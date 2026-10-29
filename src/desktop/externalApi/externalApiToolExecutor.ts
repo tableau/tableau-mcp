@@ -98,6 +98,7 @@ import {
   storyboardRoute,
   SummaryData,
   summaryDataSchema,
+  ValidateCalculatedFieldRequest,
   ValidateCalculatedFieldResponse,
   validateCalculatedFieldResponseSchema,
   ValidationResult,
@@ -106,6 +107,7 @@ import {
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  workbookDatasourceValidateCalculatedFieldRoute,
   WorkbookDiagnostics,
   workbookDiagnosticsSchema,
   WorkbookInventory,
@@ -134,7 +136,6 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
-  worksheetValidateCalculatedFieldRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -759,15 +760,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async validateWorksheetCalculatedField(
-    worksheetId: string,
-    formula: string,
+  async validateDatasourceCalculatedField(
+    datasourceId: string,
+    request: ValidateCalculatedFieldRequest,
     signal: AbortSignal,
   ): Promise<Result<ValidateCalculatedFieldResponse, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.postJsonForBody(
-        worksheetValidateCalculatedFieldRoute(worksheetId),
-        { formula },
+        workbookDatasourceValidateCalculatedFieldRoute(datasourceId),
+        request,
         validateCalculatedFieldResponseSchema,
         signal,
       ),
@@ -1503,7 +1504,7 @@ function mapClientError(
             'get-active-dialogs, then, only when the task or user intent makes the choice ' +
             'unambiguous, copy the exact returned dialog identity and exact returned action ' +
             'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
-            'invoke-dialog-action after action-invoked-dialog-remains. If either tool is unavailable, ' +
+            'invoke-dialog-action after a dialog-remains effect. If either tool is unavailable, ' +
             'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +
             `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,

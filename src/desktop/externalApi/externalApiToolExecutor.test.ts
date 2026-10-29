@@ -38,9 +38,18 @@ const invokeDialogActionRequest: InvokeDialogActionRequest = {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 0,
   },
+  requestId: 'request-1',
   action: { kind: 'button', label: 'Discard' },
 };
+
+const dialogRequestStatus = {
+  sessionId: 'dialog-session-1',
+  revision: 0,
+  requestId: 'request-1',
+} as const;
 
 describe('ExternalApiToolExecutor', () => {
   let server: MockExternalApiServer;
@@ -1949,7 +1958,7 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.validateWorkbookDocument('<workbook />', signal);
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().isValid).toBe(true);
+      expect(result.unwrap()).toEqual({ isValid: true, issues: [] });
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document:validate');
     });
 
@@ -2053,34 +2062,58 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
-  describe('worksheet calculated-field validation', () => {
-    it('posts only the formula and returns the validation outcome', async () => {
+  describe('datasource calculated-field validation', () => {
+    it('posts only the formula and parses the aggregation and data type of a valid result', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales])',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'UPPER([Region])' },
         signal,
       );
 
-      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+      expect(result.unwrap()).toEqual({
+        isValid: true,
+        errors: [],
+        isAggregate: false,
+        dataType: 'string',
+      });
       const posted = server.requests.at(-1);
       expect(posted).toMatchObject({
         method: 'POST',
-        path: '/v0/workbook/worksheets/sheet-sales:validateCalculatedField',
+        path: '/v0/workbook/datasources/wb-ds-superstore:validateCalculatedField',
         contentType: 'application/json',
       });
-      expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'SUM([Sales])' });
+      expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'UPPER([Region])' });
+    });
+
+    it('sends the caption and qualified field name of an edited calc', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const request = {
+        formula: 'SUM([Sales])',
+        caption: 'Total Sales',
+        fieldName: '[federated.0abc123].[Calculation_1]',
+      };
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        request,
+        signal,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(JSON.parse(server.requests.at(-1)?.body ?? '{}')).toEqual(request);
     });
 
     it('reports formula errors with their position', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales]',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales]' },
         signal,
       );
 
@@ -2090,18 +2123,26 @@ describe('ExternalApiToolExecutor', () => {
       });
     });
 
-    it('maps an unknown worksheet to a command failure', async () => {
+    it('maps an unknown datasource to a datasource-not-found command failure', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('missing', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'missing-datasource',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr().type).toBe('command-failed');
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('datasource-not-found');
+      }
     });
 
     it('polls a 202 to the validation result', async () => {
-      server.setOverride('POST /v0/workbook/worksheets/sheet-sales:validateCalculatedField', {
+      server.setOverride('POST /v0/workbook/datasources/wb-ds-superstore:validateCalculatedField', {
         status: 202,
         contentType: 'application/json',
         headers: { location: '/v0/operations/op-validate', 'retry-after': '0' },
@@ -2121,7 +2162,11 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('sheet-sales', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
     });
@@ -2192,6 +2237,10 @@ describe('ExternalApiToolExecutor', () => {
             objectName: 'saveChangesDialog',
             title: 'Save Changes',
             className: 'QMessageBox',
+            sessionId: 'dialog-session-1',
+            revision: 0,
+            family: 'qt',
+            status: 'active',
             messageText: 'Do you want to save changes to Regional Sales?',
             informativeText: 'Unsaved changes will be lost if you discard them.',
             detailedText: 'Workbook: Regional Sales',
@@ -2204,6 +2253,8 @@ describe('ExternalApiToolExecutor', () => {
             ],
           },
         ],
+        uiSnapshotAvailable: true,
+        recentActions: [],
       });
       expect(server.requests.at(-1)?.path).toBe('/v0/app/dialogs');
       expect(onRpc).toHaveBeenCalledWith(
@@ -2219,33 +2270,53 @@ describe('ExternalApiToolExecutor', () => {
       server.setOverride('GET /v0/app/dialogs', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ dialogs: [] }),
+        body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.getActiveDialogs(signal);
 
-      expect(result.unwrap()).toEqual({ dialogs: [] });
+      expect(result.unwrap()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
     });
 
     it.each([
-      ['no-active-dialog', { outcome: 'no-active-dialog', dialogs: [] }],
       [
-        'dismissed',
+        'dialog-dismissed',
         {
-          outcome: 'dismissed',
+          outcome: 'completed',
           dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
+          status: { ...dialogRequestStatus, state: 'completed', effect: 'dialog-dismissed' },
+          uiSnapshotAvailable: true,
           dialogs: [],
         },
       ],
       [
-        'action-invoked-dialog-remains',
+        'session-stale failure',
         {
-          outcome: 'action-invoked-dialog-remains',
+          outcome: 'failed',
           dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
+          status: {
+            ...dialogRequestStatus,
+            state: 'failed',
+            effect: 'none',
+            code: 'dialog-session-stale',
+          },
+          uiSnapshotAvailable: true,
+          dialogs: [],
+        },
+      ],
+      [
+        'dialog-remains',
+        {
+          outcome: 'completed',
+          dialog: invokeDialogActionRequest.dialog,
+          status: { ...dialogRequestStatus, state: 'completed', effect: 'dialog-remains' },
+          uiSnapshotAvailable: true,
           dialogs: [
             {
               ...invokeDialogActionRequest.dialog,
@@ -2277,11 +2348,7 @@ describe('ExternalApiToolExecutor', () => {
     it.each([
       [400, 'invalid-request-body'],
       [404, 'route-not-found'],
-      [409, 'dialog-not-found'],
-      [409, 'dialog-ambiguous'],
-      [409, 'dialog-action-not-found'],
-      [409, 'dialog-action-ambiguous'],
-      [409, 'dialog-action-disabled'],
+      [403, 'origin-not-allowed'],
     ])('maps HTTP %i %s canonically without retrying', async (status, code) => {
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status,
@@ -3017,7 +3084,7 @@ describe('ExternalApiToolExecutor', () => {
           expect(commandError.message).toContain('exact returned dialog identity');
           expect(commandError.message).toContain('exact returned action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
-          expect(commandError.message).toContain('action-invoked-dialog-remains');
+          expect(commandError.message).toContain('dialog-remains effect');
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3369,7 +3436,7 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('exact returned action');
   expect(message).toContain('at most one invoke-dialog-action call');
   expect(message).toContain('Do not guess or assume Cancel is safe');
-  expect(message).toContain('action-invoked-dialog-remains');
+  expect(message).toContain('dialog-remains effect');
   expect(message).toContain('ask the user to handle the dialog');
   expect(message).toContain('list-instances');
 }

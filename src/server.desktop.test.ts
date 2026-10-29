@@ -845,8 +845,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
-    expect(floors.get('get-active-dialogs')).toBe('0.2.13');
-    expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
+    expect(floors.get('get-active-dialogs')).toBe('0.2.26');
+    expect(floors.get('invoke-dialog-action')).toBe('0.2.26');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
     expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
@@ -857,7 +857,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('set-data-source-page-active')).toBe('0.2.25');
     expect(floors.get('get-capabilities')).toBe('0.2.25');
     expect(floors.get('reload-extensions')).toBe('0.2.25');
-    expect(floors.get('validate-calculated-field')).toBe('0.2.16');
+    expect(floors.get('validate-calculated-field')).toBe('0.2.27');
+    expect(floors.get('author-calc')).toBe('0.2.27');
   });
 
   it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
@@ -964,21 +965,21 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     );
   });
 
-  it('a connected 0.2.12 Desktop hides dialog tools and 0.2.13 exposes them', () => {
+  it('a connected 0.2.25 Desktop hides dialog tools and 0.2.26 exposes them', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
     );
-    const at212 = filterToolsByApiVersion(profileTools, '0.2.12').map((tool) => tool.name);
-    const at213 = filterToolsByApiVersion(profileTools, '0.2.13').map((tool) => tool.name);
+    const at225 = filterToolsByApiVersion(profileTools, '0.2.25').map((tool) => tool.name);
+    const at226 = filterToolsByApiVersion(profileTools, '0.2.26').map((tool) => tool.name);
 
     for (const name of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
-      expect(at212).not.toContain(name);
-      expect(at213).toContain(name);
+      expect(at225).not.toContain(name);
+      expect(at226).toContain(name);
     }
   });
 
-  it('keeps 0.2.13 dialog tools while gating app state until 0.2.14', () => {
+  it('gates app state at 0.2.14 and dialog tools at 0.2.26', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
@@ -986,8 +987,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     const namesAt = (apiVersion: string | undefined): string[] =>
       filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
 
-    expect(namesAt('0.2.13')).toContain('get-active-dialogs');
-    expect(namesAt('0.2.13')).toContain('invoke-dialog-action');
+    expect(namesAt('0.2.14')).not.toContain('get-active-dialogs');
+    expect(namesAt('0.2.14')).not.toContain('invoke-dialog-action');
     expect(namesAt('0.2.13')).not.toContain('get-desktop-state');
     expect(namesAt('0.2.14')).toContain('get-desktop-state');
     expect(namesAt('0.3.0')).toContain('get-desktop-state');

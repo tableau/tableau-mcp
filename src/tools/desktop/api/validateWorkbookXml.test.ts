@@ -16,7 +16,15 @@ import { getValidateWorkbookXmlTool } from './validateWorkbookXml.js';
 
 const validationResultSchema = z.object({
   isValid: z.boolean(),
-  validationIssues: z.array(z.string()).optional(),
+  issues: z.array(
+    z.object({
+      severity: z.string(),
+      message: z.string(),
+      line: z.number().int().optional(),
+      column: z.number().int().optional(),
+      element: z.string().optional(),
+    }),
+  ),
 });
 
 describe('validateWorkbookXmlTool', () => {
@@ -102,7 +110,7 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
     invariant(result.content[0].type === 'text');
     expect(validationResultSchema.parse(JSON.parse(result.content[0].text))).toEqual({
       isValid: true,
-      validationIssues: [],
+      issues: [],
     });
     expect(server.requests.map((request) => request.path)).toEqual([
       '/v0/workbook/document:validate',
@@ -114,7 +122,13 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
       status: 200,
       body: JSON.stringify({
         isValid: false,
-        validationIssues: ['Dashboard zone references missing worksheet "Missing Sheet"'],
+        issues: [
+          {
+            severity: 'error',
+            message: 'Dashboard zone references missing worksheet "Missing Sheet"',
+            element: 'zone',
+          },
+        ],
       }),
     });
     const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
@@ -129,7 +143,13 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
     invariant(result.content[0].type === 'text');
     expect(validationResultSchema.parse(JSON.parse(result.content[0].text))).toEqual({
       isValid: false,
-      validationIssues: ['Dashboard zone references missing worksheet "Missing Sheet"'],
+      issues: [
+        {
+          severity: 'error',
+          message: 'Dashboard zone references missing worksheet "Missing Sheet"',
+          element: 'zone',
+        },
+      ],
     });
   });
 

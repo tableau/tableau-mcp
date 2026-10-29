@@ -11,6 +11,7 @@ import {
   storyboardRoute,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  workbookDatasourceValidateCalculatedFieldRoute,
   worksheetImageRoute,
   worksheetLogicalTableDataRoute,
   worksheetRoute,
@@ -196,6 +197,10 @@ describe('route builders refuse unsafe ids', () => {
     ['storyboardRoute', storyboardRoute],
     ['workbookDatasourceRoute', workbookDatasourceRoute],
     ['workbookDatasourceDocumentRoute', workbookDatasourceDocumentRoute],
+    [
+      'workbookDatasourceValidateCalculatedFieldRoute',
+      workbookDatasourceValidateCalculatedFieldRoute,
+    ],
     ['datasourceRefreshDataRoute', datasourceRefreshDataRoute],
     ['datasourceRefreshExtractRoute', datasourceRefreshExtractRoute],
     ['sheetActionRoute', (id) => sheetActionRoute({ kind: 'worksheet', id }, 'delete')],
@@ -264,9 +269,15 @@ describe('executor sends nothing for an unsafe id', () => {
 
       const data = await executor.refreshDatasourceData(id, signal);
       const extract = await executor.refreshDatasourceExtract(id, {}, signal);
+      const validate = await executor.validateDatasourceCalculatedField(
+        id,
+        { formula: '1' },
+        signal,
+      );
 
       expect(data.isErr()).toBe(true);
       expect(extract.isErr()).toBe(true);
+      expect(validate.isErr()).toBe(true);
       expect(server.requests.length).toBe(before);
     },
   );

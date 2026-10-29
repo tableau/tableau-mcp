@@ -22,6 +22,10 @@ const completeDialogList: DialogList = {
       objectName: 'saveChangesDialog',
       title: 'Save Changes',
       className: 'QMessageBox',
+      sessionId: 'dialog-session-1',
+      revision: 0,
+      family: 'qt',
+      status: 'active',
       messageText: 'Save the workbook?',
       informativeText: 'Unsaved work may be lost.',
       detailedText: 'Workbook: Regional Sales',
@@ -38,12 +42,26 @@ const completeDialogList: DialogList = {
       objectName: '',
       title: 'Second dialog',
       className: 'QDialog',
+      sessionId: 'dialog-session-2',
+      revision: 2,
+      family: 'qt',
+      status: 'active',
       buttons: ['  Keep spaces  ', 'Café'],
       actions: [
         { kind: 'button', label: '  Keep spaces  ' },
         { kind: 'button', label: 'Café' },
         { kind: 'close' },
       ],
+    },
+  ],
+  uiSnapshotAvailable: true,
+  recentActions: [
+    {
+      sessionId: 'dialog-session-0',
+      revision: 1,
+      requestId: 'request-1',
+      state: 'completed',
+      effect: 'dialog-dismissed',
     },
   ],
 };
@@ -53,13 +71,13 @@ describe('get-active-dialogs tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.13 API floor', () => {
+  it('declares the read contract and 0.2.26 API floor', () => {
     const tool = getActiveDialogsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-active-dialogs');
-    expect(tool.minApiVersion).toBe('0.2.13');
-    expect(tool.description).toContain('visible message and diagnostic text');
-    expect(tool.description).toContain('semantic actions such as close');
+    expect(tool.minApiVersion).toBe('0.2.26');
+    expect(tool.description).toContain('exact session identity (sessionId, revision)');
+    expect(tool.description).toContain('recent dialog action requests');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toEqual({
       readOnlyHint: true,
@@ -113,14 +131,18 @@ describe('get-active-dialogs tool', () => {
     harness.server.setOverride('GET /v0/app/dialogs', {
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ dialogs: [] }),
+      body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
     });
 
     try {
       const result = await harness.callTool({ session: undefined });
 
       expect(result.isError).toBe(false);
-      expect(parseResult(result)).toEqual({ dialogs: [] });
+      expect(parseResult(result)).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
       expect(dialogGets(harness.server)).toHaveLength(1);
     } finally {
       await harness.close();
@@ -202,6 +224,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-get-active-dialogs',
-    apiVersion: '0.2.13',
+    apiVersion: '0.2.26',
   };
 }

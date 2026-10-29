@@ -4,6 +4,7 @@ import {
   EXTERNAL_API_ROUTES,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  workbookDatasourceValidateCalculatedFieldRoute,
 } from './types.js';
 
 describe('workbook datasource routes', () => {
@@ -11,6 +12,9 @@ describe('workbook datasource routes', () => {
     expect(EXTERNAL_API_ROUTES.workbookDatasource).toBe('/v0/workbook/datasources/{id}');
     expect(EXTERNAL_API_ROUTES.workbookDatasourceDocument).toBe(
       '/v0/workbook/datasources/{id}/document',
+    );
+    expect(EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField).toBe(
+      '/v0/workbook/datasources/{id}:validateCalculatedField',
     );
   });
 
@@ -22,6 +26,9 @@ describe('workbook datasource routes', () => {
     expect(workbookDatasourceRoute(datasourceId)).toBe(`/v0/workbook/datasources/${segment}`);
     expect(workbookDatasourceDocumentRoute(datasourceId)).toBe(
       `/v0/workbook/datasources/${segment}/document`,
+    );
+    expect(workbookDatasourceValidateCalculatedFieldRoute(datasourceId)).toBe(
+      `/v0/workbook/datasources/${segment}:validateCalculatedField`,
     );
   });
 });

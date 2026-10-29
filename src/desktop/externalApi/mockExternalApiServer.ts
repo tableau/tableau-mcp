@@ -63,6 +63,7 @@ export type MockExternalApiServer = {
 };
 
 const DEFAULT_TOKEN = 'valid-token';
+const QUALIFIED_FIELD_NAME = /^\[[^\]]+\](\.\[[^\]]+\])+$/;
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
 // The per-item /document routes return the requested item's bare fragment directly — a
 // `<datasource>`, `<worksheet>`, or `<dashboard>`, not wrapped in a `<workbook>`. The handler
@@ -201,6 +202,10 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 0,
+    family: 'qt',
+    status: 'active',
     messageText: 'Do you want to save changes to Regional Sales?',
     informativeText: 'Unsaved changes will be lost if you discard them.',
     detailedText: 'Workbook: Regional Sales',
@@ -370,6 +375,7 @@ export async function startMockExternalApiServer(
     buttons: [...(dialog.buttons ?? [])],
     actions: dialog.actions?.map((action) => ({ ...action })),
   }));
+  const recentActions: DialogList['recentActions'] = [];
   const workbookDatasources = options.workbookDatasources ?? DEFAULT_WORKBOOK_DATASOURCES;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
@@ -490,13 +496,13 @@ export async function startMockExternalApiServer(
         isStartPageVisible,
         isDataSourcePageActive,
         isPresentationMode: false,
-        isFocusMode: false,
+        isCanvasMode: false,
       });
       return;
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
-      sendJson(res, 200, { dialogs });
+      sendJson(res, 200, { dialogs, uiSnapshotAvailable: true, recentActions });
       return;
     }
 
@@ -527,11 +533,16 @@ export async function startMockExternalApiServer(
 
       const identity = isRecord(request) ? request.dialog : undefined;
       const action = isRecord(request) ? request.action : undefined;
+      const requestId = isRecord(request) ? request.requestId : undefined;
       if (
         !isRecord(identity) ||
         typeof identity.objectName !== 'string' ||
         typeof identity.title !== 'string' ||
         typeof identity.className !== 'string' ||
+        typeof identity.sessionId !== 'string' ||
+        typeof identity.revision !== 'number' ||
+        typeof requestId !== 'string' ||
+        requestId.length === 0 ||
         !isRecord(action)
       ) {
         sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
@@ -545,56 +556,56 @@ export async function startMockExternalApiServer(
         return;
       }
 
-      if (dialogs.length === 0) {
-        sendJson(res, 200, { outcome: 'no-active-dialog', dialogs: [] });
+      const dialog = {
+        objectName: identity.objectName,
+        title: identity.title,
+        className: identity.className,
+        sessionId: identity.sessionId,
+        revision: identity.revision,
+      };
+      const respond = (
+        outcome: 'completed' | 'failed',
+        effect: 'none' | 'dialog-dismissed',
+        code?: string,
+      ): void => {
+        const status = {
+          sessionId: dialog.sessionId,
+          revision: dialog.revision,
+          requestId,
+          state: outcome,
+          effect,
+          ...(code === undefined ? {} : { code }),
+        };
+        recentActions.push(status);
+        sendJson(res, 200, { outcome, dialog, status, uiSnapshotAvailable: true, dialogs });
+      };
+
+      const match = dialogs.find((candidate) => candidate.sessionId === dialog.sessionId);
+      if (match === undefined) {
+        respond('failed', 'none', 'dialog-not-found');
+        return;
+      }
+      if (match.revision !== dialog.revision) {
+        respond('failed', 'none', 'dialog-session-stale');
         return;
       }
 
-      const matches = dialogs.filter(
-        (dialog) =>
-          dialog.objectName === identity.objectName &&
-          dialog.title === identity.title &&
-          dialog.className === identity.className,
-      );
-      if (matches.length === 0) {
-        sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
-        return;
-      }
-      if (matches.length > 1) {
-        sendProblem(
-          res,
-          409,
-          'dialog-ambiguous',
-          'More than one active dialog matched the request.',
-        );
-        return;
-      }
-
-      const actionMatches = (matches[0].actions ?? []).filter(
+      const actionMatches = (match.actions ?? []).filter(
         (candidate) =>
           candidate.kind === action.kind &&
           (candidate.kind === 'close' || candidate.label === action.label),
       );
       if (actionMatches.length === 0) {
-        sendProblem(res, 409, 'dialog-action-not-found', 'No visible dialog action matched.');
+        respond('failed', 'none', 'dialog-action-unsupported');
         return;
       }
       if (actionMatches.length > 1) {
-        sendProblem(res, 409, 'dialog-action-ambiguous', 'More than one visible action matched.');
+        respond('failed', 'none', 'dialog-action-ambiguous');
         return;
       }
 
-      dialogs.splice(dialogs.indexOf(matches[0]), 1);
-      sendJson(res, 200, {
-        outcome: 'dismissed',
-        dialog: {
-          objectName: identity.objectName,
-          title: identity.title,
-          className: identity.className,
-        },
-        action,
-        dialogs,
-      });
+      dialogs.splice(dialogs.indexOf(match), 1);
+      respond('completed', 'dialog-dismissed');
       return;
     }
 
@@ -940,7 +951,7 @@ export async function startMockExternalApiServer(
         sendProblem(res, 400, 'invalid-request-body', 'Empty workbook document body.');
         return;
       }
-      sendJson(res, 200, { isValid: true, validationIssues: [] });
+      sendJson(res, 200, { isValid: true, issues: [] });
       return;
     }
 
@@ -1197,37 +1208,55 @@ export async function startMockExternalApiServer(
     }
 
     const validateCalculatedFieldMatch = path.match(
-      /^\/v0\/workbook\/worksheets\/([^/]+):validateCalculatedField$/,
+      /^\/v0\/workbook\/datasources\/([^/]+):validateCalculatedField$/,
     );
     if (method === 'POST' && validateCalculatedFieldMatch) {
-      const worksheetId = decodeURIComponent(validateCalculatedFieldMatch[1]);
-      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
-        return;
-      }
-      let parsed: { formula?: unknown };
+      let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(body);
       } catch {
         sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
         return;
       }
-      if (typeof parsed.formula !== 'string') {
+      const { formula, caption, fieldName, ...unknownKeys } = parsed;
+      if (
+        typeof formula !== 'string' ||
+        formula.length === 0 ||
+        (caption !== undefined && (typeof caption !== 'string' || caption.length === 0)) ||
+        (fieldName !== undefined &&
+          (typeof fieldName !== 'string' || !QUALIFIED_FIELD_NAME.test(fieldName))) ||
+        Object.keys(unknownKeys).length > 0
+      ) {
         sendProblem(
           res,
           400,
           'invalid-request-body',
-          'validateCalculatedField requires a string `formula`.',
+          'validateCalculatedField requires a non-empty string `formula`, an optional non-empty ' +
+            'string `caption`, and an optional `fieldName` of the form [datasource-name].[field-name].',
         );
         return;
       }
-      const isBalanced = parsed.formula.split('(').length === parsed.formula.split(')').length;
-      sendJson(res, 200, {
-        isValid: isBalanced,
-        errors: isBalanced
-          ? []
-          : [{ position: parsed.formula.length, length: 0, message: 'Unbalanced parentheses.' }],
-      });
+      const datasourceId = decodeURIComponent(validateCalculatedFieldMatch[1]);
+      if (
+        !workbookDatasources.some(
+          (datasource) =>
+            datasource.id !== undefined && decodeURIComponent(datasource.id) === datasourceId,
+        )
+      ) {
+        sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+        return;
+      }
+      const isBalanced = formula.split('(').length === formula.split(')').length;
+      sendJson(
+        res,
+        200,
+        isBalanced
+          ? { isValid: true, errors: [], isAggregate: false, dataType: 'string' }
+          : {
+              isValid: false,
+              errors: [{ position: formula.length, length: 0, message: 'Unbalanced parentheses.' }],
+            },
+      );
       return;
     }
 
@@ -1445,7 +1474,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.25' },
+        info: { title: 'Tableau External Client API', version: '0.2.27' },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },

@@ -213,11 +213,10 @@ function captionTokens(formula: string): string[] {
 
 /**
  * Authors a batch of calculations with per-calc validation and dependency ordering.
- * Resolves ONE target datasource for the whole batch, activates it once, then walks the
- * dependency layers: within a layer it validates each formula (cascading a failure to any
+ * Resolves ONE target datasource for the whole batch, then walks the dependency layers: within a layer it validates each formula (cascading a failure to any
  * calc that depends on it), then creates the layer's valid calcs in a single whole-document
  * apply. Returns a per-calc outcome; calcs created in earlier layers persist even when a
- * later calc fails (partial success). An unresolvable/failed activation, a caption collision,
+ * later calc fails (partial success). An unresolvable datasource, a caption collision,
  * an empty batch, or a duplicate caption aborts the whole batch with no partial state.
  */
 export async function authorCalculationsWithValidation({
@@ -315,26 +314,12 @@ export async function authorCalculationsWithValidation({
     ).toErr();
   }
 
-  // Every requested calc already exists identically: report reuse without activating the
-  // datasource or applying anything.
+  // Every requested calc already exists identically: report reuse without validating or applying.
   if (idempotentOutcomes.size === specs.length) {
     return new Ok(specs.map((_, index) => idempotentOutcomes.get(index)!));
   }
 
   const layering = layerCalculationsByDependency(specs);
-
-  // Activate the target datasource exactly once, by its internal <datasource name=...> id.
-  // A failed activation aborts: validating/creating against the wrong active datasource
-  // would be silently wrong.
-  const activation = await executor.executeCommand({
-    namespace: 'tabdoc',
-    command: 'set-active-datasource',
-    args: { datasource: datasourceName },
-    signal,
-  });
-  if (activation.isErr()) {
-    return new DesktopCommandExecutionError(activation.error).toErr();
-  }
 
   const outcomes = new Array<AuthoredCalcOutcome | undefined>(specs.length).fill(undefined);
   for (const [index, outcome] of idempotentOutcomes) {
@@ -406,16 +391,16 @@ export async function authorCalculationsWithValidation({
       }
 
       const validation = await validateCalcFormula({
+        datasourceName,
         formula,
         caption: calc.caption,
         executor,
         signal,
       });
       if (validation.status === 'error') {
-        // The validate command could not run (transport / non-completed envelope) — an infra
-        // failure, not a verdict on this formula. Abort with the typed execution error rather than
-        // reporting invalid-formula, so the agent is never told to "fix" a correct formula. Matches
-        // the set-active-datasource activation abort above.
+        // The validate route could not run — an infra failure, not a verdict on this formula. Abort
+        // with the typed execution error rather than reporting invalid-formula, so the agent is never
+        // told to "fix" a correct formula.
         return validation.error.toErr();
       }
       if (validation.status === 'invalid') {
@@ -515,51 +500,29 @@ type CalcValidation =
   | { status: 'error'; error: DesktopCommandExecutionError };
 
 async function validateCalcFormula({
+  datasourceName,
   formula,
   caption,
   executor,
   signal,
 }: {
+  datasourceName: string;
   formula: string;
   caption: string;
 } & WithExecutorAndAbortSignal): Promise<CalcValidation> {
-  const result = await executor.executeCommand({
-    namespace: 'tabdoc',
-    command: 'get-calc-details-pres-model-for-formula',
-    args: { 'calculation-formula': formula, 'calculation-caption': caption },
+  const result = await executor.validateDatasourceCalculatedField(
+    datasourceName,
+    { formula, caption },
     signal,
-  });
-  // A rejected command (transport error / non-completed envelope) is an infra failure, not a
-  // verdict on the formula. An invalid formula comes back as a completed command with errors.
+  );
   if (result.isErr()) {
     return { status: 'error', error: new DesktopCommandExecutionError(result.error) };
   }
-  if (result.value.status !== 'completed') {
-    // A non-completed envelope carries Desktop's own error for a 'failed' command; surface it as an
-    // execution error and note the terminal status so the failure is diagnosable.
+  if (!result.value.isValid) {
     return {
-      status: 'error',
-      error: new DesktopCommandExecutionError(
-        { type: 'command-failed', error: result.value.error },
-        `formula validation did not complete (status: ${result.value.status})`,
-      ),
+      status: 'invalid',
+      message: formatValidatorErrors(result.value.errors.map((error) => error.message)),
     };
-  }
-  const errors = calcErrorMessages(result.value.result);
-  if (errors === undefined) {
-    // errorMsgs is always present in a well-formed response (empty for a valid formula). Its absence
-    // means the command's result shape changed, so "no errors" is not trustworthy — fail closed and
-    // author nothing rather than silently create an unvalidated calc (the W-24061123 false-success bug).
-    return {
-      status: 'error',
-      error: new DesktopCommandExecutionError(
-        { type: 'invalid-response', error: result.value.result },
-        'formula validation succeeded but its result did not contain the expected errorMsgs field',
-      ),
-    };
-  }
-  if (errors.length > 0) {
-    return { status: 'invalid', message: formatValidatorErrors(errors) };
   }
   return { status: 'valid' };
 }
@@ -573,56 +536,6 @@ function formatValidatorErrors(errors: string[]): string {
   }
   const list = errors.map((error, index) => `${index + 1}. ${error}`).join('\n');
   return `Formula validation reported ${errors.length} error(s):\n${list}`;
-}
-
-/**
- * Reads the calc validator's error list out of the command result.
- *
- * tabdoc:get-calc-details-pres-model-for-formula returns a completed (SUCCEEDED) command whose
- * out-param is a UserCalculationDetailsPresModel; an invalid formula is DATA — a non-empty
- * errorMsgs array — never a command failure. executeCommand hands back the command envelope, so
- * the out-params live on `.result`. Captured live payloads (the __fixtures__ pair) pin the shape:
- * `result.userCalculationDetails.errorMsgs: string[]`, present-and-empty for a valid formula and
- * non-empty for an invalid one.
- *
- * Returns `undefined` ONLY when no errorMsgs array exists anywhere in the result. Because errorMsgs
- * is always present in a well-formed response, that absence means the command contract changed, so
- * the caller must fail CLOSED (author nothing) rather than treat it as "no errors" — treating an
- * unparseable response as valid is the W-24061123 false-success bug. An empty array means valid.
- * The walk descends objects AND arrays and matches the errorMsg(s) key case-insensitively so a
- * nesting/casing drift still finds the array rather than silently missing it.
- */
-export function calcErrorMessages(
-  result: Record<string, unknown> | undefined,
-): string[] | undefined {
-  return findErrorMessagesNode(result);
-}
-
-function findErrorMessagesNode(node: unknown): string[] | undefined {
-  if (Array.isArray(node)) {
-    for (const entry of node) {
-      const found = findErrorMessagesNode(entry);
-      if (found !== undefined) {
-        return found;
-      }
-    }
-    return undefined;
-  }
-  if (node === null || typeof node !== 'object') {
-    return undefined;
-  }
-  for (const [key, value] of Object.entries(node)) {
-    if (Array.isArray(value) && /^errormsgs?$/.test(key.replace(/[^a-z]/gi, '').toLowerCase())) {
-      return value.map((entry) => String(entry)).filter((entry) => entry.length > 0);
-    }
-  }
-  for (const value of Object.values(node)) {
-    const found = findErrorMessagesNode(value);
-    if (found !== undefined) {
-      return found;
-    }
-  }
-  return undefined;
 }
 
 /**

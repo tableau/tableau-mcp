@@ -53,7 +53,7 @@ describe('get-app-info tool', () => {
       isStartPageVisible: false,
       isDataSourcePageActive: true,
       isPresentationMode: false,
-      isFocusMode: true,
+      isCanvasMode: true,
       futureField: 'preserved',
     } satisfies AppInfo;
     const getApp = vi.fn().mockResolvedValue(Ok(info));

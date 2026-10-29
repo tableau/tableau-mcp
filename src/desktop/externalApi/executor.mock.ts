@@ -32,7 +32,7 @@ export function makeExecutorMock(
     getOperation: vi.fn(),
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
-      .mockResolvedValue(Ok({ dialogs: [] })),
+      .mockResolvedValue(Ok({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] })),
     getDesktopState: vi.fn<ExternalApiToolExecutor['getDesktopState']>().mockResolvedValue(
       Ok({
         state: 'IDLE',
@@ -42,9 +42,27 @@ export function makeExecutorMock(
         progressWindows: [],
       }),
     ),
-    invokeDialogAction: vi
-      .fn<ExternalApiToolExecutor['invokeDialogAction']>()
-      .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
+    invokeDialogAction: vi.fn<ExternalApiToolExecutor['invokeDialogAction']>().mockResolvedValue(
+      Ok({
+        outcome: 'completed',
+        dialog: {
+          objectName: 'saveChangesDialog',
+          title: 'Tableau',
+          className: 'QMessageBox',
+          sessionId: 'dialog-session-1',
+          revision: 0,
+        },
+        status: {
+          sessionId: 'dialog-session-1',
+          revision: 0,
+          requestId: 'request-1',
+          state: 'completed',
+          effect: 'dialog-dismissed',
+        },
+        uiSnapshotAvailable: true,
+        dialogs: [],
+      }),
+    ),
     getWorkbook: vi.fn(),
     listWorksheets: vi.fn(),
     listDashboards: vi.fn(),
@@ -72,7 +90,7 @@ export function makeExecutorMock(
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
-    validateWorksheetCalculatedField: vi.fn(),
+    validateDatasourceCalculatedField: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyDatasourceDocument: vi.fn(),
