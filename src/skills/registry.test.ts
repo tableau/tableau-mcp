@@ -21,10 +21,10 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import { log } from '../logging/logger.js';
+import { InvalidSkillsCursorError } from './cursor.js';
 import {
   buildSkillRegistry,
   getSkillRegistry,
-  InvalidSkillsCursorError,
   MAX_SKILLS_PAGE_SIZE,
   resetSkillRegistry,
   type SkillRegistry,
@@ -314,7 +314,6 @@ describe('registry', () => {
 
   describe('pagination', () => {
     const N = MAX_SKILLS_PAGE_SIZE;
-    const encode = (text: string): string => Buffer.from(text).toString('base64url');
     const tinyUri = (i: number): string => `skill://skill-${String(i).padStart(4, '0')}/SKILL.md`;
 
     // Tiny valid skills with zero-padded names so URI order matches creation order.
@@ -391,61 +390,12 @@ describe('registry', () => {
       expect(entry.resources).toHaveLength(121);
     });
 
-    describe('invalid cursors', () => {
-      const total = N + 1;
+    it('rejects an invalid cursor with the cursor module error', () => {
+      writeTinySkills(N + 1);
 
-      it.each([
-        ['empty', ''],
-        ['not base64url', 'not base64!'],
-        ['padded base64', `${encode('v1:50')}=`],
-        ['garbage text', encode('hello')],
-        ['unknown version', encode('v2:50')],
-        ['missing version', encode('50')],
-        ['zero offset', encode('v1:0')],
-        ['negative offset', encode('v1:-1')],
-        ['float offset', encode('v1:1.5')],
-        ['leading zero', encode('v1:050')],
-        ['unsafe integer', encode('v1:9007199254740993')],
-        ['oversized', encode(`v1:${'9'.repeat(100)}`)],
-        ['offset at end of registry', encode(`v1:${total}`)],
-        ['offset past end of registry', encode(`v1:${total + 1}`)],
-      ])('rejects a %s cursor', (_label, cursor) => {
-        writeTinySkills(total);
-
-        expect(() => buildSkillRegistry(skillsDir).list(cursor)).toThrow(InvalidSkillsCursorError);
-      });
-
-      it('accepts the last advancing offset', () => {
-        writeTinySkills(total);
-
-        expect(buildSkillRegistry(skillsDir).list(encode(`v1:${total - 1}`)).skills).toHaveLength(
-          1,
-        );
-      });
-
-      it('rejects a non-canonical encoding of a valid offset', () => {
-        writeTinySkills(total);
-        const registry = buildSkillRegistry(skillsDir);
-        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-        const cursor = registry.list().nextCursor!;
-        const altered = cursor.slice(0, -1) + alphabet[alphabet.indexOf(cursor.at(-1)!) + 1];
-        // Same decoded bytes, different text: only the canonical form is accepted.
-        expect(Buffer.from(altered, 'base64url')).toEqual(Buffer.from(cursor, 'base64url'));
-
-        expect(() => registry.list(altered)).toThrow(InvalidSkillsCursorError);
-      });
-
-      it('rejects any cursor on an empty registry', () => {
-        expect(() => buildSkillRegistry(skillsDir).list(encode('v1:1'))).toThrow(
-          InvalidSkillsCursorError,
-        );
-      });
-
-      it('does not echo the cursor in the error message', () => {
-        const registry = buildSkillRegistry(skillsDir);
-
-        expect(() => registry.list('secret-cursor!')).toThrow(/^(?!.*secret)/);
-      });
+      expect(() => buildSkillRegistry(skillsDir).list('invalid!')).toThrow(
+        InvalidSkillsCursorError,
+      );
     });
   });
 

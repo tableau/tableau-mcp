@@ -1,7 +1,8 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 
-import { InvalidSkillsCursorError, type SkillRegistry } from './registry.js';
+import { InvalidSkillsCursorError } from './cursor.js';
+import { type SkillRegistry } from './registry.js';
 import {
   SkillsGetHandlerRequestSchema,
   SkillsGetRequestSchema,
