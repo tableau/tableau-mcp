@@ -28,6 +28,9 @@ import {
   writeContainedCacheTextFile,
 } from './cachePath.js';
 
+// Without O_NOFOLLOW (Windows) open follows the link, so containment refuses it instead.
+const finalSymlinkReason = typeof constants.O_NOFOLLOW === 'number' ? 'symlink' : 'outside-cache';
+
 describe('readContainedCacheTextFile', () => {
   const temporaryPaths: string[] = [];
 
@@ -123,7 +126,7 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(candidate)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
-      reason: 'symlink',
+      reason: finalSymlinkReason,
     });
   });
 
@@ -162,7 +165,7 @@ describe('readContainedCacheTextFile', () => {
       expect(readContainedCacheTextFile(candidate, operations)).toMatchObject({
         ok: false,
         issue: 'unsafe-file',
-        reason: linkKind === 'final' ? 'symlink' : 'outside-cache',
+        reason: linkKind === 'final' ? finalSymlinkReason : 'outside-cache',
       });
       expect(read).not.toHaveBeenCalled();
     },
@@ -404,7 +407,7 @@ describe('writeContainedCacheTextFile', () => {
     expect(writeContainedCacheTextFile(finalLink, '<escaped/>')).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
-      reason: 'symlink',
+      reason: finalSymlinkReason,
     });
 
     const linkedDirectory = join(directory, 'linked');
@@ -514,10 +517,12 @@ describe('writeContainedCacheTextFile', () => {
     const directory = cacheDirectory('enotdir');
     writeFileSync(join(directory, 'a.xml'), '<a/>');
 
-    expect(writeContainedCacheTextFile(join(directory, 'a.xml', 'b.xml'), '<x/>')).toMatchObject({
-      issue: 'unsafe-file',
-      reason: 'not-regular-file',
-    });
+    // Windows reports ENOENT, not ENOTDIR, for a path through a file.
+    expect(writeContainedCacheTextFile(join(directory, 'a.xml', 'b.xml'), '<x/>')).toMatchObject(
+      process.platform === 'win32'
+        ? { issue: 'unsupported-new-path' }
+        : { issue: 'unsafe-file', reason: 'not-regular-file' },
+    );
   });
 });
 
