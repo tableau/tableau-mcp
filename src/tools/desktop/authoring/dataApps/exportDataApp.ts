@@ -70,7 +70,7 @@ export const getExportDataAppTool = (
   const tool = new DesktopTool({
     server,
     name: 'export-data-app',
-    minApiVersion: '0.2.26',
+    minApiVersion: '0.2.27',
     title: 'Export a data app package',
     description:
       'Writes a .tpkg for the selected sheet. Returns filePath, packageId, and version. Leaves the source files in place. When a sheet hosts multiple extensions, pass instanceId.',
