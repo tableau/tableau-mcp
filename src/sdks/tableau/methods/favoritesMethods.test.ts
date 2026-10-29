@@ -34,6 +34,38 @@ function makeMethods(
 }
 
 describe('FavoritesMethods', () => {
+  it('accepts the Cloud position and addedAt envelope without exposing either value', async () => {
+    const { methods } = makeMethods({
+      favorites: {
+        favorite: [
+          {
+            label: 'Sales',
+            position: '17',
+            addedAt: '2026-10-29T00:00:00Z',
+            workbook: { id: resourceId },
+          },
+        ],
+      },
+    });
+    const result = await methods.queryFavorites({ siteId, userId });
+    expect(result.favorites).toEqual([{ resourceType: 'workbook', resourceId, label: 'Sales' }]);
+    expect(JSON.stringify(result)).not.toContain('2026-10-29');
+    expect(result.favorites[0]).not.toHaveProperty('position');
+    expect(result.favorites[0]).not.toHaveProperty('addedAt');
+  });
+
+  it.each([null, 17, true, { private: 'PRIVATE_VALUE' }, ['PRIVATE_VALUE']])(
+    'rejects nonstring addedAt metadata %j',
+    async (addedAt) => {
+      const { methods } = makeMethods({
+        favorites: { favorite: [{ addedAt, workbook: { id: resourceId } }] },
+      });
+      const result = await methods.queryFavorites({ siteId, userId });
+      expect(result.favorites).toEqual([]);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_VALUE');
+    },
+  );
+
   it.each(['0', '17', 0, 17])('accepts position %j without returning it', async (position) => {
     const { methods } = makeMethods({
       favorites: { favorite: [{ label: 'Sales', position, workbook: { id: resourceId } }] },

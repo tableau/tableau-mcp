@@ -22,14 +22,19 @@ export const rawFavoriteSchema = z.record(z.unknown());
 
 // These are metadata fields, not resource alternatives. Never return their values.
 // https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_fields.htm
+// https://help.tableau.com/samples/en-us/rest_api/ts-api_3_29.xsd (favoriteType)
 const favoriteMetadataFields = new Set([
   'label',
   'parentProjectName',
   'targetOwnerName',
   'position',
+  'addedAt',
 ]);
 
 export function normalizeFavorite(raw: z.infer<typeof rawFavoriteSchema>): Favorite | undefined {
+  // The public XSD declares addedAt as dateTime; Cloud JSON represents it as a string.
+  // Its value is presentation metadata and must not escape into the returned shortlist.
+  if ('addedAt' in raw && typeof raw.addedAt !== 'string') return undefined;
   // Cloud 3.30 includes position in its default response. It is opaque display metadata.
   if (
     'position' in raw &&
