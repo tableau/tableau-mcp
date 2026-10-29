@@ -440,9 +440,7 @@ spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 The session store provider to use for the embedded OAuth authorization server's session state
 (pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
-Also stores single-use confirmation evidence for `run-flow`, `run-flow-task`, and `cancel-flow-run`,
-regardless of the authentication mode. Cross-replica flow confirmation requires a shared custom
-store and a shared signing key; see [`MUTATION_PREVIEW_TTL_MINUTES`](env-vars.md#mutation_preview_ttl_minutes).
+Also stores [flow confirmation state](env-vars.md#mutation_preview_ttl_minutes) in every authentication mode.
 
 - Default: `memory`
 - Possible values:
