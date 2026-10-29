@@ -11,7 +11,7 @@ export const collectionErrorSchema = z
   .object({
     errorCode: optionalInteger,
     errorMessage: optionalString,
-    luid: optionalString,
+    luid: optionalNullableString,
     erroredItem: z
       .object({ contentLuid: optionalString, contentType: optionalString })
       .passthrough()

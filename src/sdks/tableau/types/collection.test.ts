@@ -42,6 +42,21 @@ describe('Collections documented JSON schemas', () => {
   it('preserves HTTP 200 batch partial errors and the affected count', () => {
     expect(collectionMembershipResponseSchema.parse(fixtures.partial)).toEqual(fixtures.partial);
   });
+  it('preserves a null error LUID returned by Cloud without accepting invalid LUID types', () => {
+    const response = {
+      response: 0,
+      errors: [
+        { errorCode: 1, luid: null, erroredItem: { contentLuid: id, contentType: 'workbook' } },
+      ],
+    };
+    expect(collectionMembershipResponseSchema.parse(response)).toEqual(response);
+    expect(
+      collectionMembershipResponseSchema.safeParse({
+        ...response,
+        errors: [{ ...response.errors[0], luid: 42 }],
+      }).success,
+    ).toBe(false);
+  });
   it('accepts name and optional description only for create', () => {
     expect(createCollectionSchema.parse({ name: ' Review ', description: 'Details' })).toEqual({
       name: 'Review',

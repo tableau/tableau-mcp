@@ -55,6 +55,22 @@ function setup(
 }
 
 describe('CollectionsMethods guarded transport', () => {
+  it.each(['add', 'remove'] as const)(
+    'preserves Cloud batch%s errors with a null LUID without retrying',
+    async (action) => {
+      const response = {
+        response: 0,
+        errors: [{ errorCode: 1, luid: null, erroredItem: item }],
+      };
+      const { methods, requests } = setup(response, { 'content-type': 'application/json' });
+      const result =
+        action === 'add'
+          ? await methods.addCollectionItems({ collectionId: id, items: [item] })
+          : await methods.removeCollectionItems({ collectionId: id, items: [item] });
+      expect(result).toEqual(response);
+      expect(requests).toHaveLength(1);
+    },
+  );
   it('accepts null owner display metadata returned by Cloud collection creation', async () => {
     const response = { ...fixtures.create, ownerName: null, ownerAlias: null, ownerDomain: null };
     const { methods, requests } = setup(response);
