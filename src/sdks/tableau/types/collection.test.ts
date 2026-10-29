@@ -39,6 +39,16 @@ describe('Collections documented JSON schemas', () => {
     expect(parsed.items?.[0].content).not.toHaveProperty('contentLuid');
     expect(parsed.items?.[0].content?.syncToken).toBe('opaque-token');
   });
+  it('accepts null item extraData returned by Cloud while preserving content identity', () => {
+    const page = {
+      items: [{ content: { id: 42, contentType: 'Workbook' }, extraData: null }],
+    };
+    expect(collectionItemsPageSchema.parse(page)).toEqual(page);
+    expect(
+      collectionItemsPageSchema.safeParse({ items: [{ extraData: { unexpected: 'value' } }] })
+        .success,
+    ).toBe(false);
+  });
   it('preserves HTTP 200 batch partial errors and the affected count', () => {
     expect(collectionMembershipResponseSchema.parse(fixtures.partial)).toEqual(fixtures.partial);
   });

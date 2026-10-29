@@ -53,7 +53,7 @@ export const collectionItemSchema = z
       })
       .passthrough()
       .optional(),
-    extraData: z.record(z.number().int()).optional(),
+    extraData: z.record(z.number().int()).nullable().optional(),
     position: optionalInteger,
   })
   .passthrough();
