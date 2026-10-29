@@ -11,7 +11,6 @@ describe('getWorkbookExtensionsTool', () => {
     const tool = getWorkbookExtensionsTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-workbook-extensions');
     expect(tool.minApiVersion).toBe('0.2.27');
-    expect(tool.description).toContain('upgrade Desktop');
   });
 
   it('reports a missing route as a Desktop update and does not call another command', async () => {

@@ -21,7 +21,7 @@ export const getWorkbookExtensionsTool = (
     minApiVersion: '0.2.27',
     title,
     description:
-      'Lists viz and dashboard extensions placed in the open workbook. Each entry has instanceId (unique per placed zone), the host sheet stable id and kind (worksheet or dashboard), the full ExtensionKey (id, version, url), and packagePath. packagePath is null for a hosted extension with no local package. Reload with the returned sheet id. A Desktop build older than External API 0.2.27 does not serve this route: tell the user to upgrade Desktop. Do not guess a package path or call an unrelated command.',
+      'Lists viz and dashboard extensions in the open workbook. Reload one with its sheet id.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
