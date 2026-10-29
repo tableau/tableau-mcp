@@ -14,12 +14,23 @@ import {
   GetPageResult,
   MAX_PAGE_SIZE,
 } from '../../../utils/paginate.js';
+import {
+  contentTagSearchDescription,
+  contentTagSearchLabelsSchema,
+  withContentTagFilter,
+} from '../_lib/contentTagFilter.js';
+import { withContentTagResponseValidation } from '../_lib/contentTagResponse.js';
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
+  tagLabels: contentTagSearchLabelsSchema
+    .optional()
+    .describe(
+      'Exact decoded tags to search for. One label matches that tag; multiple labels match ANY (OR). Cannot be combined with a tags clause in filter.',
+    ),
   filter: z.string().optional(),
   pageNumber: z
     .number()
@@ -89,6 +100,9 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
 
   ${genericFilterDescription}
 
+  **Tag-only discovery**
+  ${contentTagSearchDescription}
+
   **Example Usage:**
   - List data sources with the name "Project Views":
       filter: "name:eq:Project Views"
@@ -112,14 +126,17 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, tagLabels, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listDatasourcesTool.name);
       return await listDatasourcesTool.logAndExecute<ListDatasourcesResult>({
         extra,
-        args: { filter, limit },
+        args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
+          const combinedFilter = withContentTagFilter(filter, tagLabels);
+          const validatedFilter = combinedFilter
+            ? parseAndValidateDatasourcesFilterString(combinedFilter)
+            : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,
             maxResultLimit,
@@ -129,30 +146,34 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
           }
 
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: listDatasourcesTool.requiredApiScopes,
-              callback: async (restApi) => {
-                const page = await getPage({
-                  pageNumber,
-                  limit,
-                  maxResultLimit,
-                  getDataFn: async ({ pageSize, pageNumber }) => {
-                    const { pagination, datasources: data } =
-                      await restApi.datasourcesMethods.listDatasources({
-                        siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
-                        pageSize,
-                        pageNumber,
-                      });
+            await withContentTagResponseValidation(() =>
+              useRestApi({
+                ...extra,
+                // Raw pages precede bounded-context filtering and must not reach debug notifications.
+                disableLogging: true,
+                jwtScopes: listDatasourcesTool.requiredApiScopes,
+                callback: async (restApi) => {
+                  const page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => {
+                      const { pagination, datasources: data } =
+                        await restApi.datasourcesMethods.listDatasources({
+                          siteId: restApi.siteId,
+                          filter: validatedFilter ?? '',
+                          pageSize,
+                          pageNumber,
+                        });
 
-                    return { pagination, data };
-                  },
-                });
+                      return { pagination, data };
+                    },
+                  });
 
-                return page;
-              },
-            }),
+                  return page;
+                },
+              }),
+            ),
           );
         },
         constrainSuccessResult: (page) => {

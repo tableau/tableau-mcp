@@ -14,6 +14,11 @@ import {
   workbookValidationResultSchema,
 } from '../types/workbookValidation.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+import {
+  assertEmptyTagMutationResponse,
+  assertTagMutationResponse,
+  encodeTagLabel,
+} from './tagUtils.js';
 
 /**
  * Workbooks methods of the Tableau Server REST API
@@ -213,18 +218,19 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     siteId: string;
     tagLabels: ReadonlyArray<string>;
   }): Promise<void> => {
-    await this._apiClient.addTagsToWorkbook(
+    const response = await this._apiClient.addTagsToWorkbook(
       { tags: { tag: tagLabels.map((label) => ({ label })) } },
       {
         params: { siteId, workbookId },
         ...this.authHeader,
       },
     );
+    assertTagMutationResponse(response);
   };
 
   /**
-   * Removes a single tag (by label) from the specified workbook. Responds 204; removing a tag the
-   * workbook does not carry is a no-op on the server.
+   * Removes a single tag (by exact decoded label) from the specified workbook. Responds 204
+   * on success; a missing tag may return 404007. Other tags are preserved.
    *
    * Required scopes (Tableau Cloud): `tableau:workbook_tags:delete`
    *
@@ -242,10 +248,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     siteId: string;
     tagLabel: string;
   }): Promise<void> => {
-    await this._apiClient.deleteTagFromWorkbook(undefined, {
-      params: { siteId, workbookId, tagName: tagLabel },
+    const response = await this._apiClient.deleteTagFromWorkbook(undefined, {
+      params: { siteId, workbookId, tagName: encodeTagLabel(tagLabel) },
       ...this.authHeader,
     });
+    assertEmptyTagMutationResponse(response);
   };
 
   /**

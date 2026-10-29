@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pathParam } from '../../routeSafety/ids.js';
 import { customViewSchema } from '../types/customView.js';
 import { paginationSchema } from '../types/pagination.js';
+import { tagsSchema } from '../types/tags.js';
 import { viewSchema } from '../types/view.js';
 import { paginationParameters } from './paginationParameters.js';
 
@@ -244,7 +245,35 @@ const queryViewsForSiteEndpoint = makeEndpoint({
   }),
 });
 
+const addTagsToViewEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/views/:viewId/tags',
+  alias: 'addTagsToView',
+  description: 'Adds one or more tags to the specified view.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('viewId'),
+    { name: 'body', type: 'Body', schema: z.object({ tags: tagsSchema }) },
+  ],
+  response: z.object({ tags: tagsSchema }),
+});
+
+const deleteTagFromViewEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/views/:viewId/tags/:tagName',
+  alias: 'deleteTagFromView',
+  description: 'Removes a single tag (by label) from the specified view.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('viewId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
+});
+
 const viewsApi = makeApi([
+  addTagsToViewEndpoint,
+  deleteTagFromViewEndpoint,
   getViewEndpoint,
   listCustomViewsEndpoint,
   getCustomViewEndpoint,

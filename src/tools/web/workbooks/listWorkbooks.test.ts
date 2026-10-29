@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 
 import * as loggerModule from '../../../logging/logger.js';
 import { OverridableConfig } from '../../../overridableConfig.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
@@ -48,6 +50,64 @@ beforeEach(() => {
 describe('listWorkbooksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('tag-only discovery', () => {
+    it.each([
+      { labels: ['Sales'], expected: 'tags:eq:Sales' },
+      { labels: ['Sales', 'Finance', 'Sales'], expected: 'tags:in:[Sales,Finance]' },
+      { labels: ['売上 #1'], expected: 'tags:eq:売上 #1' },
+      { labels: ['pending-deletion-2026-10-14'], expected: 'tags:eq:pending-deletion-2026-10-14' },
+    ])(
+      'passes $expected through the native list API with normal pagination',
+      async ({ labels, expected }) => {
+        mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
+        const result = await getToolResult({ tagLabels: labels, pageNumber: 2, limit: 5 });
+        expect(result.isError).toBe(false);
+        expect(vi.mocked(useRestApi).mock.calls.at(-1)?.[0].disableLogging).toBe(true);
+        expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            filter: expected,
+            pageNumber: 2,
+            pageSize: 1000,
+          }),
+        );
+      },
+    );
+
+    it('contains malformed tag-search response metadata without notifications', async () => {
+      const sentinel = 'SYNTHETIC_TAG_SEARCH_METADATA';
+      mocks.mockQueryWorkbooksForSite.mockRejectedValueOnce(
+        new ZodiosError(`Malformed response ${sentinel}`),
+      );
+      const result = await getToolResult({ tagLabels: ['Sales'] });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).not.toContain(sentinel);
+      expect(vi.mocked(useRestApi).mock.calls.at(-1)?.[0].disableLogging).toBe(true);
+    });
+
+    it('ANDs non-tag filter fields with the typed tag condition', async () => {
+      mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
+      const result = await getToolResult({
+        filter: 'projectName:eq:Finance',
+        tagLabels: ['Sales'],
+      });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'projectName:eq:Finance,tags:eq:Sales' }),
+      );
+    });
+
+    it.each([
+      { labels: ['A,B'], filter: undefined },
+      { labels: ['Sales],name:eq:Secret'], filter: undefined },
+      { labels: ['%252C'], filter: undefined },
+      { labels: ['Sales'], filter: 'tags:eq:Old' },
+    ])('rejects ambiguous tag inputs before REST', async ({ labels, filter }) => {
+      const result = await getToolResult({ filter, tagLabels: labels });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockQueryWorkbooksForSite).not.toHaveBeenCalled();
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -380,7 +440,7 @@ describe('listWorkbooksTool', () => {
 });
 
 async function getToolResult(
-  params: { filter: string; pageNumber?: number; limit?: number },
+  params: { filter?: string; tagLabels?: string[]; pageNumber?: number; limit?: number },
   extra: TableauWebRequestHandlerExtra = getMockRequestHandlerExtra(),
 ): Promise<CallToolResult> {
   const listWorkbooksTool = getListWorkbooksTool(new WebMcpServer());
@@ -388,6 +448,7 @@ async function getToolResult(
   return await callback(
     {
       filter: params.filter,
+      tagLabels: params.tagLabels,
       pageNumber: params.pageNumber,
       limit: params.limit,
     },

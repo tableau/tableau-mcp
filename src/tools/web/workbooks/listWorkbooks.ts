@@ -21,12 +21,23 @@ import {
   GetPageResult,
   MAX_PAGE_SIZE,
 } from '../../../utils/paginate.js';
+import {
+  contentTagSearchDescription,
+  contentTagSearchLabelsSchema,
+  withContentTagFilter,
+} from '../_lib/contentTagFilter.js';
+import { withContentTagResponseValidation } from '../_lib/contentTagResponse.js';
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
+  tagLabels: contentTagSearchLabelsSchema
+    .optional()
+    .describe(
+      'Exact decoded tags to search for. One label matches that tag; multiple labels match ANY (OR). Cannot be combined with a tags clause in filter.',
+    ),
   filter: z.string().optional(),
   pageNumber: z
     .number()
@@ -82,6 +93,9 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
 
   ${genericFilterDescription}
 
+  **Tag-only discovery**
+  ${contentTagSearchDescription}
+
   **Example Usage:**
   - List workbooks with the name "Superstore":
       filter: "name:eq:Superstore"
@@ -104,15 +118,18 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, tagLabels, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listWorkbooksTool.name);
 
       return await listWorkbooksTool.logAndExecute<ListWorkbooksResult>({
         extra,
-        args: {},
+        args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
+          const combinedFilter = withContentTagFilter(filter, tagLabels);
+          const validatedFilter = combinedFilter
+            ? parseAndValidateWorkbooksFilterString(combinedFilter)
+            : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,
             maxResultLimit,
@@ -122,57 +139,61 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
           }
 
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: listWorkbooksTool.requiredApiScopes,
-              callback: async (restApi) => {
-                const page = await getPage({
-                  pageNumber,
-                  limit,
-                  maxResultLimit,
-                  getDataFn: async ({ pageSize, pageNumber }) => {
-                    const { pagination, workbooks: data } =
-                      await restApi.workbooksMethods.queryWorkbooksForSite({
-                        siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
-                        pageSize,
-                        pageNumber,
-                      });
+            await withContentTagResponseValidation(() =>
+              useRestApi({
+                ...extra,
+                // Raw pages precede bounded-context filtering and must not reach debug notifications.
+                disableLogging: true,
+                jwtScopes: listWorkbooksTool.requiredApiScopes,
+                callback: async (restApi) => {
+                  const page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => {
+                      const { pagination, workbooks: data } =
+                        await restApi.workbooksMethods.queryWorkbooksForSite({
+                          siteId: restApi.siteId,
+                          filter: validatedFilter ?? '',
+                          pageSize,
+                          pageNumber,
+                        });
 
-                    return { pagination, data };
-                  },
-                });
-
-                const workbooks = page.data;
-
-                if (configWithOverrides.disableMetadataApiRequests || workbooks.length === 0) {
-                  return { ...page, data: workbooks };
-                }
-
-                try {
-                  const response = await restApi.metadataMethods.graphql(
-                    getWorkbookLineageQuery(workbooks.map((workbook) => workbook.id)),
-                  );
-                  const enriched = mergeWorkbookLineage(
-                    workbooks,
-                    getWorkbookLineageByLuid(response),
-                    configWithOverrides.boundedContext.datasourceIds,
-                  );
-                  return { ...page, data: enriched };
-                } catch (error) {
-                  log(
-                    {
-                      message: 'Failed to enrich workbooks with lineage metadata',
-                      level: 'warning',
-                      logger: 'lineage',
-                      data: getExceptionMessage(error),
+                      return { pagination, data };
                     },
-                    extra,
-                  );
-                  return { ...page, data: workbooks };
-                }
-              },
-            }),
+                  });
+
+                  const workbooks = page.data;
+
+                  if (configWithOverrides.disableMetadataApiRequests || workbooks.length === 0) {
+                    return { ...page, data: workbooks };
+                  }
+
+                  try {
+                    const response = await restApi.metadataMethods.graphql(
+                      getWorkbookLineageQuery(workbooks.map((workbook) => workbook.id)),
+                    );
+                    const enriched = mergeWorkbookLineage(
+                      workbooks,
+                      getWorkbookLineageByLuid(response),
+                      configWithOverrides.boundedContext.datasourceIds,
+                    );
+                    return { ...page, data: enriched };
+                  } catch (error) {
+                    log(
+                      {
+                        message: 'Failed to enrich workbooks with lineage metadata',
+                        level: 'warning',
+                        logger: 'lineage',
+                        data: getExceptionMessage(error),
+                      },
+                      extra,
+                    );
+                    return { ...page, data: workbooks };
+                  }
+                },
+              }),
+            ),
           );
         },
         constrainSuccessResult: (page) => {

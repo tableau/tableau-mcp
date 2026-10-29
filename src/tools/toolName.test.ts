@@ -1,7 +1,7 @@
 import { DesktopMcpServer } from '../server.desktop.js';
 import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './desktop/tools.js';
-import { isWebToolName, webToolNames } from './web/toolName.js';
+import { isWebToolName, webToolGroups, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
   it('recognizes capture-window-screenshot as a Desktop tool name', () => {
@@ -49,6 +49,15 @@ describe('ToolName', () => {
           ).toBe(false);
         }
       }
+    }
+  });
+});
+
+describe('content tag tool groups', () => {
+  it('classifies generic tag operations as web content tools', () => {
+    for (const name of ['add-content-tags', 'remove-content-tag'] as const) {
+      expect(isWebToolName(name)).toBe(true);
+      expect(webToolGroups.content).toContain(name);
     }
   });
 });

@@ -38,6 +38,7 @@ export type McpScope =
   | 'tableau:mcp:tasks:write'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
+  | 'tableau:mcp:content:tags:write'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write'
   | 'tableau:mcp:workbook:write'
@@ -69,6 +70,8 @@ export type TableauApiScope =
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbook_tags:delete'
+  | 'tableau:view_tags:update'
+  | 'tableau:view_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
@@ -103,6 +106,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:workbook:create',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
+  'tableau:mcp:content:tags:write',
   'tableau:mcp:users:write',
   'tableau:mcp:workbook:write',
   'tableau:mcp:view:read',
@@ -118,6 +122,20 @@ export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauA
   'tableau:content:read',
   'tableau:mcp_site_settings:read',
 ];
+
+// Per-operation JWTs use only the selected resource's mutation scope. Access-check REST lookups
+// obtain their own read-only JWT; the OAuth advertisement below is the union needed by each tool.
+export const CONTENT_TAG_UPDATE_API_SCOPES = {
+  workbook: ['tableau:workbook_tags:update'],
+  view: ['tableau:view_tags:update'],
+  datasource: ['tableau:datasource_tags:update'],
+} as const satisfies Record<'workbook' | 'view' | 'datasource', ReadonlyArray<TableauApiScope>>;
+
+export const CONTENT_TAG_DELETE_API_SCOPES = {
+  workbook: ['tableau:workbook_tags:delete'],
+  view: ['tableau:view_tags:delete'],
+  datasource: ['tableau:datasource_tags:delete'],
+} as const satisfies Record<'workbook' | 'view' | 'datasource', ReadonlyArray<TableauApiScope>>;
 
 /**
  * Scopes the resource access checker needs to fetch a *flow* for a
@@ -499,6 +517,26 @@ const toolScopeMap: Record<
       'tableau:content:read',
       'tableau:mcp_site_settings:read',
       'tableau:users:read',
+    ]),
+  },
+  // Generic tag writes require a dedicated write grant; read or lifecycle-delete grants alone
+  // cannot authorize them. Discovery advertises a union, but runtime selects one mutation scope.
+  'add-content-tags': {
+    mcp: ['tableau:mcp:content:tags:write'],
+    api: new Set([
+      ...CONTENT_TAG_UPDATE_API_SCOPES.workbook,
+      ...CONTENT_TAG_UPDATE_API_SCOPES.view,
+      ...CONTENT_TAG_UPDATE_API_SCOPES.datasource,
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  'remove-content-tag': {
+    mcp: ['tableau:mcp:content:tags:write'],
+    api: new Set([
+      ...CONTENT_TAG_DELETE_API_SCOPES.workbook,
+      ...CONTENT_TAG_DELETE_API_SCOPES.view,
+      ...CONTENT_TAG_DELETE_API_SCOPES.datasource,
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
   // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
