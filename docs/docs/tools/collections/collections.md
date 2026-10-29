@@ -136,6 +136,13 @@ numeric-identity proof requests only permissions-read in a completed, separate s
 membership session. Resource checks obtain their existing minimum scopes separately. No
 source-content delete or permission-update scope is added.
 
+When `ADVERTISE_API_SCOPES=true` and OAuth scope enforcement is enabled, the existing initialization
+gate checks the union of required scopes for enabled tools. Collection membership therefore makes
+`tableau:permissions:read` required at initialization as well as on those two tool calls. The same
+scope remains optional for `publish-workbook` itself; its post-publish disclosure policy is
+unchanged. Clients with an older grant may need to authorize the added read scope before
+initializing with Collections.
+
 ## Live checks still required
 
 Verify paging/sort wire spellings, accepted contentType casing, contentName necessity, collection

@@ -6,7 +6,12 @@ import { stubDefaultEnvVars } from '../../testShared.js';
 import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
 import { AccessTokenValidator, ExternalAccessTokenValidator } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
-import { getSupportedScopes, PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from './scopes.js';
+import {
+  getRequiredApiScopesForTool,
+  getRequiredScopesForTool,
+  getSupportedScopes,
+  PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
+} from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
 const mocks = vi.hoisted(() => ({
@@ -146,7 +151,7 @@ describe('scaffold-data-app required API scope', () => {
   });
 });
 
-describe('initialize with optional post-publish permission disclosure', () => {
+describe('required collection owner scopes and optional post-publish permission disclosure', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
@@ -161,9 +166,14 @@ describe('initialize with optional post-publish permission disclosure', () => {
     mocks.isFeatureEnabled.mockResolvedValue(false);
   });
 
-  it.each([true, false])(
-    'keeps permission disclosure optional while enforcing required scopes (has projects:read=%s)',
-    async (hasProjectsRead) => {
+  it.each([
+    { hasProjectsRead: true, hasOwnerRead: true },
+    { hasProjectsRead: true, hasOwnerRead: false },
+    { hasProjectsRead: false, hasOwnerRead: true },
+    { hasProjectsRead: false, hasOwnerRead: false },
+  ])(
+    'checks initialize required scopes: projects=$hasProjectsRead, collection owner=$hasOwnerRead',
+    async ({ hasProjectsRead, hasOwnerRead }) => {
       const clientId = 'https://chatgpt.com/connector';
       const advertisedScopes = await getSupportedScopes({ includeApiScopes: true, clientId });
       expect(advertisedScopes).toContain(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
@@ -171,7 +181,7 @@ describe('initialize with optional post-publish permission disclosure', () => {
 
       const scopes = advertisedScopes.filter(
         (scope) =>
-          scope !== PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE &&
+          (hasOwnerRead || scope !== PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE) &&
           (hasProjectsRead || scope !== 'tableau:projects:read'),
       );
       const authInfo = { scopes, clientId };
@@ -195,7 +205,7 @@ describe('initialize with optional post-publish permission disclosure', () => {
 
       await middleware(req, res, next);
 
-      if (hasProjectsRead) {
+      if (hasProjectsRead && hasOwnerRead) {
         expect(next).toHaveBeenCalledOnce();
         expect(req.auth).toEqual(authInfo);
         expect(res.statusCode).toBeUndefined();
@@ -204,9 +214,77 @@ describe('initialize with optional post-publish permission disclosure', () => {
         expect(res.statusCode).toBe(403);
         expect(res.body.error).toBe('insufficient_scope');
         expect(res.headers['WWW-Authenticate']).toContain('tableau:projects:read');
-        expect(res.headers['WWW-Authenticate']).not.toContain(
-          PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
-        );
+        expect(res.headers['WWW-Authenticate']).toContain(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+      }
+    },
+  );
+
+  it('allows publish-workbook without its optional post-publish permission scope', async () => {
+    const scopes = [
+      ...getRequiredScopesForTool('publish-workbook'),
+      ...getRequiredApiScopesForTool('publish-workbook'),
+    ];
+    expect(scopes).not.toContain(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+    const authInfo = { scopes, clientId: 'https://chatgpt.com/connector' };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'publish-workbook', arguments: {} },
+      },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+    await middleware(req, res, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.auth).toEqual(authInfo);
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it.each([
+    { toolName: 'add-collection-items', hasOwnerRead: true },
+    { toolName: 'add-collection-items', hasOwnerRead: false },
+    { toolName: 'remove-collection-items', hasOwnerRead: true },
+    { toolName: 'remove-collection-items', hasOwnerRead: false },
+  ] as const)(
+    'enforces $toolName owner read scope: present=$hasOwnerRead',
+    async ({ toolName, hasOwnerRead }) => {
+      const required = [
+        ...getRequiredScopesForTool(toolName),
+        ...getRequiredApiScopesForTool(toolName),
+      ];
+      expect(required).toContain(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+      const scopes = required.filter(
+        (scope) => hasOwnerRead || scope !== PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
+      );
+      const authInfo = { scopes, clientId: 'https://chatgpt.com/connector' };
+      const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+      const req = {
+        headers: { authorization: 'Bearer valid-token' },
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: toolName, arguments: {} },
+        },
+      } as unknown as AuthenticatedRequest;
+      const res = makeRes();
+      const next = vi.fn();
+      await middleware(req, res, next);
+      if (hasOwnerRead) {
+        expect(next).toHaveBeenCalledOnce();
+        expect(req.auth).toEqual(authInfo);
+        expect(res.statusCode).toBeUndefined();
+      } else {
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('insufficient_scope');
+        expect(res.headers['WWW-Authenticate']).toContain(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
       }
     },
   );
