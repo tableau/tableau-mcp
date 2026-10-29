@@ -192,6 +192,21 @@ describe('server', () => {
     }
   });
 
+  it('registers list-recent-content as a read-only tool for non-admin callers', async () => {
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.VIEWER);
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'list-recent-content',
+      expect.objectContaining({
+        inputSchema: { limit: expect.any(Object) },
+        annotations: expect.objectContaining({ readOnlyHint: true, destructiveHint: false }),
+      }),
+      expect.any(Function),
+    );
+  });
+
   // The scope layer advertises each tool's registration-condition probe scopes from a
   // `conditionApiScopes` field in scopes.ts's toolScopeMap. Those scopes must match what the tool
   // instance's declared `registrationConditions` map to via REGISTRATION_CONDITION_API_SCOPES. If the

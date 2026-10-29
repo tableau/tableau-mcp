@@ -1,6 +1,7 @@
 import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
+import { getListRecentContentTool } from './contentExploration/listRecentContent.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getPublishDatasourceTool } from './datasources/publishDatasource.js';
@@ -104,6 +105,7 @@ export const webToolFactories = [
   getGetCustomViewDataTool,
   getGetCustomViewImageTool,
   getSearchContentTool,
+  getListRecentContentTool,
   getRevokeAccessTokenTool,
   getResetConsentTool,
   getQueryAdminInsightsTool,
