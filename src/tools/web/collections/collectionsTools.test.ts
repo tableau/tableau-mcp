@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   createCollection: vi.fn(),
   listCollectionItems: vi.fn(),
   getCollection: vi.fn(),
+  queryCollectionOwner: vi.fn(),
   addCollectionItems: vi.fn(),
   removeCollectionItems: vi.fn(),
   getCurrentServerSession: vi.fn(),
@@ -34,19 +35,18 @@ const mocks = vi.hoisted(() => ({
   isFlowAllowed: vi.fn(),
   userId: '55555555-5555-4555-8555-555555555555',
   siteId: '66666666-6666-4666-8666-666666666666',
+  serverOrigin: 'https://my-tableau-server.com',
 }));
 vi.mock('../../../getTableauServerInfo.js', () => ({ getTableauServerInfo: vi.fn() }));
 vi.mock('../../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
       collectionsMethods: mocks,
+      collectionPermissionsMethods: mocks,
+      serverOrigin: mocks.serverOrigin,
       authenticatedServerMethods: mocks,
-      get userId() {
-        return mocks.userId;
-      },
-      get siteId() {
-        return mocks.siteId;
-      },
+      userId: mocks.userId,
+      siteId: mocks.siteId,
     }),
   ),
 }));
@@ -95,10 +95,12 @@ describe('Collections web tools', () => {
     });
     mocks.userId = fixtures.create.userId;
     mocks.siteId = fixtures.create.siteId;
+    mocks.serverOrigin = 'https://my-tableau-server.com';
     mocks.listCollections.mockResolvedValue(fixtures.page);
     mocks.createCollection.mockResolvedValue(fixtures.create);
     mocks.listCollectionItems.mockResolvedValue(fixtures.itemsPage);
     mocks.getCollection.mockResolvedValue({ collection: fixtures.create });
+    mocks.queryCollectionOwner.mockResolvedValue({ collectionId, ownerId: fixtures.create.userId });
     mocks.addCollectionItems.mockResolvedValue({ response: 1 });
     mocks.removeCollectionItems.mockResolvedValue({ response: 1 });
     mocks.getCurrentServerSession.mockResolvedValue(
@@ -148,6 +150,7 @@ describe('Collections web tools', () => {
         expect.arrayContaining([
           'tableau:collections:read',
           'tableau:collections:update',
+          'tableau:permissions:read',
           'tableau:content:read',
           'tableau:mcp_site_settings:read',
         ]),
@@ -373,7 +376,8 @@ describe('Collections web tools', () => {
       (await call(getAddCollectionItemsTool(new WebMcpServer()), { collectionId, items: [member] }))
         .isError,
     ).toBe(false);
-    expect(mocks.getCurrentServerSession).toHaveBeenCalledOnce();
+    // Each independent owner-read/mutation session rechecks identity at entry and after the read.
+    expect(mocks.getCurrentServerSession).toHaveBeenCalledTimes(4);
   });
   it('rejects a wrong-site identity fallback', async () => {
     mocks.userId = '';
@@ -457,5 +461,129 @@ describe('Collections web tools', () => {
     expect(result.isError).toBe(true);
     expect(message(result)).toContain('Synthetic permission failure');
     expect(message(result)).not.toContain('version-unsupported');
+  });
+
+  it.each(['add', 'remove'] as const)(
+    'verifies numeric aliases through an isolated permission read before %s',
+    async (action) => {
+      mocks.getCollection.mockResolvedValue({
+        collection: { ...fixtures.create, siteId: '7', userId: '42' },
+      });
+      const tool =
+        action === 'add'
+          ? getAddCollectionItemsTool(new WebMcpServer())
+          : getRemoveCollectionItemsTool(new WebMcpServer());
+      const result = await call(tool, { collectionId, items: [member] });
+      expect(result.isError).not.toBe(true);
+      expect(payload(result).status).toBe('completed');
+      expect(mocks.queryCollectionOwner).toHaveBeenCalledExactlyOnceWith({
+        siteId: fixtures.create.siteId,
+        collectionId,
+      });
+      const mutation = action === 'add' ? mocks.addCollectionItems : mocks.removeCollectionItems;
+      expect(mocks.queryCollectionOwner.mock.invocationCallOrder[0]).toBeLessThan(
+        mutation.mock.invocationCallOrder[0],
+      );
+      expect(mocks.getCollection).toHaveBeenCalledTimes(2);
+      expect(useRestApi).toHaveBeenCalledWith(
+        expect.objectContaining({ jwtScopes: ['tableau:permissions:read'], disableLogging: true }),
+      );
+    },
+  );
+
+  it.each(['owner', 'collection'] as const)(
+    'refuses a different permission-proof %s without a batch',
+    async (field) => {
+      mocks.getCollection.mockResolvedValue({
+        collection: { ...fixtures.create, siteId: '7', userId: '42' },
+      });
+      mocks.queryCollectionOwner.mockResolvedValue({
+        collectionId: field === 'collection' ? member.contentLuid : collectionId,
+        ownerId: field === 'owner' ? member.contentLuid : fixtures.create.userId,
+      });
+      const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+        collectionId,
+        items: [member],
+      });
+      expect(result.isError).toBe(true);
+      expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['siteId', 'userId', 'serverOrigin'] as const)(
+    'refuses a changed %s between owner proof and mutation',
+    async (field) => {
+      mocks.getCollection.mockResolvedValue({
+        collection: { ...fixtures.create, siteId: '7', userId: '42' },
+      });
+      mocks.queryCollectionOwner.mockImplementationOnce(async () => {
+        mocks[field] = field === 'serverOrigin' ? 'https://other-tableau.test' : member.contentLuid;
+        return { collectionId, ownerId: fixtures.create.userId };
+      });
+      const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+        collectionId,
+        items: [member],
+      });
+      expect(result.isError).toBe(true);
+      expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['siteId', 'userId', 'serverOrigin'] as const)(
+    'refuses a changed %s before requesting the permission proof',
+    async (field) => {
+      mocks.getCollection.mockImplementationOnce(async () => {
+        mocks[field] = field === 'serverOrigin' ? 'https://other-tableau.test' : member.contentLuid;
+        return { collection: { ...fixtures.create, siteId: '7', userId: '42' } };
+      });
+      const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+        collectionId,
+        items: [member],
+      });
+      expect(result.isError).toBe(true);
+      expect(mocks.queryCollectionOwner).not.toHaveBeenCalled();
+      expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['siteId', 'userId'] as const)(
+    'refuses mixed numeric/UUID %s without a permission fallback',
+    async (field) => {
+      mocks.getCollection.mockResolvedValue({ collection: { ...fixtures.create, [field]: '42' } });
+      const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+        collectionId,
+        items: [member],
+      });
+      expect(result.isError).toBe(true);
+      expect(mocks.queryCollectionOwner).not.toHaveBeenCalled();
+      expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+    },
+  );
+
+  it('withholds failed proof details and never retries a batch', async () => {
+    mocks.getCollection.mockResolvedValue({
+      collection: { ...fixtures.create, siteId: '7', userId: '42' },
+    });
+    mocks.queryCollectionOwner.mockRejectedValueOnce(new Error('PRIVATE_PERMISSION_GRANTS'));
+    const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+      collectionId,
+      items: [member],
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_PERMISSION_GRANTS');
+    expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+    expect(mocks.queryCollectionOwner).toHaveBeenCalledOnce();
+  });
+
+  it('refuses owner metadata changed before the mutation session', async () => {
+    mocks.getCollection
+      .mockResolvedValueOnce({ collection: { ...fixtures.create, siteId: '7', userId: '42' } })
+      .mockResolvedValueOnce({ collection: { ...fixtures.create, siteId: '7', userId: '43' } });
+    const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+      collectionId,
+      items: [member],
+    });
+    expect(result.isError).toBe(true);
+    expect(mocks.addCollectionItems).not.toHaveBeenCalled();
   });
 });

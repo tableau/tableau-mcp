@@ -1,5 +1,7 @@
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
+import { useRestApi } from '../../../restApiInstance.js';
+import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import {
@@ -102,8 +104,16 @@ export async function assertCollectionMembersAllowed(
   }
 }
 
-/** Owner-only candidate policy, stricter than Tableau's administrator exception. */
-export async function assertCollectionOwner(restApi: RestApi, collectionId: string): Promise<void> {
+function ownerUnverified(): McpToolError {
+  return new McpToolError({
+    type: 'collection-owner-unverified',
+    statusCode: 403,
+    message:
+      'This candidate changes membership only in collections verified as owned by the signed-in user on this site. Ownership could not be established. No collection membership was changed.',
+  });
+}
+
+async function authenticatedCollectionUserId(restApi: RestApi): Promise<string> {
   let userId = restApi.userId;
   if (!luidSchema.safeParse(userId).success) {
     const session = await restApi.authenticatedServerMethods.getCurrentServerSession();
@@ -112,29 +122,112 @@ export async function assertCollectionOwner(restApi: RestApi, collectionId: stri
       session.value.site.id !== restApi.siteId ||
       !luidSchema.safeParse(session.value.user.id).success
     ) {
-      throw new McpToolError({
-        type: 'collection-owner-unverified',
-        statusCode: 403,
-        message:
-          'The signed-in user could not be verified for this authenticated site. No collection membership was changed.',
-      });
+      throw ownerUnverified();
     }
     userId = session.value.user.id;
   }
-  const details = await restApi.collectionsMethods.getCollection(collectionId);
+  return userId;
+}
+
+export type VerifiedCollectionOwner = Readonly<{
+  serverOrigin: string;
+  siteId: string;
+  userId: string;
+  collectionId: string;
+  collectionSiteId: string;
+  collectionUserId: string;
+}>;
+
+async function assertOwnerActor(restApi: RestApi, proof: VerifiedCollectionOwner): Promise<void> {
+  if (
+    restApi.serverOrigin !== proof.serverOrigin ||
+    restApi.siteId !== proof.siteId ||
+    (await authenticatedCollectionUserId(restApi)) !== proof.userId
+  )
+    throw ownerUnverified();
+}
+
+/** Complete each read before opening the next session: PAT sign-in invalidates older sessions. */
+export async function verifyCollectionOwner(
+  collectionId: string,
+  extra: TableauWebRequestHandlerExtra,
+): Promise<VerifiedCollectionOwner> {
+  const quietExtra = getQuietCollectionsExtra(extra);
+  const inspected = await useRestApi({
+    ...quietExtra,
+    jwtScopes: ['tableau:collections:read'],
+    callback: async (restApi) => {
+      const serverOrigin = restApi.serverOrigin;
+      const siteId = restApi.siteId;
+      const userId = await authenticatedCollectionUserId(restApi);
+      const details = await restApi.collectionsMethods.getCollection(collectionId);
+      const collection = details.collection;
+      if (
+        details.errors?.length ||
+        collection?.luid !== collectionId ||
+        !collection.siteId ||
+        !collection.userId ||
+        !serverOrigin ||
+        !luidSchema.safeParse(siteId).success
+      )
+        throw ownerUnverified();
+      const proof: VerifiedCollectionOwner = {
+        serverOrigin,
+        siteId,
+        userId,
+        collectionId,
+        collectionSiteId: collection.siteId,
+        collectionUserId: collection.userId,
+      };
+      await assertOwnerActor(restApi, proof);
+      if (collection.siteId === proof.siteId && collection.userId === proof.userId)
+        return { proof, numeric: false };
+      // No fallback for a UUID mismatch, a missing identity, or mixed representations.
+      if (!/^[0-9]+$/.test(collection.siteId) || !/^[0-9]+$/.test(collection.userId))
+        throw ownerUnverified();
+      return { proof, numeric: true };
+    },
+  });
+  if (inspected.numeric) {
+    try {
+      await useRestApi({
+        ...quietExtra,
+        jwtScopes: ['tableau:permissions:read'],
+        callback: async (restApi) => {
+          await assertOwnerActor(restApi, inspected.proof);
+          const owner = await restApi.collectionPermissionsMethods.queryCollectionOwner({
+            siteId: inspected.proof.siteId,
+            collectionId,
+          });
+          if (owner.collectionId !== collectionId || owner.ownerId !== inspected.proof.userId)
+            throw ownerUnverified();
+          await assertOwnerActor(restApi, inspected.proof);
+        },
+      });
+    } catch (error) {
+      if (error instanceof RouteSafetyError) throw error;
+      // Permission failures can contain unrelated grants or private labels. Retain no cause.
+      throw ownerUnverified();
+    }
+  }
+  return Object.freeze(inspected.proof);
+}
+
+/** Check the mutation actor and unchanged raw identity without opening another REST session. */
+export async function assertCollectionOwnerSession(
+  restApi: RestApi,
+  proof: VerifiedCollectionOwner,
+): Promise<void> {
+  await assertOwnerActor(restApi, proof);
+  const details = await restApi.collectionsMethods.getCollection(proof.collectionId);
+  await assertOwnerActor(restApi, proof);
   if (
     details.errors?.length ||
-    details.collection?.luid !== collectionId ||
-    details.collection.userId !== userId ||
-    details.collection.siteId !== restApi.siteId
-  ) {
-    throw new McpToolError({
-      type: 'collection-owner-unverified',
-      statusCode: 403,
-      message:
-        'This candidate changes membership only in collections verified as owned by the signed-in user on this site. Ownership could not be established. No collection membership was changed.',
-    });
-  }
+    details.collection?.luid !== proof.collectionId ||
+    details.collection.siteId !== proof.collectionSiteId ||
+    details.collection.userId !== proof.collectionUserId
+  )
+    throw ownerUnverified();
 }
 
 export type CollectionPageResultInfo = {

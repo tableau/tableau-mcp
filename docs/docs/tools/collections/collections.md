@@ -63,10 +63,18 @@ first page as an advancing second page when metadata does not match.
 ## Permissions, bounds, and membership safety
 
 All tools declare minimum Viewer role; Tableau still enforces the caller's endpoint permissions.
-Membership changes are additionally owner-only in this candidate, including for administrators: GET
-collection details must match its LUID, owner `userId`, and authenticated site `siteId`. If the
-signed-in user LUID is missing, a same-site current-session lookup may resolve it; otherwise
-mutation fails closed. There is no caller-controlled owner/user/site argument.
+Membership changes are additionally owner-only, including for administrators. UUID identities in
+collection details must match the authenticated site and user. When both collection owner and site
+are numeric-string aliases, a separate, site-scoped
+[collection permissions read](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_collection_permissions)
+must return the requested collection LUID and the authenticated user's owner LUID. No alias/name
+comparison or numeric-to-UUID conversion is used. Missing/mixed identities and UUID mismatches fail
+closed without that fallback.
+
+Owner-read sessions finish before the mutation session opens. The mutation session must match the
+verified server origin, site and user, and collection details must retain the same raw owner/site
+identities. The proof is used only within that operation. A missing signed-in user LUID can be
+resolved only through the same-site current-session API. No owner/user/site argument is accepted.
 
 Both listing tools refuse every configured bounded-content context. The official item `content`
 model declares numeric internal `id`/`siteId`, `contentType`, `title`, and `syncToken`, but no
@@ -119,12 +127,14 @@ are not mislabeled as version failures.
   site-settings scope
 - Create: MCP `tableau:mcp:collections:create`; API `tableau:collections:create`
 - Membership: MCP `tableau:mcp:collections:update`; API `tableau:collections:read` and
-  `tableau:collections:update`, plus existing supported resource-checker scopes in OAuth discovery
+  `tableau:collections:update`, plus `tableau:permissions:read` for numeric-identity verification
+  and existing supported resource-checker scopes in OAuth discovery
 
 List runtime JWTs request only `tableau:collections:read`; config probes request their existing
-site-settings scope in a separate call. Membership runtime JWTs request the read/update pair;
-resource checks obtain their existing minimum scopes separately. No source-content delete scope is
-added.
+site-settings scope in a separate call. Membership runtime JWTs request the read/update pair; the
+numeric-identity proof requests only permissions-read in a completed, separate session before the
+membership session. Resource checks obtain their existing minimum scopes separately. No
+source-content delete or permission-update scope is added.
 
 ## Live checks still required
 

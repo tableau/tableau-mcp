@@ -48,6 +48,7 @@ let collectionResponse: Record<string, unknown>;
 let pageResponse: Record<string, unknown>;
 let memberResponse: Record<string, unknown>;
 let mutationResponse: Record<string, unknown>;
+let ownerPermissionsResponse: Record<string, unknown>;
 
 async function call<S extends z.ZodRawShape>(
   tool: WebTool<S>,
@@ -101,6 +102,16 @@ beforeEach(() => {
     },
   };
   mutationResponse = { response: 1 };
+  ownerPermissionsResponse = {
+    permissions: {
+      collection: {
+        id: fixtures.create.luid,
+        owner: { id: fixtures.create.userId },
+        name: privateSentinel,
+      },
+      granteeCapabilities: [{ private: privateSentinel }],
+    },
+  };
   const adapter: AxiosRequestConfig['adapter'] = async (config) => {
     const url = config.url ?? '';
     requests.push(url);
@@ -120,6 +131,8 @@ beforeEach(() => {
     else if (url === '/collections' && config.method === 'post')
       data = { ...fixtures.create, name: { private: privateSentinel } };
     else if (url === `/collections/${fixtures.create.luid}`) data = collectionResponse;
+    else if (url.endsWith(`/collections/${fixtures.create.luid}/permissions`))
+      data = ownerPermissionsResponse;
     else if (url.endsWith('/items') && config.method === 'get') data = pageResponse;
     else if (url.endsWith('/batchCreate') || url.endsWith('/batchDelete')) data = mutationResponse;
     else throw new Error('Unexpected mock endpoint; no network adapter is available.');
@@ -139,6 +152,54 @@ afterEach(() => {
 });
 
 describe('Collections request-local default-debug privacy', () => {
+  it('finishes owner/permission read sessions before opening mutation and withholds grants', async () => {
+    collectionResponse = {
+      collection: { ...fixtures.create, siteId: '7', userId: '42', name: privateSentinel },
+    };
+    const result = await call(getAddCollectionItemsTool(extra.server), {
+      collectionId: fixtures.create.luid,
+      items: [member],
+    });
+    expect(result.isError).not.toBe(true);
+    expect(requests).toContain(
+      `/sites/${fixtures.create.siteId}/collections/${fixtures.create.luid}/permissions`,
+    );
+    const permissionIndex = requests.findIndex((url) => url.endsWith('/permissions'));
+    const batchIndex = requests.findIndex((url) => url.endsWith('/batchCreate'));
+    expect(permissionIndex).toBeLessThan(batchIndex);
+    expect(requests.slice(permissionIndex + 1, batchIndex)).toContain('/auth/signout');
+    expect(requests.slice(permissionIndex + 1, batchIndex)).toContain('/auth/signin');
+    let active = 0;
+    for (const path of requests) {
+      if (path === '/auth/signin') {
+        active++;
+        expect(active).toBe(1);
+      }
+      if (path === '/auth/signout') {
+        active--;
+        expect(active).toBe(0);
+      }
+    }
+    expect(active).toBe(0);
+    noPrivateDetails(result);
+  });
+
+  it('withholds malformed permission proof and refuses every membership write', async () => {
+    collectionResponse = { collection: { ...fixtures.create, siteId: '7', userId: '42' } };
+    ownerPermissionsResponse = {
+      permissions: {
+        collection: { id: fixtures.create.luid, owner: { id: { private: privateSentinel } } },
+        granteeCapabilities: [{ private: privateSentinel }],
+      },
+    };
+    const result = await call(getAddCollectionItemsTool(extra.server), {
+      collectionId: fixtures.create.luid,
+      items: [member],
+    });
+    expect(result.isError).toBe(true);
+    expect(requests.some((url) => url.endsWith('/batchCreate'))).toBe(false);
+    noPrivateDetails(result);
+  });
   it('withholds a denied member before batch execution without silencing tool notifications', async () => {
     vi.stubEnv('INCLUDE_PROJECT_IDS', allowedProject);
     extra = getMockRequestHandlerExtra();

@@ -15,6 +15,7 @@ import {
   AuthenticatedAuthenticationMethods,
   AuthenticationMethods,
 } from './methods/authenticationMethods.js';
+import CollectionPermissionsMethods from './methods/collectionPermissionsMethods.js';
 import CollectionsMethods from './methods/collectionsMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
@@ -127,6 +128,11 @@ export class RestApi {
     return getBearerTokenPayload(this.creds.token)['https://tableau.com/userId'] ?? '';
   }
 
+  /** Origin of this SDK's guarded requests, for binding cross-session identity proofs. */
+  get serverOrigin(): string {
+    return new URL(RestApi.host).origin;
+  }
+
   private get authenticationMethods(): AuthenticationMethods {
     const authenticationMethods = new AuthenticationMethods(RestApi.baseUrl, {
       timeout: this._maxRequestTimeoutMs,
@@ -165,6 +171,15 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrlWithoutVersion, collectionsMethods.interceptors);
     return collectionsMethods;
+  }
+
+  get collectionPermissionsMethods(): CollectionPermissionsMethods {
+    const methods = new CollectionPermissionsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, methods.interceptors);
+    return methods;
   }
 
   get contentExplorationMethods(): ContentExplorationMethods {

@@ -247,12 +247,14 @@ const toolScopeMap: Record<
     api: new Set(['tableau:collections:create']),
   },
   // Static OAuth surface includes owner read plus all supported member-checker scopes.
+  // Numeric ownership uses a separate permissions-read session completed before mutation.
   // Runtime JWTs mint the membership pair; resource checks mint their own minimum scopes.
   'add-collection-items': {
     mcp: ['tableau:mcp:collections:update'],
     api: new Set([
       'tableau:collections:read',
       'tableau:collections:update',
+      'tableau:permissions:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
@@ -261,6 +263,7 @@ const toolScopeMap: Record<
     api: new Set([
       'tableau:collections:read',
       'tableau:collections:update',
+      'tableau:permissions:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },

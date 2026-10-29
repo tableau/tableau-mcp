@@ -13,6 +13,7 @@ import { join, relative } from 'node:path';
 import { z } from 'zod';
 
 import * as authenticationApi from '../tableau/apis/authenticationApi.js';
+import * as collectionPermissionsApi from '../tableau/apis/collectionPermissionsApi.js';
 import * as collectionsApi from '../tableau/apis/collectionsApi.js';
 import * as contentExplorationApi from '../tableau/apis/contentExplorationApi.js';
 import * as datasourcesApi from '../tableau/apis/datasourcesApi.js';
@@ -48,6 +49,7 @@ type Endpoint = {
 const modules: Record<string, Record<string, unknown>> = {
   'tableau-oauth/apis.ts': tableauOAuthApi,
   'tableau/apis/authenticationApi.ts': authenticationApi,
+  'tableau/apis/collectionPermissionsApi.ts': collectionPermissionsApi,
   'tableau/apis/collectionsApi.ts': collectionsApi,
   'tableau/apis/contentExplorationApi.ts': contentExplorationApi,
   'tableau/apis/datasourcesApi.ts': datasourcesApi,

@@ -12,8 +12,9 @@ import { WebTool } from '../tool.js';
 import { assertCollectionsSupported } from './collectionsCapability.js';
 import {
   assertCollectionMembersAllowed,
-  assertCollectionOwner,
+  assertCollectionOwnerSession,
   getQuietCollectionsExtra,
+  verifyCollectionOwner,
 } from './collectionsUtils.js';
 
 export const collectionMembershipParamsSchema = {
@@ -31,7 +32,7 @@ export function getCollectionMembershipTool(
     server,
     name: action === 'add' ? 'add-collection-items' : 'remove-collection-items',
     minRequiredRole: SiteRole.VIEWER,
-    description: `${action === 'add' ? 'Adds' : 'Removes'} references through POST /api/-/collections/{collectionId}/items/${action === 'add' ? 'batchCreate' : 'batchDelete'}. Accepts an owner-verified collection LUID and member references. Every member is checked before sending the batch. Removing membership never deletes source content. Returns affected count, errors, and an honest completed/partial-failure/unverified status; HTTP 200 may contain partial errors. Never retry a partial batch automatically. No collection deletion, sharing, or ownership transfer. Requires collections:read for owner verification and collections:update. Accepted contentType casing/contentName requirements are not specified by OpenAPI and require live verification.`,
+    description: `${action === 'add' ? 'Adds' : 'Removes'} references through POST /api/-/collections/{collectionId}/items/${action === 'add' ? 'batchCreate' : 'batchDelete'}. Accepts an owner-verified collection LUID and member references. Every member is checked before sending the batch. Removing membership never deletes source content. Returns affected count, errors, and an honest completed/partial-failure/unverified status; HTTP 200 may contain partial errors. Never retry a partial batch automatically. No collection deletion, sharing, or ownership transfer. Requires collections:read and collections:update. Numeric owner/site aliases also require tableau:permissions:read for a separate site-scoped owner LUID check. Accepted contentType casing/contentName requirements are not specified by OpenAPI and require live verification.`,
     paramsSchema: collectionMembershipParamsSchema,
     annotations: {
       title: action === 'add' ? 'Add Collection Items' : 'Remove Collection Items',
@@ -53,12 +54,13 @@ export function getCollectionMembershipTool(
           if (!parsed.success) return new ArgsValidationError(parsed.error.message).toErr();
           await assertCollectionsSupported(extra);
           await assertCollectionMembersAllowed(parsed.data.items, quietExtra);
+          const owner = await verifyCollectionOwner(parsed.data.collectionId, quietExtra);
           return new Ok(
             await useRestApi({
               ...quietExtra,
               jwtScopes: ['tableau:collections:read', 'tableau:collections:update'],
               callback: async (restApi) => {
-                await assertCollectionOwner(restApi, parsed.data.collectionId);
+                await assertCollectionOwnerSession(restApi, owner);
                 const response =
                   action === 'add'
                     ? await restApi.collectionsMethods.addCollectionItems(parsed.data)
