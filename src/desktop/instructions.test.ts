@@ -1,4 +1,6 @@
+import { buildCombinedInstructions } from '../instructions.combined.js';
 import { desktopToolNames } from '../tools/desktop/toolName.js';
+import { TOOL_PROFILE_NAMES } from './episode-events.js';
 import {
   buildDesktopInstructions,
   DESKTOP_ROUTE_TABLE,
@@ -618,4 +620,93 @@ describe('buildDesktopInstructions', () => {
       );
     },
   );
+});
+
+// Claude Code CLI 2.1.307 shows only this many UTF-16 units of server instructions by default.
+const CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT = 4_096;
+// The limit TAS sets for its own Claude Code sessions.
+const CLAUDE_CODE_RAISED_INSTRUCTIONS_LIMIT = 16_384;
+
+const CORE_ENTRY_IDS = [
+  'preamble',
+  'ask-user-ambiguity',
+  'analytical-question-no-write',
+  'data-value-question',
+  'no-native-tool-escape',
+  SESSION_RESOLUTION_ID,
+  'preflight-rejection',
+  'rounded-bar',
+  'plain-chart',
+  'dense-scatter-bubble',
+];
+
+const PROFILES_WITHOUT_TABLE = ['demo', 'spec-loop'];
+const TABLE_PROFILES = ['', 'not-a-profile', ...TOOL_PROFILE_NAMES].filter(
+  (profile) => !PROFILES_WITHOUT_TABLE.includes(profile),
+);
+
+const visibleUnderCliCut = (text: string, limit: number): string => {
+  if (text.length <= limit) return text;
+  const kept = text.slice(0, limit);
+  const last = kept.charCodeAt(kept.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? kept.slice(0, -1) : kept;
+};
+
+type Variant = { name: string; text: string; profile: string; sessionPinned: boolean };
+
+const variants = (profiles: readonly string[]): Variant[] =>
+  profiles.flatMap((profile) =>
+    [false, true].flatMap((sessionPinned) => {
+      const desktop = buildDesktopInstructions({ sessionPinned, profile });
+      return [
+        { name: 'standalone', text: desktop },
+        { name: 'combined', text: buildCombinedInstructions({ sessionPinned, profile }) },
+      ].map(({ name, text }) => ({
+        name: `${name} profile=${JSON.stringify(profile)} pinned=${sessionPinned}`,
+        text,
+        profile,
+        sessionPinned,
+      }));
+    }),
+  );
+
+describe('instruction visibility under the Claude Code default cut', () => {
+  it('puts the core entries first, in order', () => {
+    expect(DESKTOP_ROUTE_TABLE.slice(0, CORE_ENTRY_IDS.length).map((entry) => entry.id)).toEqual(
+      CORE_ENTRY_IDS,
+    );
+  });
+
+  it.each(variants(TABLE_PROFILES).map((v) => [v.name, v] as const))(
+    'shows every core entry whole in %s',
+    (_name, { text, sessionPinned }) => {
+      const visible = visibleUnderCliCut(text, CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT);
+      for (const id of CORE_ENTRY_IDS) {
+        const entry = DESKTOP_ROUTE_TABLE.find((e) => e.id === id)!;
+        const rendered =
+          sessionPinned && id === SESSION_RESOLUTION_ID
+            ? SESSION_RESOLUTION_TEXT_PINNED
+            : renderInstructionEntry(entry);
+        const end = text.indexOf(rendered) + rendered.length;
+        expect(
+          end,
+          `${id} ends at ${end}, ${end - CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT} over the limit`,
+        ).toBeLessThanOrEqual(CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT);
+        expect(visible, `${id} is cut`).toContain(rendered);
+      }
+    },
+  );
+
+  it.each(variants(PROFILES_WITHOUT_TABLE).map((v) => [v.name, v] as const))(
+    'fits demo and spec-loop whole within the default limit in %s',
+    (_name, { text }) => {
+      expect(text.length).toBeLessThanOrEqual(CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT);
+    },
+  );
+
+  it.each(
+    variants([...TABLE_PROFILES, ...PROFILES_WITHOUT_TABLE]).map((v) => [v.name, v] as const),
+  )('fits within the raised limit in %s', (_name, { text }) => {
+    expect(text.length).toBeLessThanOrEqual(CLAUDE_CODE_RAISED_INSTRUCTIONS_LIMIT);
+  });
 });

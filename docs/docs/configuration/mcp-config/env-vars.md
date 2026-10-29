@@ -529,12 +529,11 @@ well-formed GUID.
 ## Product telemetry fields
 
 Every event also carries `type`, `host_timestamp` (UTC time of the call), `service_name`
-(`tableau-mcp`), `pod`, `podname` and `is_hyperforce`.
+(`tableau-mcp`), `podname` and `is_hyperforce`.
 
 | Field                                          | Web                                                                                                                                         | Desktop                                                                               |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `tool_name`, `request_id`                      | yes                                                                                                                                         | yes                                                                                   |
-| `host_name`                                    | the machine's hostname                                                                                                                      | not sent                                                                              |
 | `session_id`                                   | MCP session ID, empty on stdio                                                                                                              | `TABLEAU_DESKTOP_SESSION_LUID`, empty if unset                                        |
 | `site_luid`, `user_luid`                       | from the signed-in session                                                                                                                  | `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`                                              |
 | `chat_id`                                      | not sent                                                                                                                                    | `TABLEAU_CHAT_ID`                                                                     |
@@ -546,8 +545,7 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
-1024 characters), `site_luid`, `user_luid` and `host_name` (the machine's hostname). Calling it also
-sends the usual `tool_call` event.
+1024 characters), `site_luid` and `user_luid`. Calling it also sends the usual `tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
@@ -770,7 +768,7 @@ discretion.
 
 ## `CSP_ALLOWED_DOMAINS`
 
-A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps (when the `mcp-apps` feature is enabled).
+A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps.
 
 - Default: `https://*.online.tableau.com,https://*.tableau.com`
 - The configured [`SERVER`](#server) origin is automatically appended to this list.
@@ -794,8 +792,6 @@ presigned URL (as a `resource_link` content block) instead of inlining the image
 client fetches the image bytes directly from S3, so the image never streams back through the MCP
 server on read.
 
-- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
-  disabled, this variable has no effect and the tools return inline base64.
 - Default: unset (feature disabled — tools return inline base64, the original behavior).
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
