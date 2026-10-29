@@ -18,4 +18,7 @@ const endpoint = makeEndpoint({
   response: collectionOwnerPermissionsSchema,
 });
 
-export const collectionPermissionsApis = makeApi([endpoint]) satisfies ZodiosEndpointDefinitions;
+const collectionPermissionsApi = makeApi([endpoint]);
+export const collectionPermissionsApis = [
+  ...collectionPermissionsApi,
+] as const satisfies ZodiosEndpointDefinitions;
