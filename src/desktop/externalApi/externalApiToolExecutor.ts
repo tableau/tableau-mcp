@@ -98,6 +98,7 @@ import {
   storyboardRoute,
   SummaryData,
   summaryDataSchema,
+  ValidateCalculatedFieldRequest,
   ValidateCalculatedFieldResponse,
   validateCalculatedFieldResponseSchema,
   ValidationResult,
@@ -106,6 +107,7 @@ import {
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  workbookDatasourceValidateCalculatedFieldRoute,
   WorkbookDiagnostics,
   workbookDiagnosticsSchema,
   WorkbookInventory,
@@ -134,7 +136,6 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
-  worksheetValidateCalculatedFieldRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -759,15 +760,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async validateWorksheetCalculatedField(
-    worksheetId: string,
-    formula: string,
+  async validateDatasourceCalculatedField(
+    datasourceId: string,
+    request: ValidateCalculatedFieldRequest,
     signal: AbortSignal,
   ): Promise<Result<ValidateCalculatedFieldResponse, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.postJsonForBody(
-        worksheetValidateCalculatedFieldRoute(worksheetId),
-        { formula },
+        workbookDatasourceValidateCalculatedFieldRoute(datasourceId),
+        request,
         validateCalculatedFieldResponseSchema,
         signal,
       ),

@@ -72,7 +72,7 @@ export function makeExecutorMock(
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
-    validateWorksheetCalculatedField: vi.fn(),
+    validateDatasourceCalculatedField: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyDatasourceDocument: vi.fn(),

@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.25), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.27), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -31,6 +31,8 @@ export const EXTERNAL_API_ROUTES = {
   workbookDatasources: '/v0/workbook/datasources',
   workbookDatasource: '/v0/workbook/datasources/{id}',
   workbookDatasourceDocument: '/v0/workbook/datasources/{id}/document',
+  workbookDatasourceValidateCalculatedField:
+    '/v0/workbook/datasources/{id}:validateCalculatedField',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
@@ -73,7 +75,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
-  worksheetValidateCalculatedField: '/v0/workbook/worksheets/{id}:validateCalculatedField',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
@@ -316,6 +317,12 @@ export function workbookDatasourceDocumentRoute(datasourceId: string): string {
   );
 }
 
+export function workbookDatasourceValidateCalculatedFieldRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField.replace('{id}', () =>
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
 export function worksheetSummaryDataRoute(
   worksheetId: string,
   query: WorksheetSummaryDataQuery,
@@ -402,10 +409,6 @@ export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
 
 export function worksheetReloadExtensionRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:reloadExtension`;
-}
-
-export function worksheetValidateCalculatedFieldRoute(worksheetId: string): string {
-  return `${worksheetRoute(worksheetId)}:validateCalculatedField`;
 }
 
 export function worksheetRefreshNowRoute(worksheetId: string): string {
@@ -1011,11 +1014,24 @@ export const logicalTableListSchema = z
   .passthrough();
 export type LogicalTableList = z.infer<typeof logicalTableListSchema>;
 
+/** One issue found by `POST /v0/workbook/document:validate`. */
+export const workbookValidationIssueSchema = z
+  .object({
+    // Extensible enum: 'error' | 'warning' today; tolerate future values.
+    severity: z.string(),
+    message: z.string(),
+    line: z.number().int().optional(),
+    column: z.number().int().optional(),
+    element: z.string().optional(),
+  })
+  .passthrough();
+export type WorkbookValidationIssue = z.infer<typeof workbookValidationIssueSchema>;
+
 /** Validation result returned by `POST /v0/workbook/document:validate`. */
 export const validationResultSchema = z
   .object({
     isValid: z.boolean(),
-    validationIssues: z.array(z.string()).optional(),
+    issues: z.array(workbookValidationIssueSchema),
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
@@ -1124,7 +1140,15 @@ export const capabilityMatrixSchema = z
   .passthrough();
 export type CapabilityMatrix = z.infer<typeof capabilityMatrixSchema>;
 
-/** Result of `POST /v0/workbook/worksheets/{id}:validateCalculatedField`. */
+/** Body of `POST /v0/workbook/datasources/{id}:validateCalculatedField`. */
+export type ValidateCalculatedFieldRequest = {
+  formula: string;
+  caption?: string;
+  /** Qualified internal name of the edited calc: `[datasource-name].[field-name]`. */
+  fieldName?: string;
+};
+
+/** Result of `POST /v0/workbook/datasources/{id}:validateCalculatedField`. */
 export const validateCalculatedFieldResponseSchema = z
   .object({
     isValid: z.boolean(),
@@ -1137,6 +1161,9 @@ export const validateCalculatedFieldResponseSchema = z
         })
         .passthrough(),
     ),
+    isAggregate: z.boolean().optional(),
+    // Workbook <column> datatype vocabulary (extensible enum).
+    dataType: z.string().optional(),
   })
   .passthrough();
 export type ValidateCalculatedFieldResponse = z.infer<typeof validateCalculatedFieldResponseSchema>;

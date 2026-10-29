@@ -11,10 +11,10 @@ import { getValidateCalculatedFieldTool } from './validateCalculatedField.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
-const worksheets = {
-  worksheets: [
-    { id: 'sheet-target', name: 'Sales', hidden: false },
-    { id: 'sheet-decoy', name: 'Profit', hidden: false },
+const datasources = {
+  datasources: [
+    { id: 'ds-target', name: 'Sample - Superstore' },
+    { id: 'ds-decoy', name: 'Quota' },
   ],
 };
 
@@ -24,15 +24,17 @@ describe('validate-calculated-field tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares a read-only tool with worksheet and formula params', () => {
+  it('declares a read-only tool with datasource, formula, caption, and fieldName params', () => {
     const tool = getValidateCalculatedFieldTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('validate-calculated-field');
-    expect(tool.minApiVersion).toBe('0.2.16');
+    expect(tool.minApiVersion).toBe('0.2.27');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      datasourceName: expect.any(Object),
       formula: expect.any(Object),
+      caption: expect.any(Object),
+      fieldName: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
@@ -42,78 +44,163 @@ describe('validate-calculated-field tool', () => {
     });
   });
 
-  it('rejects an empty formula and an empty worksheet name', () => {
+  it('rejects an empty formula, datasource name, caption, or fieldName', () => {
     const tool = getValidateCalculatedFieldTool(new DesktopMcpServer());
     const schema = z.object(tool.paramsSchema as z.ZodRawShape);
+    const valid = { datasourceName: 'Sample - Superstore', formula: 'SUM([Sales])' };
 
-    expect(schema.safeParse({ worksheetName: 'Sales', formula: '' }).success).toBe(false);
-    expect(schema.safeParse({ worksheetName: '', formula: 'SUM([Sales])' }).success).toBe(false);
-    expect(schema.safeParse({ worksheetName: 'Sales', formula: 'SUM([Sales])' }).success).toBe(
-      true,
-    );
+    expect(schema.safeParse({ ...valid, formula: '' }).success).toBe(false);
+    expect(schema.safeParse({ ...valid, datasourceName: '' }).success).toBe(false);
+    expect(schema.safeParse({ ...valid, caption: '' }).success).toBe(false);
+    expect(schema.safeParse({ ...valid, fieldName: '' }).success).toBe(false);
+    expect(schema.safeParse(valid).success).toBe(true);
+    expect(
+      schema.safeParse({
+        ...valid,
+        caption: 'Total Sales',
+        fieldName: '[federated.0abc123].[Calculation_123]',
+      }).success,
+    ).toBe(true);
   });
 
-  it('resolves the worksheet name and returns the validation result', async () => {
+  it('resolves the datasource name and returns the validation result', async () => {
     const validation = {
       isValid: false,
       errors: [{ position: 4, length: 1, message: 'Unbalanced parentheses.' }],
     };
-    const listWorksheets = vi.fn().mockResolvedValue(Ok(worksheets));
-    const validateWorksheetCalculatedField = vi.fn().mockResolvedValue(Ok(validation));
+    const listWorkbookDatasources = vi.fn().mockResolvedValue(Ok(datasources));
+    const validateDatasourceCalculatedField = vi.fn().mockResolvedValue(Ok(validation));
     const controller = new AbortController();
     const extra = {
       ...getMockRequestHandlerExtra(),
       signal: controller.signal,
-      getExecutor: vi.fn().mockResolvedValue({ listWorksheets, validateWorksheetCalculatedField }),
+      getExecutor: vi
+        .fn()
+        .mockResolvedValue({ listWorkbookDatasources, validateDatasourceCalculatedField }),
     };
 
     const result = await invokeTool(
-      { session: '999', worksheetName: 'Sales', formula: 'SUM([Sales]' },
+      {
+        session: '999',
+        datasourceName: 'Sample - Superstore',
+        formula: 'SUM([Sales]',
+        caption: undefined,
+        fieldName: undefined,
+      },
       extra,
     );
 
     invariant(result.content[0].type === 'text');
     expect(result.isError).toBe(false);
     expect(JSON.parse(result.content[0].text)).toEqual(validation);
-    expect(validateWorksheetCalculatedField).toHaveBeenCalledExactlyOnceWith(
-      'sheet-target',
-      'SUM([Sales]',
+    expect(validateDatasourceCalculatedField).toHaveBeenCalledExactlyOnceWith(
+      'ds-target',
+      { formula: 'SUM([Sales]', caption: undefined, fieldName: undefined },
       controller.signal,
     );
   });
 
-  it('returns an error when the worksheet does not exist, without validating', async () => {
-    const validateWorksheetCalculatedField = vi.fn();
+  it('forwards caption and fieldName and passes isAggregate and dataType through', async () => {
+    const validation = { isValid: true, errors: [], isAggregate: true, dataType: 'real' };
+    const validateDatasourceCalculatedField = vi.fn().mockResolvedValue(Ok(validation));
     const extra = {
       ...getMockRequestHandlerExtra(),
       getExecutor: vi.fn().mockResolvedValue({
-        listWorksheets: vi.fn().mockResolvedValue(Ok(worksheets)),
-        validateWorksheetCalculatedField,
+        listWorkbookDatasources: vi.fn().mockResolvedValue(Ok(datasources)),
+        validateDatasourceCalculatedField,
       }),
     };
 
     const result = await invokeTool(
-      { session: undefined, worksheetName: 'Missing', formula: 'SUM([Sales])' },
+      {
+        session: undefined,
+        datasourceName: 'Sample - Superstore',
+        formula: 'SUM([Sales])',
+        caption: 'Total Sales',
+        fieldName: '[federated.0abc123].[Calculation_123]',
+      },
       extra,
     );
 
-    expect(result.isError).toBe(true);
-    expect(validateWorksheetCalculatedField).not.toHaveBeenCalled();
+    invariant(result.content[0].type === 'text');
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text)).toEqual(validation);
+    expect(validateDatasourceCalculatedField).toHaveBeenCalledExactlyOnceWith(
+      'ds-target',
+      {
+        formula: 'SUM([Sales])',
+        caption: 'Total Sales',
+        fieldName: '[federated.0abc123].[Calculation_123]',
+      },
+      expect.any(AbortSignal),
+    );
   });
+
+  it.each([
+    {
+      datasourceName: 'Missing',
+      inventory: datasources,
+      expected: 'was not found',
+    },
+    {
+      datasourceName: 'Duplicate',
+      inventory: {
+        datasources: [
+          { id: 'first', name: 'Duplicate' },
+          { id: 'second', name: 'Duplicate' },
+        ],
+      },
+      expected: 'matched multiple datasources',
+    },
+  ])(
+    'returns an error when $datasourceName does not resolve, without validating',
+    async ({ datasourceName, inventory, expected }) => {
+      const validateDatasourceCalculatedField = vi.fn();
+      const extra = {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockResolvedValue({
+          listWorkbookDatasources: vi.fn().mockResolvedValue(Ok(inventory)),
+          validateDatasourceCalculatedField,
+        }),
+      };
+
+      const result = await invokeTool(
+        {
+          session: undefined,
+          datasourceName,
+          formula: 'SUM([Sales])',
+          caption: undefined,
+          fieldName: undefined,
+        },
+        extra,
+      );
+
+      invariant(result.content[0].type === 'text');
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(expected);
+      expect(validateDatasourceCalculatedField).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns an error when the executor fails', async () => {
     const extra = {
       ...getMockRequestHandlerExtra(),
       getExecutor: vi.fn().mockResolvedValue({
-        listWorksheets: vi.fn().mockResolvedValue(Ok(worksheets)),
-        validateWorksheetCalculatedField: vi
+        listWorkbookDatasources: vi.fn().mockResolvedValue(Ok(datasources)),
+        validateDatasourceCalculatedField: vi
           .fn()
           .mockResolvedValue(Err({ type: 'unknown', error: 'Desktop request failed.' })),
       }),
     };
 
     const result = await invokeTool(
-      { session: undefined, worksheetName: 'sheet-target', formula: 'SUM([Sales])' },
+      {
+        session: undefined,
+        datasourceName: 'ds-target',
+        formula: 'SUM([Sales])',
+        caption: undefined,
+        fieldName: undefined,
+      },
       extra,
     );
 
@@ -122,7 +209,13 @@ describe('validate-calculated-field tool', () => {
 });
 
 async function invokeTool(
-  args: { session: string | undefined; worksheetName: string; formula: string },
+  args: {
+    session: string | undefined;
+    datasourceName: string;
+    formula: string;
+    caption: string | undefined;
+    fieldName: string | undefined;
+  },
   extra: ReturnType<typeof getMockRequestHandlerExtra>,
 ): Promise<CallToolResult> {
   const tool = getValidateCalculatedFieldTool(new DesktopMcpServer());

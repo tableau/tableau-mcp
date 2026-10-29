@@ -44,6 +44,7 @@ import {
   windowInfoSchema,
   workbookDiagnosticsSchema,
   workbookInventorySchema,
+  workbookValidationIssueSchema,
   worksheetDiagnosticsSchema,
   worksheetInvalidFieldSchema,
   worksheetItemSchema,
@@ -156,13 +157,12 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   SummaryData: ['columns', 'rows'],
   LogicalTableItem: ['id', 'caption'],
   LogicalTableList: ['tables'],
-  ValidationResult: ['validationIssues'],
   ImageExport: ['effectiveMimeType', 'width', 'height'],
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.25 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.25');
+  it('tracks the 0.2.27 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.27');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -260,6 +260,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
+      ['WorkbookValidationIssue', workbookValidationIssueSchema],
       ['ImageExport', imageResultSchema],
       ['OperationList', operationListSchema],
       ['ValidateCalculatedFieldResponse', validateCalculatedFieldResponseSchema],
@@ -277,7 +278,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.25 requiredness exception set', () => {
+    it('pins the complete 0.2.27 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -315,7 +316,6 @@ describe('external client API contract (captured openapi fixture)', () => {
         SummaryData: ['columns', 'rows'],
         LogicalTableItem: ['id', 'caption'],
         LogicalTableList: ['tables'],
-        ValidationResult: ['validationIssues'],
         ImageExport: ['effectiveMimeType', 'width', 'height'],
       });
       for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
@@ -611,6 +611,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookDatasources,
       EXTERNAL_API_ROUTES.workbookDatasource,
       EXTERNAL_API_ROUTES.workbookDatasourceDocument,
+      EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
       EXTERNAL_API_ROUTES.workbookDocument,
       EXTERNAL_API_ROUTES.workbookDocumentValidate,
       EXTERNAL_API_ROUTES.workbookStoryboards,
@@ -659,7 +660,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.oauthProtectedResource,
       EXTERNAL_API_ROUTES.appToggleDataSourcePage,
       EXTERNAL_API_ROUTES.capabilities,
-      EXTERNAL_API_ROUTES.worksheetValidateCalculatedField,
       EXTERNAL_API_ROUTES.worksheetReloadExtension,
       EXTERNAL_API_ROUTES.dashboardReloadExtensions,
     ])('spec documents %s', (route) => {
@@ -701,12 +701,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       }
     });
 
-    it('documents the new 0.2.25 operations by operationId', () => {
+    it('documents the 0.2.25 and 0.2.27 operations by operationId', () => {
       const operationIds = Object.fromEntries(
         [
           EXTERNAL_API_ROUTES.appToggleDataSourcePage,
           EXTERNAL_API_ROUTES.capabilities,
-          EXTERNAL_API_ROUTES.worksheetValidateCalculatedField,
+          EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
           EXTERNAL_API_ROUTES.worksheetReloadExtension,
           EXTERNAL_API_ROUTES.dashboardReloadExtensions,
         ].map((route) => {
@@ -718,7 +718,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(operationIds).toEqual({
         [EXTERNAL_API_ROUTES.appToggleDataSourcePage]: 'toggleDataSourcePage',
         [EXTERNAL_API_ROUTES.capabilities]: 'getCapabilities',
-        [EXTERNAL_API_ROUTES.worksheetValidateCalculatedField]: 'validateWorksheetCalculatedField',
+        [EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField]:
+          'validateDatasourceCalculatedField',
         [EXTERNAL_API_ROUTES.worksheetReloadExtension]: 'reloadWorksheetExtension',
         [EXTERNAL_API_ROUTES.dashboardReloadExtensions]: 'reloadDashboardExtensions',
       });
@@ -729,6 +730,21 @@ describe('external client API contract (captured openapi fixture)', () => {
 
       expect(request.required).toEqual(['isDataSourcePageActive']);
       expect(request.properties?.isDataSourcePageActive?.type).toBe('boolean');
+    });
+
+    it('requires a non-empty formula and allows an optional caption and fieldName', () => {
+      const request = specSchema('ValidateCalculatedFieldRequest');
+
+      expect(request.required).toEqual(['formula']);
+      expect(Object.keys(request.properties ?? {}).sort()).toEqual([
+        'caption',
+        'fieldName',
+        'formula',
+      ]);
+      for (const property of Object.values(request.properties ?? {})) {
+        expect(property.type).toBe('string');
+        expect(property.minLength).toBe(1);
+      }
     });
 
     it('accepts spec-shaped capability, validation, operation list and metadata payloads', () => {
@@ -744,6 +760,22 @@ describe('external client API contract (captured openapi fixture)', () => {
         validateCalculatedFieldResponseSchema.safeParse({
           isValid: false,
           errors: [{ position: 4, length: 2, message: 'Unknown field.' }],
+        }).success,
+      ).toBe(true);
+      expect(
+        validateCalculatedFieldResponseSchema.safeParse({
+          isValid: true,
+          errors: [],
+          isAggregate: true,
+          dataType: 'real',
+        }).success,
+      ).toBe(true);
+      expect(
+        validationResultSchema.safeParse({
+          isValid: false,
+          issues: [
+            { severity: 'error', message: 'Bad element.', line: 3, column: 5, element: 'column' },
+          ],
         }).success,
       ).toBe(true);
       expect(

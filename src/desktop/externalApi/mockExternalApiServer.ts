@@ -63,6 +63,7 @@ export type MockExternalApiServer = {
 };
 
 const DEFAULT_TOKEN = 'valid-token';
+const QUALIFIED_FIELD_NAME = /^\[[^\]]+\](\.\[[^\]]+\])+$/;
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
 // The per-item /document routes return the requested item's bare fragment directly — a
 // `<datasource>`, `<worksheet>`, or `<dashboard>`, not wrapped in a `<workbook>`. The handler
@@ -940,7 +941,7 @@ export async function startMockExternalApiServer(
         sendProblem(res, 400, 'invalid-request-body', 'Empty workbook document body.');
         return;
       }
-      sendJson(res, 200, { isValid: true, validationIssues: [] });
+      sendJson(res, 200, { isValid: true, issues: [] });
       return;
     }
 
@@ -1197,37 +1198,55 @@ export async function startMockExternalApiServer(
     }
 
     const validateCalculatedFieldMatch = path.match(
-      /^\/v0\/workbook\/worksheets\/([^/]+):validateCalculatedField$/,
+      /^\/v0\/workbook\/datasources\/([^/]+):validateCalculatedField$/,
     );
     if (method === 'POST' && validateCalculatedFieldMatch) {
-      const worksheetId = decodeURIComponent(validateCalculatedFieldMatch[1]);
-      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
-        return;
-      }
-      let parsed: { formula?: unknown };
+      let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(body);
       } catch {
         sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
         return;
       }
-      if (typeof parsed.formula !== 'string') {
+      const { formula, caption, fieldName, ...unknownKeys } = parsed;
+      if (
+        typeof formula !== 'string' ||
+        formula.length === 0 ||
+        (caption !== undefined && (typeof caption !== 'string' || caption.length === 0)) ||
+        (fieldName !== undefined &&
+          (typeof fieldName !== 'string' || !QUALIFIED_FIELD_NAME.test(fieldName))) ||
+        Object.keys(unknownKeys).length > 0
+      ) {
         sendProblem(
           res,
           400,
           'invalid-request-body',
-          'validateCalculatedField requires a string `formula`.',
+          'validateCalculatedField requires a non-empty string `formula`, an optional non-empty ' +
+            'string `caption`, and an optional `fieldName` of the form [datasource-name].[field-name].',
         );
         return;
       }
-      const isBalanced = parsed.formula.split('(').length === parsed.formula.split(')').length;
-      sendJson(res, 200, {
-        isValid: isBalanced,
-        errors: isBalanced
-          ? []
-          : [{ position: parsed.formula.length, length: 0, message: 'Unbalanced parentheses.' }],
-      });
+      const datasourceId = decodeURIComponent(validateCalculatedFieldMatch[1]);
+      if (
+        !workbookDatasources.some(
+          (datasource) =>
+            datasource.id !== undefined && decodeURIComponent(datasource.id) === datasourceId,
+        )
+      ) {
+        sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+        return;
+      }
+      const isBalanced = formula.split('(').length === formula.split(')').length;
+      sendJson(
+        res,
+        200,
+        isBalanced
+          ? { isValid: true, errors: [], isAggregate: false, dataType: 'string' }
+          : {
+              isValid: false,
+              errors: [{ position: formula.length, length: 0, message: 'Unbalanced parentheses.' }],
+            },
+      );
       return;
     }
 
@@ -1445,7 +1464,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.25' },
+        info: { title: 'Tableau External Client API', version: '0.2.27' },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },

@@ -1949,7 +1949,7 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.validateWorkbookDocument('<workbook />', signal);
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().isValid).toBe(true);
+      expect(result.unwrap()).toEqual({ isValid: true, issues: [] });
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document:validate');
     });
 
@@ -2053,34 +2053,58 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
-  describe('worksheet calculated-field validation', () => {
-    it('posts only the formula and returns the validation outcome', async () => {
+  describe('datasource calculated-field validation', () => {
+    it('posts only the formula and parses the aggregation and data type of a valid result', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales])',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'UPPER([Region])' },
         signal,
       );
 
-      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+      expect(result.unwrap()).toEqual({
+        isValid: true,
+        errors: [],
+        isAggregate: false,
+        dataType: 'string',
+      });
       const posted = server.requests.at(-1);
       expect(posted).toMatchObject({
         method: 'POST',
-        path: '/v0/workbook/worksheets/sheet-sales:validateCalculatedField',
+        path: '/v0/workbook/datasources/wb-ds-superstore:validateCalculatedField',
         contentType: 'application/json',
       });
-      expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'SUM([Sales])' });
+      expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'UPPER([Region])' });
+    });
+
+    it('sends the caption and qualified field name of an edited calc', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const request = {
+        formula: 'SUM([Sales])',
+        caption: 'Total Sales',
+        fieldName: '[federated.0abc123].[Calculation_1]',
+      };
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        request,
+        signal,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(JSON.parse(server.requests.at(-1)?.body ?? '{}')).toEqual(request);
     });
 
     it('reports formula errors with their position', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales]',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales]' },
         signal,
       );
 
@@ -2090,18 +2114,26 @@ describe('ExternalApiToolExecutor', () => {
       });
     });
 
-    it('maps an unknown worksheet to a command failure', async () => {
+    it('maps an unknown datasource to a datasource-not-found command failure', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('missing', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'missing-datasource',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr().type).toBe('command-failed');
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('datasource-not-found');
+      }
     });
 
     it('polls a 202 to the validation result', async () => {
-      server.setOverride('POST /v0/workbook/worksheets/sheet-sales:validateCalculatedField', {
+      server.setOverride('POST /v0/workbook/datasources/wb-ds-superstore:validateCalculatedField', {
         status: 202,
         contentType: 'application/json',
         headers: { location: '/v0/operations/op-validate', 'retry-after': '0' },
@@ -2121,7 +2153,11 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('sheet-sales', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
     });

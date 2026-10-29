@@ -866,7 +866,7 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toEqual({ isValid: true, validationIssues: [] });
+    expect(result.unwrap()).toEqual({ isValid: true, issues: [] });
 
     const last = server.requests.at(-1);
     expect(last?.method).toBe('POST');
