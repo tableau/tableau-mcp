@@ -64,8 +64,6 @@ const NON_TOOL_VOCABULARY = [
   'dashboard-image',
   'dashboard-only',
   'dashboard-refresh-now-failed',
-  'data-app-package-missing',
-  'data-app-sheet-not-selected',
   'data-app-template',
   'data-app-template-missing',
   'data-app-worksheet',
