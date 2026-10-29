@@ -22,9 +22,22 @@ export const rawFavoriteSchema = z.record(z.unknown());
 
 // These are metadata fields, not resource alternatives. Never return their values.
 // https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_fields.htm
-const favoriteMetadataFields = new Set(['label', 'parentProjectName', 'targetOwnerName']);
+const favoriteMetadataFields = new Set([
+  'label',
+  'parentProjectName',
+  'targetOwnerName',
+  'position',
+]);
 
 export function normalizeFavorite(raw: z.infer<typeof rawFavoriteSchema>): Favorite | undefined {
+  // Cloud 3.30 includes position in its default response. It is opaque display metadata.
+  if (
+    'position' in raw &&
+    typeof raw.position !== 'string' &&
+    !(typeof raw.position === 'number' && Number.isFinite(raw.position))
+  ) {
+    return undefined;
+  }
   const contentKeys = Object.keys(raw).filter((key) => !favoriteMetadataFields.has(key));
   if (contentKeys.length !== 1) return undefined;
   const resourceType = favoriteResourceTypeSchema.safeParse(contentKeys[0]);
