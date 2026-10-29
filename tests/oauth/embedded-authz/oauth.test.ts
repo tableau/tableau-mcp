@@ -251,6 +251,27 @@ describe('OAuth', () => {
     expect(response.body.client_id_metadata_document_supported).toBe(true);
   });
 
+  it('should still advertise supported scopes when scope enforcement is disabled', async () => {
+    // OAUTH_DISABLE_SCOPES turns off the request-time scope gate, but discovery must still list the
+    // supported scopes. Otherwise a client requests no scope and a delegated authorization server
+    // (Tableau) rejects the authorization request with invalid_scope.
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+
+    const { app } = await startServer();
+
+    const protectedResource = await request(app).get('/.well-known/oauth-protected-resource');
+    expect(protectedResource.status).toBe(200);
+    expect(protectedResource.body.scopes_supported).not.toEqual([]);
+    expect(protectedResource.body.scopes_supported).toContain('tableau:mcp:content:read');
+    expect(protectedResource.body.scopes_supported).toHaveLength(14);
+
+    const authServer = await request(app).get('/.well-known/oauth-authorization-server');
+    expect(authServer.status).toBe(200);
+    expect(authServer.body.scopes_supported).not.toEqual([]);
+    expect(authServer.body.scopes_supported).toContain('tableau:mcp:content:read');
+    expect(authServer.body.scopes_supported).toHaveLength(14);
+  });
+
   it('should allow authenticated requests', async () => {
     const { app } = await startServer();
 
