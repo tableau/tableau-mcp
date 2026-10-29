@@ -385,14 +385,93 @@ describe('publishWorkbookTool', () => {
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishWorkbook.mockRejectedValue(
-      new Error('Tableau publishWorkbook request failed with status 400: bad workbook'),
+      tableauAxiosError(400, {
+        error: { code: '400011', summary: 'Bad Request', detail: 'The workbook is corrupt.' },
+      }),
     );
 
     const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('bad workbook');
+    expect(result.content[0].text).toBe(
+      'Tableau could not publish the workbook. Check that the workbook file is valid. Tableau error 400011: Bad Request: The workbook is corrupt.',
+    );
+  });
+
+  it.each([
+    [400, '400020', 'The workbook file name must end in .twb or .twbx.'],
+    [403, '403007', 'You may lack publish permission on the project'],
+    [403, '403130', 'Set overwrite to true to replace it'],
+    [404, '404005', 'Use list-projects to find a valid projectId.'],
+    [404, '404006', 'Retry with overwrite set to false.'],
+  ])(
+    'maps documented publish error %i/%s to actionable guidance',
+    async (status, code, guidance) => {
+      mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+        timestamp: '2026-06-10T14:32:18.456Z',
+        uploadId: 'validated-upload-id',
+      });
+      mocks.mockPublishWorkbook.mockRejectedValue(
+        tableauAxiosError(status, { error: { code, detail: 'Tableau detail.' } }),
+      );
+
+      const result = await getToolResult(validArgs);
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(guidance);
+      expect(result.content[0].text).toContain(`Tableau error ${code}: Tableau detail.`);
+    },
+  );
+
+  it("returns Tableau's reason for an undocumented 4xx publish error", async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(
+      tableauAxiosError(409, { error: { code: '409093', detail: 'Workbook already exists.' } }),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      'Tableau rejected the workbook publish. Tableau error 409093: Workbook already exists.',
+    );
+  });
+
+  it('falls back to the generic error for a 400 without a Tableau error body', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(tableauAxiosError(400, '<html>Bad Request</html>'));
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Request failed with status code 400');
+  });
+
+  it('does not map 5xx publish failures', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(
+      tableauAxiosError(500, { error: { code: '500000', detail: 'Internal error.' } }),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Request failed with status code 500');
+    expect(result.content[0].text).not.toContain('Tableau error');
   });
 
   it('uploads and publishes a local TWBX workbook file path without a separate validation step', async () => {
@@ -1257,6 +1336,12 @@ describe('publishWorkbookTool', () => {
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
   });
 });
+
+function tableauAxiosError(status: number, data: unknown): AxiosError {
+  const error = new AxiosError(`Request failed with status code ${status}`);
+  error.response = { status, data } as AxiosError['response'];
+  return error;
+}
 
 async function getToolResult(
   params: {
