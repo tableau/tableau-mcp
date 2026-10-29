@@ -1008,8 +1008,6 @@ export const workbookExtensionListSchema = z
   })
   .passthrough();
 export type WorkbookExtensionList = z.infer<typeof workbookExtensionListSchema>;
-export type WorkbookExtension = z.infer<typeof workbookExtensionSchema>;
-export type WorkbookExtensionKey = z.infer<typeof workbookExtensionKeySchema>;
 
 /** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
 export const summaryDataSchema = z
