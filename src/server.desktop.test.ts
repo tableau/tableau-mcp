@@ -858,6 +858,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-capabilities')).toBe('0.2.25');
     expect(floors.get('reload-extensions')).toBe('0.2.25');
     expect(floors.get('validate-calculated-field')).toBe('0.2.27');
+    expect(floors.get('author-calc')).toBe('0.2.27');
   });
 
   it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
