@@ -13,6 +13,10 @@ import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { graphIdSchema } from './knowledgeToolUtils.js';
 
+// The knowledge service accepts node-scoped contexts only when TK_NODE_SEMANTIC_CONTEXT_ENABLED is
+// on; otherwise it answers 403 node_semantic_context_disabled. Flip to true once that is enabled.
+export const NODE_SCOPED_ENABLED = false;
+
 const statementInputSchema = z.object({
   statement: z.string().trim().min(1).max(10000),
   id: z.string().trim().min(1).max(512).nullable().optional(),
@@ -47,14 +51,15 @@ const targetNodeIdSchema = z
   .optional()
   .describe(
     'Attach the context to this exact node id (a field, data source, workbook, ...) so it is ' +
-      'returned whenever that node is grounded. Mutually exclusive with isGlobal.',
+      'returned whenever that node is grounded. Mutually exclusive with isGlobal. Node-scoped ' +
+      'contexts are not currently supported by the service: use isGlobal instead ("create" requires isGlobal: true).',
   );
 const isGlobalSchema = z
   .boolean()
   .optional()
   .describe(
     'true: a company-wide rule that applies to the whole graph rather than one node. Mutually ' +
-      'exclusive with targetNodeId; "create" needs exactly one of the two.',
+      'exclusive with targetNodeId. "create" currently requires isGlobal: true.',
   );
 const nameSchema = z
   .string()
@@ -287,6 +292,14 @@ export function validateArgs(args: ManageArgs): string | null {
   const missing = REQUIRED_BY_ACTION[args.action].filter((key) => args[key] === undefined);
   if (missing.length > 0) {
     return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required when action is "${args.action}".`;
+  }
+
+  if (!NODE_SCOPED_ENABLED && args.targetNodeId) {
+    return `Node-scoped contexts (targetNodeId) are not supported yet. ${
+      args.action === 'create'
+        ? 'Create a global context with isGlobal: true instead.'
+        : 'Use isGlobal instead.'
+    }`;
   }
 
   if (args.action === 'create') {

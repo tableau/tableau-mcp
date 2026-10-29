@@ -139,6 +139,22 @@ describe('manageKnowledgeContextTool', () => {
     ).toBeNull();
   });
 
+  it('rejects node-scoped create while the service does not support it', () => {
+    expect(
+      validateArgs({
+        action: 'create',
+        statements: [{ statement: 'AOV = revenue / orders' }],
+        targetNodeId: 'field-1',
+      }),
+    ).toMatch(/Node-scoped contexts \(targetNodeId\) are not supported yet.*isGlobal: true/);
+  });
+
+  it('rejects node-scoped update while the service does not support it', () => {
+    expect(validateArgs({ action: 'update', contextId: 'ctx-1', targetNodeId: 'field-1' })).toMatch(
+      /Node-scoped contexts \(targetNodeId\) are not supported yet/,
+    );
+  });
+
   it('uses mutation annotations and requires the Knowledge write and read scopes', async () => {
     const tool = getTool();
 
