@@ -19,7 +19,7 @@ import { DesktopTool } from '../../tool.js';
 import {
   CONTAINED_CACHE_READ_ISSUE,
   getCacheDir,
-  isWithinCacheDir,
+  isLexicallyWithinCacheDir,
   readContainedCacheTextFile,
 } from './cachePath.js';
 
@@ -77,7 +77,7 @@ export const getReadCachedXmlTool = (
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
 
-          if (!isWithinCacheDir(absolutePath, cacheDir)) {
+          if (!isLexicallyWithinCacheDir(absolutePath, cacheDir)) {
             return new ArgsValidationError(
               `Security error: file path must be within cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
             ).toErr();
