@@ -304,7 +304,12 @@ describe('listViewsTool', () => {
 
       const callback = await Provider.from(getListViewsTool(new WebMcpServer()).callback);
       const result = await callback(
-        { filter: 'name:eq:Overview', pageNumber: undefined, limit: params.limit },
+        {
+          filter: 'name:eq:Overview',
+          tagLabels: undefined,
+          pageNumber: undefined,
+          limit: params.limit,
+        },
         extra,
       );
       expect(result.isError).toBe(false);
