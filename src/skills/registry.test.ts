@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -9,8 +9,26 @@ vi.mock('../logging/logger.js', () => ({
   log: vi.fn(),
 }));
 
+// Spies that default to the real implementation so tests can inject portable IO failures
+// instead of relying on chmod, which is unreliable when CI runs as a privileged user.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    readdirSync: vi.fn(actual.readdirSync),
+    readFileSync: vi.fn(actual.readFileSync),
+  };
+});
+
 import { log } from '../logging/logger.js';
-import { buildSkillRegistry, getSkillRegistry, resetSkillRegistry } from './registry.js';
+import {
+  buildSkillRegistry,
+  getSkillRegistry,
+  InvalidSkillsCursorError,
+  MAX_SKILLS_PAGE_SIZE,
+  resetSkillRegistry,
+  type SkillRegistry,
+} from './registry.js';
 
 // SHA-256 digest in the `sha256:<hex>` form the registry emits.
 const registryDigest = (content: string | Buffer): string =>
@@ -88,10 +106,13 @@ describe('registry', () => {
       ...extraFiles,
     });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     skillsDir = mkdtempSync(join(tmpdir(), 'skills-registry-'));
     vi.clearAllMocks();
     resetSkillRegistry();
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    vi.mocked(readdirSync).mockImplementation(actualFs.readdirSync);
+    vi.mocked(readFileSync).mockImplementation(actualFs.readFileSync);
   });
 
   afterEach(() => {
@@ -288,6 +309,236 @@ describe('registry', () => {
       expect(mockLogs('info').some((e) => e.message.includes('No skills directory found'))).toBe(
         true,
       );
+    });
+  });
+
+  describe('pagination', () => {
+    const N = MAX_SKILLS_PAGE_SIZE;
+    const encode = (text: string): string => Buffer.from(text).toString('base64url');
+    const tinyUri = (i: number): string => `skill://skill-${String(i).padStart(4, '0')}/SKILL.md`;
+
+    // Tiny valid skills with zero-padded names so URI order matches creation order.
+    const writeTinySkills = (count: number): void => {
+      for (let i = 0; i < count; i++) {
+        const name = `skill-${String(i).padStart(4, '0')}`;
+        createSkillManifest(name, manifest({ name, description: 'tiny' }));
+      }
+    };
+
+    // Follow nextCursor until it is omitted, returning every page.
+    const collectPages = (registry: SkillRegistry): Array<ReturnType<SkillRegistry['list']>> => {
+      const pages: Array<ReturnType<SkillRegistry['list']>> = [];
+      let cursor: string | undefined;
+      do {
+        // A repeated or non-advancing cursor must fail fast rather than loop forever.
+        expect(pages.length).toBeLessThanOrEqual(10);
+        const page = registry.list(cursor);
+        pages.push(page);
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      return pages;
+    };
+
+    it.each([
+      [0, [0]],
+      [1, [1]],
+      [N, [N]],
+      [N + 1, [N, 1]],
+      [2 * N, [N, N]],
+      [2 * N + 1, [N, N, 1]],
+    ])('pages %i skills as %j with no gaps or duplicates', (count, pageSizes) => {
+      writeTinySkills(count);
+
+      const pages = collectPages(buildSkillRegistry(skillsDir));
+
+      expect(pages.map((p) => p.skills.length)).toEqual(pageSizes);
+      pages.forEach((page, i) => {
+        // Only a non-final page carries nextCursor; the final page omits the key entirely.
+        expect('nextCursor' in page).toBe(i < pages.length - 1);
+      });
+      expect(pages.flatMap((p) => p.skills.map((s) => s.uri))).toEqual(
+        Array.from({ length: count }, (_, i) => tinyUri(i)),
+      );
+    });
+
+    it('returns the same page for the same cursor', () => {
+      writeTinySkills(2 * N + 1);
+      const registry = buildSkillRegistry(skillsDir);
+      const { nextCursor } = registry.list();
+
+      expect(registry.list(nextCursor)).toEqual(registry.list(nextCursor));
+      expect(registry.list(nextCursor).skills[0].uri).toBe(tinyUri(N));
+    });
+
+    it('keeps get() and files() complete beyond the first page', () => {
+      writeTinySkills(N + 1);
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills.map((s) => s.uri)).not.toContain(tinyUri(N));
+      expect(registry.get(tinyUri(N))?.uri).toBe(tinyUri(N));
+      expect(registry.files()).toHaveLength(N + 1);
+    });
+
+    it('returns every resource of an entry, however many it has', () => {
+      const extra = Object.fromEntries(
+        Array.from({ length: 120 }, (_, i) => [`refs/file-${i}.md`, `ref ${i}`]),
+      );
+      createSkillManifest('big', manifest({ name: 'big', description: 'many files' }), extra);
+
+      const entry = buildSkillRegistry(skillsDir).list().skills[0];
+
+      expect(entry.uri).toBe('skill://big/SKILL.md');
+      expect(entry.resources).toHaveLength(121);
+    });
+
+    describe('invalid cursors', () => {
+      const total = N + 1;
+
+      it.each([
+        ['empty', ''],
+        ['not base64url', 'not base64!'],
+        ['padded base64', `${encode('v1:50')}=`],
+        ['garbage text', encode('hello')],
+        ['unknown version', encode('v2:50')],
+        ['missing version', encode('50')],
+        ['zero offset', encode('v1:0')],
+        ['negative offset', encode('v1:-1')],
+        ['float offset', encode('v1:1.5')],
+        ['leading zero', encode('v1:050')],
+        ['unsafe integer', encode('v1:9007199254740993')],
+        ['oversized', encode(`v1:${'9'.repeat(100)}`)],
+        ['offset at end of registry', encode(`v1:${total}`)],
+        ['offset past end of registry', encode(`v1:${total + 1}`)],
+      ])('rejects a %s cursor', (_label, cursor) => {
+        writeTinySkills(total);
+
+        expect(() => buildSkillRegistry(skillsDir).list(cursor)).toThrow(InvalidSkillsCursorError);
+      });
+
+      it('accepts the last advancing offset', () => {
+        writeTinySkills(total);
+
+        expect(buildSkillRegistry(skillsDir).list(encode(`v1:${total - 1}`)).skills).toHaveLength(
+          1,
+        );
+      });
+
+      it('rejects a non-canonical encoding of a valid offset', () => {
+        writeTinySkills(total);
+        const registry = buildSkillRegistry(skillsDir);
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+        const cursor = registry.list().nextCursor!;
+        const altered = cursor.slice(0, -1) + alphabet[alphabet.indexOf(cursor.at(-1)!) + 1];
+        // Same decoded bytes, different text: only the canonical form is accepted.
+        expect(Buffer.from(altered, 'base64url')).toEqual(Buffer.from(cursor, 'base64url'));
+
+        expect(() => registry.list(altered)).toThrow(InvalidSkillsCursorError);
+      });
+
+      it('rejects any cursor on an empty registry', () => {
+        expect(() => buildSkillRegistry(skillsDir).list(encode('v1:1'))).toThrow(
+          InvalidSkillsCursorError,
+        );
+      });
+
+      it('does not echo the cursor in the error message', () => {
+        const registry = buildSkillRegistry(skillsDir);
+
+        expect(() => registry.list('secret-cursor!')).toThrow(/^(?!.*secret)/);
+      });
+    });
+  });
+
+  describe('filesystem failures', () => {
+    const eacces = (): Error =>
+      Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+
+    // Make `fn` throw for paths matching `shouldFail`, delegating to the real implementation otherwise.
+    const failWhen = (
+      fn: typeof readdirSync | typeof readFileSync,
+      shouldFail: (path: string) => boolean,
+      makeError: () => Error = eacces,
+    ): void => {
+      const real = vi.mocked(fn).getMockImplementation() as (...args: unknown[]) => unknown;
+      vi.mocked(fn as (...args: unknown[]) => unknown).mockImplementation((path, ...rest) => {
+        if (shouldFail(String(path))) {
+          throw makeError();
+        }
+        return real(path, ...rest);
+      });
+    };
+
+    it('skips a skill whose directory cannot be enumerated and keeps the rest', () => {
+      writeTestSkill('good-skill');
+      writeTestSkill('bad-skill');
+      failWhen(readdirSync, (path) => path.endsWith('bad-skill'));
+
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://good-skill/SKILL.md']);
+      expect(registry.files().every((f) => f.uri.startsWith('skill://good-skill/'))).toBe(true);
+      expect(mockLogs('warning').some((e) => e.message.includes('"bad-skill"'))).toBe(true);
+    });
+
+    it('skips the whole skill, with no orphan files, when a later file read fails', () => {
+      writeTestSkill('good-skill');
+      writeTestSkill('bad-skill');
+      failWhen(readFileSync, (path) =>
+        path.endsWith(join('bad-skill', 'skill-expertise', 'list-workbooks.md')),
+      );
+
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://good-skill/SKILL.md']);
+      expect(registry.get('skill://bad-skill/SKILL.md')).toBeUndefined();
+      const fileUris = registry.files().map((f) => f.uri);
+      expect(fileUris).toHaveLength(3);
+      expect(fileUris.every((uri) => uri.startsWith('skill://good-skill/'))).toBe(true);
+    });
+
+    it.each([
+      ['EIO', () => Object.assign(new Error('EIO: i/o error'), { code: 'EIO' })],
+      ['ENOENT', () => Object.assign(new Error('ENOENT: gone'), { code: 'ENOENT' })],
+    ])('skips the skill for a %s read error', (_code, makeError) => {
+      writeTestSkill('good-skill');
+      writeTestSkill('bad-skill');
+      failWhen(readFileSync, (path) => path.endsWith(join('bad-skill', 'README.md')), makeError);
+
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://good-skill/SKILL.md']);
+    });
+
+    it('propagates a non-filesystem error from directory enumeration', () => {
+      writeTestSkill('bad-skill');
+      failWhen(
+        readdirSync,
+        (path) => path.endsWith('bad-skill'),
+        () => new TypeError('unexpected'),
+      );
+
+      expect(() => buildSkillRegistry(skillsDir)).toThrow(TypeError);
+    });
+
+    it('propagates a non-filesystem error from a file read', () => {
+      writeTestSkill('bad-skill');
+      failWhen(
+        readFileSync,
+        (path) => path.endsWith('README.md'),
+        () => new Error('not an fs error'),
+      );
+
+      expect(() => buildSkillRegistry(skillsDir)).toThrow('not an fs error');
+    });
+
+    it('returns an empty registry when every skill fails to read', () => {
+      writeTestSkill('only-skill');
+      failWhen(readFileSync, (path) => path.endsWith('README.md'));
+
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list()).toEqual({ skills: [] });
+      expect(registry.files()).toEqual([]);
     });
   });
 
