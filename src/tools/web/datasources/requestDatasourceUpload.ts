@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -41,7 +40,7 @@ export const getRequestDatasourceUploadTool = (
     },
     disabled: new Provider(
       async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        !(await getFeatureGate().isFeatureEnabled('datasource-authoring')) ||
         !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {
@@ -57,13 +56,16 @@ export const getRequestDatasourceUploadTool = (
             );
           }
 
-          if (!isBlobStorageEnabled()) {
+          if (!extra.config.bucketS3.enabled) {
             throw new UnknownError(
-              'Blob storage provider must be configured before requesting staged data source uploads.',
+              'MCP_S3_BUCKET must be configured before requesting staged data source uploads.',
             );
           }
 
-          const result = await requestStagedDatasourceUpload({ fileName });
+          const result = await requestStagedDatasourceUpload({
+            fileName,
+            config: extra.config.bucketS3,
+          });
           return new Ok(result);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

@@ -90,6 +90,17 @@ It also includes `requestedOrigins`: the path of the finalized `manifest.json` (
 unzip directory, after `postUnzip`) and instructions for declaring the app's external origins in
 it. See [Package manifest](#package-manifest).
 
+It also includes `wiring`: the connection values for the Tableau site this session is signed in
+to, which every published datasource wired into the app needs. They come from the server's own
+configuration and the session's site, so no other tool call is needed to learn them.
+
+- **`server`**: the Tableau host only, with no scheme or port (for example
+  `10ax.online.tableau.com`).
+- **`site`**: the site's content URL, which can differ from its display name. `""` for the Default
+  site.
+- **`channel`**: `https` or `http`, from the server URL.
+- **`port`**: the server URL's port, or `443`/`80` when it uses the default for its channel.
+
 The result is a single object. Both output modes return the same static, un-substituted template
 zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping — they
 differ only in transport, never in when substitution happens (always client-side, after unzipping):
@@ -97,17 +108,17 @@ differ only in transport, never in when substitution happens (always client-side
 - **Otherwise (disk output)**: the result's `filePath` points at the template zip already on disk
   on the server — skip the download and unzip directly.
 
-- **[Blob storage](../../configuration/mcp-config/env-vars.md#blob_storage_provider) configured
-  (blob storage output)**: the server uploads its own build artifact — the same template zip disk
-  output serves — via the configured blob storage provider on every call and returns the URL the
-  provider issues for exactly those bytes. There is no manual publish step and nothing persists in
-  storage waiting to be trusted; the object is always what the server just wrote. The result's
-  `downloadUrl` points at the same un-substituted template — download it first, then unzip.
+- **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured (S3
+  output)**: the server uploads its own build artifact — the same template zip disk output serves —
+  to S3 automatically on every call, then presigns a short-lived GET URL for exactly those bytes.
+  There is no manual publish step and nothing persists in the bucket waiting to be trusted; the
+  object is always what the server just wrote. The result's `s3URL` points at the same
+  un-substituted template — download it first, then unzip.
 
 In both cases, `postUnzip` describes the literal find/replace edits and path renames to apply
 after unzipping to finalize the workspace. Datasource wiring is never performed by this tool in
 either mode — it is the caller's responsibility, applied to the finalized workbook after this tool
-returns.
+returns, using the values in `wiring`.
 
 ## Example result (disk output)
 
@@ -119,6 +130,12 @@ returns.
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
     "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
+  },
+  "wiring": {
+    "server": "10ax.online.tableau.com",
+    "site": "mcp-test",
+    "channel": "https",
+    "port": 443
   },
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
@@ -160,16 +177,22 @@ returns.
 }
 ```
 
-## Example result (blob storage output)
+## Example result (S3 output)
 
 ```json
 {
   "datappName": "Sales Demo",
-  "downloadUrl": "https://blob.example.com/...signed...",
+  "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned...",
   "allowedOrigins": [],
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
     "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
+  },
+  "wiring": {
+    "server": "10ax.online.tableau.com",
+    "site": "mcp-test",
+    "channel": "https",
+    "port": 443
   },
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",

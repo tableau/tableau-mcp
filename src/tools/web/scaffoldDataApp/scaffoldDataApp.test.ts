@@ -33,7 +33,7 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-// Floor is 2026.3.0 (see scaffoldDataApp.ts).
+// Floor is 2026.3.0 (see dataAppVersion.ts).
 const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.0', build: '' };
 const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
 const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
@@ -112,6 +112,45 @@ describe('getScaffoldDataAppTool', () => {
       const tool = makeTool(VERSION_AT_FLOOR);
       expect(await Provider.from(tool.disabled)).toBe(false);
     });
+
+    it('is disabled for Slack when the data-apps flag is on but authoring-with-slack is off', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (flag) => flag !== 'authoring-with-slack',
+      );
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_AT_FLOOR,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('is enabled for Slack when the data-apps and authoring-with-slack flags are on', async () => {
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_AT_FLOOR,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(false);
+      expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
+    });
+
+    it('is disabled for Slack when all flags are on but the version is below the floor', async () => {
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_BELOW,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('is enabled for a non-Slack client when authoring-with-slack is off', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (flag) => flag !== 'authoring-with-slack',
+      );
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://claude.ai/mcp' }),
+        VERSION_AT_FLOOR,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(false);
+    });
   });
 
   describe('version gate (disabled provider)', () => {
@@ -170,6 +209,53 @@ describe('getScaffoldDataAppTool', () => {
       expect(payload.requestedOrigins.file).toBe(
         'Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json',
       );
+    });
+
+    it('returns wiring for the configured server and the session site', async () => {
+      const result = await invokeCallback('Sales Demo');
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).wiring).toMatchObject({
+        server: 'my-tableau-server.com',
+        site: 'tc25',
+        channel: 'https',
+        port: 443,
+      });
+    });
+
+    it('falls back to the OAuth server when no server is configured', async () => {
+      const extra = getMockRequestHandlerExtra({
+        tableauAuthInfo: {
+          type: 'Bearer',
+          username: 'user',
+          server: 'https://10ax.online.tableau.com',
+          siteId: 'site-luid',
+          siteName: 'mcp-test',
+          raw: 'token',
+        },
+        getSiteName: () => 'mcp-test',
+      });
+      extra.config.server = '';
+
+      const callback = await Provider.from(makeTool().callback);
+      const result = await callback({ datappName: 'Sales Demo' }, extra);
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).wiring).toMatchObject({
+        server: '10ax.online.tableau.com',
+        site: 'mcp-test',
+      });
+    });
+
+    it('fails when no Tableau server can be determined', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.config.server = '';
+
+      const callback = await Provider.from(makeTool().callback);
+      const result = await callback({ datappName: 'Sales Demo' }, extra);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Tableau server could not be determined');
     });
 
     it('includes allowedOrigins when the site policy is empty', async () => {

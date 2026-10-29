@@ -10,7 +10,9 @@ import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
 import { isFlowReadToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
 import { getFeatureGate } from '../../features/init.js';
+import { getTableauServerInfo } from '../../getTableauServerInfo.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
+import { isDataAppVersionSupported } from '../../tools/web/scaffoldDataApp/dataAppVersion.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -540,7 +542,7 @@ const toolScopeMap: Record<
     ]),
   },
   // Requires the site's external allowed-origins policy before returning the bundled template
-  // (or uploading it via the blob storage provider and returning its URL).
+  // (or uploading it to S3 and presigning a GET URL).
   // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],
@@ -554,9 +556,9 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   // Mirrors the per-client `disabled` provider on the authoring tool registrations.
-  const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) &&
-    (await isAuthoringAllowedForClient(clientId));
+  const authoringAllowedForClient = await isAuthoringAllowedForClient(clientId);
+  const datasourceAuthoringEnabled =
+    (await featureGate.isFeatureEnabled('datasource-authoring')) && authoringAllowedForClient;
   const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
@@ -612,17 +614,31 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('manage-knowledge-context');
   }
 
-  if (!authoringToolsEnabled) {
+  if (!authoringAllowedForClient) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
+    enabledTools.delete('download-workbook');
+  }
+
+  if (!datasourceAuthoringEnabled) {
     enabledTools.delete('request-datasource-upload');
     enabledTools.delete('publish-datasource');
-    enabledTools.delete('download-workbook');
   }
 
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
     enabledTools.delete('move-workbook');
+  }
+
+  if (!authoringAllowedForClient) {
+    enabledTools.delete('scaffold-data-app');
+  }
+
+  if (enabledTools.has('scaffold-data-app')) {
+    const { productVersion } = await getTableauServerInfo(config.server);
+    if (!isDataAppVersionSupported(productVersion)) {
+      enabledTools.delete('scaffold-data-app');
+    }
   }
 
   return enabledTools;

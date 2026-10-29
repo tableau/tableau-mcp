@@ -2,10 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -39,11 +37,7 @@ export const getRequestWorkbookUploadTool = (
       idempotentHint: false,
       openWorldHint: true,
     },
-    disabled: new Provider(
-      async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        !(await isAuthoringAllowedForClient(server.clientId)),
-    ),
+    disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({
         extra,
@@ -57,13 +51,16 @@ export const getRequestWorkbookUploadTool = (
             );
           }
 
-          if (!isBlobStorageEnabled()) {
+          if (!extra.config.bucketS3.enabled) {
             throw new UnknownError(
-              'Blob storage provider must be configured before requesting staged workbook uploads.',
+              'MCP_S3_BUCKET must be configured before requesting staged workbook uploads.',
             );
           }
 
-          const result = await requestStagedWorkbookUpload({ fileName });
+          const result = await requestStagedWorkbookUpload({
+            fileName,
+            config: extra.config.bucketS3,
+          });
           return new Ok(result);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

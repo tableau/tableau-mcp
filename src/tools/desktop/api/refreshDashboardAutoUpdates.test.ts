@@ -360,6 +360,30 @@ describe('refresh-dashboard-auto-updates', () => {
     }
   });
 
+  it('says nothing was refreshed when the refresh fails before any worksheet is attempted', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride(`POST ${ROUTE}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-dashboard-no-result',
+          kind: 'dashboard.refreshNow',
+          state: 'FAILED',
+          error: { code: 'dashboard-refresh-now-failed', message: 'The dashboard is closing.' },
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain('The dashboard is closing.');
+      expect(text(result)).toContain('nothing was refreshed');
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('reports an invalid retained failure result as an invalid response', async () => {
     const harness = await startHarness((server) => {
       server.setOverride(`POST ${ROUTE}`, {

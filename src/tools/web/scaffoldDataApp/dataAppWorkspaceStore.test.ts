@@ -3,12 +3,14 @@ import { existsSync, readdirSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { buffer } from 'stream/consumers';
 
+import { getConfig } from '../../../config.js';
 import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
+import { exportedForTesting } from '../s3Client.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
+import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -16,31 +18,42 @@ import {
 } from './templateIdentity.js';
 
 const mocks = vi.hoisted(() => ({
-  mockUpload: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(),
+  send: vi.fn(),
+  getSignedUrl: vi.fn(),
 }));
 
-vi.mock('../../../blobStorage/init.js', () => ({
-  getBlobStorageProvider: vi.fn(() => ({ upload: mocks.mockUpload })),
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: vi.fn().mockImplementation(() => ({ send: mocks.send })),
+  PutObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'put', input })),
+  GetObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'get', input })),
 }));
+
+vi.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: mocks.getSignedUrl,
+}));
+
+const wiring = buildDatasourceWiringInfo({
+  serverUrl: 'https://10ax.online.tableau.com',
+  siteName: 'mcp-test',
+});
 
 describe('createDataAppWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
-    // clearAllMocks clears call history but not implementations, so reset upload to a clean
-    // success each test — otherwise a rejection stubbed in one test leaks into the next.
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
-    mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-template-url' });
+    exportedForTesting.resetS3Bundle();
+    // clearAllMocks clears call history but not implementations, so reset send/getSignedUrl to a
+    // clean success each test — otherwise a rejection stubbed in one test leaks into the next.
+    mocks.send.mockResolvedValue(undefined);
+    mocks.getSignedUrl.mockResolvedValue('https://s3.example.com/signed-template-url');
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  describe('disk output (blob storage not configured)', () => {
+  describe('disk output (S3 not configured)', () => {
     beforeAll(async () => {
       await buildTemplateZip();
     });
@@ -49,21 +62,23 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
+        config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
       invariant(value.filePath);
       expect(existsSync(value.filePath)).toBe(true);
       expect(statSync(value.filePath).size).toBeGreaterThan(0);
-      expect(value.downloadUrl).toBeUndefined();
+      expect(value.s3URL).toBeUndefined();
 
-      // Local mode returns the exact same plan blob storage mode does - the client always unzips and
-      // finalizes.
+      // Local mode returns the exact same plan S3 mode does - the client always unzips and finalizes.
       invariant(value.postUnzip);
       expect(value.postUnzip).toEqual(buildPostUnzipPlan(deriveIdentity('Sales Demo')));
       expect(value.postUnzip.renames).toContainEqual({
@@ -178,44 +193,55 @@ describe('createDataAppWorkspace', () => {
     });
   });
 
-  describe('blob storage output (blob storage configured)', () => {
-    // Blob storage mode uploads the same on-disk build artifact local mode serves, so the zip must
-    // exist.
+  describe('S3 output (MCP_S3_BUCKET configured)', () => {
+    // S3 mode now uploads the same on-disk build artifact local mode serves, so the zip must exist.
     beforeAll(async () => {
       await buildTemplateZip();
     });
 
     beforeEach(() => {
-      mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+      vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
+      vi.stubEnv('AWS_DEFAULT_REGION', 'us-west-2');
     });
 
-    it('uploads the on-disk template zip and returns the URL for what it uploaded', async () => {
+    it('uploads the on-disk template zip, then presigns a GET URL for what it uploaded', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
+        config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
 
-      expect(value.downloadUrl).toBe('https://blob.example.com/signed-template-url');
+      expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
 
-      // The server uploads its own build artifact fresh: exactly one upload carrying the real
-      // on-disk template bytes under a fixed key.
+      // The server uploads its own build artifact fresh: exactly one PutObjectCommand carrying the
+      // real on-disk template bytes under a fixed, prefix-namespaced key.
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      const putCommand = mocks.send.mock.calls[0][0];
+      expect(putCommand.__command).toBe('put');
+      const putInput = putCommand.input;
+      expect(putInput.Bucket).toBe('tmpl-bucket');
+      expect(putInput.ContentType).toBe('application/zip');
+      expect(putInput.Key).toContain('data-app-templates/');
+      expect(putInput.Key.endsWith(TEMPLATE_ZIP_FILENAME)).toBe(true);
+
       const expectedBytes = await readFile(join('src/templates', TEMPLATE_ZIP_FILENAME));
-      expect(mocks.mockUpload).toHaveBeenCalledTimes(1);
-      expect(mocks.mockUpload).toHaveBeenCalledWith({
-        key: `data-app-templates/${TEMPLATE_ZIP_FILENAME}`,
-        data: expect.anything(),
-        contentLength: expectedBytes.byteLength,
-        contentType: 'application/zip',
-      });
-      await expect(buffer(mocks.mockUpload.mock.calls[0][0].data)).resolves.toEqual(expectedBytes);
+      expect(putInput.Body).toEqual(expectedBytes);
+
+      // The presigned GET is for the exact object just uploaded — same key as the PUT.
+      const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const getInput = vi.mocked(GetObjectCommand).mock.calls[0][0];
+      expect(getInput).toEqual({ Bucket: 'tmpl-bucket', Key: putInput.Key });
+      expect(mocks.getSignedUrl).toHaveBeenCalledTimes(1);
 
       invariant(value.postUnzip);
       expect(value.postUnzip.edits.length).toBeGreaterThan(0);
@@ -225,17 +251,35 @@ describe('createDataAppWorkspace', () => {
       });
     });
 
-    it('returns an error when the upload fails', async () => {
-      mocks.mockUpload.mockRejectedValue(new Error('blob upload failed'));
+    it('returns an error when the upload (PUT) fails', async () => {
+      mocks.send.mockRejectedValue(new Error('S3 put failed'));
 
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
+        config: getConfig(),
       });
 
       invariant(result.isErr());
       expect(result.error.type).toBe('data-app-template-unavailable');
-      expect(result.error.message).toContain('blob upload failed');
+      expect(result.error.message).toContain('S3 put failed');
+      expect(mocks.getSignedUrl).not.toHaveBeenCalled();
+    });
+
+    it('returns an error when presigning fails', async () => {
+      mocks.getSignedUrl.mockRejectedValue(new Error('S3 unavailable'));
+
+      const result = await createDataAppWorkspace({
+        datappName: 'Sales Demo',
+        allowedOrigins: ['https://example.com'],
+        wiring,
+        config: getConfig(),
+      });
+
+      invariant(result.isErr());
+      expect(result.error.type).toBe('data-app-template-unavailable');
+      expect(result.error.message).toContain('S3 unavailable');
     });
   });
 });

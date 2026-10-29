@@ -6,12 +6,6 @@ import {
   isActivityLogProvider,
   providerConfigSchema as activityLogProviderConfigSchema,
 } from './activityLog/types.js';
-import {
-  BlobStorageConfig,
-  blobStorageProviderSchema,
-  isBlobStorageProviderType,
-  providerConfigSchema as blobStorageProviderConfigSchema,
-} from './blobStorage/types.js';
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   FeatureGateConfig,
@@ -110,8 +104,13 @@ export class Config extends BaseConfig {
   flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  // undefined when BLOB_STORAGE_PROVIDER is unset (no blob storage)
-  blobStorage: BlobStorageConfig | undefined;
+  bucketS3: {
+    enabled: boolean;
+    bucket: string;
+    region: string;
+    keyPrefix: string;
+    presignTtlSeconds: number;
+  };
 
   constructor() {
     super();
@@ -184,11 +183,10 @@ export class Config extends BaseConfig {
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      BLOB_STORAGE_PROVIDER: blobStorageProvider,
-      BLOB_STORAGE_PROVIDER_CONFIG: blobStorageProviderConfig,
-      MCP_S3_BUCKET: removedS3Bucket,
-      MCP_IMAGE_PREFIX: removedImagePrefix,
-      FILE_TTL: removedFileTtl,
+      MCP_S3_BUCKET: bucketS3Bucket,
+      AWS_DEFAULT_REGION: awsDefaultRegion,
+      MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
+      FILE_TTL: bucketS3PresignTtlSeconds,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -413,45 +411,29 @@ export class Config extends BaseConfig {
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
 
-    // Blob storage provider configuration. Bring-your-own-infra: when configured with a custom
-    // provider, tools that need to offload large payloads (rendered images, exported data)
-    // upload/download via BlobStorageProvider instead of inlining base64/text.
-    // Unlike the providers above, an invalid value throws: unset is a real mode (no storage), so
-    // silently falling back would hide the misconfig.
-    if (!blobStorageProvider) {
-      // The removed S3 variables used to enable staged uploads; starting without storage would
-      // silently re-enable server-local file paths in publish/download-workbook.
-      const removedS3Vars = Object.entries({
-        MCP_S3_BUCKET: removedS3Bucket,
-        MCP_IMAGE_PREFIX: removedImagePrefix,
-        FILE_TTL: removedFileTtl,
-      })
-        .filter(([, value]) => !!value?.trim())
-        .map(([name]) => name);
-      if (removedS3Vars.length > 0) {
-        throw new Error(
-          `${removedS3Vars.join(', ')} ${removedS3Vars.length === 1 ? 'is' : 'are'} no longer supported. ` +
-            'Configure blob storage with BLOB_STORAGE_PROVIDER and BLOB_STORAGE_PROVIDER_CONFIG instead.',
-        );
-      }
-      this.blobStorage = undefined;
-    } else if (!isBlobStorageProviderType(blobStorageProvider)) {
-      throw new Error(
-        `BLOB_STORAGE_PROVIDER must be one of: ${blobStorageProviderSchema.options.join(', ')}. Got: ${blobStorageProvider}`,
-      );
-    } else {
-      if (!blobStorageProviderConfig) {
-        throw new Error(
-          'BLOB_STORAGE_PROVIDER_CONFIG is required when BLOB_STORAGE_PROVIDER is "custom"',
-        );
-      }
-      this.blobStorage = {
-        provider: blobStorageProvider,
-        providerConfig: blobStorageProviderConfigSchema.parse(
-          JSON.parse(blobStorageProviderConfig),
-        ),
-      };
-    }
+    // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
+    // upload the payload (rendered image or CSV) to S3 and return a short-lived
+    // presigned URL instead of inlining base64/text. AWS credentials are
+    // resolved via the default AWS SDK credential chain (IAM role / instance
+    // profile / standard AWS_* env vars), so no credentials are read here. When
+    // unset, the tools fall back to returning the payload inline (unchanged
+    // behavior).
+    //
+    // `keyPrefix` (MCP_IMAGE_PREFIX) is the shared base folder; each tool
+    // appends its own segment (e.g. `view-images/`, `view-data/`), so an unset
+    // base falls back to the per-tool default rather than a global one.
+    const bucketS3BucketValue = bucketS3Bucket?.trim() ?? '';
+    this.bucketS3 = {
+      enabled: !!bucketS3BucketValue,
+      bucket: bucketS3BucketValue,
+      region: awsDefaultRegion?.trim() || '',
+      keyPrefix: bucketS3KeyPrefix?.trim() || '',
+      presignTtlSeconds: parseNumber(bucketS3PresignTtlSeconds, {
+        defaultValue: 60,
+        minValue: 5,
+        maxValue: 900,
+      }),
+    };
 
     this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

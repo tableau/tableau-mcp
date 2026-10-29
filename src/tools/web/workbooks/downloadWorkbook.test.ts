@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFile, rm } from 'fs/promises';
-import { buffer } from 'stream/consumers';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -14,8 +13,7 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 
 const mocks = vi.hoisted(() => ({
   mockDownloadWorkbook: vi.fn(),
-  mockUpload: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(),
+  mockUploadBufferToS3: vi.fn(),
   mockLog: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
@@ -31,9 +29,9 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../../blobStorage/init.js', () => ({
-  getBlobStorageProvider: vi.fn(() => ({ upload: mocks.mockUpload })),
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+vi.mock('../s3Client.js', async (importActual) => ({
+  ...(await importActual<typeof import('../s3Client.js')>()),
+  uploadBufferToS3: mocks.mockUploadBufferToS3,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -54,7 +52,6 @@ describe('downloadWorkbookTool', () => {
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
     mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag !== 'authoring-with-slack');
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
   });
 
   afterEach(async () => {
@@ -72,28 +69,27 @@ describe('downloadWorkbookTool', () => {
     });
   });
 
-  it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
+  it('is enabled for ChatGPT', async () => {
     const tool = getDownloadWorkbookTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled for a non-Slack client', async () => {
     const tool = getDownloadWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is enabled when the authoring-tools flag is ON for an unknown client', async () => {
+  it('is enabled for an unknown client', async () => {
     const tool = getDownloadWorkbookTool(new WebMcpServer({ clientId: 'https://example.com/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools flag is ON for Slack', async () => {
+  it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     const tool = getDownloadWorkbookTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -101,7 +97,7 @@ describe('downloadWorkbookTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when the authoring-tools and authoring-with-slack flags are ON', async () => {
+  it('is enabled for Slack when the authoring-with-slack flag is ON', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
     const tool = getDownloadWorkbookTool(
@@ -112,22 +108,13 @@ describe('downloadWorkbookTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when there is no OAuth client id (stdio)', async () => {
     const tool = getDownloadWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
-    const tool = getDownloadWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
-  });
-
-  it('should write workbook bytes to a temp path when blob storage is not configured', async () => {
+  it('should write workbook bytes to a temp path when S3 is not configured', async () => {
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
       content: workbookBytes,
@@ -154,22 +141,18 @@ describe('downloadWorkbookTool', () => {
     expect(payload.path).toMatch(/tableau-mcp-workbooks/);
     tempPathsToCleanup.push(payload.path);
     await expect(readFile(payload.path)).resolves.toEqual(workbookBytes);
-    expect(mocks.mockUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
   });
 
-  it('should return a blob storage resource link when blob storage is configured and feature is enabled', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+  it('should return an S3 resource link when MCP_S3_BUCKET is configured and feature is enabled', async () => {
+    vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
       content: workbookBytes,
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
-    let uploadedBytes: Buffer | undefined;
-    mocks.mockUpload.mockImplementation(async ({ data }) => {
-      uploadedBytes = await buffer(data);
-      return { url: 'https://blob.example.com/signed-url' };
-    });
+    mocks.mockUploadBufferToS3.mockResolvedValue('https://s3.example.com/signed-url');
 
     const result = await getToolResult({
       workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
@@ -179,29 +162,30 @@ describe('downloadWorkbookTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('workbook-file-mode');
     invariant(result.content[0].type === 'resource_link');
-    expect(result.content[0].uri).toBe('https://blob.example.com/signed-url');
+    expect(result.content[0].uri).toBe('https://s3.example.com/signed-url');
     expect(result.content[0].name).toBe('Superstore.twb');
     expect(result.content[0].mimeType).toBe('application/xml');
-    expect(mocks.mockUpload).toHaveBeenCalledWith({
-      key: expect.stringMatching(
-        /^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/[0-9a-f-]+\.twb$/,
-      ),
-      data: expect.anything(),
-      contentLength: workbookBytes.byteLength,
-      contentType: 'application/xml',
-    });
-    expect(uploadedBytes).toEqual(workbookBytes);
+    expect(mocks.mockUploadBufferToS3).toHaveBeenCalledWith(
+      workbookBytes,
+      expect.objectContaining({
+        contentType: 'application/xml',
+        bucket: 'tableau-data',
+        key: expect.stringMatching(
+          /^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/.+\.twb$/,
+        ),
+      }),
+    );
   });
 
-  it('should fall back to temp path and log warning when blob storage upload fails', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+  it('should fall back to temp path and log warning when S3 upload fails', async () => {
+    vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
       content: workbookBytes,
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
-    mocks.mockUpload.mockRejectedValue(new Error('access denied'));
+    mocks.mockUploadBufferToS3.mockRejectedValue(new Error('access denied'));
 
     const result = await getToolResult({
       workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
@@ -221,43 +205,8 @@ describe('downloadWorkbookTool', () => {
     );
   });
 
-  it('should describe an empty-message upload failure in the fallback warning', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
-    mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: Buffer.from('<workbook/>', 'utf-8'),
-      contentType: 'application/xml',
-      filename: 'Superstore.twb',
-    });
-    mocks.mockUpload.mockRejectedValue(Object.assign(new Error(''), { code: 'ECONNREFUSED' }));
-
-    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    tempPathsToCleanup.push(JSON.parse(result.content[0].text).path);
-    expect(mocks.mockLog).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('ECONNREFUSED') }),
-    );
-  });
-
-  it('should error when the provider resolves without consuming the upload data', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
-    mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: Buffer.from('<workbook/>', 'utf-8'),
-      contentType: 'application/xml',
-      filename: 'Superstore.twb',
-    });
-    mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-url' });
-
-    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('without reading the upload data');
-  });
-
-  it('should return temp path when feature flag is disabled even with blob storage configured', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+  it('should return temp path when feature flag is disabled even with MCP_S3_BUCKET', async () => {
+    vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
@@ -276,7 +225,7 @@ describe('downloadWorkbookTool', () => {
     const payload = JSON.parse(result.content[0].text);
     tempPathsToCleanup.push(payload.path);
     await expect(readFile(payload.path)).resolves.toEqual(workbookBytes);
-    expect(mocks.mockUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
   });
 
   it('should return workbook not allowed error when workbook is not allowed', async () => {

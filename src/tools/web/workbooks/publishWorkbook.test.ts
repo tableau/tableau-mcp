@@ -24,17 +24,12 @@ const mocks = vi.hoisted(() => ({
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
   sessionEvents: [] as string[],
 }));
 
 vi.mock('fs/promises', () => ({
   readFile: mocks.mockReadFile,
-}));
-
-vi.mock('../../../blobStorage/init.js', () => ({
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -104,8 +99,6 @@ describe('publishWorkbookTool', () => {
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
     mocks.mockReadFile.mockReset();
-    mocks.mockIsBlobStorageEnabled.mockReset();
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockGetPersonalSpace.mockReset();
     mocks.useRestApiCalls.length = 0;
@@ -119,9 +112,7 @@ describe('publishWorkbookTool', () => {
       ...mockWorkbook,
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
-    mocks.mockIsFeatureEnabled.mockImplementation(
-      async (flag) => flag === 'authoring-tools' || flag === 'data-apps',
-    );
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'data-apps');
     // Benign default so project-publish tests that don't assert on permissions stay green.
     mocks.mockQueryWorkbookPermissions.mockResolvedValue([]);
   });
@@ -243,28 +234,27 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
+  it('is enabled for ChatGPT', async () => {
     const tool = getPublishWorkbookTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled for a non-Slack client', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is enabled when the authoring-tools flag is ON for an unknown client', async () => {
+  it('is enabled for an unknown client', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer({ clientId: 'https://example.com/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools flag is ON for Slack', async () => {
+  it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     const tool = getPublishWorkbookTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -272,7 +262,7 @@ describe('publishWorkbookTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when the authoring-tools and authoring-with-slack flags are ON', async () => {
+  it('is enabled for Slack when the authoring-with-slack flag is ON', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
     const tool = getPublishWorkbookTool(
@@ -283,19 +273,10 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when there is no OAuth client id (stdio)', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
-    const tool = getPublishWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('validates, publishes to the requested project, and returns the published workbook', async () => {
@@ -344,6 +325,7 @@ describe('publishWorkbookTool', () => {
     });
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
+      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -417,7 +399,7 @@ describe('publishWorkbookTool', () => {
 
     const result = await getToolResult(
       { ...validLocalArgs, workbookFilePath: '/tmp/source-superstore.twbx' },
-      { blobStorageEnabled: false },
+      { bucketS3Enabled: false },
     );
 
     expect(result.isError).toBe(false);
@@ -505,6 +487,7 @@ describe('publishWorkbookTool', () => {
 
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
+      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -523,7 +506,7 @@ describe('publishWorkbookTool', () => {
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(false);
     expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twb');
@@ -535,13 +518,13 @@ describe('publishWorkbookTool', () => {
     });
   });
 
-  it('rejects local workbook file paths when blob storage is configured', async () => {
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: true });
+  it('rejects local workbook file paths when staged S3 uploads are configured', async () => {
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: true });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'workbookFilePath is only supported when staged uploads are not configured',
+      'workbookFilePath is only supported when staged S3 uploads are not configured',
     );
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
@@ -554,7 +537,7 @@ describe('publishWorkbookTool', () => {
         ...validLocalArgs,
         workbookFilePath: '/tmp/source-superstore.xml',
       },
-      { blobStorageEnabled: false },
+      { bucketS3Enabled: false },
     );
 
     expect(result.isError).toBe(true);
@@ -567,7 +550,7 @@ describe('publishWorkbookTool', () => {
   it('returns an args-validation error when local workbook file is empty', async () => {
     mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -842,7 +825,7 @@ describe('publishWorkbookTool', () => {
     ]);
 
     mocks.useRestApiCalls.length = 0;
-    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     mocks.mockPublishWorkbook.mockResolvedValue(mockWorkbook);
     await getToolResult(validArgs);
     expect(mocks.useRestApiCalls[0]?.jwtScopes).toEqual([
@@ -980,7 +963,7 @@ describe('publishWorkbookTool', () => {
   });
 
   it('returns permissions when data-apps is disabled', async () => {
-    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -1004,7 +987,7 @@ describe('publishWorkbookTool', () => {
   it('still reads permissions if data-apps is disabled while publishing', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
     mocks.mockPublishWorkbook.mockImplementation(async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
       return mockWorkbook;
     });
 
@@ -1279,11 +1262,8 @@ async function getToolResult(
     personalSpace?: boolean;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; blobStorageEnabled?: boolean } = {},
+  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
 ): Promise<CallToolResult> {
-  if (options.blobStorageEnabled !== undefined) {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(options.blobStorageEnabled);
-  }
   const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
@@ -1301,8 +1281,10 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
+  bucketS3Enabled = true,
 }: {
   boundedProjectIds?: Set<string> | null;
+  bucketS3Enabled?: boolean;
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
@@ -1316,5 +1298,15 @@ function getMockExtra({
         tags: null,
       },
     }),
+    config: {
+      ...extra.config,
+      bucketS3: {
+        enabled: bucketS3Enabled,
+        bucket: 'tableau-workbooks',
+        region: 'us-east-1',
+        keyPrefix: 'mcp/',
+        presignTtlSeconds: 300,
+      },
+    },
   };
 }

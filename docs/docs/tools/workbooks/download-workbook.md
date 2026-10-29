@@ -6,11 +6,6 @@ sidebar_position: 3
 
 Downloads workbook content from Tableau as either an unpackaged TWB XML file or a packaged TWBX file.
 
-:::warning[Disabled by Default]
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
-Slack clients additionally require the `authoring-with-slack` feature flag.
-:::
-
 ## Required permissions
 
 - **Site Role**: Requires Explorer role or higher
@@ -42,8 +37,8 @@ Example: `true`
 
 The tool returns one of two result shapes:
 
-- **Blob storage mode enabled:** returns a `resource_link` with a URL to the workbook file in blob storage.
-- **Blob storage mode disabled or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
+- **S3 file mode enabled:** returns a `resource_link` with a short-lived presigned URL to the workbook file.
+- **S3 file mode disabled or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
 
 The tool preserves Tableau response metadata when present:
 
@@ -52,15 +47,15 @@ The tool preserves Tableau response metadata when present:
   - `application/octet-stream` for `.twbx`
 - `name` (for `resource_link`) and `filename` (for temp-file JSON) are taken from Tableau's `Content-Disposition` filename when available, otherwise a fallback name is generated.
 
-## Example result (blob storage mode)
+## Example result (S3 mode)
 
 ```json
 {
   "type": "resource_link",
-  "uri": "https://blob.example.com/...presigned...",
+  "uri": "https://example-bucket.s3.amazonaws.com/...presigned...",
   "name": "Superstore.twbx",
   "mimeType": "application/octet-stream",
-  "description": "Downloaded Tableau workbook content stored in blob storage."
+  "description": "Downloaded Tableau workbook content stored in S3. This is a short-lived presigned URL."
 }
 ```
 

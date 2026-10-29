@@ -10,16 +10,11 @@ import { MAX_STAGED_DATASOURCE_BYTES } from './stagedDatasourceUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(),
   mockRequestStagedDatasourceUpload: vi.fn(),
 }));
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
-}));
-
-vi.mock('../../../blobStorage/init.js', () => ({
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('./stagedDatasourceUpload.js', async (importOriginal) => ({
@@ -33,10 +28,9 @@ describe('requestDatasourceUploadTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockRequestStagedDatasourceUpload.mockResolvedValue({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://blob.example.com/signed-put',
+      uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_DATASOURCE_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
@@ -57,16 +51,16 @@ describe('requestDatasourceUploadTool', () => {
     });
   });
 
-  it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
+  it('is enabled when the datasource-authoring flag is ON for ChatGPT', async () => {
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled when the datasource-authoring flag is ON for a non-Slack client', async () => {
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://claude.ai/mcp' }),
     );
@@ -76,7 +70,7 @@ describe('requestDatasourceUploadTool', () => {
 
   it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     mocks.mockIsFeatureEnabled.mockImplementation(
-      async (featureName: string) => featureName === 'authoring-tools',
+      async (featureName: string) => featureName === 'datasource-authoring',
     );
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
@@ -85,7 +79,7 @@ describe('requestDatasourceUploadTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when both authoring flags are enabled', async () => {
+  it('is enabled for Slack when the datasource-authoring and authoring-with-slack flags are ON', async () => {
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -93,13 +87,13 @@ describe('requestDatasourceUploadTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when the datasource-authoring flag is ON and there is no OAuth client id (stdio)', async () => {
     const tool = getRequestDatasourceUploadTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
+  it('is disabled when the datasource-authoring feature flag is OFF even for a non-Slack client', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
     const tool = getRequestDatasourceUploadTool(
@@ -107,10 +101,10 @@ describe('requestDatasourceUploadTool', () => {
     );
 
     expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
-  it('returns a staged upload URL when blob storage is configured', async () => {
+  it('returns a staged upload URL when S3 is configured', async () => {
     const result = await getToolResult({
       fileName: 'Superstore.tds',
     });
@@ -119,20 +113,25 @@ describe('requestDatasourceUploadTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://blob.example.com/signed-put',
+      uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_DATASOURCE_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tds',
+      config: expect.objectContaining({
+        enabled: true,
+        bucket: 'tableau-workbooks',
+        region: 'us-east-1',
+      }),
     });
   });
 
   it('returns a staged upload URL for a .tdsx filename', async () => {
     mocks.mockRequestStagedDatasourceUpload.mockResolvedValue({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://blob.example.com/signed-put',
+      uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_DATASOURCE_BYTES,
       requiredHeaders: { 'Content-Type': 'application/octet-stream' },
@@ -145,19 +144,30 @@ describe('requestDatasourceUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tdsx',
+      config: expect.objectContaining({ enabled: true }),
     });
   });
 
-  it('returns an error when blob storage is not configured', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
-
-    const result = await getToolResult({ fileName: 'Superstore.tds' });
+  it('returns an error when S3 is not configured', async () => {
+    const result = await getToolResult(
+      { fileName: 'Superstore.tds' },
+      {
+        config: {
+          ...getMockRequestHandlerExtra().config,
+          bucketS3: {
+            enabled: false,
+            bucket: '',
+            region: '',
+            keyPrefix: '',
+            presignTtlSeconds: 60,
+          },
+        },
+      },
+    );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      'Blob storage provider must be configured before requesting staged data source uploads.',
-    );
+    expect(result.content[0].text).toContain('MCP_S3_BUCKET must be configured');
     expect(mocks.mockRequestStagedDatasourceUpload).not.toHaveBeenCalled();
   });
 
@@ -205,5 +215,16 @@ function getMockExtra(
   return {
     ...extra,
     ...overrides,
+    config: {
+      ...extra.config,
+      bucketS3: {
+        enabled: true,
+        bucket: 'tableau-workbooks',
+        region: 'us-east-1',
+        keyPrefix: 'mcp/',
+        presignTtlSeconds: 300,
+      },
+      ...overrides.config,
+    },
   };
 }
