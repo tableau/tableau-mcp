@@ -96,10 +96,12 @@ describe('cached XML callback containment', () => {
       const readResult = await invokeRead(candidate);
       expect(readResult.isError).toBe(true);
       expect(text(readResult)).toContain('Security error');
+      expect(text(readResult)).toContain('\nReason: ');
 
       const writeResult = await invokeWrite(candidate, '<workbook><escaped/></workbook>');
       expect(writeResult.isError).toBe(true);
       expect(text(writeResult)).toContain('Security error');
+      expect(text(writeResult)).toContain('\nReason: ');
 
       const spliceResult = await invokeWrite(
         candidate,
@@ -108,6 +110,7 @@ describe('cached XML callback containment', () => {
       );
       expect(spliceResult.isError).toBe(true);
       expect(text(spliceResult)).toContain('Security error');
+      expect(text(spliceResult)).toContain('\nReason: ');
       expect(readFileSync(external, 'utf-8')).toBe(original);
     },
   );

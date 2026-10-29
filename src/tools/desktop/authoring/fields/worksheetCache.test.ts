@@ -64,7 +64,7 @@ describe.skipIf(process.platform === 'win32')('fetchAndCacheWorksheet cache writ
 
       await expect(
         fetchAndCacheWorksheet({ worksheetName: 'Sheet1', resolvedSession: '1', extra }),
-      ).rejects.toThrow(/refused to write/);
+      ).rejects.toThrow(/refused to write[\s\S]*\nReason: symlink/);
       expect(readFileSync(victim, 'utf-8')).toBe('precious');
     } finally {
       rmSync(root, { recursive: true, force: true });

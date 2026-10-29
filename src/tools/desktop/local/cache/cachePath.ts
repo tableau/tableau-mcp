@@ -4,5 +4,6 @@ export {
   getCacheDir,
   isWithinCacheDir,
   readContainedCacheTextFile,
+  unsafeFileReasonLine,
   writeContainedCacheTextFile,
 } from '../../../../desktop/cachePath.js';
