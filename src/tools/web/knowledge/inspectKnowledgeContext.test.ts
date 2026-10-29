@@ -280,6 +280,19 @@ describe('inspectKnowledgeContextTool', () => {
       });
     });
 
+    it('reports truncated when the server truncates to fewer than the limit', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(20, 51));
+
+      const out = payload(await getResult({ action: 'suggestions' }));
+
+      expect(out.suggestions).toHaveLength(20);
+      expect(out.resultInfo).toMatchObject({
+        originalSuggestionCount: 51,
+        returnedSuggestionCount: 20,
+        truncated: true,
+      });
+    });
+
     it('does not report truncated when everything was returned', async () => {
       mocks.getKnowledgeSuggestions.mockResolvedValue(report(10, 10));
 
