@@ -5,7 +5,11 @@ import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.
 import * as loggerModule from '../../../logging/logger.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
+import {
+  stubDefaultEnvVars,
+  testProductVersion,
+  testProductVersion2025_3,
+} from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -315,6 +319,23 @@ describe('getDatasourceMetadataTool', () => {
       openWorldHint: false,
     });
   });
+
+  it.each([
+    [testProductVersion2025_2, false],
+    [testProductVersion2025_3, true],
+    [{ value: '2026.3.0', build: '20263.26.1001.1200' }, true],
+  ] as const)(
+    'advertises field-name guidance according to version %s',
+    async (version, supported) => {
+      const tool = getGetDatasourceMetadataTool(new WebMcpServer(), version);
+      const description = await Provider.from(tool.description);
+      expect(description.includes('interpretFieldCaptionsAsFieldNames')).toBe(supported);
+      expect(description).toContain('metadata');
+      if (version.value === '2026.3.0') {
+        expect(description).toContain('embedded');
+      }
+    },
+  );
 
   it('should successfully merge data from both APIs and return enriched metadata', async () => {
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));

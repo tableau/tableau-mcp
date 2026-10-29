@@ -86,6 +86,9 @@ values returned by [Get Datasource Metadata](get-datasource-metadata.md), for ex
 logical tables contain fields with the same display caption. Choose the intended logical table; do
 not invent or qualify names yourself.
 
+On earlier versions, this argument is omitted from the tool schema and the metadata tool does not
+recommend field-name queries. The runtime version check still rejects clients that send `true`.
+
 Use underlying names consistently for existing fields in selections, filters, calculations and
 parameters. The VDS request properties remain `fieldCaption` and `parameterCaption`; their values
 are interpreted as underlying names when this option is enabled.

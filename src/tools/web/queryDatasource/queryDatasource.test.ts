@@ -1,7 +1,8 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../logging/logger.js';
@@ -120,7 +121,7 @@ describe('queryDatasourceTool', () => {
 
   it('should bound limit so that limit + 1 fits in a 32-bit int', async () => {
     const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
-    const schema = z.object(await Provider.from(queryDatasourceTool.paramsSchema));
+    const schema = await Provider.from(queryDatasourceTool.paramsSchema);
     const base = {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       query: { fields: [{ fieldCaption: 'Category' }] },
@@ -154,6 +155,83 @@ describe('queryDatasourceTool', () => {
       const rejected = await getToolResult({ query, productVersion });
       expect(rejected.isError).toBe(true);
       expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [{ value: '2025.2.9', build: '20252.25.1001.1200' }, false],
+    [testProductVersion2025_3, true],
+  ] as const)(
+    'advertises name mode according to version %s over MCP',
+    async (productVersion, supported) => {
+      const { McpServer } = await vi.importActual<
+        typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+      >('@modelcontextprotocol/sdk/server/mcp.js');
+      const server = new McpServer({ name: 'test', version: '0.0.0' });
+      const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
+      const callback = await Provider.from(tool.callback);
+      server.registerTool(
+        tool.name,
+        { inputSchema: await Provider.from(tool.paramsSchema) },
+        (args) => callback(args, getMockRequestHandlerExtra()),
+      );
+      const client = new Client({ name: 'test-client', version: '0.0.0' });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      mocks.mockReadMetadata.mockResolvedValue(
+        Ok({
+          data: [
+            { fieldCaption: 'Margin', fieldName: 'Calculation_1003', dataType: 'REAL' },
+            { fieldCaption: 'Category', fieldName: 'Category', dataType: 'STRING' },
+          ],
+        }),
+      );
+      mocks.mockQueryDatasource.mockResolvedValue(Ok(mockVdsResponses.success));
+      try {
+        await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+        const { tools } = await client.listTools();
+        expect(
+          Object.hasOwn(
+            tools[0].inputSchema.properties ?? {},
+            'interpretFieldCaptionsAsFieldNames',
+          ),
+        ).toBe(supported);
+        expect(tools[0].inputSchema.properties).toHaveProperty('datasourceLuid');
+        expect(tools[0].inputSchema.properties).toHaveProperty('query');
+        const args = {
+          datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+          query: { fields: [{ fieldCaption: 'Calculation_1003', function: 'AVG' }] },
+          interpretFieldCaptionsAsFieldNames: true,
+        };
+        const result = await client.callTool({ name: tool.name, arguments: args });
+        expect(result.isError).toBe(!supported);
+        if (supported) {
+          expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+            expect.objectContaining({
+              options: expect.objectContaining({ interpretFieldCaptionsAsFieldNames: true }),
+            }),
+          );
+        } else {
+          expect(result).toMatchObject({
+            content: [{ text: expect.stringContaining('requires Tableau 2025.3 or later') }],
+          });
+          expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+          expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+        }
+        const captionResult = await client.callTool({
+          name: tool.name,
+          arguments: {
+            datasourceLuid: args.datasourceLuid,
+            query: { fields: [{ fieldCaption: 'Category' }] },
+          },
+        });
+        expect(captionResult.isError).toBe(false);
+        expect(mocks.mockQueryDatasource.mock.lastCall?.[0].options).not.toHaveProperty(
+          'interpretFieldCaptionsAsFieldNames',
+        );
+      } finally {
+        await client.close();
+        await server.close();
+      }
     },
   );
 

@@ -72,6 +72,17 @@ const paramsSchema = {
     ),
 };
 
+const fieldNameParamsSchema = z.object(paramsSchema);
+// Preserve hidden arguments so unsupported calls reach the runtime version guard.
+const captionParamsSchema = fieldNameParamsSchema
+  .omit({ interpretFieldCaptionsAsFieldNames: true })
+  .passthrough();
+type QueryDatasourceParamsSchema = z.ZodType<
+  z.output<typeof fieldNameParamsSchema>,
+  z.ZodTypeDef,
+  z.input<typeof fieldNameParamsSchema>
+>;
+
 type QueryDatasourceResult = QueryOutput & {
   mcp?: {
     warnings?: ContextFilterWarning[];
@@ -86,9 +97,9 @@ type QueryDatasourceResult = QueryOutput & {
 export const getQueryDatasourceTool = (
   server: WebMcpServer,
   productVersion: ProductVersion,
-): WebTool<typeof paramsSchema> => {
+): WebTool<QueryDatasourceParamsSchema> => {
   const rules = getQueryDatasourceRules(productVersion);
-  const queryDatasourceTool = new WebTool({
+  const queryDatasourceTool = new WebTool<QueryDatasourceParamsSchema>({
     server,
     name: 'query-datasource',
     minRequiredRole: SiteRole.VIEWER,
@@ -103,7 +114,9 @@ export const getQueryDatasourceTool = (
         },
       }),
     ),
-    paramsSchema,
+    paramsSchema: new Provider(() =>
+      rules.fieldNamesAreUnavailable ? captionParamsSchema : fieldNameParamsSchema,
+    ),
     annotations: {
       title: 'Query Datasource',
       readOnlyHint: true,
