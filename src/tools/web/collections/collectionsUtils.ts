@@ -37,8 +37,8 @@ export function getQuietCollectionsExtra(
 }
 
 export const COLLECTIONS_WIRE_LIMITATION =
-  'Candidate uses literal TAG query names "page number", "page size", "sort order". ' +
-  'The official overview differs; target-deployment query spelling and contentType casing need live verification. ' +
+  'Uses REST query keys pageNumber, pageSize and sort; target-deployment paging and sorting need live verification. ' +
+  'Collection membership contentType casing also needs live verification. ' +
   'Only one page is fetched; this result is not a complete inventory.';
 
 export function hasCollectionsBounds(context: BoundedContext): boolean {

@@ -91,7 +91,7 @@ describe('CollectionsMethods guarded transport', () => {
     );
   });
 
-  it('uses unversioned collections and exact literal TAG query keys', async () => {
+  it('uses REST query keys instead of ignored human-readable TAG labels', async () => {
     const { methods, requests } = setup(fixtures.page);
     expect(
       await methods.listCollections({
@@ -106,10 +106,10 @@ describe('CollectionsMethods guarded transport', () => {
       baseURL: 'https://tableau.test/api/-',
       method: 'get',
       queries: {
-        'page number': 2,
-        'page size': 10,
+        pageNumber: 2,
+        pageSize: 10,
         filter: 'favorite:eq:true',
-        'sort order': 'name:desc',
+        sort: 'name:desc',
       },
       auth: 'synthetic-test-token',
       accept: 'application/json',

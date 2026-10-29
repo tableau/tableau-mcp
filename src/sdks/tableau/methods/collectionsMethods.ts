@@ -61,12 +61,12 @@ export default class CollectionsMethods extends AuthenticatedMethods<typeof coll
   }
 
   private queries({ pageNumber, pageSize, filter, sort }: CollectionsQuery): {
-    'page number': number | undefined;
-    'page size': number | undefined;
+    pageNumber: number | undefined;
+    pageSize: number | undefined;
     filter: string | undefined;
-    'sort order': string | undefined;
+    sort: string | undefined;
   } {
-    return { 'page number': pageNumber, 'page size': pageSize, filter, 'sort order': sort };
+    return { pageNumber, pageSize, filter, sort };
   }
 
   private async execute<S extends z.ZodTypeAny>(

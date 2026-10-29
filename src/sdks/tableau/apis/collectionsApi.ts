@@ -18,11 +18,11 @@ import {
   collectionsSortSchema,
 } from '../types/collectionsQuery.js';
 
-// Literal query names from TAG OpenAPI. The overview instead calls sorting `sort` and classic
-// REST uses camelCase paging. No alternative spelling or live compatibility is assumed here.
+// Cloud ignores the human-readable TAG query labels containing spaces. Use REST query keys;
+// retain response metadata checks so ignored parameters cannot establish completeness.
 const pagingParameters = [
-  { name: 'page number', type: 'Query', schema: z.number().int().optional() },
-  { name: 'page size', type: 'Query', schema: z.number().int().optional() },
+  { name: 'pageNumber', type: 'Query', schema: z.number().int().optional() },
+  { name: 'pageSize', type: 'Query', schema: z.number().int().optional() },
 ] as const;
 
 const listCollectionsEndpoint = makeEndpoint({
@@ -32,7 +32,7 @@ const listCollectionsEndpoint = makeEndpoint({
   parameters: [
     ...pagingParameters,
     { name: 'filter', type: 'Query', schema: collectionsFilterSchema.optional() },
-    { name: 'sort order', type: 'Query', schema: collectionsSortSchema.optional() },
+    { name: 'sort', type: 'Query', schema: collectionsSortSchema.optional() },
   ] as const,
   response: collectionsPageSchema,
 });
@@ -61,7 +61,7 @@ const listCollectionItemsEndpoint = makeEndpoint({
     pathParam('collectionId'),
     ...pagingParameters,
     { name: 'filter', type: 'Query', schema: collectionItemsFilterSchema.optional() },
-    { name: 'sort order', type: 'Query', schema: collectionItemsSortSchema.optional() },
+    { name: 'sort', type: 'Query', schema: collectionItemsSortSchema.optional() },
   ] as const,
   response: collectionItemsPageSchema,
 });
