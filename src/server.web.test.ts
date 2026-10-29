@@ -192,6 +192,18 @@ describe('server', () => {
     }
   });
 
+  it('registers all three self-only favorites tools for authenticated readers', async () => {
+    const server = getServer();
+    await server.registerTools();
+    for (const name of ['list-favorites', 'add-favorite', 'remove-favorite']) {
+      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+        name,
+        expect.any(Object),
+        expect.any(Function),
+      );
+    }
+  });
+
   // The scope layer advertises each tool's registration-condition probe scopes from a
   // `conditionApiScopes` field in scopes.ts's toolScopeMap. Those scopes must match what the tool
   // instance's declared `registrationConditions` map to via REGISTRATION_CONDITION_API_SCOPES. If the

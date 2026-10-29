@@ -17,6 +17,7 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import FavoritesMethods from './methods/favoritesMethods.js';
 import FlowDocumentMethods from './methods/flowDocumentMethods.js';
 import FlowsMethods from './methods/flowsMethods.js';
 import JobsMethods from './methods/jobsMethods.js';
@@ -177,6 +178,15 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, datasourcesMethods.interceptors);
     return datasourcesMethods;
+  }
+
+  get favoritesMethods(): FavoritesMethods {
+    const favoritesMethods = new FavoritesMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, favoritesMethods.interceptors);
+    return favoritesMethods;
   }
 
   get flowsMethods(): FlowsMethods {

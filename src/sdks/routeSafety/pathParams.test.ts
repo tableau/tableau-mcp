@@ -15,6 +15,7 @@ import { z } from 'zod';
 import * as authenticationApi from '../tableau/apis/authenticationApi.js';
 import * as contentExplorationApi from '../tableau/apis/contentExplorationApi.js';
 import * as datasourcesApi from '../tableau/apis/datasourcesApi.js';
+import * as favoritesApi from '../tableau/apis/favoritesApi.js';
 import * as flowDocumentApi from '../tableau/apis/flowDocumentApi.js';
 import * as flowsApi from '../tableau/apis/flowsApi.js';
 import * as jobsApi from '../tableau/apis/jobsApi.js';
@@ -49,6 +50,7 @@ const modules: Record<string, Record<string, unknown>> = {
   'tableau/apis/authenticationApi.ts': authenticationApi,
   'tableau/apis/contentExplorationApi.ts': contentExplorationApi,
   'tableau/apis/datasourcesApi.ts': datasourcesApi,
+  'tableau/apis/favoritesApi.ts': favoritesApi,
   'tableau/apis/flowDocumentApi.ts': flowDocumentApi,
   'tableau/apis/flowsApi.ts': flowsApi,
   'tableau/apis/jobsApi.ts': jobsApi,

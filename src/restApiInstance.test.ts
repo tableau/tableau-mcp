@@ -70,6 +70,25 @@ describe('restApiInstance', () => {
       expect(restApi.signOut).toHaveBeenCalled();
     });
 
+    it('supports favorites raw-notification containment without installing payload interceptors', async () => {
+      vi.stubEnv('AUTH', 'pat');
+      await useRestApi({
+        config: getConfig(),
+        disableLogging: true,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        ...defaultLuidGetters,
+        callback: async () => true,
+      });
+      expect(RestApi).toHaveBeenCalledWith(
+        expect.objectContaining({ requestInterceptor: undefined, responseInterceptor: undefined }),
+      );
+      expect(notifier.info).not.toHaveBeenCalled();
+      expect(notifier.error).not.toHaveBeenCalled();
+    });
+
     it('should sign in with Direct Trust when auth is Direct Trust', async () => {
       vi.stubEnv('AUTH', 'direct-trust');
       vi.stubEnv('JWT_SUB_CLAIM', 'test-jwt-sub-claim');

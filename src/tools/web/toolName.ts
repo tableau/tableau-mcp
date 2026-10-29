@@ -1,4 +1,7 @@
 export const webToolNames = [
+  'list-favorites',
+  'add-favorite',
+  'remove-favorite',
   'list-datasources',
   'list-extract-refresh-tasks',
   'update-cloud-extract-refresh-task',
@@ -58,6 +61,7 @@ export const webToolNames = [
 export type WebToolName = (typeof webToolNames)[number];
 
 export const webToolGroupNames = [
+  'favorites',
   'datasource',
   'workbook',
   'authoring',
@@ -80,6 +84,7 @@ export const webToolGroupNames = [
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
+  favorites: ['list-favorites', 'add-favorite', 'remove-favorite'],
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook', 'download-workbook', 'move-workbook'],
   authoring: [
