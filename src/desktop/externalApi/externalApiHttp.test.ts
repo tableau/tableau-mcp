@@ -54,9 +54,23 @@ const invokeDialogActionRequest: InvokeDialogActionRequest = {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 0,
   },
+  requestId: 'request-1',
   action: { kind: 'button', label: 'Discard' },
 };
+
+const dialogRequestStatus = (
+  request: InvokeDialogActionRequest,
+  effect: 'dialog-dismissed' | 'dialog-remains',
+): Record<string, unknown> => ({
+  sessionId: request.dialog.sessionId,
+  revision: request.dialog.revision,
+  requestId: request.requestId,
+  state: 'completed',
+  effect,
+});
 
 describe('ExternalApiHttp', () => {
   let server: MockExternalApiServer;
@@ -881,18 +895,23 @@ describe('ExternalApiHttp', () => {
         objectName: ' save-dialog ',
         title: 'Save “Regional Sales”?',
         className: 'QMessageBox',
+        sessionId: 'dialog-session-2',
+        revision: 5,
       },
+      requestId: 'request-2',
       action: { kind: 'button', label: ' &Discard ' },
+    };
+    const response = {
+      outcome: 'completed',
+      dialog: exactRequest.dialog,
+      status: dialogRequestStatus(exactRequest, 'dialog-dismissed'),
+      uiSnapshotAvailable: true,
+      dialogs: [],
     };
     server.setOverride('POST /v0/app:invokeDialogAction', {
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        outcome: 'dismissed',
-        dialog: exactRequest.dialog,
-        action: exactRequest.action,
-        dialogs: [],
-      }),
+      body: JSON.stringify(response),
     });
     const result = await http.postJsonForDirectBody(
       EXTERNAL_API_ROUTES.appInvokeDialogAction,
@@ -901,12 +920,7 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toEqual({
-      outcome: 'dismissed',
-      dialog: exactRequest.dialog,
-      action: exactRequest.action,
-      dialogs: [],
-    });
+    expect(result.unwrap()).toEqual(response);
     const posted = server.requests.at(-1);
     expect(posted?.method).toBe('POST');
     expect(posted?.path).toBe('/v0/app:invokeDialogAction');
@@ -914,7 +928,7 @@ describe('ExternalApiHttp', () => {
     expect(posted?.body).toBe(JSON.stringify(exactRequest));
   });
 
-  it('preserves all fields in an action-invoked-dialog-remains response', async () => {
+  it('preserves all fields in a dialog-remains response', async () => {
     const remainingDialog = {
       ...invokeDialogActionRequest.dialog,
       messageText: ' Save this workbook? ',
@@ -934,9 +948,10 @@ describe('ExternalApiHttp', () => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        outcome: 'action-invoked-dialog-remains',
+        outcome: 'completed',
         dialog: invokeDialogActionRequest.dialog,
-        action: invokeDialogActionRequest.action,
+        status: dialogRequestStatus(invokeDialogActionRequest, 'dialog-remains'),
+        uiSnapshotAvailable: true,
         dialogs: [remainingDialog],
         responseExtension: true,
       }),
@@ -949,9 +964,10 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.unwrap()).toEqual({
-      outcome: 'action-invoked-dialog-remains',
+      outcome: 'completed',
       dialog: invokeDialogActionRequest.dialog,
-      action: invokeDialogActionRequest.action,
+      status: dialogRequestStatus(invokeDialogActionRequest, 'dialog-remains'),
+      uiSnapshotAvailable: true,
       dialogs: [remainingDialog],
       responseExtension: true,
     });
@@ -959,11 +975,7 @@ describe('ExternalApiHttp', () => {
 
   it.each([
     [400, 'invalid-request-body'],
-    [409, 'dialog-not-found'],
-    [409, 'dialog-ambiguous'],
-    [409, 'dialog-action-not-found'],
-    [409, 'dialog-action-ambiguous'],
-    [409, 'dialog-action-disabled'],
+    [403, 'origin-not-allowed'],
   ])('maps HTTP %i %s from a direct JSON POST', async (status, code) => {
     server.setOverride('POST /v0/app:invokeDialogAction', {
       status,

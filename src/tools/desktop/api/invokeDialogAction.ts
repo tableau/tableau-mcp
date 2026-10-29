@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import {
-  dialogActionSchema,
+  DialogIdentity,
+  dialogIdentitySchema,
   InvokeDialogActionRequest,
   InvokeDialogActionResult,
 } from '../../../desktop/externalApi/types.js';
@@ -12,18 +15,18 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
-const actionSchema = dialogActionSchema.describe('');
+const messageBoxActionSchema = z
+  .object({ kind: z.enum(['button', 'close', 'cancel']), label: z.string().min(1).optional() })
+  .strict()
+  .refine(({ kind, label }) => (kind === 'button') === (label !== undefined), {
+    message: 'button needs label; close and cancel take none',
+  });
+type MessageBoxAction = z.infer<typeof messageBoxActionSchema>;
 
 const paramsSchema = {
   session: sessionParam(),
-  dialog: z
-    .object({
-      objectName: z.string(),
-      title: z.string(),
-      className: z.string(),
-    })
-    .describe(''),
-  action: actionSchema,
+  dialog: dialogIdentitySchema.describe(''),
+  action: messageBoxActionSchema.describe(''),
 };
 
 const title = 'Invoke Dialog Action';
@@ -40,8 +43,10 @@ function invokeDialogActionRouteMissingError(): McpToolError {
   });
 }
 
-type InvokeDialogActionToolArgs = InvokeDialogActionRequest & {
+type InvokeDialogActionToolArgs = {
   session: string | undefined;
+  dialog: DialogIdentity;
+  action: MessageBoxAction;
 };
 
 export const getInvokeDialogActionTool = (
@@ -50,7 +55,7 @@ export const getInvokeDialogActionTool = (
   const tool = new DesktopTool({
     server,
     name: 'invoke-dialog-action',
-    minApiVersion: '0.2.13',
+    minApiVersion: '0.2.26',
     title,
     description: 'Use get-active-dialogs context; exact action only. Never guess or retry.',
     paramsSchema,
@@ -62,9 +67,18 @@ export const getInvokeDialogActionTool = (
     },
     callback: async ({ session, dialog, action }, extra): Promise<CallToolResult> => {
       const request: InvokeDialogActionRequest = {
-        dialog,
+        dialog: {
+          objectName: dialog.objectName,
+          title: dialog.title,
+          className: dialog.className,
+          sessionId: dialog.sessionId,
+          revision: dialog.revision,
+        },
+        requestId: randomUUID(),
         action:
-          action.kind === 'button' ? { kind: 'button', label: action.label } : { kind: 'close' },
+          action.kind === 'button'
+            ? { kind: 'button', label: action.label ?? '' }
+            : { kind: action.kind },
       };
       const loggedArgs: InvokeDialogActionToolArgs = {
         session,
@@ -72,11 +86,10 @@ export const getInvokeDialogActionTool = (
           objectName: REDACTED_DIALOG_VALUE,
           title: REDACTED_DIALOG_VALUE,
           className: REDACTED_DIALOG_VALUE,
+          sessionId: dialog.sessionId,
+          revision: dialog.revision,
         },
-        action:
-          action.kind === 'button'
-            ? { kind: 'button', label: REDACTED_DIALOG_VALUE }
-            : { kind: 'close' },
+        action: action.label === undefined ? action : { ...action, label: REDACTED_DIALOG_VALUE },
       };
       return await tool.logAndExecute<InvokeDialogActionResult>({
         extra,

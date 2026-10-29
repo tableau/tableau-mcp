@@ -16,9 +16,12 @@ import {
   datasourceItemSchema,
   datasourceListSchema,
   desktopStateSchema,
+  DIALOG_ACTION_KINDS,
+  dialogActionInvocationSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
+  dialogRequestStatusSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
   imageResultSchema,
@@ -133,7 +136,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
     'isStartPageVisible',
     'isDataSourcePageActive',
     'isPresentationMode',
-    'isFocusMode',
+    'isCanvasMode',
   ],
   DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
   DashboardList: ['dashboards'],
@@ -149,6 +152,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   DatasourceList: ['datasources'],
   Health: ['status'],
   ProtectedResourceMetadata: ['resource', 'bearer_methods_supported'],
+  WindowInfo: ['sessionId', 'revision', 'family', 'status'],
   WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources', 'index', 'type'],
   WorksheetList: ['worksheets'],
   StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
@@ -292,7 +296,7 @@ describe('external client API contract (captured openapi fixture)', () => {
           'isStartPageVisible',
           'isDataSourcePageActive',
           'isPresentationMode',
-          'isFocusMode',
+          'isCanvasMode',
         ],
         DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
         DashboardList: ['dashboards'],
@@ -308,6 +312,7 @@ describe('external client API contract (captured openapi fixture)', () => {
         DatasourceList: ['datasources'],
         Health: ['status'],
         ProtectedResourceMetadata: ['resource', 'bearer_methods_supported'],
+        WindowInfo: ['sessionId', 'revision', 'family', 'status'],
         WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources', 'index', 'type'],
         WorksheetList: ['worksheets'],
         StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
@@ -411,10 +416,27 @@ describe('external client API contract (captured openapi fixture)', () => {
   });
 
   describe('dialog contracts', () => {
+    const identity = {
+      objectName: 'dialog',
+      title: 'Save',
+      className: 'QMessageBox',
+      sessionId: 'dialog-session-1',
+      revision: 0,
+    };
+    const status = {
+      sessionId: 'dialog-session-1',
+      revision: 0,
+      requestId: 'request-1',
+      state: 'completed',
+      effect: 'dialog-dismissed',
+    };
+
     it.each([
       ['DialogIdentity', dialogIdentitySchema],
       ['DialogList', dialogListSchema],
+      ['DialogRequestStatus', dialogRequestStatusSchema],
       ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
+      ['InvokeDialogActionResult', invokeDialogActionResultSchema],
     ] as const)('%s properties and required set match exactly', (name, schema) => {
       const component = specSchema(name);
       expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
@@ -422,13 +444,12 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
 
     it('reuses WindowInfo for every dialog snapshot', () => {
-      const dialogList = specSchema('DialogList');
-      const dismissResult = specSchema('InvokeDialogActionResult');
-
-      expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      for (const outcome of dismissResult.oneOf ?? []) {
-        expect(outcome.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      }
+      expect(specSchema('DialogList').properties?.dialogs?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+      expect(specSchema('InvokeDialogActionResult').properties?.dialogs?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
     });
 
     it('documents bounded detailed text and its truncation marker', () => {
@@ -438,88 +459,98 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
     });
 
-    it('models exact labeled button and semantic close actions', () => {
-      const variants = specSchema('DialogAction').oneOf ?? [];
-      const byKind = Object.fromEntries(
-        variants.map((variant) => [variant.properties?.kind?.const, variant]),
-      );
-
-      expect(byKind.button.required?.sort()).toEqual(['kind', 'label']);
-      expect(byKind.button.properties?.label?.minLength).toBe(1);
-      expect(byKind.close.required).toEqual(['kind']);
-      expect(byKind.close.properties?.label).toBe(false);
+    it('advertises every action kind the spec defines', () => {
+      expect(specSchema('DialogAction').properties?.kind?.enum).toEqual([...DIALOG_ACTION_KINDS]);
       expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
       expect(dialogActionSchema.safeParse({ kind: 'unknown' }).success).toBe(false);
     });
 
-    it('requires an exact returned action in requests and invoked responses', () => {
-      const request = specSchema('InvokeDialogActionRequest');
-      const outcomes = specSchema('InvokeDialogActionResult').oneOf ?? [];
-
-      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: '' },
-        }).success,
-      ).toBe(false);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: ' ' },
-        }).success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: 'dialog', title: 'Save' },
-          action: { kind: 'button', label: 'Discard' },
-        }).success,
-      ).toBe(false);
-      for (const outcome of outcomes.filter(
-        (candidate) => candidate.properties?.outcome?.const !== 'no-active-dialog',
-      )) {
-        expect(outcome.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-        expect(outcome.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      }
-    });
-
-    it('models the exact three outcome branches and their required fields', () => {
-      const outcomeSchemas = specSchema('InvokeDialogActionResult').oneOf ?? [];
-      const requiredByOutcome = Object.fromEntries(
-        outcomeSchemas.map((outcome) => [
-          outcome.properties?.outcome?.const,
-          [...(outcome.required ?? [])].sort(),
-        ]),
+    it('models one strict invocation variant per action kind', () => {
+      const variants = specSchema('DialogActionInvocation').oneOf ?? [];
+      const byKind: Record<string, SpecSchema> = Object.fromEntries(
+        variants.map((variant) => [variant.properties?.kind?.const, variant]),
       );
 
-      expect(requiredByOutcome).toEqual({
-        'no-active-dialog': ['dialogs', 'outcome'],
-        dismissed: ['action', 'dialog', 'dialogs', 'outcome'],
-        'action-invoked-dialog-remains': ['action', 'dialog', 'dialogs', 'outcome'],
-      });
+      expect(Object.keys(byKind).sort()).toEqual([...DIALOG_ACTION_KINDS].sort());
+      for (const [kind, variant] of Object.entries(byKind)) {
+        const zodVariant = dialogActionInvocationSchema.optionsMap.get(kind) as z.AnyZodObject;
+        expect(declaredKeys(zodVariant).sort()).toEqual(
+          Object.keys(variant.properties ?? {}).sort(),
+        );
+        expect(requiredKeys(zodVariant).sort()).toEqual([...(variant.required ?? [])].sort());
+      }
+      expect(
+        dialogActionInvocationSchema.safeParse({ kind: 'button', label: 'Discard' }).success,
+      ).toBe(true);
+      expect(dialogActionInvocationSchema.safeParse({ kind: 'button', label: '' }).success).toBe(
+        false,
+      );
+      expect(dialogActionInvocationSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(
+        false,
+      );
+      expect(
+        dialogActionInvocationSchema.safeParse({
+          kind: 'choose-color',
+          red: 256,
+          green: 0,
+          blue: 0,
+        }).success,
+      ).toBe(false);
+    });
 
+    it('requires a session identity, request id, and exact invocation in requests', () => {
+      const request = specSchema('InvokeDialogActionRequest');
+
+      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
+      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogActionInvocation');
       expect(
-        invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
-          .success,
+        invokeDialogActionRequestSchema.safeParse({
+          dialog: identity,
+          requestId: 'request-1',
+          action: { kind: 'close' },
+        }).success,
       ).toBe(true);
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'dismissed',
+        invokeDialogActionRequestSchema.safeParse({
+          dialog: identity,
+          requestId: 'has space',
+          action: { kind: 'close' },
+        }).success,
+      ).toBe(false);
+      expect(
+        invokeDialogActionRequestSchema.safeParse({
           dialog: { objectName: 'dialog', title: 'Save', className: 'QMessageBox' },
-          action: { kind: 'button', label: 'Discard' },
+          requestId: 'request-1',
+          action: { kind: 'close' },
+        }).success,
+      ).toBe(false);
+    });
+
+    it('matches the spec outcome, state, and effect enums', () => {
+      const result = specSchema('InvokeDialogActionResult');
+      const requestStatus = specSchema('DialogRequestStatus');
+
+      expect(result.properties?.status?.$ref).toBe('#/components/schemas/DialogRequestStatus');
+      expect(invokeDialogActionResultSchema.shape.outcome.options).toEqual(
+        result.properties?.outcome?.enum,
+      );
+      expect(dialogRequestStatusSchema.shape.state.options).toEqual(
+        requestStatus.properties?.state?.enum,
+      );
+      expect(dialogRequestStatusSchema.shape.effect.options).toEqual(
+        requestStatus.properties?.effect?.enum,
+      );
+      expect(
+        invokeDialogActionResultSchema.safeParse({
+          outcome: 'completed',
+          dialog: identity,
+          status,
+          uiSnapshotAvailable: true,
           dialogs: [],
         }).success,
       ).toBe(true);
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'action-invoked-dialog-remains',
-          dialogs: [],
-        }).success,
+        invokeDialogActionResultSchema.safeParse({ outcome: 'completed', dialogs: [] }).success,
       ).toBe(false);
     });
   });
@@ -892,9 +923,6 @@ describe('external client API contract (captured openapi fixture)', () => {
           'application/json'
         ]?.schema?.$ref,
       ).toBe('#/components/schemas/InvokeDialogActionResult');
-      expect(
-        Object.keys(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses ?? {}),
-      ).toContain('409');
     });
 
     it('documents the app-state read with the shared AppState response', () => {

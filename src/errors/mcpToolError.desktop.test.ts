@@ -129,7 +129,7 @@ describe('ImageExportTimeoutError', () => {
     expect(error.message).toContain('exact returned action');
     expect(error.message).toContain('at most one invoke-dialog-action call');
     expect(error.message).toContain('Do not guess or assume Cancel is safe');
-    expect(error.message).toContain('action-invoked-dialog-remains');
+    expect(error.message).toContain('dialog-remains effect');
     expect(error.message).toContain('ask the user to handle the dialog');
   });
 });

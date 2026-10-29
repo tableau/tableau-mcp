@@ -594,10 +594,16 @@ export const PROBLEM_CODES = [
   'operation-not-found',
   'operation-pending',
   'dialog-not-found',
-  'dialog-ambiguous',
-  'dialog-action-not-found',
   'dialog-action-ambiguous',
   'dialog-action-disabled',
+  'dialog-action-indeterminate',
+  'dialog-action-invalid',
+  'dialog-action-unsupported',
+  'dialog-request-capacity',
+  'dialog-request-conflict',
+  'dialog-request-expired',
+  'dialog-session-inactive',
+  'dialog-session-stale',
   'method-not-allowed',
   'command-not-found',
   'invalid-command-parameter',
@@ -653,29 +659,113 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
-/** A visible dialog action copied exactly into `POST /v0/app:invokeDialogAction`. */
-export const dialogActionSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('button'),
-      label: z.string().min(1),
-    })
-    .passthrough(),
-  z
-    .object({
-      kind: z.literal('close'),
-      label: z.never().optional(),
-    })
-    .passthrough(),
-]);
+export const DIALOG_ACTION_KINDS = [
+  'button',
+  'close',
+  'cancel',
+  'choose-file',
+  'choose-files',
+  'choose-directory',
+  'save-file',
+  'choose-color',
+  'submit-print',
+] as const;
+
+/** A dialog capability advertised on {@link windowInfoSchema}; it never carries a selected value. */
+export const dialogActionSchema = z
+  .object({
+    kind: z.enum(DIALOG_ACTION_KINDS),
+    label: z.string().optional(),
+    enabled: z.boolean().optional(),
+    filters: z.array(z.unknown()).optional(),
+    selectedFilterId: z.string().optional(),
+    defaultFilterId: z.string().optional(),
+    minimumPaths: z.number().int().optional(),
+    maximumPaths: z.number().int().optional(),
+    overwriteConfirmationRequired: z.boolean().optional(),
+    alphaSupported: z.boolean().optional(),
+    printers: z.array(z.unknown()).optional(),
+    minimumPage: z.number().int().optional(),
+    maximumPage: z.number().int().optional(),
+    minimumCopies: z.number().int().optional(),
+    maximumCopies: z.number().int().optional(),
+    ranges: z.array(z.unknown()).optional(),
+    sheetScopes: z.array(z.unknown()).optional(),
+    supportsCollation: z.boolean().optional(),
+    supportsPrintToFile: z.boolean().optional(),
+    supportsExportSelection: z.boolean().optional(),
+  })
+  .passthrough();
 export type DialogAction = z.infer<typeof dialogActionSchema>;
 
-/** A visible modal Qt window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
+const nonEmptyString = z.string().min(1);
+const colorChannel = z.number().int().min(0).max(255);
+
+/** One exact action selected from a dialog's advertised capabilities for `POST /v0/app:invokeDialogAction`. */
+export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('button'), label: nonEmptyString }).strict(),
+  z.object({ kind: z.literal('close') }).strict(),
+  z.object({ kind: z.literal('cancel') }).strict(),
+  z
+    .object({
+      kind: z.literal('choose-file'),
+      path: nonEmptyString,
+      filterId: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('choose-files'),
+      paths: z.array(nonEmptyString).min(1),
+      filterId: z.string().optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('choose-directory'), path: nonEmptyString }).strict(),
+  z
+    .object({
+      kind: z.literal('save-file'),
+      path: nonEmptyString,
+      filterId: z.string(),
+      overwriteConfirmed: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('choose-color'),
+      red: colorChannel,
+      green: colorChannel,
+      blue: colorChannel,
+      alpha: colorChannel.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('submit-print'),
+      printerId: z.string(),
+      range: z.enum(['all-pages', 'page-range', 'current-page', 'selection']),
+      sheetScope: z.enum(['entire-workbook', 'active-sheet', 'selected-sheets']),
+      firstPage: z.number().int().min(0),
+      lastPage: z.number().int().min(0),
+      copies: z.number().int().min(1),
+      collate: z.boolean(),
+      exportSelection: z.boolean(),
+      outputPath: nonEmptyString.optional(),
+    })
+    .strict(),
+]);
+export type DialogActionInvocation = z.infer<typeof dialogActionInvocationSchema>;
+
+/** A visible modal window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
 export const windowInfoSchema = z
   .object({
     objectName: z.string(),
     title: z.string(),
     className: z.string(),
+    sessionId: z.string().optional(),
+    revision: z.number().int().optional(),
+    family: z.enum(['qt', 'file', 'print', 'color']).optional(),
+    status: z.enum(['preparing', 'active', 'suspended', 'closing']).optional(),
+    mode: z.string().optional(),
     messageText: z.string().optional(),
     informativeText: z.string().optional(),
     detailedText: z.string().optional(),
@@ -693,14 +783,41 @@ export const dialogIdentitySchema = z
     objectName: z.string(),
     title: z.string(),
     className: z.string(),
+    sessionId: z.string(),
+    revision: z.number().int().min(0),
   })
   .passthrough();
 export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
 
-/** Current actionable Desktop dialogs returned independently of operation state. */
+/** Safe status of one dialog action request; pollable through `GET /v0/app/dialogs` `recentActions`. */
+export const dialogRequestStatusSchema = z
+  .object({
+    sessionId: z.string(),
+    revision: z.number().int(),
+    requestId: z.string(),
+    state: z.enum(['pending', 'completed', 'canceled', 'failed', 'expired', 'indeterminate']),
+    effect: z.enum([
+      'none',
+      'dialog-remains',
+      'dialog-dismissed',
+      'native-panel-closed',
+      'file-choice-returned',
+      'color-returned',
+      'print-prepared',
+      'indeterminate',
+    ]),
+    code: z.string().optional(),
+    expiresInMilliseconds: z.number().int().optional(),
+  })
+  .passthrough();
+export type DialogRequestStatus = z.infer<typeof dialogRequestStatusSchema>;
+
+/** Current Desktop dialogs returned independently of operation state. */
 export const dialogListSchema = z
   .object({
     dialogs: z.array(windowInfoSchema),
+    uiSnapshotAvailable: z.boolean(),
+    recentActions: z.array(dialogRequestStatusSchema),
   })
   .passthrough();
 export type DialogList = z.infer<typeof dialogListSchema>;
@@ -746,39 +863,33 @@ export type DesktopState = z.infer<typeof desktopStateSchema>;
 export const invokeDialogActionRequestSchema = z
   .object({
     dialog: dialogIdentitySchema,
-    action: dialogActionSchema,
+    requestId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[!-~]+$/),
+    action: dialogActionInvocationSchema,
   })
   .passthrough();
 export type InvokeDialogActionRequest = z.infer<typeof invokeDialogActionRequestSchema>;
 
-/**
- * Post-action dialog state. Only outcomes that confirm a click echo the selected
- * identity and action; `no-active-dialog` confirms that no action occurred.
- */
-export const invokeDialogActionResultSchema = z.discriminatedUnion('outcome', [
-  z
-    .object({
-      outcome: z.literal('no-active-dialog'),
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('dismissed'),
-      dialog: dialogIdentitySchema,
-      action: dialogActionSchema,
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('action-invoked-dialog-remains'),
-      dialog: dialogIdentitySchema,
-      action: dialogActionSchema,
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-]);
+/** Request status plus the current dialog snapshot; selected file, color and printer values are never echoed. */
+export const invokeDialogActionResultSchema = z
+  .object({
+    outcome: z.enum([
+      'dispatched-pending',
+      'completed',
+      'canceled',
+      'failed',
+      'expired',
+      'indeterminate',
+    ]),
+    dialog: dialogIdentitySchema,
+    status: dialogRequestStatusSchema,
+    uiSnapshotAvailable: z.boolean(),
+    dialogs: z.array(windowInfoSchema),
+  })
+  .passthrough();
 export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
@@ -800,6 +911,7 @@ export const operationEnvelopeSchema = z
     diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -813,6 +925,7 @@ export const operationListSchema = z
     operations: z.array(operationEnvelopeSchema),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
   })
   .passthrough();
 export type OperationList = z.infer<typeof operationListSchema>;
@@ -1119,7 +1232,7 @@ export const appInfoSchema = z
     isStartPageVisible: z.boolean().optional(),
     isDataSourcePageActive: z.boolean().optional(),
     isPresentationMode: z.boolean().optional(),
-    isFocusMode: z.boolean().optional(),
+    isCanvasMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;

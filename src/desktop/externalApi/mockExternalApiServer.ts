@@ -202,6 +202,10 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 0,
+    family: 'qt',
+    status: 'active',
     messageText: 'Do you want to save changes to Regional Sales?',
     informativeText: 'Unsaved changes will be lost if you discard them.',
     detailedText: 'Workbook: Regional Sales',
@@ -371,6 +375,7 @@ export async function startMockExternalApiServer(
     buttons: [...(dialog.buttons ?? [])],
     actions: dialog.actions?.map((action) => ({ ...action })),
   }));
+  const recentActions: DialogList['recentActions'] = [];
   const workbookDatasources = options.workbookDatasources ?? DEFAULT_WORKBOOK_DATASOURCES;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
@@ -491,13 +496,13 @@ export async function startMockExternalApiServer(
         isStartPageVisible,
         isDataSourcePageActive,
         isPresentationMode: false,
-        isFocusMode: false,
+        isCanvasMode: false,
       });
       return;
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
-      sendJson(res, 200, { dialogs });
+      sendJson(res, 200, { dialogs, uiSnapshotAvailable: true, recentActions });
       return;
     }
 
@@ -528,11 +533,16 @@ export async function startMockExternalApiServer(
 
       const identity = isRecord(request) ? request.dialog : undefined;
       const action = isRecord(request) ? request.action : undefined;
+      const requestId = isRecord(request) ? request.requestId : undefined;
       if (
         !isRecord(identity) ||
         typeof identity.objectName !== 'string' ||
         typeof identity.title !== 'string' ||
         typeof identity.className !== 'string' ||
+        typeof identity.sessionId !== 'string' ||
+        typeof identity.revision !== 'number' ||
+        typeof requestId !== 'string' ||
+        requestId.length === 0 ||
         !isRecord(action)
       ) {
         sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
@@ -546,56 +556,56 @@ export async function startMockExternalApiServer(
         return;
       }
 
-      if (dialogs.length === 0) {
-        sendJson(res, 200, { outcome: 'no-active-dialog', dialogs: [] });
+      const dialog = {
+        objectName: identity.objectName,
+        title: identity.title,
+        className: identity.className,
+        sessionId: identity.sessionId,
+        revision: identity.revision,
+      };
+      const respond = (
+        outcome: 'completed' | 'failed',
+        effect: 'none' | 'dialog-dismissed',
+        code?: string,
+      ): void => {
+        const status = {
+          sessionId: dialog.sessionId,
+          revision: dialog.revision,
+          requestId,
+          state: outcome,
+          effect,
+          ...(code === undefined ? {} : { code }),
+        };
+        recentActions.push(status);
+        sendJson(res, 200, { outcome, dialog, status, uiSnapshotAvailable: true, dialogs });
+      };
+
+      const match = dialogs.find((candidate) => candidate.sessionId === dialog.sessionId);
+      if (match === undefined) {
+        respond('failed', 'none', 'dialog-not-found');
+        return;
+      }
+      if (match.revision !== dialog.revision) {
+        respond('failed', 'none', 'dialog-session-stale');
         return;
       }
 
-      const matches = dialogs.filter(
-        (dialog) =>
-          dialog.objectName === identity.objectName &&
-          dialog.title === identity.title &&
-          dialog.className === identity.className,
-      );
-      if (matches.length === 0) {
-        sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
-        return;
-      }
-      if (matches.length > 1) {
-        sendProblem(
-          res,
-          409,
-          'dialog-ambiguous',
-          'More than one active dialog matched the request.',
-        );
-        return;
-      }
-
-      const actionMatches = (matches[0].actions ?? []).filter(
+      const actionMatches = (match.actions ?? []).filter(
         (candidate) =>
           candidate.kind === action.kind &&
           (candidate.kind === 'close' || candidate.label === action.label),
       );
       if (actionMatches.length === 0) {
-        sendProblem(res, 409, 'dialog-action-not-found', 'No visible dialog action matched.');
+        respond('failed', 'none', 'dialog-action-unsupported');
         return;
       }
       if (actionMatches.length > 1) {
-        sendProblem(res, 409, 'dialog-action-ambiguous', 'More than one visible action matched.');
+        respond('failed', 'none', 'dialog-action-ambiguous');
         return;
       }
 
-      dialogs.splice(dialogs.indexOf(matches[0]), 1);
-      sendJson(res, 200, {
-        outcome: 'dismissed',
-        dialog: {
-          objectName: identity.objectName,
-          title: identity.title,
-          className: identity.className,
-        },
-        action,
-        dialogs,
-      });
+      dialogs.splice(dialogs.indexOf(match), 1);
+      respond('completed', 'dialog-dismissed');
       return;
     }
 

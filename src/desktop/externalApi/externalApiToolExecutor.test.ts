@@ -38,9 +38,18 @@ const invokeDialogActionRequest: InvokeDialogActionRequest = {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 0,
   },
+  requestId: 'request-1',
   action: { kind: 'button', label: 'Discard' },
 };
+
+const dialogRequestStatus = {
+  sessionId: 'dialog-session-1',
+  revision: 0,
+  requestId: 'request-1',
+} as const;
 
 describe('ExternalApiToolExecutor', () => {
   let server: MockExternalApiServer;
@@ -2228,6 +2237,10 @@ describe('ExternalApiToolExecutor', () => {
             objectName: 'saveChangesDialog',
             title: 'Save Changes',
             className: 'QMessageBox',
+            sessionId: 'dialog-session-1',
+            revision: 0,
+            family: 'qt',
+            status: 'active',
             messageText: 'Do you want to save changes to Regional Sales?',
             informativeText: 'Unsaved changes will be lost if you discard them.',
             detailedText: 'Workbook: Regional Sales',
@@ -2240,6 +2253,8 @@ describe('ExternalApiToolExecutor', () => {
             ],
           },
         ],
+        uiSnapshotAvailable: true,
+        recentActions: [],
       });
       expect(server.requests.at(-1)?.path).toBe('/v0/app/dialogs');
       expect(onRpc).toHaveBeenCalledWith(
@@ -2255,33 +2270,53 @@ describe('ExternalApiToolExecutor', () => {
       server.setOverride('GET /v0/app/dialogs', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ dialogs: [] }),
+        body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.getActiveDialogs(signal);
 
-      expect(result.unwrap()).toEqual({ dialogs: [] });
+      expect(result.unwrap()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
     });
 
     it.each([
-      ['no-active-dialog', { outcome: 'no-active-dialog', dialogs: [] }],
       [
-        'dismissed',
+        'dialog-dismissed',
         {
-          outcome: 'dismissed',
+          outcome: 'completed',
           dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
+          status: { ...dialogRequestStatus, state: 'completed', effect: 'dialog-dismissed' },
+          uiSnapshotAvailable: true,
           dialogs: [],
         },
       ],
       [
-        'action-invoked-dialog-remains',
+        'session-stale failure',
         {
-          outcome: 'action-invoked-dialog-remains',
+          outcome: 'failed',
           dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
+          status: {
+            ...dialogRequestStatus,
+            state: 'failed',
+            effect: 'none',
+            code: 'dialog-session-stale',
+          },
+          uiSnapshotAvailable: true,
+          dialogs: [],
+        },
+      ],
+      [
+        'dialog-remains',
+        {
+          outcome: 'completed',
+          dialog: invokeDialogActionRequest.dialog,
+          status: { ...dialogRequestStatus, state: 'completed', effect: 'dialog-remains' },
+          uiSnapshotAvailable: true,
           dialogs: [
             {
               ...invokeDialogActionRequest.dialog,
@@ -2313,11 +2348,7 @@ describe('ExternalApiToolExecutor', () => {
     it.each([
       [400, 'invalid-request-body'],
       [404, 'route-not-found'],
-      [409, 'dialog-not-found'],
-      [409, 'dialog-ambiguous'],
-      [409, 'dialog-action-not-found'],
-      [409, 'dialog-action-ambiguous'],
-      [409, 'dialog-action-disabled'],
+      [403, 'origin-not-allowed'],
     ])('maps HTTP %i %s canonically without retrying', async (status, code) => {
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status,
@@ -3053,7 +3084,7 @@ describe('ExternalApiToolExecutor', () => {
           expect(commandError.message).toContain('exact returned dialog identity');
           expect(commandError.message).toContain('exact returned action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
-          expect(commandError.message).toContain('action-invoked-dialog-remains');
+          expect(commandError.message).toContain('dialog-remains effect');
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3405,7 +3436,7 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('exact returned action');
   expect(message).toContain('at most one invoke-dialog-action call');
   expect(message).toContain('Do not guess or assume Cancel is safe');
-  expect(message).toContain('action-invoked-dialog-remains');
+  expect(message).toContain('dialog-remains effect');
   expect(message).toContain('ask the user to handle the dialog');
   expect(message).toContain('list-instances');
 }

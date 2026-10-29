@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.25",
+    "version": "0.2.27",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -103,7 +103,7 @@
     "/v0/app": {
       "get": {
         "summary": "Get application info",
-        "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), isPresentationMode (whether presentation mode is on), and isFocusMode (whether focus mode is on).",
+        "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), isPresentationMode (whether presentation mode is on), and isCanvasMode (whether canvas mode is on).",
         "operationId": "getApp",
         "parameters": [
           {
@@ -112,7 +112,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), isPresentationMode (whether presentation mode is on), and isFocusMode (whether focus mode is on).",
+            "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), isPresentationMode (whether presentation mode is on), and isCanvasMode (whether canvas mode is on).",
             "content": {
               "application/json": {
                 "schema": {
@@ -145,7 +145,7 @@
     "/v0/app/dialogs": {
       "get": {
         "summary": "List active dialogs",
-        "description": "Returns the current visible modal dialogs that require a user decision, or an empty dialogs array when none is actionable. Actions and dialog identity fields are exact values for a subsequent POST /v0/app:invokeDialogAction request. Self-clearing progress windows are excluded. The read runs on the Desktop UI thread and waits for it without a time limit, so it does not return while Desktop is busy without pumping events; use GET /v0/app/state for a bounded read that reports uiSnapshotAvailable.",
+        "description": "Returns the current Qt and registered native dialog observations, including preparing, suspended, and closing blockers; self-clearing progress windows are excluded. Actions are offered only for active dialogs. sessionId and revision are exact values for a subsequent POST /v0/app:invokeDialogAction request. uiSnapshotAvailable is false when the bounded UI capture did not complete, so an empty dialogs array is not proof that no blocker exists.",
         "operationId": "listActiveDialogs",
         "parameters": [
           {
@@ -154,7 +154,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the current visible modal dialogs that require a user decision, or an empty dialogs array when none is actionable. Actions and dialog identity fields are exact values for a subsequent POST /v0/app:invokeDialogAction request. Self-clearing progress windows are excluded. The read runs on the Desktop UI thread and waits for it without a time limit, so it does not return while Desktop is busy without pumping events; use GET /v0/app/state for a bounded read that reports uiSnapshotAvailable.",
+            "description": "Returns the current Qt and registered native dialog observations, including preparing, suspended, and closing blockers; self-clearing progress windows are excluded. Actions are offered only for active dialogs. sessionId and revision are exact values for a subsequent POST /v0/app:invokeDialogAction request. uiSnapshotAvailable is false when the bounded UI capture did not complete, so an empty dialogs array is not proof that no blocker exists.",
             "content": {
               "application/json": {
                 "schema": {
@@ -223,7 +223,7 @@
     "/v0/app:invokeDialogAction": {
       "post": {
         "summary": "Invoke an active dialog action",
-        "description": "Selects one current actionable dialog by exact objectName, title, and className, then invokes one visible enabled action copied from the dialog's actions array. Labeled buttons preserve their exact text; recognized unlabeled controls use semantic actions such as close. The response reports whether the dialog was dismissed, remains afterward, or no actionable dialog was present. A rejected request never invokes an action. Only the topmost active modal dialog can be targeted; a listed dialog beneath another modal is rejected with 409 dialog-not-found. The action runs on the Desktop UI thread and waits for it without a time limit; if the action opens another modal dialog, the request does not complete until that dialog closes.",
+        "description": "Copies the exact objectName, title, className, sessionId, and revision of one active dialog from GET /v0/app/dialogs, then supplies caller-selected values for one advertised capability. Generate a unique requestId for each logical request and reuse its ID and action for idempotent retries. The response reports a safe request status that can be polled through GET /v0/app/dialogs and never echoes selected file, color, or printer payloads.",
         "operationId": "invokeDialogAction",
         "parameters": [
           {
@@ -242,7 +242,7 @@
         },
         "responses": {
           "200": {
-            "description": "Selects one current actionable dialog by exact objectName, title, and className, then invokes one visible enabled action copied from the dialog's actions array. Labeled buttons preserve their exact text; recognized unlabeled controls use semantic actions such as close. The response reports whether the dialog was dismissed, remains afterward, or no actionable dialog was present. A rejected request never invokes an action. Only the topmost active modal dialog can be targeted; a listed dialog beneath another modal is rejected with 409 dialog-not-found. The action runs on the Desktop UI thread and waits for it without a time limit; if the action opens another modal dialog, the request does not complete until that dialog closes.",
+            "description": "Copies the exact objectName, title, className, sessionId, and revision of one active dialog from GET /v0/app/dialogs, then supplies caller-selected values for one advertised capability. Generate a unique requestId for each logical request and reuse its ID and action for idempotent retries. The response reports a safe request status that can be polled through GET /v0/app/dialogs and never echoes selected file, color, or printer payloads.",
             "content": {
               "application/json": {
                 "schema": {
@@ -266,16 +266,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "description": "The request conflicts with the current state of the workbook or the application. The code field identifies the specific conflict. Codes specific to this route: dialog-not-found, dialog-ambiguous, dialog-action-not-found, dialog-action-ambiguous, dialog-action-disabled.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -555,7 +545,7 @@
     "/v0/datasources/{id}:refreshData": {
       "post": {
         "summary": "Refresh a datasource's data",
-        "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a connection failure outside the Data tab is shown in a Desktop error dialog and the Operation still ends SUCCEEDED. A refresh the user cancels in Desktop still ends as a SUCCEEDED Operation, and so does a refresh requested while the workbook is committing, which is skipped even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+        "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a connection failure outside the Data tab is shown in a Desktop error dialog and the Operation still ends SUCCEEDED. A cancellation reported by the refresh command ends as a CANCELLED Operation. A refresh requested while the workbook is committing is skipped and ends SUCCEEDED, even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
         "operationId": "refreshData",
         "parameters": [
           {
@@ -573,7 +563,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a connection failure outside the Data tab is shown in a Desktop error dialog and the Operation still ends SUCCEEDED. A refresh the user cancels in Desktop still ends as a SUCCEEDED Operation, and so does a refresh requested while the workbook is committing, which is skipped even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+            "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a connection failure outside the Data tab is shown in a Desktop error dialog and the Operation still ends SUCCEEDED. A cancellation reported by the refresh command ends as a CANCELLED Operation. A refresh requested while the workbook is committing is skipped and ends SUCCEEDED, even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
             "content": {
               "application/json": {
                 "schema": {
@@ -633,7 +623,7 @@
     "/v0/datasources/{id}:refreshExtract": {
       "post": {
         "summary": "Refresh a datasource extract",
-        "description": "Kicks off an extract refresh on the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources). By default the refresh is incremental when the extract is configured for incremental refresh; send isFullRefresh=true to force a full refresh. A datasource that has no refreshable extract is a no-op SUCCEEDED Operation. A refresh the user cancels in Desktop still ends as a SUCCEEDED Operation. An id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+        "description": "Kicks off an extract refresh on the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources). By default the refresh is incremental when the extract is configured for incremental refresh; send isFullRefresh=true to force a full refresh. A datasource that has no refreshable extract is a no-op SUCCEEDED Operation. A cancellation reported by the refresh command ends as a CANCELLED Operation. An id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
         "operationId": "refreshExtract",
         "parameters": [
           {
@@ -661,7 +651,7 @@
         },
         "responses": {
           "200": {
-            "description": "Kicks off an extract refresh on the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources). By default the refresh is incremental when the extract is configured for incremental refresh; send isFullRefresh=true to force a full refresh. A datasource that has no refreshable extract is a no-op SUCCEEDED Operation. A refresh the user cancels in Desktop still ends as a SUCCEEDED Operation. An id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+            "description": "Kicks off an extract refresh on the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources). By default the refresh is incremental when the extract is configured for incremental refresh; send isFullRefresh=true to force a full refresh. A datasource that has no refreshable extract is a no-op SUCCEEDED Operation. A cancellation reported by the refresh command ends as a CANCELLED Operation. An id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
             "content": {
               "application/json": {
                 "schema": {
@@ -764,14 +754,14 @@
     "/v0/operations": {
       "get": {
         "summary": "List operations",
-        "description": "Lists async operations, newest first: those still running and those that finished within about the last 60 minutes. An operation that completed within the synchronous response window is never registered, so it does not appear here. When any listed operation is unfinished, the read also snapshots modal windows on the Desktop UI thread and waits for it without a time limit.",
+        "description": "Lists async operations, newest first: those still running and those that finished within about the last 60 minutes. An operation that completed within the synchronous response window is never registered, so it does not appear here. When any listed operation is unfinished, the response also includes one bounded UI snapshot at the top level. uiSnapshotAvailable is true when the capture completed and false when it did not; false means the window arrays may be incomplete, so empty arrays do not prove that no blocker exists. The field is absent when no capture was attempted.",
         "operationId": "listOperations",
         "parameters": [
           {
             "name": "state",
             "in": "query",
             "required": false,
-            "description": "Return only operations in this state: RUNNING, SUCCEEDED, or FAILED (the only Operation.state values this version produces). The match is case-sensitive, and an unrecognized value returns an empty list.",
+            "description": "Return only operations in this state: RUNNING, SUCCEEDED, FAILED, or CANCELLED (the Operation.state values this version produces). The match is case-sensitive, and an unrecognized value returns an empty list.",
             "schema": {
               "type": "string"
             }
@@ -791,7 +781,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Lists async operations, newest first: those still running and those that finished within about the last 60 minutes. An operation that completed within the synchronous response window is never registered, so it does not appear here. When any listed operation is unfinished, the read also snapshots modal windows on the Desktop UI thread and waits for it without a time limit.",
+            "description": "Lists async operations, newest first: those still running and those that finished within about the last 60 minutes. An operation that completed within the synchronous response window is never registered, so it does not appear here. When any listed operation is unfinished, the response also includes one bounded UI snapshot at the top level. uiSnapshotAvailable is true when the capture completed and false when it did not; false means the window arrays may be incomplete, so empty arrays do not prove that no blocker exists. The field is absent when no capture was attempted.",
             "content": {
               "application/json": {
                 "schema": {
@@ -829,7 +819,7 @@
     "/v0/operations/{id}": {
       "get": {
         "summary": "Get an operation",
-        "description": "Returns the current state of an async operation. An unfinished operation is RUNNING, so poll until state is SUCCEEDED or FAILED. The command result is not awaited, but while the operation is unfinished the read also snapshots modal windows on the Desktop UI thread and waits for it without a time limit, so it does not return while Desktop is busy without pumping events. Returns 404 for an unknown id, for an operation that completed within the synchronous response window (it is never registered), and for one that finished more than about 60 minutes ago.",
+        "description": "Returns the current state of an async operation. An unfinished operation is RUNNING, so poll until state is SUCCEEDED, FAILED, or CANCELLED. The command result is not awaited, but while the operation is unfinished the response also includes one bounded UI snapshot. uiSnapshotAvailable is true when the capture completed and false when it did not; false means the window arrays may be incomplete, so empty arrays do not prove that no blocker exists. The field is absent when no capture was attempted. Returns 404 for an unknown id, for an operation that completed within the synchronous response window (it is never registered), and for one that finished more than about 60 minutes ago.",
         "operationId": "getOperation",
         "parameters": [
           {
@@ -847,7 +837,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the current state of an async operation. An unfinished operation is RUNNING, so poll until state is SUCCEEDED or FAILED. The command result is not awaited, but while the operation is unfinished the read also snapshots modal windows on the Desktop UI thread and waits for it without a time limit, so it does not return while Desktop is busy without pumping events. Returns 404 for an unknown id, for an operation that completed within the synchronous response window (it is never registered), and for one that finished more than about 60 minutes ago.",
+            "description": "Returns the current state of an async operation. An unfinished operation is RUNNING, so poll until state is SUCCEEDED, FAILED, or CANCELLED. The command result is not awaited, but while the operation is unfinished the response also includes one bounded UI snapshot. uiSnapshotAvailable is true when the capture completed and false when it did not; false means the window arrays may be incomplete, so empty arrays do not prove that no blocker exists. The field is absent when no capture was attempted. Returns 404 for an unknown id, for an operation that completed within the synchronous response window (it is never registered), and for one that finished more than about 60 minutes ago.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2243,6 +2233,87 @@
         }
       }
     },
+    "/v0/workbook/datasources/{id}:validateCalculatedField": {
+      "post": {
+        "summary": "Validate a new or edited calculated field on a datasource",
+        "description": "Validates the formula, and optionally the caption, of a calculated field in the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), without adding or changing any field. Omit fieldName to validate a new calculated field; set it to the qualified internal name of an existing calculated field to validate an edit of that field. References resolve against the workbook as it is now, so a formula that references a calculation not yet added to the workbook is reported as invalid. An id that matches no datasource, or names the Parameters datasource, returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+        "operationId": "validateDatasourceCalculatedField",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateCalculatedFieldRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validates the formula, and optionally the caption, of a calculated field in the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), without adding or changing any field. Omit fieldName to validate a new calculated field; set it to the qualified internal name of an existing calculated field to validate an edit of that field. References resolve against the workbook as it is now, so a formula that references a calculation not yet added to the workbook is reported as invalid. An id that matches no datasource, or names the Parameters datasource, returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateCalculatedFieldResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body. Codes specific to this route: invalid-request-body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: datasource-not-found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/diagnostics": {
       "get": {
         "summary": "Get workbook diagnostics",
@@ -2462,7 +2533,7 @@
     "/v0/workbook/document:validate": {
       "post": {
         "summary": "Validate a workbook document",
-        "description": "Validates the submitted Tableau XML against the schema without applying it.",
+        "description": "Checks the submitted Tableau XML without applying it: well-formedness, document version, the schema, and the dashboard-zone type-v2 rule an apply enforces. Within each datasource, including a bare datasource document from GET /v0/workbook/datasources/{id}/document, a column defined more than once, or a calculated field whose caption attribute matches another column's caption attribute, is reported as an error. Failures are reported in issues with isValid false. Passing does not guarantee that an apply succeeds.",
         "operationId": "validateWorkbookDocument",
         "parameters": [
           {
@@ -2496,7 +2567,7 @@
         },
         "responses": {
           "200": {
-            "description": "Validates the submitted Tableau XML against the schema without applying it.",
+            "description": "Checks the submitted Tableau XML without applying it: well-formedness, document version, the schema, and the dashboard-zone type-v2 rule an apply enforces. Within each datasource, including a bare datasource document from GET /v0/workbook/datasources/{id}/document, a column defined more than once, or a calculated field whose caption attribute matches another column's caption attribute, is reported as an error. Failures are reported in issues with isValid false. Passing does not guarantee that an apply succeeds.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3981,7 +4052,7 @@
     "/v0/workbook/worksheets/{id}/showMe": {
       "get": {
         "summary": "Get Show Me options for a worksheet",
-        "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context. Returns 400 for a repeated or empty dataSource, a repeated or unknown selectionMode, a field that is not fully qualified, an unrecognized query parameter, or selectionMode=ambient with fields.",
+        "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context. Returns 400 for a repeated or empty dataSource, a repeated or unknown selectionMode, a malformed or unknown internal field identity, an unrecognized query parameter, or selectionMode=ambient with fields. An unknown datasource returns 404; a datasource caption, including one used as a field qualifier, is rejected with guidance to use its internal identity. Field errors identify the parameter, input index, and rejected value.",
         "operationId": "getWorksheetShowMeOptions",
         "parameters": [
           {
@@ -4030,7 +4101,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context. Returns 400 for a repeated or empty dataSource, a repeated or unknown selectionMode, a field that is not fully qualified, an unrecognized query parameter, or selectionMode=ambient with fields.",
+            "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context. Returns 400 for a repeated or empty dataSource, a repeated or unknown selectionMode, a malformed or unknown internal field identity, an unrecognized query parameter, or selectionMode=ambient with fields. An unknown datasource returns 404; a datasource caption, including one used as a field qualifier, is rejected with guidance to use its internal identity. Field errors identify the parameter, input index, and rejected value.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4056,7 +4127,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: sheet-not-found.",
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: sheet-not-found, datasource-not-found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4657,7 +4728,7 @@
     "/v0/workbook/worksheets/{id}:showMe": {
       "post": {
         "summary": "Apply Show Me to a worksheet",
-        "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified selected-field context. A missing worksheet returns 404. When an inapplicable or unavailable request completes synchronously, it returns a 409 Problem; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+        "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified internal selected-field context. A missing worksheet or unknown datasource returns 404. A datasource caption, including one used as a field qualifier, is rejected with guidance to use its internal identity. Invalid field identities are rejected atomically with parameter, input index, and rejected value. When an inapplicable or unavailable request completes synchronously, it returns a 409 Problem; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
         "operationId": "showMeWorksheet",
         "parameters": [
           {
@@ -4685,7 +4756,7 @@
         },
         "responses": {
           "200": {
-            "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified selected-field context. A missing worksheet returns 404. When an inapplicable or unavailable request completes synchronously, it returns a 409 Problem; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+            "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified internal selected-field context. A missing worksheet or unknown datasource returns 404. A datasource caption, including one used as a field qualifier, is rejected with guidance to use its internal identity. Invalid field identities are rejected atomically with parameter, input index, and rejected value. When an inapplicable or unavailable request completes synchronously, it returns a 409 Problem; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4728,7 +4799,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: sheet-not-found.",
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: sheet-not-found, datasource-not-found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4850,102 +4921,6 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/v0/workbook/worksheets/{id}:validateCalculatedField": {
-      "post": {
-        "summary": "Validate a calculated-field formula",
-        "description": "Validates a calculated-field formula against a worksheet's data model without adding or changing any field. A formula that does not qualify its fields with a data source is validated against the worksheet's primary data source, falling back to the data source selected in the schema viewer. On a layered worksheet, which can have several primary data sources, the data source selected in the schema viewer is always used, and it may not be one of this sheet's. If the sheet lookup does not settle in time, the request is rejected with 503 operation-pending and a Retry-After header; retry it.",
-        "operationId": "validateWorksheetCalculatedField",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/UserAgent"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ValidateCalculatedFieldRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Validates a calculated-field formula against a worksheet's data model without adding or changing any field. A formula that does not qualify its fields with a data source is validated against the worksheet's primary data source, falling back to the data source selected in the schema viewer. On a layered worksheet, which can have several primary data sources, the data source selected in the schema viewer is always used, and it may not be one of this sheet's. If the sheet lookup does not settle in time, the request is rejected with 503 operation-pending and a Retry-After header; retry it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidateCalculatedFieldResponse"
-                }
-              }
-            }
-          },
-          "202": {
-            "$ref": "#/components/responses/Accepted"
-          },
-          "400": {
-            "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body. Codes specific to this route: invalid-request-body.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: sheet-not-found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "421": {
-            "$ref": "#/components/responses/MisdirectedRequest"
-          },
-          "500": {
-            "$ref": "#/components/responses/ServerError"
-          },
-          "503": {
-            "description": "The service is temporarily unavailable. The code field identifies the cause, such as api-disabled. Codes specific to this route: operation-pending.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds to wait before retrying the request. Sent only with operation-pending.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         }
       }
@@ -5413,10 +5388,16 @@
               "operation-not-found",
               "operation-pending",
               "dialog-not-found",
-              "dialog-ambiguous",
-              "dialog-action-not-found",
               "dialog-action-ambiguous",
               "dialog-action-disabled",
+              "dialog-session-stale",
+              "dialog-session-inactive",
+              "dialog-action-unsupported",
+              "dialog-action-invalid",
+              "dialog-request-conflict",
+              "dialog-request-expired",
+              "dialog-request-capacity",
+              "dialog-action-indeterminate",
               "method-not-allowed",
               "command-not-found",
               "invalid-command-parameter",
@@ -5479,6 +5460,10 @@
           "completedAt": {
             "type": "string"
           },
+          "uiSnapshotAvailable": {
+            "type": "boolean",
+            "description": "Present on a single-operation response when a UI snapshot was attempted. True means the bounded capture completed; false means it did not, so empty window arrays do not prove that no blocker exists. Operation-list entries omit this field."
+          },
           "error": {
             "$ref": "#/components/schemas/OperationError"
           },
@@ -5536,7 +5521,15 @@
       "WindowInfo": {
         "type": "object",
         "description": "A visible modal window or dialog in Tableau Desktop, observed at read time. Whether a client must act on it is conveyed by the containing response: dialogs and blockingWindows contain windows that need a human decision, while progressWindows contains self-clearing windows. The content fields (messageText, informativeText, detailedText, iconLevel, buttons, actions) are best-effort: standard message boxes expose them precisely, while other dialogs are read from their visible labels, read-only text areas, and buttons and may include incidental text.",
-        "required": ["objectName", "title", "className"],
+        "required": [
+          "objectName",
+          "title",
+          "className",
+          "sessionId",
+          "revision",
+          "family",
+          "status"
+        ],
         "properties": {
           "objectName": {
             "type": "string"
@@ -5546,6 +5539,23 @@
           },
           "className": {
             "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "family": {
+            "type": "string",
+            "enum": ["qt", "file", "print", "color"]
+          },
+          "mode": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["preparing", "active", "suspended", "closing"]
           },
           "messageText": {
             "type": "string"
@@ -5580,34 +5590,82 @@
         }
       },
       "DialogAction": {
-        "description": "An exact visible dialog action. Text buttons use kind button and preserve their label; recognized unlabeled window controls use a semantic kind such as close.",
-        "oneOf": [
-          {
-            "type": "object",
-            "required": ["kind", "label"],
-            "properties": {
-              "kind": {
-                "type": "string",
-                "const": "button"
-              },
-              "label": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
+        "description": "A dialog capability descriptor. It contains no selected file, color, or printer payload.",
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "button",
+              "close",
+              "cancel",
+              "choose-file",
+              "choose-files",
+              "choose-directory",
+              "save-file",
+              "choose-color",
+              "submit-print"
+            ]
           },
-          {
-            "type": "object",
-            "required": ["kind"],
-            "properties": {
-              "kind": {
-                "type": "string",
-                "const": "close"
-              },
-              "label": false
-            }
+          "label": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "filters": {
+            "type": "array"
+          },
+          "selectedFilterId": {
+            "type": "string"
+          },
+          "defaultFilterId": {
+            "type": "string"
+          },
+          "minimumPaths": {
+            "type": "integer"
+          },
+          "maximumPaths": {
+            "type": "integer"
+          },
+          "overwriteConfirmationRequired": {
+            "type": "boolean"
+          },
+          "alphaSupported": {
+            "type": "boolean"
+          },
+          "printers": {
+            "type": "array"
+          },
+          "minimumPage": {
+            "type": "integer"
+          },
+          "maximumPage": {
+            "type": "integer"
+          },
+          "minimumCopies": {
+            "type": "integer"
+          },
+          "maximumCopies": {
+            "type": "integer"
+          },
+          "ranges": {
+            "type": "array"
+          },
+          "sheetScopes": {
+            "type": "array"
+          },
+          "supportsCollation": {
+            "type": "boolean"
+          },
+          "supportsPrintToFile": {
+            "type": "boolean"
+          },
+          "supportsExportSelection": {
+            "type": "boolean"
           }
-        ]
+        }
       },
       "OperationError": {
         "type": "object",
@@ -5702,10 +5760,253 @@
           }
         ]
       },
+      "DialogRequestStatus": {
+        "type": "object",
+        "required": ["sessionId", "revision", "requestId", "state", "effect"],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["pending", "completed", "canceled", "failed", "expired", "indeterminate"]
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "none",
+              "dialog-remains",
+              "dialog-dismissed",
+              "native-panel-closed",
+              "file-choice-returned",
+              "color-returned",
+              "print-prepared",
+              "indeterminate"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "expiresInMilliseconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "DialogActionInvocation": {
+        "description": "One exact action selected from a dialog's capabilities. File paths, printer choices, and color values are input-only and are not echoed.",
+        "type": "object",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "label"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "button"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "close"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "cancel"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "path"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "choose-file"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "filterId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "paths"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "choose-files"
+              },
+              "paths": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "filterId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "path"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "choose-directory"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "path", "filterId", "overwriteConfirmed"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "save-file"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "filterId": {
+                "type": "string"
+              },
+              "overwriteConfirmed": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "red", "green", "blue"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "choose-color"
+              },
+              "red": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "green": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "blue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "alpha": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind",
+              "printerId",
+              "range",
+              "sheetScope",
+              "firstPage",
+              "lastPage",
+              "copies",
+              "collate",
+              "exportSelection"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "submit-print"
+              },
+              "printerId": {
+                "type": "string"
+              },
+              "range": {
+                "type": "string",
+                "enum": ["all-pages", "page-range", "current-page", "selection"]
+              },
+              "sheetScope": {
+                "type": "string",
+                "enum": ["entire-workbook", "active-sheet", "selected-sheets"]
+              },
+              "firstPage": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lastPage": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "copies": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "collate": {
+                "type": "boolean"
+              },
+              "exportSelection": {
+                "type": "boolean"
+              },
+              "outputPath": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
       "DialogIdentity": {
         "type": "object",
-        "description": "Exact current-dialog identity copied from objectName, title, and className in a DialogList item.",
-        "required": ["objectName", "title", "className"],
+        "additionalProperties": false,
+        "description": "Exact current-dialog identity copied from one DialogList item. sessionId and revision prevent a stale action from selecting a replacement dialog with the same visible text.",
+        "required": ["objectName", "title", "className", "sessionId", "revision"],
         "properties": {
           "objectName": {
             "type": "string"
@@ -5715,14 +6016,85 @@
           },
           "className": {
             "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
           }
         }
       },
       "DialogList": {
         "type": "object",
-        "description": "Current visible modal windows that require a user decision.",
-        "required": ["dialogs"],
+        "description": "Current registered Qt and native dialog observations; self-clearing progress windows are excluded. A false uiSnapshotAvailable value means the UI capture was bounded before completion and dialogs is not evidence of no blockers.",
+        "required": ["dialogs", "uiSnapshotAvailable", "recentActions"],
         "properties": {
+          "dialogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WindowInfo"
+            }
+          },
+          "uiSnapshotAvailable": {
+            "type": "boolean"
+          },
+          "recentActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DialogRequestStatus"
+            }
+          }
+        }
+      },
+      "InvokeDialogActionRequest": {
+        "description": "Copies the exact identity of one dialog from DialogList and supplies a caller-generated requestId and caller-selected values for one advertised capability. Reuse the same requestId and action to retry the same logical request idempotently.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dialog", "requestId", "action"],
+        "properties": {
+          "dialog": {
+            "$ref": "#/components/schemas/DialogIdentity"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[!-~]+$",
+            "description": "Caller-generated unique ID for the logical request. Reuse the same ID and action when retrying it."
+          },
+          "action": {
+            "$ref": "#/components/schemas/DialogActionInvocation"
+          }
+        }
+      },
+      "InvokeDialogActionResult": {
+        "description": "The request status and current dialog snapshot. uiSnapshotAvailable is false when the bounded UI capture did not complete, so an empty dialogs array is not evidence that no blocker exists. Selection payloads are never echoed.",
+        "type": "object",
+        "required": ["outcome", "dialog", "status", "uiSnapshotAvailable", "dialogs"],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "dispatched-pending",
+              "completed",
+              "canceled",
+              "failed",
+              "expired",
+              "indeterminate"
+            ]
+          },
+          "dialog": {
+            "$ref": "#/components/schemas/DialogIdentity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DialogRequestStatus"
+          },
+          "uiSnapshotAvailable": {
+            "type": "boolean"
+          },
           "dialogs": {
             "type": "array",
             "items": {
@@ -5730,84 +6102,6 @@
             }
           }
         }
-      },
-      "InvokeDialogActionRequest": {
-        "description": "Selects one current actionable dialog and one visible action by exact values from DialogList.",
-        "type": "object",
-        "required": ["dialog", "action"],
-        "properties": {
-          "dialog": {
-            "$ref": "#/components/schemas/DialogIdentity"
-          },
-          "action": {
-            "$ref": "#/components/schemas/DialogAction"
-          }
-        }
-      },
-      "InvokeDialogActionResult": {
-        "description": "The post-action dialog snapshot. An invoked outcome echoes the exact selected dialog and action; no-active-dialog performs no action.",
-        "oneOf": [
-          {
-            "type": "object",
-            "required": ["outcome", "dialogs"],
-            "properties": {
-              "outcome": {
-                "type": "string",
-                "const": "no-active-dialog"
-              },
-              "dialogs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/WindowInfo"
-                }
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["outcome", "dialog", "action", "dialogs"],
-            "properties": {
-              "outcome": {
-                "type": "string",
-                "const": "dismissed"
-              },
-              "dialog": {
-                "$ref": "#/components/schemas/DialogIdentity"
-              },
-              "action": {
-                "$ref": "#/components/schemas/DialogAction"
-              },
-              "dialogs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/WindowInfo"
-                }
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["outcome", "dialog", "action", "dialogs"],
-            "properties": {
-              "outcome": {
-                "type": "string",
-                "const": "action-invoked-dialog-remains"
-              },
-              "dialog": {
-                "$ref": "#/components/schemas/DialogIdentity"
-              },
-              "action": {
-                "$ref": "#/components/schemas/DialogAction"
-              },
-              "dialogs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/WindowInfo"
-                }
-              }
-            }
-          }
-        ]
       },
       "WorksheetItem": {
         "type": "object",
@@ -6094,7 +6388,7 @@
       },
       "OperationList": {
         "type": "object",
-        "description": "Async operations. List entries omit each operation's `result`, `blockingWindows` and `progressWindows`: fetch GET /v0/operations/{id} for an operation's `result`, and read window state once from the top-level `blockingWindows` and `progressWindows` here.",
+        "description": "Async operations. List entries omit each operation's `result`, `blockingWindows`, `progressWindows` and `uiSnapshotAvailable`: fetch GET /v0/operations/{id} for an operation's `result`, and read window state once from the top-level `blockingWindows` and `progressWindows` here. uiSnapshotAvailable is present when a capture was attempted; false means it did not complete within the bound, so empty window arrays do not prove that no blocker exists.",
         "required": ["operations"],
         "properties": {
           "operations": {
@@ -6114,6 +6408,10 @@
             "items": {
               "$ref": "#/components/schemas/WindowInfo"
             }
+          },
+          "uiSnapshotAvailable": {
+            "type": "boolean",
+            "description": "Present when a UI snapshot was attempted. True means the bounded capture completed; false means it did not, so empty window arrays do not prove that no blocker exists."
           }
         }
       },
@@ -6296,18 +6594,46 @@
           }
         }
       },
+      "WorkbookValidationIssue": {
+        "type": "object",
+        "description": "One issue found while validating a workbook document.",
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "description": "error makes the document invalid; warning does not. Clients must tolerate values not listed here.",
+            "x-extensible-enum": ["error", "warning"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "description": "1-based line of the offending element; omitted when unknown."
+          },
+          "column": {
+            "type": "integer",
+            "description": "1-based column of the offending element; omitted when unknown."
+          },
+          "element": {
+            "type": "string",
+            "description": "Tag name of the offending element; omitted when unknown."
+          }
+        }
+      },
       "ValidationResult": {
         "type": "object",
         "description": "The outcome of validating a workbook document.",
-        "required": ["isValid", "validationIssues"],
+        "required": ["isValid", "issues"],
         "properties": {
           "isValid": {
             "type": "boolean"
           },
-          "validationIssues": {
+          "issues": {
             "type": "array",
+            "description": "Issues found in the document; empty when the document is clean.",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/WorkbookValidationIssue"
             }
           }
         }
@@ -6448,37 +6774,50 @@
           }
         }
       },
-      "ValidateCalculatedFieldRequest": {
-        "type": "object",
-        "description": "The calculated-field formula to validate on a worksheet.",
-        "additionalProperties": false,
-        "required": ["formula"],
-        "properties": {
-          "formula": {
-            "type": "string",
-            "description": "The calculated-field formula text to validate."
-          }
-        }
-      },
       "CalculatedFieldValidationError": {
         "type": "object",
-        "description": "A validation error located within the calculated-field formula.",
+        "description": "A validation error in the calculated-field formula or its caption.",
         "required": ["position", "length", "message"],
         "properties": {
           "position": {
-            "type": "integer"
+            "type": "integer",
+            "description": "0-based offset of the error in formula, in UTF-16 code units; 0 when the error is not tied to formula text."
           },
           "length": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Length of the error in UTF-16 code units; 0 when the error is not tied to formula text."
           },
           "message": {
             "type": "string"
           }
         }
       },
+      "ValidateCalculatedFieldRequest": {
+        "type": "object",
+        "description": "The formula, and optionally the caption, of a new or edited calculated field to validate on a datasource.",
+        "additionalProperties": false,
+        "required": ["formula"],
+        "properties": {
+          "formula": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The calculated-field formula text to validate."
+          },
+          "caption": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The caption the calculated field would have. A blank caption or one that matches another field's caption is reported as an error."
+          },
+          "fieldName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The existing calculated field being edited, given as its internal name qualified by the datasource's internal name, in the form [datasource-name].[field-name] (e.g. \"[federated.0abc123].[Calculation_123]\"). The field keeps its own caption, and a formula that references the field itself, directly or through other calculations, is reported as a circular reference. A field that is not a calculated field in the datasource named by {id} is reported as an error. Omit to validate a new calculated field."
+          }
+        }
+      },
       "ValidateCalculatedFieldResponse": {
         "type": "object",
-        "description": "The outcome of validating a calculated-field formula.",
+        "description": "The outcome of validating a new or edited calculated field on a datasource.",
         "required": ["isValid", "errors"],
         "properties": {
           "isValid": {
@@ -6489,6 +6828,28 @@
             "items": {
               "$ref": "#/components/schemas/CalculatedFieldValidationError"
             }
+          },
+          "isAggregate": {
+            "type": "boolean",
+            "description": "Whether the formula aggregates, such as SUM([Sales]). Present only when isValid is true."
+          },
+          "dataType": {
+            "type": "string",
+            "description": "The data type the formula evaluates to, using the datatype values of a workbook <column> element. Present only when isValid is true. Clients must tolerate values not listed here.",
+            "x-extensible-enum": [
+              "integer",
+              "real",
+              "string",
+              "datetime",
+              "boolean",
+              "date",
+              "tuple",
+              "spatial",
+              "unknown",
+              "binary",
+              "time",
+              "table"
+            ]
           }
         }
       },
@@ -6620,7 +6981,7 @@
           "isStartPageVisible",
           "isDataSourcePageActive",
           "isPresentationMode",
-          "isFocusMode"
+          "isCanvasMode"
         ],
         "properties": {
           "applicationVersion": {
@@ -6653,7 +7014,7 @@
           "isPresentationMode": {
             "type": "boolean"
           },
-          "isFocusMode": {
+          "isCanvasMode": {
             "type": "boolean"
           }
         }
