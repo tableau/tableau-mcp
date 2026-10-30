@@ -868,7 +868,7 @@ describe('captureWindowScreenshot', () => {
         expect(result.value).toMatchObject({ width: 1200, height: 800 });
       }
       expect(mkdtemp).toHaveBeenCalledExactlyOnceWith(
-        join(canonicalTempRoot, 'tableau-screenshot-'),
+        join(canonicalTempRoot, 'desktop-window-capture-'),
       );
       const directory = mkdtemp.mock.results[0].value as string;
       expect(executor.captureAppScreenshot).toHaveBeenCalledExactlyOnceWith(directory, signal);

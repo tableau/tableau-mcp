@@ -274,7 +274,7 @@ async function captureThroughScreenshotRoute(
   let outputDirectory: string;
   try {
     outputDirectory = fileSystem.mkdtemp(
-      join(fileSystem.realpath(tmpdir()), 'tableau-screenshot-'),
+      join(fileSystem.realpath(tmpdir()), 'desktop-window-capture-'),
     );
   } catch {
     return failure(
