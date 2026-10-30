@@ -57,5 +57,5 @@ export type RecentContent = z.infer<typeof recentContentSchema>;
 // JSON fixture contract derived from Tableau's documented XML recents/recent response and the
 // SDK's JSON conventions. Keep this contract explicit until it is validated against a live site.
 export const recentContentResponseSchema = z.object({
-  recents: z.object({ recent: z.array(recentContentSchema).optional() }),
+  recents: z.object({ recent: z.array(recentContentSchema).max(24).optional() }),
 });

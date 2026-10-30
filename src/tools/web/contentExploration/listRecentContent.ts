@@ -44,12 +44,15 @@ Use this tool to revisit your own recent content. Use search-content for relevan
         args: { limit },
         callback: async () => {
           const config = await extra.getConfigWithOverrides();
+          const maxResultLimit = config.getMaxResultLimit(listRecentContentTool.name);
+          const effectiveLimit = Math.min(limit ?? 24, maxResultLimit ?? 24);
           // Raw REST response notifications run before bounded filtering. Keep this request's
           // listing and access-check probes quiet while preserving WebTool audit logging above.
-          // Each existing checker probe spreads extra into useRestApi, forwarding this flag.
+          // Every checker reuses this request's already-resolved configuration snapshot.
           const quietExtra: TableauWebRequestHandlerExtra & { disableLogging: true } = {
             ...extra,
             disableLogging: true,
+            getConfigWithOverrides: async () => config,
           };
           const recentContent = await useRestApi({
             ...extra,
@@ -68,7 +71,7 @@ Use this tool to revisit your own recent content. Use search-content for relevan
             },
           });
 
-          const parsed = z.array(recentContentSchema).safeParse(recentContent);
+          const parsed = z.array(recentContentSchema).max(24).safeParse(recentContent);
           if (!parsed.success) {
             throw new Error('Tableau returned an invalid recent-content response.');
           }
@@ -87,13 +90,13 @@ Use this tool to revisit your own recent content. Use search-content for relevan
                   });
             if (access.allowed) {
               allowedContent.push(recent);
+              if (allowedContent.length >= effectiveLimit) break;
             }
           }
 
-          const maxResultLimit = config.getMaxResultLimit(listRecentContentTool.name);
-          const effectiveLimit = Math.min(limit ?? 24, maxResultLimit ?? 24);
-          // Preserve the mixed backend order. Denied rows never consume either result limit.
-          return new Ok(allowedContent.slice(0, effectiveLimit));
+          // Preserve the mixed backend order. Denied rows never consume either result limit, and
+          // no additional authorization probes run after the effective limit is filled.
+          return new Ok(allowedContent);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       }),

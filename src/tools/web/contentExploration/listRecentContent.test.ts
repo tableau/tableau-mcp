@@ -150,14 +150,14 @@ describe('list-recent-content', () => {
     }
   });
 
-  it('checks every returned row through its matching access-checker rule', async () => {
+  it('stops authorization probes as soon as the effective limit is filled', async () => {
     const viewCheck = vi.spyOn(resourceAccessChecker, 'isViewAllowed');
     const workbookCheck = vi.spyOn(resourceAccessChecker, 'isWorkbookAllowed');
     await callTool({ limit: 1 });
-    expect(viewCheck).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ viewId: recentView.view.id }),
+    expect(workbookCheck).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ workbookId: recentWorkbook.workbook.id }),
     );
-    expect(workbookCheck).toHaveBeenCalledTimes(2);
+    expect(viewCheck).not.toHaveBeenCalled();
   });
 
   it('applies workbook restrictions to both workbook and view rows before caller limit', async () => {
@@ -238,9 +238,17 @@ describe('list-recent-content', () => {
     ).toEqual([recentWorkbook]);
   });
 
-  it('defaults to at most 24 results', async () => {
-    mocks.getRecentlyViewedForSite.mockResolvedValue(Array.from({ length: 25 }, () => recentView));
+  it('defaults to 24 results', async () => {
+    mocks.getRecentlyViewedForSite.mockResolvedValue(Array.from({ length: 24 }, () => recentView));
     expect(parseResult(await callTool())).toHaveLength(24);
+  });
+
+  it('rejects an oversized recent window before any resource authorization probe', async () => {
+    const viewCheck = vi.spyOn(resourceAccessChecker, 'isViewAllowed');
+    mocks.getRecentlyViewedForSite.mockResolvedValue(Array.from({ length: 25 }, () => recentView));
+    const result = await callTool();
+    expect(result.isError).toBe(true);
+    expect(viewCheck).not.toHaveBeenCalled();
   });
 
   it('does not invent access timestamps from content timestamps', async () => {
