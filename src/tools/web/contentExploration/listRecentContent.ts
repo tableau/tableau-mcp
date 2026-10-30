@@ -29,7 +29,7 @@ export const getListRecentContentTool = (server: WebMcpServer): WebTool<typeof p
     name: 'list-recent-content',
     minRequiredRole: SiteRole.VIEWER,
     description: `Retrieves the signed-in user's recent views and workbooks on the current Tableau site.
-Returns an ordered array of { view: metadata } or { workbook: metadata } entries after server-configured resource restrictions. The API window contains at most 24 items recently created, updated, or accessed by this user and may lag several minutes. Optional limit is an integer from 1 to 24, default 24, and is applied after resource restrictions along with MAX_RESULT_LIMIT/MAX_RESULT_LIMITS.
+Returns an ordered array of { view: metadata } or { workbook: metadata } entries after server-configured resource restrictions. The API window contains at most 24 items recently created, updated, or accessed by this user and may lag several minutes. Optional limit is an integer from 1 to 24, default 24; server-side restrictions may return fewer items than requested.
 Use this tool to revisit your own recent content. Use search-content for relevance/popularity discovery or list-views/list-workbooks for general listings. It does not support another user, pagination, sorting, or date filters, and does not reproduce the full UI Recents experience or include flows. createdAt/updatedAt describe content changes; no last-viewed/access timestamp is returned.`,
     paramsSchema,
     annotations: {
