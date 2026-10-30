@@ -11,10 +11,9 @@ import {
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
-import { assertCollectionsSupported } from './collectionsCapability.js';
+import { checkCollectionsSupported } from './collectionsCapability.js';
 import {
-  assertCollectionListingAllowed,
-  COLLECTIONS_WIRE_LIMITATION,
+  checkCollectionListingAllowed,
   describeCollectionPage,
   getQuietCollectionsExtra,
 } from './collectionsUtils.js';
@@ -26,23 +25,21 @@ export const collectionsPagingParams = {
     .min(1)
     .max(2147483647)
     .optional()
-    .describe('1-based page number, default 1. Positive paging is a local candidate constraint.'),
+    .describe('1-based page number, default 1.'),
   pageSize: z
     .number()
     .int()
     .min(1)
     .max(1000)
     .optional()
-    .describe(
-      'Items requested in one page, default 100. The 1000-item maximum is a local candidate safety cap; TAG has no documented page-size bounds.',
-    ),
+    .describe('Items requested in one page, from 1 to 1000, default 100.'),
 };
 export const listCollectionsParamsSchema = {
   ...collectionsPagingParams,
   filter: collectionsFilterSchema
     .optional()
     .describe(
-      'Optional distinct-field field:eq:value expressions, comma-separated. Documented fields: ownerLuid, visibility, createdTime, updatedTime, luid, siteId, favorite. Only eq is exposed locally; the official field/operator matrix is unspecified.',
+      'Optional comma-separated field:eq:value filters with distinct fields: ownerLuid, visibility, createdTime, updatedTime, luid, siteId, favorite.',
     ),
   sort: collectionsSortSchema
     .optional()
@@ -59,8 +56,7 @@ export const getListCollectionsTool = (
     name: 'list-collections',
     minRequiredRole: SiteRole.VIEWER,
     description:
-      'Lists one page of Collections metadata through GET /api/-/collections for the authenticated site. Accepts optional paging, eq filters, and sort; preserves items, errors, moreItems, totalCount, and pagination. Use list-collection-items to inspect members. Listing refuses configured bounded-content contexts because documented member identities cannot be safely resolved. ' +
-      COLLECTIONS_WIRE_LIMITATION,
+      'Lists one page of collections on the authenticated site with optional paging, eq filters, and sort. Returns collection metadata, item-level errors, and available page metadata. Use list-collection-items to inspect members. Unavailable when content restrictions are configured. A single page does not establish a complete inventory; inspect resultInfo warnings before advancing pages.',
     paramsSchema: listCollectionsParamsSchema,
     annotations: {
       title: 'List Collections',
@@ -79,13 +75,15 @@ export const getListCollectionsTool = (
           if (!parsed.success) return new ArgsValidationError(parsed.error.message).toErr();
           const { pageNumber = 1, pageSize = 100, filter, sort } = parsed.data;
           const config = await quietExtra.getConfigWithOverrides();
-          assertCollectionListingAllowed(config.boundedContext);
+          const allowed = checkCollectionListingAllowed(config.boundedContext);
+          if (allowed.isErr()) return allowed;
           const maxResultLimit = config.getMaxResultLimit(tool.name);
           if (maxResultLimit !== null && (pageNumber - 1) * pageSize >= maxResultLimit)
             return new PageExceedsLimitError(
               'The requested Collections page exceeds the configured result limit.',
             ).toErr();
-          await assertCollectionsSupported(extra);
+          const supported = await checkCollectionsSupported(extra);
+          if (supported.isErr()) return supported;
           return new Ok(
             await useRestApi({
               ...quietExtra,

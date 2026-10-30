@@ -12,10 +12,9 @@ import {
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
-import { assertCollectionsSupported } from './collectionsCapability.js';
+import { checkCollectionsSupported } from './collectionsCapability.js';
 import {
-  assertCollectionListingAllowed,
-  COLLECTIONS_WIRE_LIMITATION,
+  checkCollectionListingAllowed,
   describeCollectionPage,
   getQuietCollectionsExtra,
 } from './collectionsUtils.js';
@@ -27,7 +26,7 @@ export const listCollectionItemsParamsSchema = {
   filter: collectionItemsFilterSchema
     .optional()
     .describe(
-      'Distinct-field field:eq:value filters. Fields: ownerLuid, title, createdTime, modifiedTime, luid, type, favorite. Only eq is exposed locally because the official operator matrix is unspecified.',
+      'Comma-separated field:eq:value filters with distinct fields: ownerLuid, title, createdTime, modifiedTime, luid, type, favorite.',
     ),
   sort: collectionItemsSortSchema
     .optional()
@@ -44,8 +43,7 @@ export const getListCollectionItemsTool = (
     name: 'list-collection-items',
     minRequiredRole: SiteRole.VIEWER,
     description:
-      'Lists one page of member references through GET /api/-/collections/{collectionId}/items. Accepts a Collection LUID and optional paging, eq filter, and sort. Returns documented content metadata, numeric internal IDs, errors, and page metadata. Numeric IDs and syncToken are not REST content LUIDs. Use list-collections to discover containers; use content-specific discovery for usable member LUIDs. Refuses all bounded-content contexts. ' +
-      COLLECTIONS_WIRE_LIMITATION,
+      'Lists one page of member references for a collection LUID, with optional paging, eq filters, and sort. Returns content metadata, numeric internal IDs, errors, and available page metadata. Numeric IDs and syncToken cannot be used as content LUIDs. Use list-collections to discover collections and content-specific discovery to obtain member LUIDs. Unavailable when content restrictions are configured. Inspect resultInfo warnings before advancing pages; one page does not establish completeness.',
     paramsSchema: listCollectionItemsParamsSchema,
     annotations: {
       title: 'List Collection Items',
@@ -64,13 +62,15 @@ export const getListCollectionItemsTool = (
           if (!parsed.success) return new ArgsValidationError(parsed.error.message).toErr();
           const { collectionId, pageNumber = 1, pageSize = 100, filter, sort } = parsed.data;
           const config = await quietExtra.getConfigWithOverrides();
-          assertCollectionListingAllowed(config.boundedContext);
+          const allowed = checkCollectionListingAllowed(config.boundedContext);
+          if (allowed.isErr()) return allowed;
           const maxResultLimit = config.getMaxResultLimit(tool.name);
           if (maxResultLimit !== null && (pageNumber - 1) * pageSize >= maxResultLimit)
             return new PageExceedsLimitError(
               'The requested collection-items page exceeds the configured result limit.',
             ).toErr();
-          await assertCollectionsSupported(extra);
+          const supported = await checkCollectionsSupported(extra);
+          if (supported.isErr()) return supported;
           return new Ok(
             await useRestApi({
               ...quietExtra,

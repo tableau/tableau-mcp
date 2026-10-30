@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getTableauServerInfo } from '../../../getTableauServerInfo.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import fixtures from '../../../sdks/tableau/fixtures/collections.json';
@@ -232,7 +233,11 @@ describe('Collections web tools', () => {
       await call(getListCollectionItemsTool(new WebMcpServer()), { collectionId }),
     ]) {
       expect(result.isError).toBe(true);
-      expect(message(result)).toContain('numeric internal IDs');
+      expect(message(result)).toBe(
+        'Collections listing is unavailable with configured content restrictions. The documented item ' +
+          'schema exposes numeric internal IDs without content LUIDs, so this candidate cannot safely ' +
+          'resolve collection members against bounded-context controls.',
+      );
     }
     expect(mocks.listCollections).not.toHaveBeenCalled();
     expect(mocks.listCollectionItems).not.toHaveBeenCalled();
@@ -326,7 +331,9 @@ describe('Collections web tools', () => {
       items: [member, { ...member, contentType: 'view' }],
     });
     expect(result.isError).toBe(true);
-    expect(message(result)).toContain('could not be verified');
+    expect(message(result)).toBe(
+      'A collection member could not be verified against the configured content restrictions. No collection membership was changed.',
+    );
     expect(message(result)).not.toContain('Outside allowed project');
     expect(mocks.addCollectionItems).not.toHaveBeenCalled();
     expect(mocks.getCollection).not.toHaveBeenCalled();
@@ -377,6 +384,9 @@ describe('Collections web tools', () => {
         items: [member],
       });
       expect(result.isError).toBe(true);
+      expect(message(result)).toBe(
+        'This candidate changes membership only in collections verified as owned by the signed-in user on this site. Ownership could not be established. No collection membership was changed.',
+      );
       expect(mocks.addCollectionItems).not.toHaveBeenCalled();
     },
   );
@@ -453,17 +463,45 @@ describe('Collections web tools', () => {
       restApiVersion: '3.28',
       productVersion: { value: '2026.1.0', build: 'release' },
     });
-    expect((await call(getListCollectionsTool(new WebMcpServer()), {})).isError).toBe(true);
-    expect(
-      (await call(getCreateCollectionTool(new WebMcpServer()), { name: 'Review' })).isError,
-    ).toBe(true);
-    expect(
-      (await call(getAddCollectionItemsTool(new WebMcpServer()), { collectionId, items: [member] }))
-        .isError,
-    ).toBe(true);
+    const results = [
+      await call(getListCollectionsTool(new WebMcpServer()), {}),
+      await call(getListCollectionItemsTool(new WebMcpServer()), { collectionId }),
+      await call(getCreateCollectionTool(new WebMcpServer()), { name: 'Review' }),
+      await call(getAddCollectionItemsTool(new WebMcpServer()), { collectionId, items: [member] }),
+      await call(getRemoveCollectionItemsTool(new WebMcpServer()), {
+        collectionId,
+        items: [member],
+      }),
+    ];
+    for (const result of results) {
+      expect(result.isError).toBe(true);
+      expect(message(result)).toBe(
+        'Collections REST API requires Tableau Cloud February 2026 / REST API 3.28 or later, or Tableau Server 2026.2 / REST API 3.29 or later. This target is older or its deployment/version could not be verified. No Collections request was sent.',
+      );
+    }
     expect(mocks.listCollections).not.toHaveBeenCalled();
     expect(mocks.createCollection).not.toHaveBeenCalled();
     expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+  });
+  it('uses getErrorText for an expected ownership failure', async () => {
+    mocks.getCollection.mockResolvedValue({
+      collection: { ...fixtures.create, userId: member.contentLuid },
+    });
+    const render = vi
+      .spyOn(McpToolError.prototype, 'getErrorText')
+      .mockReturnValue('Curated ownership guidance');
+    try {
+      const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+        collectionId,
+        items: [member],
+      });
+      expect(result.isError).toBe(true);
+      expect(message(result)).toBe('Curated ownership guidance');
+      expect(render).toHaveBeenCalledOnce();
+      expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+    } finally {
+      render.mockRestore();
+    }
   });
   it('preserves a permission failure rather than relabeling it unsupported', async () => {
     mocks.listCollections.mockRejectedValue(new Error('Synthetic permission failure'));
@@ -594,6 +632,9 @@ describe('Collections web tools', () => {
       items: [member],
     });
     expect(result.isError).toBe(true);
+    expect(message(result)).toBe(
+      'This candidate changes membership only in collections verified as owned by the signed-in user on this site. Ownership could not be established. No collection membership was changed.',
+    );
     expect(mocks.addCollectionItems).not.toHaveBeenCalled();
   });
 });

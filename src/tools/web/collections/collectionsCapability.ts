@@ -1,3 +1,5 @@
+import { Ok, Result } from 'ts-results-es';
+
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getTableauServerInfo } from '../../../getTableauServerInfo.js';
 import { ServerInfo } from '../../../sdks/tableau/types/serverInfo.js';
@@ -30,19 +32,20 @@ export function supportsCollections(server: string, info: ServerInfo): boolean {
   return apiAtLeast(29) && (year > 2026 || (year === 2026 && release >= 2));
 }
 
-export async function assertCollectionsSupported(
+export async function checkCollectionsSupported(
   extra: TableauWebRequestHandlerExtra,
-): Promise<void> {
+): Promise<Result<void, McpToolError>> {
   // Match useRestApi's configured-server precedence.
   const server = extra.config.server || extra.tableauAuthInfo?.server;
   if (!server || !supportsCollections(server, await getTableauServerInfo(server))) {
-    throw new McpToolError({
+    return new McpToolError({
       type: 'collections-version-unsupported',
       statusCode: 400,
       message:
         'Collections REST API requires Tableau Cloud February 2026 / REST API 3.28 or later, ' +
         'or Tableau Server 2026.2 / REST API 3.29 or later. This target is older or its ' +
         'deployment/version could not be verified. No Collections request was sent.',
-    });
+    }).toErr();
   }
+  return new Ok(undefined);
 }

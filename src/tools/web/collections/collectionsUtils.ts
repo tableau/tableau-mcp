@@ -1,3 +1,5 @@
+import { Ok, Result } from 'ts-results-es';
+
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -45,24 +47,25 @@ export function hasCollectionsBounds(context: BoundedContext): boolean {
   return Object.values(context).some((value) => value !== null);
 }
 
-export function assertCollectionListingAllowed(context: BoundedContext): void {
+export function checkCollectionListingAllowed(context: BoundedContext): Result<void, McpToolError> {
   if (hasCollectionsBounds(context)) {
-    throw new McpToolError({
+    return new McpToolError({
       type: 'collections-bounded-context-unsupported',
       statusCode: 403,
       message:
         'Collections listing is unavailable with configured content restrictions. The documented item ' +
         'schema exposes numeric internal IDs without content LUIDs, so this candidate cannot safely ' +
         'resolve collection members against bounded-context controls.',
-    });
+    }).toErr();
   }
+  return new Ok(undefined);
 }
 
 /** All members pass before any batch mutation; unknown types fail closed under constraints. */
-export async function assertCollectionMembersAllowed(
+export async function checkCollectionMembersAllowed(
   items: CollectionMembershipItem[],
   extra: TableauWebRequestHandlerExtra,
-): Promise<void> {
+): Promise<Result<void, McpToolError>> {
   const quietExtra = getQuietCollectionsExtra(extra);
   const context = (await quietExtra.getConfigWithOverrides()).boundedContext;
   for (const item of items) {
@@ -94,14 +97,15 @@ export async function assertCollectionMembersAllowed(
         };
     }
     if (!result.allowed) {
-      throw new McpToolError({
+      return new McpToolError({
         type: 'collection-member-not-allowed',
         statusCode: 403,
         message:
           'A collection member could not be verified against the configured content restrictions. No collection membership was changed.',
-      });
+      }).toErr();
     }
   }
+  return new Ok(undefined);
 }
 
 function ownerUnverified(): McpToolError {
@@ -113,7 +117,9 @@ function ownerUnverified(): McpToolError {
   });
 }
 
-async function authenticatedCollectionUserId(restApi: RestApi): Promise<string> {
+async function authenticatedCollectionUserId(
+  restApi: RestApi,
+): Promise<Result<string, McpToolError>> {
   let userId = restApi.userId;
   if (!luidSchema.safeParse(userId).success) {
     const session = await restApi.authenticatedServerMethods.getCurrentServerSession();
@@ -122,11 +128,11 @@ async function authenticatedCollectionUserId(restApi: RestApi): Promise<string> 
       session.value.site.id !== restApi.siteId ||
       !luidSchema.safeParse(session.value.user.id).success
     ) {
-      throw ownerUnverified();
+      return ownerUnverified().toErr();
     }
     userId = session.value.user.id;
   }
-  return userId;
+  return new Ok(userId);
 }
 
 export type VerifiedCollectionOwner = Readonly<{
@@ -138,20 +144,22 @@ export type VerifiedCollectionOwner = Readonly<{
   collectionUserId: string;
 }>;
 
-async function assertOwnerActor(restApi: RestApi, proof: VerifiedCollectionOwner): Promise<void> {
-  if (
-    restApi.serverOrigin !== proof.serverOrigin ||
-    restApi.siteId !== proof.siteId ||
-    (await authenticatedCollectionUserId(restApi)) !== proof.userId
-  )
-    throw ownerUnverified();
+async function checkOwnerActor(
+  restApi: RestApi,
+  proof: VerifiedCollectionOwner,
+): Promise<Result<void, McpToolError>> {
+  if (restApi.serverOrigin !== proof.serverOrigin || restApi.siteId !== proof.siteId)
+    return ownerUnverified().toErr();
+  const userId = await authenticatedCollectionUserId(restApi);
+  if (userId.isErr() || userId.value !== proof.userId) return ownerUnverified().toErr();
+  return new Ok(undefined);
 }
 
 /** Complete each read before opening the next session: PAT sign-in invalidates older sessions. */
 export async function verifyCollectionOwner(
   collectionId: string,
   extra: TableauWebRequestHandlerExtra,
-): Promise<VerifiedCollectionOwner> {
+): Promise<Result<VerifiedCollectionOwner, McpToolError>> {
   const quietExtra = getQuietCollectionsExtra(extra);
   const inspected = await useRestApi({
     ...quietExtra,
@@ -160,6 +168,7 @@ export async function verifyCollectionOwner(
       const serverOrigin = restApi.serverOrigin;
       const siteId = restApi.siteId;
       const userId = await authenticatedCollectionUserId(restApi);
+      if (userId.isErr()) return userId;
       const details = await restApi.collectionsMethods.getCollection(collectionId);
       const collection = details.collection;
       if (
@@ -170,64 +179,72 @@ export async function verifyCollectionOwner(
         !serverOrigin ||
         !luidSchema.safeParse(siteId).success
       )
-        throw ownerUnverified();
+        return ownerUnverified().toErr();
       const proof: VerifiedCollectionOwner = {
         serverOrigin,
         siteId,
-        userId,
+        userId: userId.value,
         collectionId,
         collectionSiteId: collection.siteId,
         collectionUserId: collection.userId,
       };
-      await assertOwnerActor(restApi, proof);
+      const actor = await checkOwnerActor(restApi, proof);
+      if (actor.isErr()) return actor;
       if (collection.siteId === proof.siteId && collection.userId === proof.userId)
-        return { proof, numeric: false };
+        return new Ok({ proof, numeric: false });
       // No fallback for a UUID mismatch, a missing identity, or mixed representations.
       if (!/^[0-9]+$/.test(collection.siteId) || !/^[0-9]+$/.test(collection.userId))
-        throw ownerUnverified();
-      return { proof, numeric: true };
+        return ownerUnverified().toErr();
+      return new Ok({ proof, numeric: true });
     },
   });
-  if (inspected.numeric) {
+  if (inspected.isErr()) return inspected;
+  const { proof, numeric } = inspected.value;
+  if (numeric) {
     try {
-      await useRestApi({
+      const verified = await useRestApi({
         ...quietExtra,
         jwtScopes: ['tableau:permissions:read'],
         callback: async (restApi) => {
-          await assertOwnerActor(restApi, inspected.proof);
+          const actor = await checkOwnerActor(restApi, proof);
+          if (actor.isErr()) return actor;
           const owner = await restApi.collectionPermissionsMethods.queryCollectionOwner({
-            siteId: inspected.proof.siteId,
+            siteId: proof.siteId,
             collectionId,
           });
-          if (owner.collectionId !== collectionId || owner.ownerId !== inspected.proof.userId)
-            throw ownerUnverified();
-          await assertOwnerActor(restApi, inspected.proof);
+          if (owner.collectionId !== collectionId || owner.ownerId !== proof.userId)
+            return ownerUnverified().toErr();
+          return await checkOwnerActor(restApi, proof);
         },
       });
+      if (verified.isErr()) return verified;
     } catch (error) {
       if (error instanceof RouteSafetyError) throw error;
       // Permission failures can contain unrelated grants or private labels. Retain no cause.
-      throw ownerUnverified();
+      return ownerUnverified().toErr();
     }
   }
-  return Object.freeze(inspected.proof);
+  return new Ok(Object.freeze(proof));
 }
 
 /** Check the mutation actor and unchanged raw identity without opening another REST session. */
-export async function assertCollectionOwnerSession(
+export async function checkCollectionOwnerSession(
   restApi: RestApi,
   proof: VerifiedCollectionOwner,
-): Promise<void> {
-  await assertOwnerActor(restApi, proof);
+): Promise<Result<void, McpToolError>> {
+  const actor = await checkOwnerActor(restApi, proof);
+  if (actor.isErr()) return actor;
   const details = await restApi.collectionsMethods.getCollection(proof.collectionId);
-  await assertOwnerActor(restApi, proof);
+  const currentActor = await checkOwnerActor(restApi, proof);
+  if (currentActor.isErr()) return currentActor;
   if (
     details.errors?.length ||
     details.collection?.luid !== proof.collectionId ||
     details.collection.siteId !== proof.collectionSiteId ||
     details.collection.userId !== proof.collectionUserId
   )
-    throw ownerUnverified();
+    return ownerUnverified().toErr();
+  return new Ok(undefined);
 }
 
 export type CollectionPageResultInfo = {

@@ -8,7 +8,7 @@ import { createCollectionSchema } from '../../../sdks/tableau/types/collection.j
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
-import { assertCollectionsSupported } from './collectionsCapability.js';
+import { checkCollectionsSupported } from './collectionsCapability.js';
 import { getQuietCollectionsExtra } from './collectionsUtils.js';
 
 export const createCollectionParamsSchema = {
@@ -28,7 +28,7 @@ export const getCreateCollectionTool = (
     name: 'create-collection',
     minRequiredRole: SiteRole.VIEWER,
     description:
-      'Creates an empty Collection through POST /api/-/collections using name and optional description. Returns the direct CollectionModel, including the actual name and LUID. Collections are private by default according to product help; no visibility, sharing, ownership transfer, or content is submitted. Use add-collection-items separately to add references. Creation is not idempotent, and duplicate names can be suffixed. Requires collections:create and Cloud February 2026 / Server 2026.2 or later; target-deployment contract still needs live verification.',
+      'Creates an empty private collection using a name and optional description. Returns the actual name and collection LUID. Use add-collection-items separately to add references. Duplicate names may receive a numeric suffix; inspect the site before retrying an uncertain creation to avoid duplicates. Does not share collections or transfer ownership.',
     paramsSchema: createCollectionParamsSchema,
     annotations: {
       title: 'Create Collection',
@@ -48,7 +48,8 @@ export const getCreateCollectionTool = (
           const quietExtra = getQuietCollectionsExtra(extra);
           const parsed = createCollectionSchema.safeParse(args);
           if (!parsed.success) return new ArgsValidationError(parsed.error.message).toErr();
-          await assertCollectionsSupported(extra);
+          const supported = await checkCollectionsSupported(extra);
+          if (supported.isErr()) return supported;
           const collection = await useRestApi({
             ...quietExtra,
             jwtScopes: tool.requiredApiScopes,
