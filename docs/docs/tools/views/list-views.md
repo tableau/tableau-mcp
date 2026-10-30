@@ -25,6 +25,18 @@ views, `totalAvailable` stops at the cap and the response includes `mcp.resultIn
 
 ## Optional arguments
 
+### `tagLabels`
+
+Exact, case-sensitive view tags to search for. `["Sales"]` matches that tag; `["Sales", "Finance"]`
+matches ANY listed tag (OR). Duplicates are removed without changing case or Unicode. Other `filter`
+fields are ANDed with the tag condition, but a raw `tags` clause cannot be combined with
+`tagLabels`. This is not an all-tags AND search and does not inherit workbook tags.
+
+Tool limits: 1–50 labels, each at most 256 UTF-16 code units. No `&`, comma, brackets,
+percent-escape sequences, ASCII controls or surrounding whitespace. See
+[Search Content by Tag](../content/search-content-by-tag.md) for API limitations and pagination.
+
+
 ### `filter`
 
 A

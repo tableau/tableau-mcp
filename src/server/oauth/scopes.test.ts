@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  CONTENT_TAG_DELETE_API_SCOPES,
+  CONTENT_TAG_UPDATE_API_SCOPES,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
   getSupportedApiScopes,
@@ -161,6 +163,52 @@ describe('scopes', () => {
 
     it('requires no Tableau API permissions to request an S3 upload URL', () => {
       expect(getRequiredApiScopesForTool('request-datasource-upload')).toEqual([]);
+    });
+  });
+
+  describe('generic content tags scopes', () => {
+    it.each(['add-content-tags', 'remove-content-tag'] as const)(
+      'requires a dedicated write grant for %s',
+      (name) => {
+        mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as ReturnType<
+          typeof configModule.getConfig
+        >);
+        expect(getRequiredScopesForTool(name)).toEqual(['tableau:mcp:content:tags:write']);
+      },
+    );
+
+    it.each([
+      ['add-content-tags', 'update', CONTENT_TAG_UPDATE_API_SCOPES],
+      ['remove-content-tag', 'delete', CONTENT_TAG_DELETE_API_SCOPES],
+    ] as const)(
+      'advertises only %s mutation scopes plus bounded-context reads',
+      (name, operation, perCall) => {
+        expect([...getRequiredApiScopesForTool(name)].sort()).toEqual(
+          [
+            'tableau:content:read',
+            `tableau:datasource_tags:${operation}`,
+            'tableau:mcp_site_settings:read',
+            `tableau:view_tags:${operation}`,
+            `tableau:workbook_tags:${operation}`,
+          ].sort(),
+        );
+        for (const resourceType of ['workbook', 'view', 'datasource'] as const) {
+          expect(perCall[resourceType]).toEqual([`tableau:${resourceType}_tags:${operation}`]);
+        }
+      },
+    );
+
+    it('advertises tag writes without enabling administrator lifecycle tools', async () => {
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as ReturnType<
+        typeof configModule.getConfig
+      >);
+      expect(await getSupportedMcpScopes()).toContain('tableau:mcp:content:tags:write');
+      const scopes = await getSupportedApiScopes();
+      for (const resourceType of ['workbook', 'view', 'datasource']) {
+        expect(scopes).toContain(`tableau:${resourceType}_tags:update`);
+        expect(scopes).toContain(`tableau:${resourceType}_tags:delete`);
+      }
+      expect(scopes).not.toContain('tableau:workbooks:delete');
     });
   });
 

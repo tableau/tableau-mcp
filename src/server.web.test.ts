@@ -220,6 +220,23 @@ describe('server', () => {
     expect(new WebMcpServer().name).toBe(serverName);
   });
 
+  it('registers generic tag mutations for Viewer callers without administrator tooling', async () => {
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'false');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'enforce-role-requirements',
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.VIEWER);
+    const server = getServer();
+    await server.registerTools();
+    for (const name of ['add-content-tags', 'remove-content-tag']) {
+      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+        name,
+        expect.objectContaining({ annotations: expect.objectContaining({ readOnlyHint: false }) }),
+        expect.any(Function),
+      );
+    }
+  });
+
   it('advertises the skills extension capability when skills-over-mcp is enabled', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) => name === 'skills-over-mcp',

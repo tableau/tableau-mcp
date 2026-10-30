@@ -11,6 +11,11 @@ import { CustomView } from '../types/customView.js';
 import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+import {
+  assertEmptyTagMutationResponse,
+  assertTagMutationResponse,
+  encodeTagLabel,
+} from './tagUtils.js';
 
 type QueryImageError = { type: 'feature-disabled' } | { type: 'unknown'; message: string };
 
@@ -30,6 +35,48 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, viewsApis, { axiosConfig }), creds);
   }
+
+  /**
+   * Add tags without replacing existing tags. REST API 1.0+; JWT scope added in API 3.27.
+   * Required scope: `tableau:view_tags:update`.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#add_tags_to_view
+   */
+  addTagsToView = async ({
+    siteId,
+    viewId,
+    tagLabels,
+  }: {
+    siteId: string;
+    viewId: string;
+    tagLabels: ReadonlyArray<string>;
+  }): Promise<void> => {
+    const response = await this._apiClient.addTagsToView(
+      { tags: { tag: tagLabels.map((label) => ({ label })) } },
+      { params: { siteId, viewId }, ...this.authHeader },
+    );
+    assertTagMutationResponse(response);
+  };
+
+  /**
+   * Remove only the exact decoded label. REST API 1.0+; JWT scope added in API 3.27.
+   * Required scope: `tableau:view_tags:delete`. A successful request responds 204.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_tag_from_view
+   */
+  deleteTagFromView = async ({
+    siteId,
+    viewId,
+    tagLabel,
+  }: {
+    siteId: string;
+    viewId: string;
+    tagLabel: string;
+  }): Promise<void> => {
+    const response = await this._apiClient.deleteTagFromView(undefined, {
+      params: { siteId, viewId, tagName: encodeTagLabel(tagLabel) },
+      ...this.authHeader,
+    });
+    assertEmptyTagMutationResponse(response);
+  };
 
   /**
    * Gets the details of a specific view.
