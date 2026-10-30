@@ -59,6 +59,7 @@ async function startServer(): Promise<void> {
         tools: {},
       },
       instructions,
+      maxToolInputElements: 2_000,
     },
   );
 

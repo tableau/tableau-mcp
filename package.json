@@ -78,7 +78,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/ext-apps": "^1.7.2",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@xmldom/xmldom": "^0.9.10",
     "@zodios/core": "^10.9.6",
     "cookie-parser": "^1.4.7",

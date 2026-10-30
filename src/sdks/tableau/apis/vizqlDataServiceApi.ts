@@ -154,7 +154,14 @@ const simpleFilterBaseSchema = z.object({
 
 export const setFilterSchema = filterBaseSchema.extend({
   filterType: z.literal('SET'),
-  values: z.union([z.array(z.string()), z.array(z.number()), z.array(z.boolean())]),
+  // Bound the SET member list at the server's tool-input element cap (2,000): the
+  // schema then advertises maxItems and still refuses an oversized list when the
+  // SDK's maxToolInputElements check is not in force.
+  values: z.union([
+    z.array(z.string()).max(2000),
+    z.array(z.number()).max(2000),
+    z.array(z.boolean()).max(2000),
+  ]),
   exclude: z.boolean().optional(),
 });
 

@@ -9,7 +9,10 @@ import { WebTool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
 const paramsSchema = {
-  metricIds: z.array(luidSchema),
+  // Bound the id list at the server's tool-input element cap (2,000): the schema
+  // then advertises maxItems and still refuses an oversized list when the SDK's
+  // maxToolInputElements check is not in force.
+  metricIds: z.array(luidSchema).max(2000),
 };
 
 export const getListPulseMetricsFromMetricIdsTool = (
