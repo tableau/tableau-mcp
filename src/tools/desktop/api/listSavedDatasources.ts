@@ -35,6 +35,7 @@ export const getListSavedDatasourcesTool = (
   const listSavedDatasourcesTool = new DesktopTool({
     server,
     name: 'list-saved-datasources',
+    // Floor matches open-file, the only way to use this tool's output.
     minApiVersion: '0.2.6',
     title,
     description:
@@ -68,7 +69,7 @@ export const getListSavedDatasourcesTool = (
             result.value.repositoryLocation || process.env['TABLEAU_REPOSITORY_DIR'] || undefined;
           const needle = nameContains?.toLowerCase();
           const datasources = (
-            repositoryLocation ? findSavedDatasources(repositoryLocation) : []
+            repositoryLocation ? findSavedDatasources(repositoryLocation, result.value.locale) : []
           ).filter((d) => !needle || d.name.toLowerCase().includes(needle));
 
           return new Ok({
@@ -90,28 +91,58 @@ export const getListSavedDatasourcesTool = (
   return listSavedDatasourcesTool;
 };
 
-function findSavedDatasources(repositoryLocation: string): SavedDatasource[] {
-  const folders = [DATASOURCES_FOLDER, ...safeReadDir(repositoryLocation).filter(isNotDefault)];
-  for (const folder of folders) {
-    const root = join(repositoryLocation, folder);
-    if (!isDirectory(root)) continue;
-    const found = collect(root, root, 0);
-    // The folder name is localized, so when "Datasources" is absent accept the first folder with sources.
-    if (found.length > 0) {
-      return found.sort(
-        (a, b) => Number(a.builtInSample) - Number(b.builtInSample) || a.name.localeCompare(b.name),
-      );
-    }
+// Desktop names the built-in sample folder after the release, e.g. "2026.1".
+const VERSION_FOLDER = /^(\d{4})\.(\d+)$/;
+
+type Found = SavedDatasource & { version?: [number, number]; localeFolder?: string };
+
+function findSavedDatasources(repositoryLocation: string, locale?: string): SavedDatasource[] {
+  const root = join(repositoryLocation, DATASOURCES_FOLDER);
+  // The folder name is localized, so only when "Datasources" is absent accept the first folder with sources.
+  const roots = isDirectory(root)
+    ? [root]
+    : safeReadDir(repositoryLocation)
+        .map((folder) => join(repositoryLocation, folder))
+        .filter(isDirectory);
+  for (const candidate of roots) {
+    const found = collect(candidate, candidate, 0);
+    if (found.length > 0) return arrange(found, locale);
   }
   return [];
 }
 
-function isNotDefault(folder: string): boolean {
-  return folder !== DATASOURCES_FOLDER;
+// Older releases leave their sample folders behind, so keep only the newest.
+function arrange(found: Found[], locale?: string): SavedDatasource[] {
+  const user = found.filter((d) => !d.builtInSample);
+  let samples = found.filter((d) => d.builtInSample);
+  const newest = samples.reduce<[number, number] | undefined>(
+    (max, d) => (d.version && (!max || compareVersions(d.version, max) > 0) ? d.version : max),
+    undefined,
+  );
+  samples = samples.filter((d) => d.version && newest && compareVersions(d.version, newest) === 0);
+
+  const wanted = locale?.replace('-', '_').toLowerCase();
+  const inLocale = wanted
+    ? samples.filter((d) => d.localeFolder?.toLowerCase().startsWith(wanted))
+    : [];
+  if (inLocale.length > 0) {
+    samples = inLocale;
+  } else {
+    samples = [...new Map(samples.map((d) => [d.name, d])).values()];
+  }
+
+  const byName = (a: SavedDatasource, b: SavedDatasource): number => a.name.localeCompare(b.name);
+  return [...user.sort(byName), ...samples.sort(byName)].map(
+    ({ name, path, fileType, builtInSample }) => ({ name, path, fileType, builtInSample }),
+  );
 }
 
-function collect(root: string, dir: string, depth: number): SavedDatasource[] {
-  const found: SavedDatasource[] = [];
+function compareVersions(a: [number, number], b: [number, number]): number {
+  return a[0] - b[0] || a[1] - b[1];
+}
+
+function collect(root: string, dir: string, depth: number): Found[] {
+  const found: Found[] = [];
   for (const entry of safeReadDir(dir)) {
     const path = join(dir, entry);
     if (isDirectory(path)) {
@@ -120,11 +151,14 @@ function collect(root: string, dir: string, depth: number): SavedDatasource[] {
     }
     const ext = extname(entry).toLowerCase();
     if (ext === '.tds' || ext === '.tdsx') {
+      const [first, second] = relative(root, dir).split(sep);
+      const match = first ? VERSION_FOLDER.exec(first) : null;
       found.push({
         name: entry.slice(0, -ext.length),
         path,
         fileType: ext === '.tds' ? 'tds' : 'tdsx',
-        builtInSample: relative(root, dir).split(sep).filter(Boolean).length >= 2,
+        builtInSample: match !== null,
+        ...(match ? { version: [Number(match[1]), Number(match[2])], localeFolder: second } : {}),
       });
     }
   }

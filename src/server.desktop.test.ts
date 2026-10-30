@@ -811,6 +811,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('refresh-dashboard-auto-updates')).toBe('0.2.19');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');
     expect(floors.get('open-file')).toBe('0.2.6');
+    expect(floors.get('list-saved-datasources')).toBe('0.2.6');
     expect(floors.get('save-workbook')).toBe('0.2.6');
     expect(floors.get('add-worksheet')).toBe('0.2.6');
     expect(floors.get('add-dashboard')).toBe('0.2.6');
@@ -897,6 +898,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
 
     for (const dropped of [
       'open-file',
+      'list-saved-datasources',
       'save-workbook',
       'add-worksheet',
       'add-dashboard',

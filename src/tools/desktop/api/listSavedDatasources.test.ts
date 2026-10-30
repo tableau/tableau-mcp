@@ -51,10 +51,10 @@ describe('list-saved-datasources tool', () => {
   });
 
   it('finds built-in samples in the nested version/locale folder and user sources', async () => {
-    const sample = touch('Datasources', '2026.x', 'en_US-US', 'World Indicators.tds');
+    const sample = touch('Datasources', '2026.1', 'en_US-US', 'World Indicators.tds');
     const packaged = touch('Datasources', 'My Packaged.tdsx');
     touch('Datasources', 'notes.txt');
-    touch('Datasources', '2026.x', 'en_US-US', 'World Indicators.hyper');
+    touch('Datasources', '2026.1', 'en_US-US', 'World Indicators.hyper');
 
     const result = await run({ repositoryLocation: repo });
 
@@ -74,8 +74,8 @@ describe('list-saved-datasources tool', () => {
   });
 
   it('filters by name case-insensitively', async () => {
-    touch('Datasources', '2026.x', 'en_US-US', 'World Indicators.tds');
-    touch('Datasources', '2026.x', 'en_US-US', 'Sample - Superstore.tds');
+    touch('Datasources', '2026.1', 'en_US-US', 'World Indicators.tds');
+    touch('Datasources', '2026.1', 'en_US-US', 'Sample - Superstore.tds');
 
     const result = await run({ repositoryLocation: repo }, { nameContains: 'WORLD' });
 
@@ -88,6 +88,58 @@ describe('list-saved-datasources tool', () => {
     const result = await run({ repositoryLocation: repo });
 
     expect(result.datasources).toEqual([]);
+  });
+
+  it('finds a file exactly at the depth limit', async () => {
+    const file = touch('Datasources', 'a', 'b', 'c', 'd', 'At Limit.tds');
+
+    const result = await run({ repositoryLocation: repo });
+
+    expect(result.datasources.map((d) => d.path)).toEqual([file]);
+  });
+
+  it('only treats files under a <year>.<n> version folder as built-in samples', async () => {
+    const user = touch('Datasources', 'Finance', '2024', 'Sales.tds');
+    const sample = touch('Datasources', '2026.1', 'en_US-US', 'World Indicators.tds');
+
+    const result = await run({ repositoryLocation: repo });
+
+    expect(result.datasources).toEqual([
+      { name: 'Sales', path: user, fileType: 'tds', builtInSample: false },
+      { name: 'World Indicators', path: sample, fileType: 'tds', builtInSample: true },
+    ]);
+  });
+
+  it('keeps only the newest version folder of built-in samples', async () => {
+    touch('Datasources', '2025.3', 'en_US-US', 'World Indicators.tds');
+    touch('Datasources', '2025.3', 'en_US-US', 'Only In Old.tds');
+    const newest = touch('Datasources', '2026.1', 'en_US-US', 'World Indicators.tds');
+    touch('Datasources', '2026.10', 'en_US-US', 'Ten.tds');
+
+    const result = await run({ repositoryLocation: repo });
+
+    // 2026.10 is newer than 2026.1 (numeric, not lexical, compare).
+    expect(result.datasources.map((d) => d.name)).toEqual(['Ten']);
+    expect(result.datasources.map((d) => d.path)).not.toContain(newest);
+  });
+
+  it('prefers the sample locale folder matching the Desktop locale', async () => {
+    touch('Datasources', '2026.1', 'de_DE-DE', 'World Indicators.tds');
+    const en = touch('Datasources', '2026.1', 'en_US-US', 'World Indicators.tds');
+
+    const result = await run({ repositoryLocation: repo, locale: 'en_US' });
+
+    expect(result.datasources.map((d) => d.path)).toEqual([en]);
+  });
+
+  it('does not scan sibling folders when Datasources exists but is empty', async () => {
+    mkdirSync(join(repo, 'Datasources'));
+    touch('Other', 'Stray.tds');
+
+    const result = await run({ repositoryLocation: repo });
+
+    expect(result.datasources).toEqual([]);
+    expect(result.message).toContain('No saved data sources');
   });
 
   it('returns an empty list with a message when the repository is missing or empty', async () => {
@@ -110,7 +162,7 @@ describe('list-saved-datasources tool', () => {
   });
 
   async function run(
-    app: { repositoryLocation?: string },
+    app: { repositoryLocation?: string; locale?: string },
     args: { nameContains?: string } = {},
   ): Promise<Result> {
     const extra = {
