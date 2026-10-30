@@ -23,10 +23,27 @@ describe('Collections documented JSON schemas', () => {
   it('parses direct unwrapped collection creation with the server-suffixed name', () => {
     expect(collectionSchema.parse(fixtures.create)).toEqual(fixtures.create);
   });
-  it('retains optional forward-compatible collection fields', () => {
+  it('strips unreviewed forward-compatible collection fields', () => {
     expect(collectionSchema.parse({ luid: id, futureField: 'value' })).toEqual({
       luid: id,
-      futureField: 'value',
+    });
+  });
+  it('strips undocumented fields throughout returned pages and errors', () => {
+    expect(
+      collectionsPageSchema.parse({
+        privateRoot: 'sentinel',
+        items: [{ luid: id, privateCollection: 'sentinel' }],
+        errors: [
+          {
+            errorCode: 1,
+            privateError: 'sentinel',
+            erroredItem: { contentLuid: id, contentType: 'view', privateItem: 'sentinel' },
+          },
+        ],
+      }),
+    ).toEqual({
+      items: [{ luid: id }],
+      errors: [{ errorCode: 1, erroredItem: { contentLuid: id, contentType: 'view' } }],
     });
   });
   it('parses pages with moreItems and an empty page', () => {
@@ -39,15 +56,13 @@ describe('Collections documented JSON schemas', () => {
     expect(parsed.items?.[0].content).not.toHaveProperty('contentLuid');
     expect(parsed.items?.[0].content?.syncToken).toBe('opaque-token');
   });
-  it('accepts null item extraData returned by Cloud while preserving content identity', () => {
+  it('drops opaque item extraData returned by Cloud while preserving content identity', () => {
     const page = {
       items: [{ content: { id: 42, contentType: 'Workbook' }, extraData: null }],
     };
-    expect(collectionItemsPageSchema.parse(page)).toEqual(page);
-    expect(
-      collectionItemsPageSchema.safeParse({ items: [{ extraData: { unexpected: 'value' } }] })
-        .success,
-    ).toBe(false);
+    expect(collectionItemsPageSchema.parse(page)).toEqual({
+      items: [{ content: { id: 42, contentType: 'Workbook' } }],
+    });
   });
   it('preserves HTTP 200 batch partial errors and the affected count', () => {
     expect(collectionMembershipResponseSchema.parse(fixtures.partial)).toEqual(fixtures.partial);
@@ -103,10 +118,23 @@ describe('Collections documented JSON schemas', () => {
       }).success,
     ).toBe(true);
   });
-  it('enforces the explicitly local batch size cap', () => {
+  it('enforces the explicitly local anti-amplification batch size cap', () => {
     expect(
       collectionMembershipRequestSchema.safeParse({
-        items: Array.from({ length: 1001 }, () => ({ contentLuid: id, contentType: 'view' })),
+        items: Array.from({ length: 101 }, (_, index) => ({
+          contentLuid: `${String(index).padStart(8, '0')}-2222-4222-8222-222222222222`,
+          contentType: 'view',
+        })),
+      }).success,
+    ).toBe(false);
+  });
+  it('rejects duplicate membership targets before authorization probes', () => {
+    expect(
+      collectionMembershipRequestSchema.safeParse({
+        items: [
+          { contentLuid: id, contentType: ' View ' },
+          { contentLuid: id.toUpperCase(), contentType: 'view' },
+        ],
       }).success,
     ).toBe(false);
   });

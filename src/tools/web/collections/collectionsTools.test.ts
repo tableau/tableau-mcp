@@ -331,6 +331,16 @@ describe('Collections web tools', () => {
     expect(mocks.addCollectionItems).not.toHaveBeenCalled();
     expect(mocks.getCollection).not.toHaveBeenCalled();
   });
+  it('rejects duplicate batch targets before any authorization or ownership probe', async () => {
+    const result = await call(getAddCollectionItemsTool(new WebMcpServer()), {
+      collectionId,
+      items: [member, { ...member }],
+    });
+    expect(result.isError).toBe(true);
+    expect(mocks.isWorkbookAllowed).not.toHaveBeenCalled();
+    expect(mocks.getCollection).not.toHaveBeenCalled();
+    expect(mocks.addCollectionItems).not.toHaveBeenCalled();
+  });
   it('rejects unknown content types under bounds', async () => {
     vi.stubEnv('INCLUDE_TAGS', 'Sales');
     const result = await call(getRemoveCollectionItemsTool(new WebMcpServer()), {

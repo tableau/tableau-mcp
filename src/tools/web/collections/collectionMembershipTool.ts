@@ -5,7 +5,10 @@ import { z } from 'zod';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
-import { collectionMembershipRequestSchema } from '../../../sdks/tableau/types/collection.js';
+import {
+  collectionMembershipRequestSchema,
+  MAX_COLLECTION_MEMBERSHIP_ITEMS,
+} from '../../../sdks/tableau/types/collection.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
@@ -20,7 +23,7 @@ import {
 export const collectionMembershipParamsSchema = {
   collectionId: luidSchema.describe('LUID of a collection owned by the signed-in user.'),
   items: collectionMembershipRequestSchema.shape.items.describe(
-    '1–1000 reference objects with contentLuid (UUID), contentType (nonblank, no controls), and optional contentName. Count limit is local policy. TAG documents no contentType enum/casing; exact server-supported spellings need live verification. Existing bound checkers recognize workbook, view, datasource; other types are refused when any content restrictions apply.',
+    `1–${MAX_COLLECTION_MEMBERSHIP_ITEMS} unique reference objects with contentLuid (UUID), contentType (nonblank, no controls), and optional contentName. Count and uniqueness limits are local anti-amplification policy. TAG documents no contentType enum/casing; exact server-supported spellings need live verification. Existing bound checkers recognize workbook, view, datasource; other types are refused when any content restrictions apply.`,
   ),
 };
 

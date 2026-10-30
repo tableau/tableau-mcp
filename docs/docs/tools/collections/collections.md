@@ -31,15 +31,16 @@ LUID, the tool warns that creation may have occurred; inspect the site before re
 
 ## Paging, filters, and sort
 
-Default page number is 1 and page size is 100. The positive page-number rule, 1000-item page-size
-cap, and 1000-member batch cap are local candidate safeguards, not TAG schema limits.
+Default page number is 1 and page size is 100. The positive page-number rule and 1000-item page-size
+cap are local candidate safeguards, not TAG schema limits. Membership mutations accept at most 100
+unique targets per call so bounded-context authorization cannot amplify into an unbounded probe set.
 `MAX_RESULT_LIMIT` and `MAX_RESULT_LIMITS` still constrain reachable offsets and returned items.
 
-Cloud ignored the human-readable TAG query labels `page number` and `page size`: a request for
-page 2 with size 1 returned page 1 with size 100. This candidate instead sends `pageNumber`,
-`pageSize`, and the `sort` key documented in the Collections overview. Deployment acceptance and
-actual page advancement still require live verification. Response metadata and incompleteness
-warnings are preserved. There is no automatic paging or fallback to private browser APIs.
+Cloud ignored the human-readable TAG query labels `page number` and `page size`: a request for page
+2 with size 1 returned page 1 with size 100. This candidate instead sends `pageNumber`, `pageSize`,
+and the `sort` key documented in the Collections overview. Deployment acceptance and actual page
+advancement still require live verification. Response metadata and incompleteness warnings are
+preserved. There is no automatic paging or fallback to private browser APIs.
 
 Filters use distinct-field `field:eq:value` expressions separated by commas. Only `eq` is exposed as
 a conservative local restriction: the Collections-specific operator matrix is undocumented. Values

@@ -251,6 +251,24 @@ describe('Collections request-local default-debug privacy', () => {
     async (kind) => {
       vi.stubEnv('MAX_RESULT_LIMIT', '1');
       extra = getMockRequestHandlerExtra();
+      if (kind === 'items') {
+        pageResponse = {
+          ...fixtures.itemsPage,
+          items: [
+            {
+              ...fixtures.itemsPage.items[0],
+              content: { ...fixtures.itemsPage.items[0].content, title: 'Allowed summary' },
+            },
+            {
+              ...fixtures.itemsPage.items[0],
+              content: { ...fixtures.itemsPage.items[0].content, title: privateSentinel },
+            },
+          ],
+          pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 2 },
+          totalCount: 2,
+          moreItems: true,
+        };
+      }
       const result =
         kind === 'collections'
           ? await call(getListCollectionsTool(extra.server), { pageSize: 100 })

@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 import { luidSchema } from '../../routeSafety/ids.js';
 
-// The TAG OpenAPI marks response-model properties optional. Keep unknown fields for forward
-// compatibility; operations that need an identity or a page perform their own checks.
+// The TAG OpenAPI marks response-model properties optional. Keep documented fields optional, but
+// strip unknown response properties so newly introduced server metadata is never exposed through
+// the MCP boundary without an explicit review.
 const optionalString = z.string().optional();
 const optionalNullableString = z.string().nullable().optional();
 const optionalInteger = z.number().int().optional();
@@ -13,11 +14,15 @@ export const collectionErrorSchema = z
     errorMessage: optionalString,
     luid: optionalNullableString,
     erroredItem: z
-      .object({ contentLuid: optionalString, contentType: optionalString })
-      .passthrough()
+      .object({
+        contentLuid: optionalString,
+        contentType: optionalString,
+        contentName: optionalString,
+      })
+      .strip()
       .optional(),
   })
-  .passthrough();
+  .strip();
 
 export const collectionSchema = z
   .object({
@@ -37,7 +42,7 @@ export const collectionSchema = z
     permissionedItemCount: optionalInteger,
     totalItemCount: optionalInteger,
   })
-  .passthrough();
+  .strip();
 
 export const collectionItemSchema = z
   .object({
@@ -51,12 +56,11 @@ export const collectionItemSchema = z
         id: optionalInteger,
         siteId: optionalInteger,
       })
-      .passthrough()
+      .strip()
       .optional(),
-    extraData: z.record(z.number().int()).nullable().optional(),
     position: optionalInteger,
   })
-  .passthrough();
+  .strip();
 
 const pageFields = {
   errors: z.array(collectionErrorSchema).optional(),
@@ -67,23 +71,23 @@ const pageFields = {
       pageSize: optionalInteger,
       totalAvailable: optionalInteger,
     })
-    .passthrough()
+    .strip()
     .optional(),
   totalCount: optionalInteger,
 };
 
 export const collectionsPageSchema = z
   .object({ ...pageFields, items: z.array(collectionSchema).optional() })
-  .passthrough();
+  .strip();
 export const collectionItemsPageSchema = z
   .object({ ...pageFields, items: z.array(collectionItemSchema).optional() })
-  .passthrough();
+  .strip();
 export const getCollectionResponseSchema = z
   .object({
     collection: collectionSchema.optional(),
     errors: z.array(collectionErrorSchema).optional(),
   })
-  .passthrough();
+  .strip();
 
 export const collectionMembershipResponseSchema = z
   .object({
@@ -91,7 +95,7 @@ export const collectionMembershipResponseSchema = z
     response: optionalInteger,
     typeToMatchJSON: optionalString,
   })
-  .passthrough();
+  .strip();
 
 export const createCollectionSchema = z
   .object({
@@ -107,6 +111,7 @@ export const collectionMembershipItemSchema = z
     contentLuid: luidSchema,
     contentType: z
       .string()
+      .max(64, 'contentType cannot exceed 64 UTF-16 code units.')
       .refine(
         (value) =>
           value.trim().length > 0 &&
@@ -116,11 +121,31 @@ export const collectionMembershipItemSchema = z
         'contentType must be nonblank and cannot contain control characters.',
       )
       .transform((value) => value.trim()),
-    contentName: z.string().optional(),
+    contentName: z.string().max(256, 'contentName cannot exceed 256 UTF-16 code units.').optional(),
   })
   .strict();
+export const MAX_COLLECTION_MEMBERSHIP_ITEMS = 100;
 export const collectionMembershipRequestSchema = z
-  .object({ items: z.array(collectionMembershipItemSchema).min(1).max(1000) })
+  .object({
+    items: z
+      .array(collectionMembershipItemSchema)
+      .min(1)
+      .max(MAX_COLLECTION_MEMBERSHIP_ITEMS)
+      .superRefine((items, context) => {
+        const targets = new Set<string>();
+        items.forEach((item, index) => {
+          const target = `${item.contentType.toLowerCase()}\u0000${item.contentLuid.toLowerCase()}`;
+          if (targets.has(target)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Duplicate collection membership targets are not allowed.',
+              path: [index],
+            });
+          }
+          targets.add(target);
+        });
+      }),
+  })
   .strict();
 
 export type Collection = z.infer<typeof collectionSchema>;

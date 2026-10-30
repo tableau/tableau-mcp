@@ -55,10 +55,12 @@ function setup(
 }
 
 describe('CollectionsMethods guarded transport', () => {
-  it('reads nonempty Cloud collection items with null extraData', async () => {
+  it('reads nonempty Cloud collection items while dropping opaque extraData', async () => {
     const response = { items: [{ content: { id: 42, contentType: 'Workbook' }, extraData: null }] };
     const { methods, requests } = setup(response, { 'content-type': 'application/json' });
-    expect(await methods.listCollectionItems({ collectionId: id })).toEqual(response);
+    expect(await methods.listCollectionItems({ collectionId: id })).toEqual({
+      items: [{ content: { id: 42, contentType: 'Workbook' } }],
+    });
     expect(requests).toHaveLength(1);
   });
   it.each(['add', 'remove'] as const)(
