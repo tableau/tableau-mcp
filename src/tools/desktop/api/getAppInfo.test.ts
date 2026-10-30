@@ -23,6 +23,8 @@ describe('get-app-info tool', () => {
 
     expect(tool.name).toBe('get-app-info');
     expect(tool.description).toContain('get-desktop-state');
+    expect(tool.description).toContain('isCanvasMode');
+    expect(tool.description).not.toContain('isFocusMode');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toEqual({
       readOnlyHint: true,
@@ -53,7 +55,7 @@ describe('get-app-info tool', () => {
       isStartPageVisible: false,
       isDataSourcePageActive: true,
       isPresentationMode: false,
-      isFocusMode: true,
+      isCanvasMode: true,
       futureField: 'preserved',
     } satisfies AppInfo;
     const getApp = vi.fn().mockResolvedValue(Ok(info));

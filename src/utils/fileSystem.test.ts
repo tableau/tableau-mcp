@@ -42,4 +42,17 @@ describe('NODE_FILE_SYSTEM', () => {
       NODE_FILE_SYSTEM.close(fd);
     }
   });
+
+  it('creates a unique empty directory under the given prefix', () => {
+    const prefix = join(tmpdir(), 'tableau-file-system-');
+    const first = NODE_FILE_SYSTEM.mkdtemp(prefix);
+    temporaryDirectories.push(first);
+    const second = NODE_FILE_SYSTEM.mkdtemp(prefix);
+    temporaryDirectories.push(second);
+
+    expect(first.startsWith(prefix)).toBe(true);
+    expect(second).not.toBe(first);
+    expect(NODE_FILE_SYSTEM.lstat(first).isDirectory()).toBe(true);
+    expect(NODE_FILE_SYSTEM.readdir(first)).toEqual([]);
+  });
 });

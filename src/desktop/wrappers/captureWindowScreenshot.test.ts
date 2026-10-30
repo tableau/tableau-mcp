@@ -829,4 +829,138 @@ describe('captureWindowScreenshot', () => {
     expect(result.isErr()).toBe(true);
     expect(lstatSync(join(nested, 'keep.txt')).isFile()).toBe(true);
   });
+
+  describe('app screenshot route', () => {
+    function trackedMkdtemp(): ReturnType<typeof vi.fn<FileSystem['mkdtemp']>> {
+      return vi.fn<FileSystem['mkdtemp']>((prefix) => {
+        const directory = mkdtempSync(prefix);
+        cleanupRoots.push(directory);
+        return directory;
+      });
+    }
+
+    function routeExecutor(
+      captureAppScreenshot: ExternalApiToolExecutor['captureAppScreenshot'],
+    ): ExternalApiToolExecutor {
+      return makeExecutorMock({
+        desktopInstanceId: 'inst-capture',
+        desktopApiVersion: '0.2.28',
+        captureAppScreenshot: vi.fn(captureAppScreenshot),
+      });
+    }
+
+    it('selects the largest returned screenshot and removes the requested directory', async () => {
+      const mkdtemp = trackedMkdtemp();
+      const expected = png(1200, 800);
+      const executor = routeExecutor(async (outputPath) => {
+        writeFileSync(join(outputPath, 'ScreenShot_1.png'), png(300, 200, true));
+        writeFileSync(join(outputPath, 'ScreenShot_2.png'), expected);
+        return Ok({
+          filePaths: [join(outputPath, 'ScreenShot_1.png'), join(outputPath, 'ScreenShot_2.png')],
+        });
+      });
+
+      const result = await captureWindowScreenshot({ executor, signal }, { mkdtemp });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value.bytes.equals(expected)).toBe(true);
+        expect(result.value).toMatchObject({ width: 1200, height: 800 });
+      }
+      expect(mkdtemp).toHaveBeenCalledExactlyOnceWith(
+        join(canonicalTempRoot, 'tableau-screenshot-'),
+      );
+      const directory = mkdtemp.mock.results[0].value as string;
+      expect(executor.captureAppScreenshot).toHaveBeenCalledExactlyOnceWith(directory, signal);
+      expect(executor.executeCommand).not.toHaveBeenCalled();
+      expect(() => lstatSync(directory)).toThrow();
+    });
+
+    it.each([
+      [
+        'outside the requested directory',
+        (directory: string) => join(`${directory}-other`, 'ScreenShot_1.png'),
+      ],
+      [
+        'not among the listed screenshots',
+        (directory: string) => join(directory, 'ScreenShot_9.png'),
+      ],
+    ])(
+      'fails as an unsafe artifact when a returned path is %s and cleans up',
+      async (_case, pathFor) => {
+        const mkdtemp = trackedMkdtemp();
+        const executor = routeExecutor(async (outputPath) =>
+          Ok({ filePaths: [pathFor(outputPath)] }),
+        );
+
+        const result = await captureWindowScreenshot({ executor, signal }, { mkdtemp });
+
+        expect(result.isErr()).toBe(true);
+        if (result.isErr()) {
+          expectLocalCaptureError(result.error);
+          expect(result.error.message).toBe(
+            'Tableau Desktop returned an unsafe screenshot artifact.',
+          );
+        }
+        expect(() => lstatSync(mkdtemp.mock.results[0].value as string)).toThrow();
+      },
+    );
+
+    it('returns the route error unchanged and removes the requested directory', async () => {
+      const mkdtemp = trackedMkdtemp();
+      const routeError = {
+        type: 'command-failed' as const,
+        error: {
+          code: 'not-found',
+          message: 'No route matches /v0/app/screenshot',
+          recoverable: false,
+        },
+      };
+      const executor = routeExecutor(async () => Err(routeError));
+
+      const result = await captureWindowScreenshot({ executor, signal }, { mkdtemp });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) expect(result.error).toBe(routeError);
+      expect(() => lstatSync(mkdtemp.mock.results[0].value as string)).toThrow();
+    });
+
+    it('returns a capture error without calling the route when the directory cannot be created', async () => {
+      const mkdtemp = vi.fn<FileSystem['mkdtemp']>(() => {
+        throw new Error('EACCES');
+      });
+      const executor = routeExecutor(async () => Ok({ filePaths: [] }));
+
+      const result = await captureWindowScreenshot({ executor, signal }, { mkdtemp });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expectLocalCaptureError(result.error);
+        expect(result.error.message).toBe(
+          'A temporary directory for the Tableau Desktop screenshot could not be created.',
+        );
+      }
+      expect(executor.captureAppScreenshot).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, '0.2.27'])(
+      'uses the screenshot command below the route version (%s)',
+      async (desktopApiVersion) => {
+        const directory = commandDirectory();
+        writeFileSync(join(directory, 'ScreenShot_1.png'), png(10, 10));
+        const executor = makeExecutorMock({
+          desktopApiVersion,
+          executeCommand: vi
+            .fn()
+            .mockResolvedValue(Ok(completedCommand({ tempFilePath: directory }))),
+        });
+
+        const result = await captureWindowScreenshot({ executor, signal });
+
+        expect(result.isOk()).toBe(true);
+        expect(executor.executeCommand).toHaveBeenCalledOnce();
+        expect(executor.captureAppScreenshot).not.toHaveBeenCalled();
+      },
+    );
+  });
 });
