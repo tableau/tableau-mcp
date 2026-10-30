@@ -468,7 +468,7 @@ describe('scopes', () => {
         expected: true,
       },
     ])(
-      'advertises permissions scope only for enabled publishing: $enabled, $clientId, $authoringWithSlack',
+      'keeps collection owner scope required independently of publishing: $enabled, $clientId, $authoringWithSlack',
       async ({ enabled, clientId, authoringWithSlack, expected }) => {
         mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
         mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
@@ -479,12 +479,14 @@ describe('scopes', () => {
 
         const scopes = await getSupportedApiScopes(clientId);
 
-        expect(scopes.includes('tableau:permissions:read')).toBe(expected);
+        expect(scopes).toContain('tableau:permissions:read');
+        // Authoring availability still follows the original client/feature policy.
+        expect(scopes.includes('tableau:workbooks:create')).toBe(expected);
       },
     );
 
     it.each([false, true])(
-      'omits optional permissions scope when requested, data-apps=%s',
+      'retains required collection owner scope when optional scopes are omitted, data-apps=%s',
       async (enabled) => {
         mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
         mocks.mockIsFeatureEnabled.mockImplementation(
@@ -493,9 +495,18 @@ describe('scopes', () => {
         const scopes = await getSupportedApiScopes(claudeClientId, {
           includeOptionalScopes: false,
         });
-        expect(scopes).not.toContain('tableau:permissions:read');
+        expect(scopes).toContain('tableau:permissions:read');
       },
     );
+
+    it.each([
+      'list-collections',
+      'list-collection-items',
+      'create-collection',
+      'publish-workbook',
+    ] as const)('does not require owner permissions for %s', (toolName) => {
+      expect(getRequiredApiScopesForTool(toolName)).not.toContain('tableau:permissions:read');
+    });
 
     it('should advertise only the Knowledge read API scope when write tools are off', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(

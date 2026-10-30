@@ -1,0 +1,48 @@
+{
+  "create": {
+    "luid": "11111111-1111-4111-8111-111111111111",
+    "name": "Quarterly review (2)",
+    "description": "Dashboards for review",
+    "userId": "55555555-5555-4555-8555-555555555555",
+    "siteId": "66666666-6666-4666-8666-666666666666",
+    "visibility": "private"
+  },
+  "page": {
+    "items": [{ "luid": "11111111-1111-4111-8111-111111111111", "name": "Quarterly review" }],
+    "pagination": { "pageNumber": 1, "pageSize": 100, "totalAvailable": 2 },
+    "totalCount": 2,
+    "moreItems": true
+  },
+  "itemsPage": {
+    "items": [
+      {
+        "collectionLuid": "11111111-1111-4111-8111-111111111111",
+        "position": 1,
+        "content": {
+          "id": 42,
+          "siteId": 7,
+          "contentType": "view",
+          "title": "Regional Sales",
+          "syncToken": "opaque-token"
+        }
+      }
+    ],
+    "pagination": { "pageNumber": 1, "pageSize": 100, "totalAvailable": 1 },
+    "moreItems": false
+  },
+  "emptyPage": { "items": [], "moreItems": false, "totalCount": 0 },
+  "partial": {
+    "response": 1,
+    "errors": [
+      {
+        "errorCode": 1,
+        "errorMessage": "Synthetic fixture failure",
+        "luid": "11111111-1111-4111-8111-111111111111",
+        "erroredItem": {
+          "contentLuid": "44444444-4444-4444-8444-444444444444",
+          "contentType": "view"
+        }
+      }
+    ]
+  }
+}

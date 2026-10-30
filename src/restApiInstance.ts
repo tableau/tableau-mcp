@@ -25,6 +25,9 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =
+  | 'tableau:collections:read'
+  | 'tableau:collections:create'
+  | 'tableau:collections:update'
   | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:content:read'
