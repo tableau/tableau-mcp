@@ -863,6 +863,11 @@ return { data: Body as Readable, contentLength: ContentLength }; // Readable fro
 (e.g. an S3 POST policy `content-length-range`); tableau-mcp still enforces it when reading the
 upload back.
 
+Custom providers must implement `delete(key)`, which removes that object; deleting a key that does
+not exist must resolve, not throw (S3's `DeleteObjectCommand` already behaves this way). tableau-mcp
+calls it once Tableau completes a publish from a staged workbook or data source upload; a
+failure is logged and does not fail the publish.
+
 :::
 
 <hr />

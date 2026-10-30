@@ -15,7 +15,7 @@
  * Keys are relative, `/`-delimited paths chosen by the server, and later looked up by the same
  * key. Providers may prepend their own base path but must otherwise store each key as given.
  *
- * Any members added to this interface (or to its params and results) in future will be optional,
+ * New required members are added only in major releases; minor releases add only optional ones,
  * so existing providers keep compiling. Every `expiresAt` is an ISO-8601 UTC timestamp
  * (e.g. `2026-01-01T00:00:00.000Z`).
  */
@@ -82,4 +82,15 @@ export interface BlobStorageProvider {
     key: string;
     maxBytes: number;
   }): Promise<{ data: AsyncIterable<Uint8Array>; contentLength?: number } | undefined>;
+
+  /**
+   * Delete a previously stored blob. Called best-effort after a staged upload is published; a
+   * rejection is logged and never fails the tool call.
+   *
+   * Required: custom providers must implement it. Deleting a key that does not exist must
+   * resolve, not throw.
+   *
+   * @param key - Storage key/path for the blob, as passed to `getPresignedUploadUrl`/`download`
+   */
+  delete(key: string): Promise<void>;
 }
