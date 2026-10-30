@@ -108,6 +108,8 @@ import {
   workbookDatasourceRoute,
   WorkbookDiagnostics,
   workbookDiagnosticsSchema,
+  WorkbookExtensionList,
+  workbookExtensionListSchema,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
@@ -432,6 +434,14 @@ export class ExternalApiToolExecutor {
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal),
+    );
+  }
+
+  async listWorkbookExtensions(
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookExtensionList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbookExtensions, workbookExtensionListSchema, signal),
     );
   }
 
