@@ -33,6 +33,10 @@ describe('WebToolName', () => {
     }
   });
 
+  it('groups authenticated self favorites together', () => {
+    expect(webToolGroups.favorites).toEqual(['list-favorites', 'add-favorite', 'remove-favorite']);
+  });
+
   it('should group get-view-data with the view tools', () => {
     expect(webToolGroups.view).toContain('get-view-data');
   });

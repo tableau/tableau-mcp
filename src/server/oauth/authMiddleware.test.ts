@@ -6,7 +6,11 @@ import { stubDefaultEnvVars } from '../../testShared.js';
 import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
 import { AccessTokenValidator, ExternalAccessTokenValidator } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
-import { getSupportedScopes, PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from './scopes.js';
+import {
+  getRequiredApiScopesForTool,
+  getSupportedScopes,
+  PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
+} from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
 const mocks = vi.hoisted(() => ({
@@ -388,4 +392,65 @@ describe('external OIDC ID tokens', () => {
     );
     expect(JSON.stringify({ body: res.body, headers: res.headers })).not.toMatch(/audience/i);
   });
+});
+
+describe('favorites scope rejection', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(['list-favorites', 'add-favorite', 'remove-favorite'] as const)(
+    'rejects %s without its dedicated MCP scope even if every API scope is present',
+    async (name) => {
+      const authInfo = { scopes: [...getRequiredApiScopesForTool(name)], clientId: 'test-client' };
+      const middleware = authMiddleware(makeValidator(Ok(authInfo)));
+      const req = {
+        headers: { authorization: 'Bearer fixture' },
+        method: 'POST',
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } },
+      } as unknown as AuthenticatedRequest;
+      const res = makeRes();
+      const next = vi.fn();
+      await middleware(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('insufficient_scope');
+      expect(res.headers['WWW-Authenticate']).toContain(
+        name === 'list-favorites' ? 'tableau:mcp:favorites:read' : 'tableau:mcp:favorites:write',
+      );
+    },
+  );
+
+  it.each(['add-favorite', 'remove-favorite'] as const)(
+    'rejects %s without its exact mutation API scope',
+    async (name) => {
+      const mutationScope =
+        name === 'add-favorite' ? 'tableau:favorites:update' : 'tableau:favorites:delete';
+      const authInfo = {
+        scopes: [
+          'tableau:mcp:favorites:write',
+          ...getRequiredApiScopesForTool(name).filter((scope) => scope !== mutationScope),
+        ],
+        clientId: 'test-client',
+      };
+      const middleware = authMiddleware(makeValidator(Ok(authInfo)));
+      const req = {
+        headers: { authorization: 'Bearer fixture' },
+        method: 'POST',
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } },
+      } as unknown as AuthenticatedRequest;
+      const res = makeRes();
+      const next = vi.fn();
+      await middleware(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(res.headers['WWW-Authenticate']).toContain(mutationScope);
+    },
+  );
 });

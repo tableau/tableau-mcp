@@ -8,6 +8,9 @@ import { getRequestDatasourceUploadTool } from './datasources/requestDatasourceU
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
+import { getAddFavoriteTool } from './favorites/addFavorite.js';
+import { getListFavoritesTool } from './favorites/listFavorites.js';
+import { getRemoveFavoriteTool } from './favorites/removeFavorite.js';
 import { getCancelFlowRunTool } from './flows/cancelFlowRun/cancelFlowRun.js';
 import { getDescribeFlowTool } from './flows/describeFlow/describeFlow.js';
 import { getGetFlowTool } from './flows/getFlow/getFlow.js';
@@ -55,6 +58,9 @@ import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
 export const webToolFactories = [
+  getListFavoritesTool,
+  getAddFavoriteTool,
+  getRemoveFavoriteTool,
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,

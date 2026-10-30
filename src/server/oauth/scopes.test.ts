@@ -164,6 +164,36 @@ describe('scopes', () => {
     });
   });
 
+  describe('favorites scopes', () => {
+    it('uses dedicated favorites authorization and preserves the read/write separation', () => {
+      mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+      expect(getRequiredScopesForTool('list-favorites')).toEqual(['tableau:mcp:favorites:read']);
+      expect(getRequiredScopesForTool('add-favorite')).toEqual(['tableau:mcp:favorites:write']);
+      expect(getRequiredScopesForTool('remove-favorite')).toEqual(['tableau:mcp:favorites:write']);
+      expect(getRequiredApiScopesForTool('list-favorites')).toContain('tableau:content:read');
+      expect(getRequiredApiScopesForTool('list-favorites')).not.toContain(
+        'tableau:favorites:update',
+      );
+      expect(getRequiredApiScopesForTool('list-favorites')).not.toContain(
+        'tableau:favorites:delete',
+      );
+      expect(getRequiredApiScopesForTool('add-favorite')).toContain('tableau:favorites:update');
+      expect(getRequiredApiScopesForTool('add-favorite')).not.toContain('tableau:favorites:delete');
+      expect(getRequiredApiScopesForTool('remove-favorite')).toContain('tableau:favorites:delete');
+      expect(getRequiredApiScopesForTool('remove-favorite')).not.toContain(
+        'tableau:favorites:update',
+      );
+      for (const name of ['list-favorites', 'add-favorite', 'remove-favorite'] as const) {
+        expect(getRequiredApiScopesForTool(name)).toEqual(
+          expect.arrayContaining(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+        );
+        expect(getRequiredApiScopesForTool(name)).not.toContain('tableau:flows:read');
+        expect(getRequiredApiScopesForTool(name)).not.toContain('tableau:workbooks:delete');
+        expect(getRequiredApiScopesForTool(name)).not.toContain('tableau:datasources:delete');
+      }
+    });
+  });
+
   describe('getSupportedMcpScopes', () => {
     it('should include tableau:mcp:tasks:read when adminToolsEnabled and admin-tools are both on', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(

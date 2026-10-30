@@ -1,0 +1,7 @@
+{
+  "label": "Favorites",
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for the authenticated user's Tableau favorites shortlist."
+  }
+}
