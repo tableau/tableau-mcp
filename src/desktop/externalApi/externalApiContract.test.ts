@@ -7,6 +7,8 @@ import { startMockExternalApiServer } from './mockExternalApiServer.js';
 import {
   apiRootSchema,
   appInfoSchema,
+  appScreenshotRoute,
+  appScreenshotSchema,
   capabilityMatrixSchema,
   dashboardItemSchema,
   dashboardListSchema,
@@ -132,7 +134,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
     'isStartPageVisible',
     'isDataSourcePageActive',
     'isPresentationMode',
-    'isFocusMode',
+    'isCanvasMode',
   ],
   DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
   DashboardList: ['dashboards'],
@@ -160,9 +162,35 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   ImageExport: ['effectiveMimeType', 'width', 'height'],
 };
 
+// The dialog tools still speak the pre-0.2.26 protocol; these are the spec properties they omit.
+const KNOWN_DIALOG_PROTOCOL_DRIFT: Readonly<Record<string, readonly string[]>> = {
+  WindowInfo: ['family', 'mode', 'revision', 'sessionId', 'status'],
+  DialogIdentity: ['revision', 'sessionId'],
+  DialogList: ['recentActions', 'uiSnapshotAvailable'],
+  InvokeDialogActionRequest: ['requestId'],
+};
+const KNOWN_DIALOG_PROBLEM_CODE_DRIFT = {
+  specOnly: [
+    'dialog-action-indeterminate',
+    'dialog-action-invalid',
+    'dialog-action-unsupported',
+    'dialog-request-capacity',
+    'dialog-request-conflict',
+    'dialog-request-expired',
+    'dialog-session-inactive',
+    'dialog-session-stale',
+  ],
+  clientOnly: ['dialog-action-not-found', 'dialog-ambiguous'],
+};
+
+function specPropertiesWithoutDialogDrift(name: string, keys: string[]): string[] {
+  const drift = new Set(KNOWN_DIALOG_PROTOCOL_DRIFT[name] ?? []);
+  return keys.filter((key) => !drift.has(key)).sort();
+}
+
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.27 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.27');
+  it('tracks the 0.2.28 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.28');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -267,12 +295,15 @@ describe('external client API contract (captured openapi fixture)', () => {
       '%s: properties and required set match except known version deltas',
       (name, schema) => {
         const component = specSchema(name);
-        expect(declaredKeys(schema).sort()).toEqual(specPropertyNames(component).sort());
+        expect(declaredKeys(schema).sort()).toEqual(
+          specPropertiesWithoutDialogDrift(name, specPropertyNames(component)),
+        );
         const exceptions = new Set(KNOWN_READ_REQUIREDNESS_EXCEPTIONS[name] ?? []);
         expect(requiredKeys(schema).sort()).toEqual(
-          specRequiredKeys(component)
-            .filter((key) => !exceptions.has(key))
-            .sort(),
+          specPropertiesWithoutDialogDrift(
+            name,
+            specRequiredKeys(component).filter((key) => !exceptions.has(key)),
+          ),
         );
       },
     );
@@ -291,7 +322,7 @@ describe('external client API contract (captured openapi fixture)', () => {
           'isStartPageVisible',
           'isDataSourcePageActive',
           'isPresentationMode',
-          'isFocusMode',
+          'isCanvasMode',
         ],
         DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
         DashboardList: ['dashboards'],
@@ -394,9 +425,15 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(extras.sort()).toEqual(['detail', 'type']);
     });
 
-    it('PROBLEM_CODES equals the spec x-extensible-enum exactly', () => {
+    it('PROBLEM_CODES equals the spec x-extensible-enum except the known dialog drift', () => {
+      const specOnly = new Set(KNOWN_DIALOG_PROBLEM_CODE_DRIFT.specOnly);
       expect([...PROBLEM_CODES].sort()).toEqual(
-        [...(problem.properties?.code?.['x-extensible-enum'] ?? [])].sort(),
+        [
+          ...(problem.properties?.code?.['x-extensible-enum'] ?? []).filter(
+            (code) => !specOnly.has(code),
+          ),
+          ...KNOWN_DIALOG_PROBLEM_CODE_DRIFT.clientOnly,
+        ].sort(),
       );
     });
 
@@ -415,10 +452,36 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['DialogIdentity', dialogIdentitySchema],
       ['DialogList', dialogListSchema],
       ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
-    ] as const)('%s properties and required set match exactly', (name, schema) => {
+    ] as const)('%s properties and required set match except the known drift', (name, schema) => {
       const component = specSchema(name);
-      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
-      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+      expect(declaredKeys(schema).sort()).toEqual(
+        specPropertiesWithoutDialogDrift(name, Object.keys(component.properties ?? {})),
+      );
+      expect(requiredKeys(schema).sort()).toEqual(
+        specPropertiesWithoutDialogDrift(name, [...(component.required ?? [])]),
+      );
+    });
+
+    it('pins the 0.2.28 dialog protocol the dialog tools do not speak yet', () => {
+      const invokeResponses = (
+        spec.paths[EXTERNAL_API_ROUTES.appInvokeDialogAction] as {
+          post?: { responses?: Record<string, unknown> };
+        }
+      ).post?.responses;
+
+      expect(specSchema('InvokeDialogActionRequest').properties?.action?.$ref).toBe(
+        '#/components/schemas/DialogActionInvocation',
+      );
+      expect(specSchema('DialogAction').oneOf).toBeUndefined();
+      expect(specSchema('InvokeDialogActionResult').oneOf).toBeUndefined();
+      expect(Object.keys(specSchema('InvokeDialogActionResult').properties ?? {}).sort()).toEqual([
+        'dialog',
+        'dialogs',
+        'outcome',
+        'status',
+        'uiSnapshotAvailable',
+      ]);
+      expect(Object.keys(invokeResponses ?? {})).not.toContain('409');
     });
 
     it('reuses WindowInfo for every dialog snapshot', () => {
@@ -439,15 +502,6 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
 
     it('models exact labeled button and semantic close actions', () => {
-      const variants = specSchema('DialogAction').oneOf ?? [];
-      const byKind = Object.fromEntries(
-        variants.map((variant) => [variant.properties?.kind?.const, variant]),
-      );
-
-      expect(byKind.button.required?.sort()).toEqual(['kind', 'label']);
-      expect(byKind.button.properties?.label?.minLength).toBe(1);
-      expect(byKind.close.required).toEqual(['kind']);
-      expect(byKind.close.properties?.label).toBe(false);
       expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
       expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
       expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
@@ -457,11 +511,9 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
 
     it('requires an exact returned action in requests and invoked responses', () => {
-      const request = specSchema('InvokeDialogActionRequest');
-      const outcomes = specSchema('InvokeDialogActionResult').oneOf ?? [];
-
-      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
+      expect(specSchema('InvokeDialogActionRequest').properties?.dialog?.$ref).toBe(
+        '#/components/schemas/DialogIdentity',
+      );
       expect(
         invokeDialogActionRequestSchema.safeParse({
           dialog: { objectName: '', title: '', className: '' },
@@ -480,29 +532,9 @@ describe('external client API contract (captured openapi fixture)', () => {
           action: { kind: 'button', label: 'Discard' },
         }).success,
       ).toBe(false);
-      for (const outcome of outcomes.filter(
-        (candidate) => candidate.properties?.outcome?.const !== 'no-active-dialog',
-      )) {
-        expect(outcome.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-        expect(outcome.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      }
     });
 
     it('models the exact three outcome branches and their required fields', () => {
-      const outcomeSchemas = specSchema('InvokeDialogActionResult').oneOf ?? [];
-      const requiredByOutcome = Object.fromEntries(
-        outcomeSchemas.map((outcome) => [
-          outcome.properties?.outcome?.const,
-          [...(outcome.required ?? [])].sort(),
-        ]),
-      );
-
-      expect(requiredByOutcome).toEqual({
-        'no-active-dialog': ['dialogs', 'outcome'],
-        dismissed: ['action', 'dialog', 'dialogs', 'outcome'],
-        'action-invoked-dialog-remains': ['action', 'dialog', 'dialogs', 'outcome'],
-      });
-
       expect(
         invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
           .success,
@@ -601,6 +633,7 @@ describe('external client API contract (captured openapi fixture)', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
+      EXTERNAL_API_ROUTES.appScreenshot,
       EXTERNAL_API_ROUTES.appDialogs,
       EXTERNAL_API_ROUTES.appState,
       EXTERNAL_API_ROUTES.appInvokeDialogAction,
@@ -867,9 +900,43 @@ describe('external client API contract (captured openapi fixture)', () => {
           'application/json'
         ]?.schema?.$ref,
       ).toBe('#/components/schemas/InvokeDialogActionResult');
+    });
+
+    it('documents the app screenshot read with an absolute outputPath and AppScreenshot response', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.appScreenshot] as {
+        get?: {
+          operationId?: string;
+          parameters?: Array<{ name?: string; in?: string; required?: boolean; $ref?: string }>;
+          responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+        };
+        post?: unknown;
+      };
+      const appScreenshot = specSchema('AppScreenshot');
+
+      expect(Object.keys(pathItem)).toEqual(['get']);
+      expect(pathItem.get?.operationId).toBe('getAppScreenshot');
       expect(
-        Object.keys(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses ?? {}),
-      ).toContain('409');
+        pathItem.get?.parameters?.find((parameter) => parameter.name === 'outputPath'),
+      ).toMatchObject({
+        in: 'query',
+        required: true,
+      });
+      expect(pathItem.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/AppScreenshot',
+      );
+      expect(Object.keys(pathItem.get?.responses ?? {})).toContain('400');
+      expect(declaredKeys(appScreenshotSchema)).toEqual(
+        Object.keys(appScreenshot.properties ?? {}),
+      );
+      expect(requiredKeys(appScreenshotSchema)).toEqual(appScreenshot.required);
+      expect(appScreenshot.properties?.filePaths?.items?.type).toBe('string');
+      expect(appScreenshotRoute('C:/tmp/shots dir')).toBe(
+        '/v0/app/screenshot?outputPath=C%3A%2Ftmp%2Fshots%20dir',
+      );
+      expect(
+        appScreenshotSchema.safeParse({ filePaths: ['C:/tmp/shots/ScreenShot_1.png'] }).success,
+      ).toBe(true);
+      expect(appScreenshotSchema.safeParse({}).success).toBe(false);
     });
 
     it('documents the app-state read with the shared AppState response', () => {

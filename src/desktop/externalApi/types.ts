@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.27), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.28), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -17,6 +17,7 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appScreenshot: '/v0/app/screenshot',
   appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
@@ -482,6 +483,10 @@ function imageQuerySuffix(query: ImageExportQuery): string {
   return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
 
+export function appScreenshotRoute(outputPath: string): string {
+  return `${EXTERNAL_API_ROUTES.appScreenshot}?outputPath=${encodeURIComponent(outputPath)}`;
+}
+
 export function worksheetImageRoute(worksheetId: string, query: ImageExportQuery): string {
   return `${worksheetRoute(worksheetId)}/image${imageQuerySuffix(query)}`;
 }
@@ -798,6 +803,7 @@ export const operationEnvelopeSchema = z
     diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -811,6 +817,7 @@ export const operationListSchema = z
     operations: z.array(operationEnvelopeSchema),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
   })
   .passthrough();
 export type OperationList = z.infer<typeof operationListSchema>;
@@ -1136,10 +1143,17 @@ export const appInfoSchema = z
     isStartPageVisible: z.boolean().optional(),
     isDataSourcePageActive: z.boolean().optional(),
     isPresentationMode: z.boolean().optional(),
-    isFocusMode: z.boolean().optional(),
+    isCanvasMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
+
+export const appScreenshotSchema = z
+  .object({
+    filePaths: z.array(z.string()),
+  })
+  .passthrough();
+export type AppScreenshot = z.infer<typeof appScreenshotSchema>;
 
 /** Desired and resulting Start Page visibility for `POST /v0/app:toggleStartPage`. */
 export const startPageVisibilitySchema = z

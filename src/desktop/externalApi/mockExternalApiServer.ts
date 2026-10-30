@@ -490,13 +490,30 @@ export async function startMockExternalApiServer(
         isStartPageVisible,
         isDataSourcePageActive,
         isPresentationMode: false,
-        isFocusMode: false,
+        isCanvasMode: false,
       });
       return;
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
       sendJson(res, 200, { dialogs });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.appScreenshot) {
+      const outputPath = searchParams['outputPath'] ?? '';
+      const segments = outputPath.split(/[\\/]/);
+      const isAbsolute = outputPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(outputPath);
+      if (
+        !isAbsolute ||
+        /[\\/]$/.test(outputPath) ||
+        segments.includes('.') ||
+        segments.includes('..')
+      ) {
+        sendProblem(res, 400, 'invalid-query-parameter', `Invalid outputPath: ${outputPath}`);
+        return;
+      }
+      sendJson(res, 200, { filePaths: [`${outputPath}/ScreenShot_1.png`] });
       return;
     }
 
@@ -1450,7 +1467,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.27' },
+        info: { title: 'Tableau External Client API', version: '0.2.28' },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },

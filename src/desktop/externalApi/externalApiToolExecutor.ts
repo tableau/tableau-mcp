@@ -33,6 +33,9 @@ import {
   apiRootSchema,
   AppInfo,
   appInfoSchema,
+  AppScreenshot,
+  appScreenshotRoute,
+  appScreenshotSchema,
   CapabilityMatrix,
   capabilityMatrixSchema,
   dashboardDocumentRoute,
@@ -404,6 +407,15 @@ export class ExternalApiToolExecutor {
   async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal),
+    );
+  }
+
+  async captureAppScreenshot(
+    outputPath: string,
+    signal: AbortSignal,
+  ): Promise<Result<AppScreenshot, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(appScreenshotRoute(outputPath), appScreenshotSchema, signal),
     );
   }
 
