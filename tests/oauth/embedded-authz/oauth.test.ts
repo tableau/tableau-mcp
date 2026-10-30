@@ -160,9 +160,10 @@ describe('OAuth', () => {
         'tableau:mcp:users:read',
         'tableau:mcp:users:write',
         'tableau:mcp:content:delete',
+        'tableau:mcp_site_settings:read',
       ]),
     );
-    expect(response.body.scopes_supported).toHaveLength(14);
+    expect(response.body.scopes_supported).toHaveLength(15);
   });
 
   it('should provide a authorization server metadata endpoint for the OAuth 2.1 flow', async () => {
@@ -199,9 +200,10 @@ describe('OAuth', () => {
         'tableau:mcp:users:read',
         'tableau:mcp:users:write',
         'tableau:mcp:content:delete',
+        'tableau:mcp_site_settings:read',
       ]),
     );
-    expect(response.body.scopes_supported).toHaveLength(14);
+    expect(response.body.scopes_supported).toHaveLength(15);
     expect(response.body.token_endpoint_auth_methods_supported).toEqual([
       'none',
       'client_secret_basic',
@@ -243,9 +245,10 @@ describe('OAuth', () => {
         'tableau:mcp:users:read',
         'tableau:mcp:users:write',
         'tableau:mcp:content:delete',
+        'tableau:mcp_site_settings:read',
       ]),
     );
-    expect(response.body.scopes_supported).toHaveLength(14);
+    expect(response.body.scopes_supported).toHaveLength(15);
     expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none']);
     expect(response.body.subject_types_supported).toEqual(['public']);
     expect(response.body.client_id_metadata_document_supported).toBe(true);
@@ -263,13 +266,17 @@ describe('OAuth', () => {
     expect(protectedResource.status).toBe(200);
     expect(protectedResource.body.scopes_supported).not.toEqual([]);
     expect(protectedResource.body.scopes_supported).toContain('tableau:mcp:content:read');
-    expect(protectedResource.body.scopes_supported).toHaveLength(14);
+    // The site-settings scope is always advertised while MCP site settings are enabled, so a
+    // client never requests an empty scope set that a delegated AS would reject.
+    expect(protectedResource.body.scopes_supported).toContain('tableau:mcp_site_settings:read');
+    expect(protectedResource.body.scopes_supported).toHaveLength(15);
 
     const authServer = await request(app).get('/.well-known/oauth-authorization-server');
     expect(authServer.status).toBe(200);
     expect(authServer.body.scopes_supported).not.toEqual([]);
     expect(authServer.body.scopes_supported).toContain('tableau:mcp:content:read');
-    expect(authServer.body.scopes_supported).toHaveLength(14);
+    expect(authServer.body.scopes_supported).toContain('tableau:mcp_site_settings:read');
+    expect(authServer.body.scopes_supported).toHaveLength(15);
   });
 
   it('should allow authenticated requests', async () => {

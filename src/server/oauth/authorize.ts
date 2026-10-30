@@ -21,7 +21,12 @@ import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  getAlwaysRequiredApiScopes,
+  getSupportedScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { ClientRegistration, PendingAuthorization } from './types.js';
 
 /**
@@ -131,12 +136,18 @@ export function authorize(
       return;
     }
 
-    const scopesToGrant =
+    const baseScopesToGrant =
       validScopes.length > 0
         ? validScopes
         : enforceScopes
           ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id })
           : [];
+    // Always grant the site-settings scope when MCP site settings are enabled, even with
+    // enforceScopes off: it keeps the grant non-empty (a delegated AS rejects an empty scope) and
+    // lets the server read the per-site security layer. See getAlwaysRequiredApiScopes.
+    const scopesToGrant = Array.from(
+      new Set([...baseScopesToGrant, ...getAlwaysRequiredApiScopes()]),
+    );
 
     // Redirect URI security enforcement for opaque client_ids (runs after baseline param
     // validation, before storing pending auth). The CIMD path enforces its own allowlist above.

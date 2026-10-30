@@ -12,7 +12,13 @@ import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
-import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  formatScopes,
+  getAlwaysRequiredApiScopes,
+  getSupportedScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 export const AUDIENCE = 'tableau-mcp-server';
@@ -151,7 +157,7 @@ export function token(
             return;
           }
 
-          const scopesToGrant =
+          const baseScopesToGrant =
             validScopes.length > 0
               ? validScopes
               : enforceScopes
@@ -160,6 +166,11 @@ export function token(
                     clientId: clientCredentialClientId,
                   })
                 : [];
+          // Always grant the site-settings scope when MCP site settings are enabled, even with
+          // enforceScopes off. See getAlwaysRequiredApiScopes.
+          const scopesToGrant = Array.from(
+            new Set([...baseScopesToGrant, ...getAlwaysRequiredApiScopes()]),
+          );
 
           // Generate access token for client credentials grant type.
           // Refresh token is not supported for client credentials grant type.

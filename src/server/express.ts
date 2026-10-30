@@ -141,7 +141,7 @@ export async function startExpressServer({
           server.mcpServer.close();
         });
 
-        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.auth?.scopes);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -165,7 +165,13 @@ export async function startExpressServer({
           });
 
           const server = new WebMcpServer({ clientInfo, capabilities, clientId });
-          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+          await connect(
+            server,
+            transport,
+            logLevel,
+            getTableauAuthInfo(req.auth),
+            req.auth?.scopes,
+          );
         } else {
           log({
             message: 'Rejected request: no valid session ID and not an initialize request',
@@ -211,8 +217,9 @@ async function connect(
   transport: StreamableHTTPServerTransport,
   logLevel: LoggingLevel,
   authInfo: TableauAuthInfo | undefined,
+  grantedScopes: ReadonlyArray<string> | undefined,
 ): Promise<void> {
-  await server.registerTools(authInfo);
+  await server.registerTools(authInfo, grantedScopes);
   server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
     setNotificationLevel(server.mcpServer, request.params.level);
     return {};
