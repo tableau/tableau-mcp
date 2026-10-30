@@ -7,9 +7,7 @@ import { getFeatureGate } from './init.js';
  * accepted). The env boolean is read first so the flag is not consulted when opted out via env.
  * This is the single source of the "both true" rule; every enforcement site calls it.
  */
-export async function isStrictScopeMatchEnabled(
-  config: Pick<Config, 'oauth'>,
-): Promise<boolean> {
+export async function isStrictScopeMatchEnabled(config: Pick<Config, 'oauth'>): Promise<boolean> {
   return (
     config.oauth.strictScopeMatch &&
     (await getFeatureGate().isFeatureEnabled('enforce-strict-scope-match'))

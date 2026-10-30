@@ -309,7 +309,9 @@ describe('authorization code flow', () => {
     it('rejects /authorize when the requested scopes omit the mandatory scope, site settings on, strict off', async () => {
       const { app } = await startServer();
 
-      const response = await request(app).get('/oauth2/authorize').query(authorizeQuery(SUBSET_SCOPE));
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('invalid_scope');
@@ -321,7 +323,9 @@ describe('authorization code flow', () => {
       mocks.strictFlag.value = true;
       const { app } = await startServer();
 
-      const response = await request(app).get('/oauth2/authorize').query(authorizeQuery(SUBSET_SCOPE));
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
 
       expect(response.status).toBe(302);
     });
@@ -330,7 +334,9 @@ describe('authorization code flow', () => {
       vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
       const { app } = await startServer();
 
-      const response = await request(app).get('/oauth2/authorize').query(authorizeQuery(SUBSET_SCOPE));
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
 
       expect(response.status).toBe(302);
     });
