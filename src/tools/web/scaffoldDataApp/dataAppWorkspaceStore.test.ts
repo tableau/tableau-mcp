@@ -33,6 +33,8 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
 
+const productVersion = { value: '2026.3.2', build: '20263.26.1027.1340' };
+
 const wiring = buildDatasourceWiringInfo({
   serverUrl: 'https://10ax.online.tableau.com',
   siteName: 'mcp-test',
@@ -64,6 +66,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Desktop Compatibility',
         allowedOrigins: [],
         wiring,
+        productVersion,
         config: getConfig(),
       });
 
@@ -81,7 +84,7 @@ describe('createDataAppWorkspace', () => {
 
       const workbook = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
       invariant(workbook);
-      expect.soft(workbook.getAttribute('source-build')).toEqual(expect.stringMatching(/\S/));
+      expect.soft(workbook.getAttribute('source-build')).toBe('2026.3.2 (20263.26.1027.1340)');
       const manifest = workbook.getElementsByTagName('document-format-change-manifest')[0];
       invariant(manifest);
       for (const declaration of ['Extensions', 'VizExtensions', '_.fcp.Packages.true...Packages']) {
@@ -94,6 +97,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
         config: getConfig(),
       });
 
@@ -111,7 +115,9 @@ describe('createDataAppWorkspace', () => {
 
       // Local mode returns the exact same plan S3 mode does - the client always unzips and finalizes.
       invariant(value.postUnzip);
-      expect(value.postUnzip).toEqual(buildPostUnzipPlan(deriveIdentity('Sales Demo')));
+      expect(value.postUnzip).toEqual(
+        buildPostUnzipPlan(deriveIdentity('Sales Demo'), productVersion),
+      );
       expect(value.postUnzip.renames).toContainEqual({
         from: 'Data App Name/Packages/TODO-MANIFEST-ID',
         to: 'Data App Name/Packages/com.tableau.mcp.sales-demo',
@@ -240,6 +246,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
         config: getConfig(),
       });
 
@@ -275,7 +282,13 @@ describe('createDataAppWorkspace', () => {
       expect(mocks.getSignedUrl).toHaveBeenCalledTimes(1);
 
       invariant(value.postUnzip);
-      expect(value.postUnzip.edits.length).toBeGreaterThan(0);
+      const workbookEdit = value.postUnzip.edits.find(
+        ({ file }) => file === 'Data App Name/Data App Name.twb',
+      );
+      expect(workbookEdit?.replacements).toContainEqual({
+        find: 'TODO-SOURCE-BUILD',
+        replace: '2026.3.2 (20263.26.1027.1340)',
+      });
       expect(value.postUnzip.renames).toContainEqual({
         from: 'Data App Name',
         to: 'Sales Demo',
@@ -289,6 +302,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
         config: getConfig(),
       });
 
@@ -305,6 +319,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
         config: getConfig(),
       });
 
