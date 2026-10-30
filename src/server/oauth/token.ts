@@ -5,6 +5,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
+import { isStrictScopeMatchEnabled } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
@@ -12,7 +13,13 @@ import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
-import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  formatScopes,
+  getSupportedScopes,
+  MCP_SITE_SETTINGS_READ_SCOPE,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 export const AUDIENCE = 'tableau-mcp-server';
@@ -108,7 +115,9 @@ export function token(
             return;
           }
 
-          // Generate tokens
+          // Generate tokens. No mandatory-scope guard here: this branch replays authCode.scopes
+          // verbatim, and authorize.ts already refused to freeze a grant missing the mandatory
+          // site-settings scope under subset mode, so the replay is safe by construction.
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
           await refreshTokens.set(refreshTokenId, {
@@ -160,6 +169,23 @@ export function token(
                     clientId: clientCredentialClientId,
                   })
                 : [];
+
+          // Mandatory site-settings scope under subset (non-strict) matching: this branch
+          // re-validates requested scopes, so a client_credentials grant that omits
+          // tableau:mcp_site_settings:read while MCP site settings are enabled must be refused here.
+          // Mirrors the connection gate (authMiddleware) and the auth-code guard (authorize.ts).
+          if (
+            enforceScopes &&
+            !(await isStrictScopeMatchEnabled(config)) &&
+            config.enableMcpSiteSettings &&
+            !scopesToGrant.includes(MCP_SITE_SETTINGS_READ_SCOPE)
+          ) {
+            res.status(400).json({
+              error: 'invalid_scope',
+              error_description: `${MCP_SITE_SETTINGS_READ_SCOPE} is required when MCP site settings are enabled`,
+            });
+            return;
+          }
 
           // Generate access token for client credentials grant type.
           // Refresh token is not supported for client credentials grant type.

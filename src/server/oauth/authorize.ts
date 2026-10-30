@@ -6,6 +6,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
+import { isStrictScopeMatchEnabled } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
@@ -21,7 +22,12 @@ import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  getSupportedScopes,
+  MCP_SITE_SETTINGS_READ_SCOPE,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { ClientRegistration, PendingAuthorization } from './types.js';
 
 /**
@@ -137,6 +143,25 @@ export function authorize(
         : enforceScopes
           ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id })
           : [];
+
+    // Mandatory site-settings scope under subset (non-strict) matching: when MCP site settings are
+    // enabled, a minted grant that omits tableau:mcp_site_settings:read cannot read the per-site
+    // security layer, so refuse to freeze it here. Freezing happens at the pending-auth .set below
+    // and the token.ts auth-code branch replays it verbatim, so this is the only place to stop a
+    // bad auth-code grant. Mirrors the connection gate (authMiddleware) and the client_credentials
+    // guard (token.ts); strict mode keeps the full set, which already includes this scope.
+    if (
+      enforceScopes &&
+      !(await isStrictScopeMatchEnabled(config)) &&
+      config.enableMcpSiteSettings &&
+      !scopesToGrant.includes(MCP_SITE_SETTINGS_READ_SCOPE)
+    ) {
+      res.status(400).json({
+        error: 'invalid_scope',
+        error_description: `${MCP_SITE_SETTINGS_READ_SCOPE} is required when MCP site settings are enabled`,
+      });
+      return;
+    }
 
     // Redirect URI security enforcement for opaque client_ids (runs after baseline param
     // validation, before storing pending auth). The CIMD path enforces its own allowlist above.

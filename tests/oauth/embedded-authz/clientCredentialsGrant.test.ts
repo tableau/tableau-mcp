@@ -8,11 +8,33 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
+  // Lets a test force the strict-scope-match flag on; otherwise delegates to the real gate.
+  strictFlag: { value: false },
 }));
 
 vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
+
+// Override the feature gate for this file so the strict-scope-match flag is controllable per-test.
+// Composes with the shared testSetup mock (admin-tools forcing lives there); this file's mock wins.
+vi.mock('../../../src/features/init.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/features/init.js')>();
+  return {
+    ...original,
+    getFeatureGate: () => {
+      const featureGate = original.getFeatureGate();
+      return {
+        isFeatureEnabled: async (featureName: string) => {
+          if (featureName === 'enforce-strict-scope-match') {
+            return mocks.strictFlag.value;
+          }
+          return featureName === 'admin-tools' || featureGate.isFeatureEnabled(featureName);
+        },
+      };
+    },
+  };
+});
 
 describe('client credentials grant type', () => {
   let _server: http.Server | undefined;
@@ -139,6 +161,69 @@ describe('client credentials grant type', () => {
     expect(response.body).toEqual({
       error: 'invalid_client',
       error_description: 'Invalid client credentials',
+    });
+  });
+
+  describe('mandatory site-settings scope under subset matching', () => {
+    const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
+    // A supported MCP scope that is NOT the mandatory scope, so a grant of just this omits it.
+    const SUBSET_SCOPE = 'tableau:mcp:datasource:read';
+
+    beforeEach(() => {
+      // enforceScopes on; the suite default is OAUTH_DISABLE_SCOPES=true (enforcement off).
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+      mocks.strictFlag.value = false;
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      mocks.strictFlag.value = false;
+    });
+
+    it('rejects a client_credentials grant that omits the mandatory scope when site settings are on and strict is off', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+        scope: SUBSET_SCOPE,
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('invalid_scope');
+      expect(response.body.error_description).toContain(MANDATORY_SCOPE);
+    });
+
+    it('mints the token when strict scope match is on (env var + flag), even for the same subset', async () => {
+      vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+      mocks.strictFlag.value = true;
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+        scope: SUBSET_SCOPE,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.access_token).toEqual(expect.any(String));
+    });
+
+    it('mints the token when MCP site settings are disabled, even for a subset omitting the mandatory scope', async () => {
+      vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+        scope: SUBSET_SCOPE,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.access_token).toEqual(expect.any(String));
     });
   });
 });
