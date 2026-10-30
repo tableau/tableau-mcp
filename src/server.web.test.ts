@@ -507,6 +507,56 @@ describe('server', () => {
       expect(registered).toContain('query-datasource');
     });
 
+    it('omits nothing when enforceScopes is off, even for a non-empty grant with no MCP scopes', async () => {
+      // enforceScopes off: the operator opted out of scope-based access control, so the grant is not
+      // an authoritative authorization signal. A caller can still present a non-empty grant that carries
+      // only API scopes and no MCP scopes (here, just tableau:mcp_site_settings:read) — which must NOT
+      // omit every tool. The MCP check passes because requiredMcpScopes is [] when enforcement is off
+      // (getRequiredMcpScopesForTool); the API check is gated off explicitly. Mirrors request-time
+      // enforcement (authMiddleware).
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      await server.registerTools(bearerAuth, ['tableau:mcp_site_settings:read']);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+    });
+
+    it('omits nothing and adds no missing-scopes note under strict scope match with a full grant', async () => {
+      // Strict ON guarantees a full grant upstream (the gate rejects anything short), so discovery
+      // omits nothing. server.web.ts has no strict branch — this pins that a full grant produces an
+      // empty omission set and no MISSING_SCOPES_NOTE, regardless of the strict toggle.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (name: string) => name === 'enforce-strict-scope-match',
+      );
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('list-datasources'),
+        ...allScopes('query-datasource'),
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+      expect(getInstructions(server)).not.toContain('was not granted the scopes');
+    });
+
+    it('omits unusable tools and adds the missing-scopes note under non-strict with a subset grant', async () => {
+      // Strict OFF (default): a subset grant is accepted and discovery degrades gracefully — the tool
+      // the grant cannot cover is omitted and the note is pushed. This is the existing behavior the
+      // subset mode relies on; pinned here as a regression against the strict toggle.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      // Covers list-datasources fully but not query-datasource's extra viz_data_service:read scope.
+      await server.registerTools(bearerAuth, allScopes('list-datasources'));
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).not.toContain('query-datasource');
+      expect(getInstructions(server)).toContain('was not granted the scopes');
+    });
+
     it('still enforces MCP scopes but not API scopes when API scopes are not advertised', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
       const server = getServer();

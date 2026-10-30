@@ -505,10 +505,18 @@ export class WebMcpServer extends Server {
     // granted (its REST calls would 403). An explicit, non-empty scope grant means we can tell what the
     // caller is authorized for; an absent or empty list means the grant is unknown (PAT, stdio,
     // X-Tableau-Auth passthrough, which carries scopes:[]) — assume full access and omit nothing.
-    // MCP scopes are always part of the grant model; API scopes only when advertised.
+    // With enforceScopes off the operator opted out of scope-based access control, so the grant isn't
+    // authoritative — a caller can still present a non-empty grant that carries only API scopes and no
+    // MCP scopes (e.g. requesting just tableau:mcp_site_settings:read), which must not omit every tool.
+    // requiredMcpScopes already handles this: getRequiredMcpScopesForTool returns [] when enforcement is
+    // off, so an empty set never omits and the MCP check needs no separate gate. requiredApiScopes does
+    // NOT self-gate, so gate the API check explicitly to mirror request-time, which only enforces API
+    // scopes when enforceScopes AND advertiseApiScopes are on (see authMiddleware) — otherwise that
+    // API-only grant would omit every tool on its API scopes.
     const hasExplicitScopeGrant = grantedScopes !== undefined && grantedScopes.length > 0;
     const checkMcpScopes = hasExplicitScopeGrant;
-    const checkApiScopes = hasExplicitScopeGrant && config.oauth.advertiseApiScopes;
+    const checkApiScopes =
+      hasExplicitScopeGrant && config.oauth.enforceScopes && config.oauth.advertiseApiScopes;
     // Condition-probe scopes are only advertised when conditions are enforced (see getSupportedApiScopes),
     // so only hold the caller to them in that same mode — otherwise we'd omit every conditional tool for a
     // scope that was never offered. Omitting here (over letting the probe run) keeps the message honest: a
