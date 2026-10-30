@@ -11,6 +11,7 @@ import { Ok, Result } from 'ts-results-es';
 import { Config } from '../../../config.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
+import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
@@ -18,7 +19,6 @@ import { DatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
-  DataAppIdentity,
   deriveIdentity,
   PostUnzipPlan,
   RequestedOriginsGuide,
@@ -124,16 +124,25 @@ export const exportedForTesting = {
 
 export async function createDataAppWorkspace({
   datappName,
+  productVersion,
   allowedOrigins,
   wiring,
   config,
 }: {
   datappName: string;
+  productVersion: ProductVersion;
   allowedOrigins: string[];
   wiring: DatasourceWiringInfo;
   config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
+  const workspace: DataAppWorkspaceResult = {
+    datappName,
+    allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
+    wiring,
+    postUnzip: buildPostUnzipPlan(identity, productVersion),
+  };
 
   // Both output modes serve the same static, un-substituted template zip — the artifact built at
   // `npm run build` time, resolved on disk or, inside a SEA, from the embedded asset. If it isn't
@@ -147,10 +156,7 @@ export async function createDataAppWorkspace({
 
   if (config.bucketS3.enabled) {
     return await createS3Workspace({
-      datappName,
-      allowedOrigins,
-      wiring,
-      identity,
+      workspace,
       config,
       source,
     });
@@ -164,21 +170,15 @@ export async function createDataAppWorkspace({
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
-  return createLocalWorkspace({ datappName, allowedOrigins, wiring, identity, zipPath });
+  return new Ok({ ...workspace, filePath: zipPath });
 }
 
 async function createS3Workspace({
-  datappName,
-  allowedOrigins,
-  wiring,
-  identity,
+  workspace,
   config,
   source,
 }: {
-  datappName: string;
-  allowedOrigins: string[];
-  wiring: DatasourceWiringInfo;
-  identity: DataAppIdentity;
+  workspace: DataAppWorkspaceResult;
   config: Config;
   source: TemplateSource;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
@@ -208,38 +208,5 @@ async function createS3Workspace({
     ).toErr();
   }
 
-  return new Ok({
-    datappName,
-    allowedOrigins,
-    requestedOrigins: buildRequestedOriginsGuide(identity),
-    wiring,
-    s3URL,
-    postUnzip: buildPostUnzipPlan(identity),
-  });
-}
-
-function createLocalWorkspace({
-  datappName,
-  allowedOrigins,
-  wiring,
-  identity,
-  zipPath,
-}: {
-  datappName: string;
-  allowedOrigins: string[];
-  wiring: DatasourceWiringInfo;
-  identity: DataAppIdentity;
-  zipPath: string;
-}): Result<DataAppWorkspaceResult, McpToolError> {
-  // Local mode serves the same static, un-substituted template zip as S3 mode — just from the
-  // local filesystem instead of a presigned URL. Nothing is written per call, so nothing can
-  // collide; the client unzips and applies the same `postUnzip` plan to finalize.
-  return new Ok({
-    datappName,
-    allowedOrigins,
-    requestedOrigins: buildRequestedOriginsGuide(identity),
-    wiring,
-    filePath: zipPath,
-    postUnzip: buildPostUnzipPlan(identity),
-  });
+  return new Ok({ ...workspace, s3URL });
 }
