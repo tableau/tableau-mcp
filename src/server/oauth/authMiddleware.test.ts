@@ -6,7 +6,11 @@ import { stubDefaultEnvVars } from '../../testShared.js';
 import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
 import { AccessTokenValidator, ExternalAccessTokenValidator } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
-import { getSupportedScopes, PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from './scopes.js';
+import {
+  getSupportedMcpScopes,
+  getSupportedScopes,
+  PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
+} from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
 const mocks = vi.hoisted(() => ({
@@ -112,9 +116,12 @@ describe('scaffold-data-app required API scope', () => {
     vi.unstubAllEnvs();
   });
 
+  // Both tokens carry the mandatory site-settings scope so the only variable under test is
+  // scaffold-data-app's per-tool API scope (tableau:packages:read) — not the orthogonal
+  // mandatory-scope rule that subset mode applies to every grant when site settings are on.
   it.each([
-    [[], false],
-    [['tableau:packages:read'], true],
+    [['tableau:mcp_site_settings:read'], false],
+    [['tableau:packages:read', 'tableau:mcp_site_settings:read'], true],
   ])('checks packages:read on a valid token with scopes %j', async (scopes, authorized) => {
     const authInfo = { scopes, clientId: 'test-client' };
     const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
@@ -141,19 +148,25 @@ describe('scaffold-data-app required API scope', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(403);
       expect(res.body.error).toBe('insufficient_scope');
-      expect(res.headers['WWW-Authenticate']).toContain('scope="tableau:packages:read"');
+      expect(res.headers['WWW-Authenticate']).toContain('tableau:packages:read');
     }
   });
 });
 
 describe('initialize with optional post-publish permission disclosure', () => {
+  // Demanding the full supported API set at initialize is strict-mode behavior; under subset mode
+  // initialize demands no full set. This test pins the strict-mode contract (full set enforced,
+  // optional post-publish scope still excluded), so run it with strict scope match on.
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+    vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
-    mocks.isFeatureEnabled.mockImplementation(async (flag: string) => flag === 'data-apps');
+    mocks.isFeatureEnabled.mockImplementation(
+      async (flag: string) => flag === 'data-apps' || flag === 'enforce-strict-scope-match',
+    );
   });
 
   afterEach(() => {
@@ -232,9 +245,12 @@ describe('external authorization server token scopes', () => {
     stubDefaultEnvVars();
   });
 
+  // Both tokens carry the mandatory site-settings scope so the only variable under test is
+  // list-datasources' required MCP scope (tableau:mcp:datasource:read), not the orthogonal
+  // mandatory-scope rule subset mode applies to every grant when site settings are on.
   it.each([
-    [['openid', 'profile'], false],
-    [['openid', 'tableau:mcp:datasource:read'], true],
+    [['openid', 'profile', 'tableau:mcp_site_settings:read'], false],
+    [['openid', 'tableau:mcp:datasource:read', 'tableau:mcp_site_settings:read'], true],
   ])(
     'checks tableau:mcp:datasource:read on an external token with scopes %j',
     async (scopes, authorized) => {
@@ -280,7 +296,7 @@ describe('external authorization server token scopes', () => {
         expect(next).not.toHaveBeenCalled();
         expect(res.statusCode).toBe(403);
         expect(res.body.error).toBe('insufficient_scope');
-        expect(res.headers['WWW-Authenticate']).toContain('scope="tableau:mcp:datasource:read"');
+        expect(res.headers['WWW-Authenticate']).toContain('tableau:mcp:datasource:read');
       }
     },
   );
@@ -387,5 +403,177 @@ describe('external OIDC ID tokens', () => {
       `Invalid or expired access token. ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
     );
     expect(JSON.stringify({ body: res.body, headers: res.headers })).not.toMatch(/audience/i);
+  });
+});
+
+describe('strict vs. subset scope matching', () => {
+  const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
+  const clientId = 'test-client';
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false'); // enforceScopes on
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+  });
+
+  // Strict mode requires BOTH the env var and the feature flag. Turn both on.
+  function enableStrict(): void {
+    vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+    mocks.isFeatureEnabled.mockImplementation(
+      async (flag: string) => flag === 'enforce-strict-scope-match',
+    );
+  }
+
+  // A proper subset of the supported MCP scopes: the full set minus its first scope.
+  async function mcpSubset(): Promise<string[]> {
+    const supported = await getSupportedMcpScopes(clientId);
+    expect(supported.length).toBeGreaterThan(1);
+    return supported.slice(1);
+  }
+
+  function initializeReq(scopes: string[]): {
+    req: AuthenticatedRequest;
+    res: any;
+    next: ReturnType<typeof vi.fn>;
+    authInfo: { scopes: string[]; clientId: string };
+    middleware: ReturnType<typeof authMiddleware>;
+  } {
+    const authInfo = { scopes, clientId };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+        },
+      },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+    return { req, res, next, authInfo, middleware };
+  }
+
+  it('rejects a subset token at initialize when strict scope match is enabled', async () => {
+    enableStrict();
+    const { req, res, next, middleware } = initializeReq([...(await mcpSubset()), MANDATORY_SCOPE]);
+
+    await middleware(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe('insufficient_scope');
+  });
+
+  it('accepts a subset token at initialize when strict scope match is disabled', async () => {
+    // strict off (env unset); site settings on by default, so include the mandatory scope.
+    const { req, res, next, authInfo, middleware } = initializeReq([
+      ...(await mcpSubset()),
+      MANDATORY_SCOPE,
+    ]);
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.auth).toEqual(authInfo);
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it.each([
+    ['advertiseApiScopes off', 'false'],
+    ['advertiseApiScopes on', 'true'],
+  ])(
+    'rejects a subset token missing the mandatory scope when site settings are enabled (%s)',
+    async (_label, advertise) => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', advertise);
+      // strict off; site settings on by default; token omits the mandatory scope.
+      const { req, res, next, middleware } = initializeReq(await mcpSubset());
+
+      await middleware(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('insufficient_scope');
+      expect(res.headers['WWW-Authenticate']).toContain(MANDATORY_SCOPE);
+    },
+  );
+
+  it('accepts a subset token without the mandatory scope when site settings are disabled', async () => {
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
+    const { req, res, next, authInfo, middleware } = initializeReq(await mcpSubset()); // no mandatory scope
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.auth).toEqual(authInfo);
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it('requires only the mandatory scope for a non-tool request under non-strict (not the full set)', async () => {
+    // A tools/list body is not a CallToolRequest, so no tool name is resolved.
+    // Under non-strict this must relax to the mandatory scope only — a token with just the
+    // mandatory scope (no MCP scopes at all) is accepted, proving the full set is not demanded.
+    const scopes = [MANDATORY_SCOPE];
+    const authInfo = { scopes, clientId };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.auth).toEqual(authInfo);
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it('rejects a non-tool request missing the mandatory scope under non-strict when site settings are enabled', async () => {
+    const scopes: string[] = []; // neither mandatory nor any MCP scope
+    const authInfo = { scopes, clientId };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.headers['WWW-Authenticate']).toContain(MANDATORY_SCOPE);
+  });
+
+  it('does not enforce scopes at all when enforceScopes is off even if strict is configured', async () => {
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true'); // enforceScopes off
+    enableStrict(); // strict configured, but must be inert while enforcement is off
+    const scopes: string[] = []; // empty grant
+    const authInfo = { scopes, clientId };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const { req, res, next } = initializeReq(scopes);
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.auth).toEqual(authInfo);
+    expect(res.statusCode).toBeUndefined();
   });
 });
