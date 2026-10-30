@@ -7,6 +7,7 @@ import { ErrorCode, InitializeRequest, McpError } from '@modelcontextprotocol/sd
 import { existsSync, readFileSync } from 'fs';
 
 import { getFeatureGate } from './features/init.js';
+import { MAX_TOOL_INPUT_ELEMENTS } from './maxToolInputElements.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import invariant from './utils/invariant.js';
@@ -86,7 +87,7 @@ export abstract class Server {
             prompts: {},
           },
           ...(instructions ? { instructions } : {}),
-          maxToolInputElements: 2_100,
+          maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS,
         },
       );
 

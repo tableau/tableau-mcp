@@ -132,6 +132,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { MAX_TOOL_INPUT_ELEMENTS } from './maxToolInputElements.js';
 import { connectSessionStore } from './sessionStore/init.js';
 
 function deferred<T>(): {
@@ -194,6 +195,7 @@ describe('combined entrypoint startup', () => {
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
     expect(vi.mocked(McpServer).mock.calls[0][1]).toMatchObject({
       instructions: 'web instructions desktop instructions',
+      maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS,
     });
   });
 

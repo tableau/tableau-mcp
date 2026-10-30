@@ -11,6 +11,7 @@ import { buildCombinedInstructions } from './instructions.combined.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
+import { MAX_TOOL_INPUT_ELEMENTS } from './maxToolInputElements.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { WebMcpServer } from './server.web.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
@@ -59,7 +60,7 @@ async function startServer(): Promise<void> {
         tools: {},
       },
       instructions,
-      maxToolInputElements: 2_100,
+      maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS,
     },
   );
 

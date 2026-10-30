@@ -50,6 +50,35 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     });
   });
 
+  it('should bound metricDefinitionIds at 2,000 ids', async () => {
+    const listPulseMetricDefinitionsFromDefinitionIdsTool =
+      getListPulseMetricDefinitionsFromDefinitionIdsTool(new WebMcpServer());
+    const { metricDefinitionIds } = await Provider.from(
+      listPulseMetricDefinitionsFromDefinitionIdsTool.paramsSchema,
+    );
+    const ids = (count: number): string[] =>
+      Array.from(
+        { length: count },
+        (_, index) => `00000000-0000-0000-0000-${String(index).padStart(12, '0')}`,
+      );
+
+    expect(metricDefinitionIds.safeParse(ids(2000)).success).toBe(true);
+
+    const tooMany = metricDefinitionIds.safeParse(ids(2001));
+    expect(tooMany.success).toBe(false);
+    invariant(!tooMany.success);
+    expect(tooMany.error.issues).toContainEqual(
+      expect.objectContaining({ code: 'too_big', maximum: 2000, path: [] }),
+    );
+
+    const none = metricDefinitionIds.safeParse([]);
+    expect(none.success).toBe(false);
+    invariant(!none.success);
+    expect(none.error.issues).toContainEqual(
+      expect.objectContaining({ code: 'too_small', minimum: 1, path: [] }),
+    );
+  });
+
   it.each<{
     view: 'DEFINITION_VIEW_BASIC' | 'DEFINITION_VIEW_FULL' | 'DEFINITION_VIEW_DEFAULT';
     label: string;
