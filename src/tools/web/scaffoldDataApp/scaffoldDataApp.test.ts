@@ -211,6 +211,26 @@ describe('getScaffoldDataAppTool', () => {
       );
     });
 
+    it('includes the server version and build in the workbook replacement plan', async () => {
+      const callback = await Provider.from(
+        makeTool({
+          value: '2026.3.2',
+          build: '20263.26.1027.1340',
+        }).callback,
+      );
+      const result = await callback({ datappName: 'Sales Demo' }, getMockRequestHandlerExtra());
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      const edit = payload.postUnzip.edits.find(
+        ({ file }: { file: string }) => file === 'Data App Name/Data App Name.twb',
+      );
+      expect(edit.replacements).toContainEqual({
+        find: 'TODO-SOURCE-BUILD',
+        replace: '2026.3.2 (20263.26.1027.1340)',
+      });
+    });
+
     it('returns wiring for the configured server and the session site', async () => {
       const result = await invokeCallback('Sales Demo');
       expect(result.isError).toBeFalsy();

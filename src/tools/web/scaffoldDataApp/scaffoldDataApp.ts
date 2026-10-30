@@ -77,6 +77,7 @@ export const getScaffoldDataAppTool = (
 
           return await createDataAppWorkspace({
             datappName,
+            productVersion,
             allowedOrigins,
             wiring,
             config: extra.config,
