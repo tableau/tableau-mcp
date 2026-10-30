@@ -1,6 +1,7 @@
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
 import { splitTopLevel } from '../../../utils/parseAndValidateFilterString.js';
 
 /** Typed convenience input for the existing list tools' documented tags:eq / tags:in filters. */
@@ -49,14 +50,17 @@ export const contentTagSearchDescription =
  * implements OR, and repeated tags fields are last-one-wins, never an implicit all-tags AND.
  * Reserved cleanup labels may be searched: only generic mutations reserve their namespace.
  */
-export function withContentTagFilter(filter?: string, tagLabels?: string[]): string | undefined {
-  if (tagLabels === undefined) return filter;
+export function withContentTagFilter(
+  filter?: string,
+  tagLabels?: string[],
+): Result<string | undefined, McpToolError> {
+  if (tagLabels === undefined) return new Ok(filter);
   const parsed = contentTagSearchLabelsSchema.safeParse(tagLabels);
-  if (!parsed.success) throw new ArgsValidationError(parsed.error.message);
+  if (!parsed.success) return new ArgsValidationError(parsed.error.message).toErr();
   if (filter && splitTopLevel(filter, ',').some((expr) => expr.trim().split(':')[0] === 'tags')) {
-    throw new ArgsValidationError('Use tagLabels or a tags clause in filter, not both.');
+    return new ArgsValidationError('Use tagLabels or a tags clause in filter, not both.').toErr();
   }
   const labels = [...new Set(parsed.data)];
   const tagFilter = labels.length === 1 ? `tags:eq:${labels[0]}` : `tags:in:[${labels.join(',')}]`;
-  return filter?.trim() ? `${filter},${tagFilter}` : tagFilter;
+  return new Ok(filter?.trim() ? `${filter},${tagFilter}` : tagFilter);
 }

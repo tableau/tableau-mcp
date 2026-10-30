@@ -131,8 +131,9 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
         args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
           const combinedFilter = withContentTagFilter(filter, tagLabels);
-          const validatedFilter = combinedFilter
-            ? parseAndValidateViewsFilterString(combinedFilter)
+          if (combinedFilter.isErr()) return combinedFilter;
+          const validatedFilter = combinedFilter.value
+            ? parseAndValidateViewsFilterString(combinedFilter.value)
             : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,

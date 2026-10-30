@@ -126,8 +126,9 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
         args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
           const combinedFilter = withContentTagFilter(filter, tagLabels);
-          const validatedFilter = combinedFilter
-            ? parseAndValidateWorkbooksFilterString(combinedFilter)
+          if (combinedFilter.isErr()) return combinedFilter;
+          const validatedFilter = combinedFilter.value
+            ? parseAndValidateWorkbooksFilterString(combinedFilter.value)
             : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,

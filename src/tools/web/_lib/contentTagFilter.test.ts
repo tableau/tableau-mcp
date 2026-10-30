@@ -1,3 +1,5 @@
+import { Ok } from 'ts-results-es';
+
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { parseAndValidateDatasourcesFilterString } from '../datasources/datasourcesFilterUtils.js';
 import { parseAndValidateViewsFilterString } from '../views/viewsFilterUtils.js';
@@ -16,7 +18,9 @@ describe('content tag discovery filters', () => {
     ['projectName:eq:Finance', ['Sales'], 'projectName:eq:Finance,tags:eq:Sales'],
     ['', ['pending-deletion-2026-10-14'], 'tags:eq:pending-deletion-2026-10-14'],
   ] as const)('builds a decoded native filter for %j / %j', (filter, labels, expected) => {
-    expect(withContentTagFilter(filter, labels ? [...labels] : undefined)).toBe(expected);
+    expect(withContentTagFilter(filter, labels ? [...labels] : undefined)).toEqual(
+      new Ok(expected),
+    );
   });
 
   it.each(
@@ -42,13 +46,17 @@ describe('content tag discovery filters', () => {
       Array.from({ length: 51 }, (_, i) => `label${i}`),
     ].map((labels) => ({ labels })),
   )('rejects unrepresentable or over-cap labels $labels', ({ labels }) => {
-    expect(() => withContentTagFilter(undefined, labels)).toThrow(ArgsValidationError);
+    expect(withContentTagFilter(undefined, labels).unwrapErr()).toBeInstanceOf(ArgsValidationError);
   });
 
   it.each(['tags:eq:Old', 'tags:in:[Old,Older]', 'projectName:eq:Finance,tags:eq:Old'])(
     'rejects conflicting raw tags clause %s',
     (filter) => {
-      expect(() => withContentTagFilter(filter, ['Sales'])).toThrow('not both');
+      const result = withContentTagFilter(filter, ['Sales']);
+      expect(result.unwrapErr()).toBeInstanceOf(ArgsValidationError);
+      expect(result.unwrapErr().getErrorText()).toBe(
+        'Use tagLabels or a tags clause in filter, not both.',
+      );
     },
   );
 

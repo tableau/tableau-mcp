@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { OverridableConfig } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -103,6 +104,38 @@ describe('listWorkbooksTool', () => {
         expect.objectContaining({ filter: 'projectName:eq:Finance,tags:eq:Sales' }),
       );
     });
+
+    it('returns exact tag-clause conflict guidance before REST', async () => {
+      const result = await getToolResult({ filter: 'tags:eq:Old', tagLabels: ['Sales'] });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: 'text', text: 'Use tagLabels or a tags clause in filter, not both.' },
+      ]);
+      expect(mocks.mockQueryWorkbooksForSite).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { labels: ['A,B'], filter: undefined },
+      { labels: ['Sales'], filter: 'tags:eq:Old' },
+    ])(
+      'renders expected tag-input guidance through getErrorText for $labels / $filter',
+      async ({ labels, filter }) => {
+        const render = vi
+          .spyOn(ArgsValidationError.prototype, 'getErrorText')
+          .mockReturnValue('Curated tag-search input guidance');
+        try {
+          const result = await getToolResult({ filter, tagLabels: labels });
+          expect(result.isError).toBe(true);
+          expect(result.content).toEqual([
+            { type: 'text', text: 'Curated tag-search input guidance' },
+          ]);
+          expect(render).toHaveBeenCalledOnce();
+          expect(mocks.mockQueryWorkbooksForSite).not.toHaveBeenCalled();
+        } finally {
+          render.mockRestore();
+        }
+      },
+    );
 
     it.each([
       { labels: ['A,B'], filter: undefined },

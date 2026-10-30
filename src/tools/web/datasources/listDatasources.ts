@@ -133,8 +133,9 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
         args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
           const combinedFilter = withContentTagFilter(filter, tagLabels);
-          const validatedFilter = combinedFilter
-            ? parseAndValidateDatasourcesFilterString(combinedFilter)
+          if (combinedFilter.isErr()) return combinedFilter;
+          const validatedFilter = combinedFilter.value
+            ? parseAndValidateDatasourcesFilterString(combinedFilter.value)
             : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,
