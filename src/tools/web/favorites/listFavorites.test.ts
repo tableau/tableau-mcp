@@ -104,7 +104,7 @@ describe('list-favorites', () => {
     const schema = await Provider.from(tool.paramsSchema);
     expect(Object.keys(schema)).toEqual(['pageNumber', 'limit']);
     expect(schema.pageNumber.safeParse(0).success).toBe(false);
-    expect(schema.limit.safeParse(1001).success).toBe(false);
+    expect(schema.limit.safeParse(101).success).toBe(false);
   });
 
   it('reads only self, projects output fields, and makes completeness unknown without metadata', async () => {
@@ -119,7 +119,7 @@ describe('list-favorites', () => {
     expect(mocks.queryFavorites).toHaveBeenCalledWith({
       siteId,
       userId,
-      pageSize: 1000,
+      pageSize: 100,
       pageNumber: 1,
     });
     expect(payload(result)).toMatchObject({
@@ -139,7 +139,7 @@ describe('list-favorites', () => {
     mocks.queryFavorites.mockResolvedValue({
       favorites: [{ resourceType: 'workbook', resourceId, label: 'Private favorite' }],
       rawCount: 1,
-      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 1001 },
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 101 },
     });
     const result = await invoke();
     expect(payload(result)).toMatchObject({ favorites: [], hasMore: true, nextPageNumber: 2 });
@@ -152,7 +152,7 @@ describe('list-favorites', () => {
     mocks.queryFavorites.mockResolvedValue({
       favorites: [],
       rawCount: 0,
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 0 },
+      pagination: { pageNumber: 1, pageSize: 99, totalAvailable: 0 },
     });
     expect(payload(await invoke({ pageNumber: 2 }))).toMatchObject({ hasMore: null });
   });
@@ -161,7 +161,7 @@ describe('list-favorites', () => {
     mocks.queryFavorites.mockResolvedValue({
       favorites: [],
       rawCount: 0,
-      pagination: { pageNumber: 2, pageSize: 1000, totalAvailable: 1000 },
+      pagination: { pageNumber: 2, pageSize: 100, totalAvailable: 100 },
     });
     expect(payload(await invoke({ pageNumber: 2 }))).toMatchObject({
       favorites: [],
@@ -188,8 +188,36 @@ describe('list-favorites', () => {
     ]);
   });
 
+  it('rejects an oversized server page before running per-resource authorization checks', async () => {
+    mocks.queryFavorites.mockImplementation(async (args) => {
+      const methods = new FavoritesMethods(
+        'https://tableau.test/api/3.29',
+        { type: 'Bearer', token: 'fixture' },
+        {
+          adapter: async (config) => ({
+            config,
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/json' },
+            data: {
+              favorites: {
+                favorite: Array.from({ length: 101 }, () => ({
+                  label: 'Bounded',
+                  workbook: { id: resourceId },
+                })),
+              },
+            },
+          }),
+        },
+      );
+      return await methods.queryFavorites(args);
+    });
+    expect((await invoke()).isError).toBe(true);
+    expect(mocks.resourceAllowed).not.toHaveBeenCalled();
+  });
+
   it('respects the configured page ceiling before issuing a favorites read', async () => {
-    const config = new OverridableConfig({ MAX_RESULT_LIMIT: '1000' });
+    const config = new OverridableConfig({ MAX_RESULT_LIMIT: '100' });
     expect((await invoke({ pageNumber: 2 }, config)).isError).toBe(true);
     expect(mocks.queryFavorites).not.toHaveBeenCalled();
   });

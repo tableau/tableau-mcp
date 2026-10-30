@@ -6,27 +6,31 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { Favorite } from '../../../sdks/tableau/types/favorite.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { WebTool } from '../tool.js';
-import { createFavoriteAccessChecker, getAuthenticatedFavoriteUserId } from './favoriteUtils.js';
+import {
+  createFavoriteAccessChecker,
+  FAVORITES_PAGE_SIZE,
+  getAuthenticatedFavoriteUserId,
+} from './favoriteUtils.js';
 
 const paramsSchema = {
   pageNumber: z
     .number()
     .int()
     .positive()
+    .max(2147483647)
     .optional()
     .describe(
-      'The 1-based favorites page to fetch, default 1. Each server page has up to 1000 entries.',
+      `The 1-based favorites page to fetch, default 1. Each page has up to ${FAVORITES_PAGE_SIZE} entries.`,
     ),
   limit: z
     .number()
     .int()
     .positive()
-    .max(MAX_PAGE_SIZE)
+    .max(FAVORITES_PAGE_SIZE)
     .optional()
     .describe(
-      'Maximum allowed favorites to return from this page, at most 1000. Filtering may make a page shorter.',
+      `Maximum allowed favorites to return from this page, at most ${FAVORITES_PAGE_SIZE}. Filtering may make a page shorter.`,
     ),
 };
 
@@ -60,8 +64,11 @@ export const getListFavoritesTool = (server: WebMcpServer): WebTool<typeof param
         callback: async () => {
           const config = await extra.getConfigWithOverrides();
           const maxResultLimit = config.getMaxResultLimit(tool.name);
-          const pageError = getPageExceedsLimitMessage({ pageNumber, maxResultLimit });
-          if (pageError) return new PageExceedsLimitError(pageError).toErr();
+          const offset = (pageNumber - 1) * FAVORITES_PAGE_SIZE;
+          if (maxResultLimit !== null && offset >= maxResultLimit)
+            return new PageExceedsLimitError(
+              `The requested favorites page exceeds the configured result limit. Pages contain at most ${FAVORITES_PAGE_SIZE} entries.`,
+            ).toErr();
           return new Ok(
             await useRestApi({
               ...extra,
@@ -72,15 +79,16 @@ export const getListFavoritesTool = (server: WebMcpServer): WebTool<typeof param
                 const page = await restApi.favoritesMethods.queryFavorites({
                   siteId: restApi.siteId,
                   userId,
-                  pageSize: MAX_PAGE_SIZE,
+                  pageSize: FAVORITES_PAGE_SIZE,
                   pageNumber,
                 });
                 const isAllowed = createFavoriteAccessChecker(extra);
                 const favorites: Favorite[] = [];
-                const offset = (pageNumber - 1) * MAX_PAGE_SIZE;
                 const cap = Math.min(
-                  limit ?? MAX_PAGE_SIZE,
-                  maxResultLimit == null ? MAX_PAGE_SIZE : Math.max(0, maxResultLimit - offset),
+                  limit ?? FAVORITES_PAGE_SIZE,
+                  maxResultLimit == null
+                    ? FAVORITES_PAGE_SIZE
+                    : Math.max(0, maxResultLimit - offset),
                 );
                 for (const favorite of page.favorites) {
                   if (favorites.length >= cap) break;
@@ -95,13 +103,13 @@ export const getListFavoritesTool = (server: WebMcpServer): WebTool<typeof param
                 const pagination = page.pagination;
                 const metadataMatchesRequest =
                   pagination?.pageNumber === pageNumber &&
-                  pagination.pageSize === MAX_PAGE_SIZE &&
+                  pagination.pageSize === FAVORITES_PAGE_SIZE &&
                   pagination.totalAvailable >= offset + page.rawCount;
                 const hasMore = metadataMatchesRequest
-                  ? pageNumber * MAX_PAGE_SIZE < pagination.totalAvailable
+                  ? pageNumber * FAVORITES_PAGE_SIZE < pagination.totalAvailable
                   : null;
                 const nextReachable =
-                  maxResultLimit == null || pageNumber * MAX_PAGE_SIZE < maxResultLimit;
+                  maxResultLimit == null || pageNumber * FAVORITES_PAGE_SIZE < maxResultLimit;
                 return {
                   favorites,
                   pageNumber,

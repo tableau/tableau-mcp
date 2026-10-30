@@ -10,7 +10,6 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Favorite, favoriteResourceTypeSchema } from '../../../sdks/tableau/types/favorite.js';
-import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
@@ -25,6 +24,10 @@ export const favoriteTargetParamsSchema = {
     'The Tableau LUID of the content item. Favorites removal never deletes this content.',
   ),
 };
+
+/** Local anti-amplification bounds for per-item access checks and project visibility scans. */
+export const FAVORITES_PAGE_SIZE = 100;
+export const MAX_FAVORITE_PROJECT_SCAN_PAGES = 10;
 
 /** Derive self identity only from trusted authenticated REST/session state, never tool input. */
 export async function getAuthenticatedFavoriteUserId(restApi: RestApi): Promise<string> {
@@ -54,9 +57,11 @@ export function createFavoriteAccessChecker(extra: TableauWebRequestHandlerExtra
   // disableLogging option through that path so raw rejected metadata cannot be delivered in
   // debug REST notifications before the bounded-context result is known. Tool audit logging
   // remains active through WebTool.logAndExecute, and secret masking is unchanged.
+  const configSnapshot = extra.getConfigWithOverrides();
   const quietExtra: TableauWebRequestHandlerExtra & { disableLogging: true } = {
     ...extra,
     disableLogging: true,
+    getConfigWithOverrides: async () => await configSnapshot,
   };
   let visibleProjectIds: Promise<Set<string>> | undefined;
   return async ({
@@ -88,7 +93,7 @@ export function createFavoriteAccessChecker(extra: TableauWebRequestHandlerExtra
         // Keep this fail-closed until argument-aware authorization is separately designed.
         return false;
       case 'project': {
-        const { boundedContext } = await extra.getConfigWithOverrides();
+        const { boundedContext } = await configSnapshot;
         // Project favorites cannot be matched to INCLUDE_TAGS. Fail closed, even when the
         // project ID itself is allowed; no project label should bypass a configured tag gate.
         if (boundedContext.tags) return false;
@@ -102,31 +107,42 @@ export function createFavoriteAccessChecker(extra: TableauWebRequestHandlerExtra
           ...quietExtra,
           jwtScopes: ['tableau:content:read'],
           callback: async (restApi) =>
-            new Set(
-              (
-                await paginate({
-                  pageConfig: { pageSize: MAX_PAGE_SIZE },
-                  getDataFn: async ({ pageSize, pageNumber }) => {
-                    try {
-                      const { pagination, projects } = await restApi.projectsMethods.queryProjects({
-                        siteId: restApi.siteId,
-                        filter: '',
-                        pageSize,
-                        pageNumber,
-                      });
-                      return { pagination, data: projects };
-                    } catch (error) {
-                      // The existing SDK schema error can embed an entire project page. Do not
-                      // expose unrelated project labels while checking a favorite's visibility.
-                      if (error instanceof ZodiosError && isZodErrorLike(error.cause)) {
-                        throw new Error('The project visibility response could not be validated.');
-                      }
-                      throw error;
-                    }
-                  },
-                })
-              ).map((project) => project.id),
-            ),
+            (async () => {
+              const visible = new Set<string>();
+              for (
+                let pageNumber = 1;
+                pageNumber <= MAX_FAVORITE_PROJECT_SCAN_PAGES;
+                pageNumber++
+              ) {
+                try {
+                  const { pagination, projects } = await restApi.projectsMethods.queryProjects({
+                    siteId: restApi.siteId,
+                    filter: '',
+                    pageSize: FAVORITES_PAGE_SIZE,
+                    pageNumber,
+                  });
+                  projects.forEach((project) => visible.add(project.id));
+                  const metadataMatches =
+                    pagination.pageNumber === pageNumber &&
+                    pagination.pageSize === FAVORITES_PAGE_SIZE;
+                  if (
+                    !metadataMatches ||
+                    projects.length < FAVORITES_PAGE_SIZE ||
+                    pageNumber * FAVORITES_PAGE_SIZE >= pagination.totalAvailable
+                  ) {
+                    break;
+                  }
+                } catch (error) {
+                  // The existing SDK schema error can embed an entire project page. Do not
+                  // expose unrelated project labels while checking a favorite's visibility.
+                  if (error instanceof ZodiosError && isZodErrorLike(error.cause)) {
+                    throw new Error('The project visibility response could not be validated.');
+                  }
+                  throw error;
+                }
+              }
+              return visible;
+            })(),
         });
         return (await visibleProjectIds).has(resourceId);
       }

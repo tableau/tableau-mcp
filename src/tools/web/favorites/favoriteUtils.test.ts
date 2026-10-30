@@ -197,6 +197,17 @@ describe('favorite identity and bounded access', () => {
     expect(mocks.queryProjects).toHaveBeenCalledOnce();
   });
 
+  it('fails closed after the bounded project visibility scan ceiling', async () => {
+    mocks.queryProjects.mockImplementation(async ({ pageNumber }) => ({
+      projects: Array.from({ length: 100 }, (_, index) => ({
+        id: `page-${pageNumber}-project-${index}`,
+      })),
+      pagination: { pageSize: 100, pageNumber, totalAvailable: 5000 },
+    }));
+    expect(await access()({ resourceType: 'project', resourceId: projectId })).toBe(false);
+    expect(mocks.queryProjects).toHaveBeenCalledTimes(10);
+  });
+
   it('preserves non-schema HTTP and route-safety errors from project verification', async () => {
     for (const error of [
       new AxiosError('Request failed with status code 403', 'ERR_BAD_REQUEST'),

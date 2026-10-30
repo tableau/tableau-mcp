@@ -60,6 +60,9 @@ export default class FavoritesMethods extends AuthenticatedMethods<typeof favori
       const parsed = favoritesPageResponseSchema.safeParse(response);
       if (!parsed.success) throw new Error('Tableau returned an invalid favorites response.');
       const raw = parsed.data.favorites.favorite ?? [];
+      if (pageSize !== undefined && raw.length > pageSize) {
+        throw new Error('Tableau returned an invalid favorites response.');
+      }
       return {
         favorites: raw.flatMap((favorite) => {
           const normalized = normalizeFavorite(favorite);

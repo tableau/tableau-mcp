@@ -19,10 +19,10 @@ Related tools: [Add Favorite](add-favorite.md), [Remove Favorite](remove-favorit
 ## Optional arguments
 
 - `pageNumber`: positive, 1-based server page; default 1.
-- `limit`: maximum allowed favorites returned from this page, 1–1000. A larger `limit` on the same
+- `limit`: maximum allowed favorites returned from this page, 1–100. A larger `limit` on the same
   page is needed to retrieve matches trimmed by a smaller limit.
 
-Each call requests a single 1000-entry server page; it does not automatically enumerate the whole
+Each call requests a single 100-entry server page; it does not automatically enumerate the whole
 shortlist. Configured `MAX_RESULT_LIMIT` / `MAX_RESULT_LIMITS` also limit reachable pages and
 output.
 
@@ -57,7 +57,9 @@ The tool returns only workbook, view, datasource, and project IDs plus favorite 
 Workbook/view/datasource favorites pass the existing resource-access checker, including all
 applicable ID, parent-workbook, project, and tag restrictions. Project favorites must be in the
 project allowlist (if set) and visible to the authenticated user; they are omitted whenever a tag
-restriction is configured because a project's favorite cannot be matched to content tags.
+restriction is configured because a project's favorite cannot be matched to content tags. Visibility
+lookup scans at most ten 100-project pages per invocation. A project that is not proven visible
+within that bounded window is omitted rather than triggering an unbounded site enumeration.
 
 Flow (deferred), collection, legacy metric, future unknown types, malformed/ambiguous favorites, and
 label-only favorites whose targets were deleted are safely omitted. Their labels, IDs, and extra
