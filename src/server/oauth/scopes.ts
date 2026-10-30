@@ -223,6 +223,9 @@ const toolScopeMap: Record<
     // Each condition check has its own set of scopes used. Each tool needs to provide
     // the set of scopes used to check all conditions it requires.
     conditionApiScopes?: ReadonlySet<TableauApiScope>;
+    // Scopes a tool may use that are not essential for the tool's usability.
+    // A missing optional scope must not keep the tool from being registered.
+    optionalApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
   'list-datasources': {
@@ -284,6 +287,7 @@ const toolScopeMap: Record<
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
+    optionalApiScopes: new Set([PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE]),
   },
   'request-datasource-upload': {
     mcp: ['tableau:mcp:datasource:create'],
@@ -669,14 +673,15 @@ export async function getSupportedApiScopes(
     'enforce-registration-conditions',
   );
 
-  if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
-    scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
-  }
-
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
       for (const scope of scopeConfig.api) {
         scopes.add(scope);
+      }
+      if (includeOptionalScopes) {
+        for (const scope of scopeConfig.optionalApiScopes ?? []) {
+          scopes.add(scope);
+        }
       }
       // adding api scopes needed to check the registration conditions required by this tool
       if (enforceRegistrationConditions) {
