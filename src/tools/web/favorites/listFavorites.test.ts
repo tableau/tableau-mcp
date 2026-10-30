@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import FavoritesMethods from '../../../sdks/tableau/methods/favoritesMethods.js';
@@ -276,9 +277,9 @@ describe('list-favorites', () => {
     try {
       const result = await invoke();
       expect(result.isError).toBe(true);
-      expect(JSON.stringify(result)).toContain(
-        'The project visibility response could not be validated',
-      );
+      expect(result.content).toEqual([
+        { type: 'text', text: 'The project visibility response could not be validated.' },
+      ]);
       expect(JSON.stringify(result)).not.toContain(sentinel);
       expect(JSON.stringify(log.mock.calls)).not.toContain(sentinel);
     } finally {
@@ -289,7 +290,29 @@ describe('list-favorites', () => {
   it('fails closed on missing self identity, without listing any favorites', async () => {
     mocks.identity.userId = '';
     mocks.session.mockResolvedValue(Ok({ site: { id: 'different-site' }, user: { id: userId } }));
-    expect((await invoke()).isError).toBe(true);
+    const result = await invoke();
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      {
+        type: 'text',
+        text: 'Could not resolve the authenticated Tableau user on this site. Favorites require a verified user ID.',
+      },
+    ]);
     expect(mocks.queryFavorites).not.toHaveBeenCalled();
+  });
+  it('uses getErrorText for an invalid authenticated identity', async () => {
+    mocks.identity.userId = '../other-user';
+    const render = vi
+      .spyOn(ArgsValidationError.prototype, 'getErrorText')
+      .mockReturnValue('Curated identity guidance');
+    try {
+      const result = await invoke();
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([{ type: 'text', text: 'Curated identity guidance' }]);
+      expect(render).toHaveBeenCalledOnce();
+      expect(mocks.queryFavorites).not.toHaveBeenCalled();
+    } finally {
+      render.mockRestore();
+    }
   });
 });

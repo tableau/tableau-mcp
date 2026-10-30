@@ -1,4 +1,5 @@
 import { ZodiosError } from '@zodios/core';
+import { Ok, Result } from 'ts-results-es';
 import { isZodErrorLike } from 'zod-validation-error/v3';
 
 import {
@@ -30,13 +31,17 @@ export const FAVORITES_PAGE_SIZE = 100;
 export const MAX_FAVORITE_PROJECT_SCAN_PAGES = 10;
 
 /** Derive self identity only from trusted authenticated REST/session state, never tool input. */
-export async function getAuthenticatedFavoriteUserId(restApi: RestApi): Promise<string> {
+export async function getAuthenticatedFavoriteUserId(
+  restApi: RestApi,
+): Promise<Result<string, McpToolError>> {
   const userId = restApi.userId;
   if (userId) {
     if (!luidSchema.safeParse(userId).success) {
-      throw new ArgsValidationError('The authenticated Tableau user ID is unavailable or invalid.');
+      return new ArgsValidationError(
+        'The authenticated Tableau user ID is unavailable or invalid.',
+      ).toErr();
     }
-    return userId;
+    return new Ok(userId);
   }
   const session = await restApi.authenticatedServerMethods.getCurrentServerSession();
   if (
@@ -44,11 +49,11 @@ export async function getAuthenticatedFavoriteUserId(restApi: RestApi): Promise<
     session.value.site.id !== restApi.siteId ||
     !luidSchema.safeParse(session.value.user.id).success
   ) {
-    throw new ArgsValidationError(
+    return new ArgsValidationError(
       'Could not resolve the authenticated Tableau user on this site. Favorites require a verified user ID.',
-    );
+    ).toErr();
   }
-  return session.value.user.id;
+  return new Ok(session.value.user.id);
 }
 
 /** Existing resource gates are reused; projects additionally need a visible project lookup. */
@@ -63,44 +68,49 @@ export function createFavoriteAccessChecker(extra: TableauWebRequestHandlerExtra
     disableLogging: true,
     getConfigWithOverrides: async () => await configSnapshot,
   };
-  let visibleProjectIds: Promise<Set<string>> | undefined;
+  let visibleProjectIds: Promise<Result<Set<string>, McpToolError>> | undefined;
   return async ({
     resourceType,
     resourceId,
-  }: Pick<Favorite, 'resourceType' | 'resourceId'>): Promise<boolean> => {
+  }: Pick<Favorite, 'resourceType' | 'resourceId'>): Promise<Result<boolean, McpToolError>> => {
     switch (resourceType) {
       case 'workbook':
-        return (
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: resourceId,
-            extra: quietExtra,
-          })
-        ).allowed;
+        return new Ok(
+          (
+            await resourceAccessChecker.isWorkbookAllowed({
+              workbookId: resourceId,
+              extra: quietExtra,
+            })
+          ).allowed,
+        );
       case 'view':
-        return (
-          await resourceAccessChecker.isViewAllowed({ viewId: resourceId, extra: quietExtra })
-        ).allowed;
+        return new Ok(
+          (await resourceAccessChecker.isViewAllowed({ viewId: resourceId, extra: quietExtra }))
+            .allowed,
+        );
       case 'datasource':
-        return (
-          await resourceAccessChecker.isDatasourceAllowed({
-            datasourceLuid: resourceId,
-            extra: quietExtra,
-          })
-        ).allowed;
+        return new Ok(
+          (
+            await resourceAccessChecker.isDatasourceAllowed({
+              datasourceLuid: resourceId,
+              extra: quietExtra,
+            })
+          ).allowed,
+        );
       case 'flow':
         // A mixed tool cannot use the established static OAuth map to enforce a flow-only
         // read scope without expanding the scope surface when flow tools are disabled.
         // Keep this fail-closed until argument-aware authorization is separately designed.
-        return false;
+        return new Ok(false);
       case 'project': {
         const { boundedContext } = await configSnapshot;
         // Project favorites cannot be matched to INCLUDE_TAGS. Fail closed, even when the
         // project ID itself is allowed; no project label should bypass a configured tag gate.
-        if (boundedContext.tags) return false;
+        if (boundedContext.tags) return new Ok(false);
         try {
           assertProjectAllowedByBoundedContext(resourceId, boundedContext);
         } catch (error) {
-          if (error instanceof ProjectNotAllowedError) return false;
+          if (error instanceof ProjectNotAllowedError) return new Ok(false);
           throw error;
         }
         visibleProjectIds ??= useRestApi({
@@ -136,15 +146,21 @@ export function createFavoriteAccessChecker(extra: TableauWebRequestHandlerExtra
                   // The existing SDK schema error can embed an entire project page. Do not
                   // expose unrelated project labels while checking a favorite's visibility.
                   if (error instanceof ZodiosError && isZodErrorLike(error.cause)) {
-                    throw new Error('The project visibility response could not be validated.');
+                    return new McpToolError({
+                      type: 'invalid-project-visibility-response',
+                      statusCode: 502,
+                      message: 'The project visibility response could not be validated.',
+                    }).toErr();
                   }
                   throw error;
                 }
               }
-              return visible;
+              return new Ok(visible);
             })(),
         });
-        return (await visibleProjectIds).has(resourceId);
+        const visible = await visibleProjectIds;
+        if (visible.isErr()) return visible;
+        return new Ok(visible.value.has(resourceId));
       }
     }
   };

@@ -41,17 +41,19 @@ export const getAddFavoriteTool = (server: WebMcpServer): WebTool<typeof paramsS
         callback: async () => {
           // Complete permission probes before opening the mutation session: signing in again
           // with the same Cloud PAT invalidates its preceding session.
-          if (!(await createFavoriteAccessChecker(extra)(args)))
-            return favoriteNotAllowedError().toErr();
+          const allowed = await createFavoriteAccessChecker(extra)(args);
+          if (allowed.isErr()) return allowed;
+          if (!allowed.value) return favoriteNotAllowedError().toErr();
           return useRestApi({
             ...extra,
             disableLogging: true,
             jwtScopes: ['tableau:favorites:update'],
             callback: async (restApi) => {
               const userId = await getAuthenticatedFavoriteUserId(restApi);
+              if (userId.isErr()) return userId;
               await restApi.favoritesMethods.addFavorite({
                 siteId: restApi.siteId,
-                userId,
+                userId: userId.value,
                 resourceType: args.resourceType,
                 resourceId: args.resourceId,
                 label: args.label,

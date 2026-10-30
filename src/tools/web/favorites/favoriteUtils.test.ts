@@ -1,6 +1,7 @@
 import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { OverridableConfig } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
@@ -39,12 +40,13 @@ vi.mock('../../../restApiInstance.js', () => ({
 
 function access(
   config: Record<string, string> = {},
-): ReturnType<typeof createFavoriteAccessChecker> {
-  return createFavoriteAccessChecker(
+): (target: Parameters<ReturnType<typeof createFavoriteAccessChecker>>[0]) => Promise<boolean> {
+  const checker = createFavoriteAccessChecker(
     getMockRequestHandlerExtra({
       getConfigWithOverrides: vi.fn().mockResolvedValue(new OverridableConfig(config)),
     }),
   );
+  return async (target) => (await checker(target)).unwrap();
 }
 
 function authenticatedRest(
@@ -88,34 +90,40 @@ describe('favorite identity and bounded access', () => {
 
   it('uses the authenticated REST identity without an arbitrary-user lookup', async () => {
     const rest = authenticatedRest();
-    expect(await getAuthenticatedFavoriteUserId(rest)).toBe(userId);
+    expect(await getAuthenticatedFavoriteUserId(rest)).toEqual(Ok(userId));
     expect(rest.authenticatedServerMethods.getCurrentServerSession).not.toHaveBeenCalled();
   });
 
   it('resolves a missing bearer user ID from the current session only on the same site', async () => {
     const rest = authenticatedRest('');
-    expect(await getAuthenticatedFavoriteUserId(rest)).toBe(userId);
+    expect(await getAuthenticatedFavoriteUserId(rest)).toEqual(Ok(userId));
     expect(rest.authenticatedServerMethods.getCurrentServerSession).toHaveBeenCalledOnce();
     const mismatch = authenticatedRest(
       '',
       Ok({ site: { id: 'another-site' }, user: { id: userId } }),
     );
-    await expect(getAuthenticatedFavoriteUserId(mismatch)).rejects.toThrow('Could not resolve');
+    expect((await getAuthenticatedFavoriteUserId(mismatch)).unwrapErr()).toBeInstanceOf(
+      ArgsValidationError,
+    );
   });
 
   it('fails closed if session lookup fails or its user ID is missing/unsafe', async () => {
     for (const id of ['', '../other', 'not-a-luid']) {
-      await expect(
-        getAuthenticatedFavoriteUserId(
-          authenticatedRest('', Ok({ site: { id: 'site' }, user: { id } })),
-        ),
-      ).rejects.toThrow('Could not resolve');
+      const result = await getAuthenticatedFavoriteUserId(
+        authenticatedRest('', Ok({ site: { id: 'site' }, user: { id } })),
+      );
+      expect(result.unwrapErr()).toBeInstanceOf(ArgsValidationError);
+      expect(result.unwrapErr().getErrorText()).toBe(
+        'Could not resolve the authenticated Tableau user on this site. Favorites require a verified user ID.',
+      );
     }
     const rest = authenticatedRest('');
     vi.mocked(rest.authenticatedServerMethods.getCurrentServerSession).mockResolvedValue(
       Err({ type: 'unauthorized', message: 'Do not expose this external payload' }),
     );
-    await expect(getAuthenticatedFavoriteUserId(rest)).rejects.toThrow('Could not resolve');
+    expect((await getAuthenticatedFavoriteUserId(rest)).unwrapErr().getErrorText()).toBe(
+      'Could not resolve the authenticated Tableau user on this site. Favorites require a verified user ID.',
+    );
   });
 
   it.each(['workbook', 'view', 'datasource'] as FavoriteResourceType[])(

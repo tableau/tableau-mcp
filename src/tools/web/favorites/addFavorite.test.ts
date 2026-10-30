@@ -202,10 +202,21 @@ describe('add-favorite', () => {
   it('fails closed on missing or invalid authenticated identity', async () => {
     mocks.identity.userId = '';
     mocks.session.mockResolvedValue(Ok({ site: { id: 'different-site' }, user: { id: userId } }));
-    expect((await invoke()).isError).toBe(true);
+    const missing = await invoke();
+    expect(missing.isError).toBe(true);
+    expect(missing.content).toEqual([
+      {
+        type: 'text',
+        text: 'Could not resolve the authenticated Tableau user on this site. Favorites require a verified user ID.',
+      },
+    ]);
     expect(mocks.addFavorite).not.toHaveBeenCalled();
     mocks.identity.userId = '../other-user';
-    expect((await invoke()).isError).toBe(true);
+    const invalid = await invoke();
+    expect(invalid.isError).toBe(true);
+    expect(invalid.content).toEqual([
+      { type: 'text', text: 'The authenticated Tableau user ID is unavailable or invalid.' },
+    ]);
     expect(mocks.addFavorite).not.toHaveBeenCalled();
   });
 

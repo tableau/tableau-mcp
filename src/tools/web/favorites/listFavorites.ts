@@ -69,57 +69,56 @@ export const getListFavoritesTool = (server: WebMcpServer): WebTool<typeof param
             return new PageExceedsLimitError(
               `The requested favorites page exceeds the configured result limit. Pages contain at most ${FAVORITES_PAGE_SIZE} entries.`,
             ).toErr();
-          return new Ok(
-            await useRestApi({
-              ...extra,
-              disableLogging: true,
-              jwtScopes: ['tableau:content:read'],
-              callback: async (restApi) => {
-                const userId = await getAuthenticatedFavoriteUserId(restApi);
-                const page = await restApi.favoritesMethods.queryFavorites({
-                  siteId: restApi.siteId,
-                  userId,
-                  pageSize: FAVORITES_PAGE_SIZE,
-                  pageNumber,
-                });
-                const isAllowed = createFavoriteAccessChecker(extra);
-                const favorites: Favorite[] = [];
-                const cap = Math.min(
-                  limit ?? FAVORITES_PAGE_SIZE,
-                  maxResultLimit == null
-                    ? FAVORITES_PAGE_SIZE
-                    : Math.max(0, maxResultLimit - offset),
-                );
-                for (const favorite of page.favorites) {
-                  if (favorites.length >= cap) break;
-                  if (await isAllowed(favorite)) {
-                    favorites.push({
-                      resourceType: favorite.resourceType,
-                      resourceId: favorite.resourceId,
-                      ...(favorite.label !== undefined && { label: favorite.label }),
-                    });
-                  }
+          return await useRestApi({
+            ...extra,
+            disableLogging: true,
+            jwtScopes: ['tableau:content:read'],
+            callback: async (restApi) => {
+              const userId = await getAuthenticatedFavoriteUserId(restApi);
+              if (userId.isErr()) return userId;
+              const page = await restApi.favoritesMethods.queryFavorites({
+                siteId: restApi.siteId,
+                userId: userId.value,
+                pageSize: FAVORITES_PAGE_SIZE,
+                pageNumber,
+              });
+              const isAllowed = createFavoriteAccessChecker(extra);
+              const favorites: Favorite[] = [];
+              const cap = Math.min(
+                limit ?? FAVORITES_PAGE_SIZE,
+                maxResultLimit == null ? FAVORITES_PAGE_SIZE : Math.max(0, maxResultLimit - offset),
+              );
+              for (const favorite of page.favorites) {
+                if (favorites.length >= cap) break;
+                const allowed = await isAllowed(favorite);
+                if (allowed.isErr()) return allowed;
+                if (allowed.value) {
+                  favorites.push({
+                    resourceType: favorite.resourceType,
+                    resourceId: favorite.resourceId,
+                    ...(favorite.label !== undefined && { label: favorite.label }),
+                  });
                 }
-                const pagination = page.pagination;
-                const metadataMatchesRequest =
-                  pagination?.pageNumber === pageNumber &&
-                  pagination.pageSize === FAVORITES_PAGE_SIZE &&
-                  pagination.totalAvailable >= offset + page.rawCount;
-                const hasMore = metadataMatchesRequest
-                  ? pageNumber * FAVORITES_PAGE_SIZE < pagination.totalAvailable
-                  : null;
-                const nextReachable =
-                  maxResultLimit == null || pageNumber * FAVORITES_PAGE_SIZE < maxResultLimit;
-                return {
-                  favorites,
-                  pageNumber,
-                  hasMore,
-                  ...(hasMore !== false && nextReachable && { nextPageNumber: pageNumber + 1 }),
-                  note: 'Unsupported, deleted, and unverifiable favorites are omitted. Counts and metadata for omitted entries are not returned. hasMore is null when Tableau omits pagination; even a short or empty page does not establish completeness. limit trims this page; use a larger limit to retrieve additional matches from the same page.',
-                };
-              },
-            }),
-          );
+              }
+              const pagination = page.pagination;
+              const metadataMatchesRequest =
+                pagination?.pageNumber === pageNumber &&
+                pagination.pageSize === FAVORITES_PAGE_SIZE &&
+                pagination.totalAvailable >= offset + page.rawCount;
+              const hasMore = metadataMatchesRequest
+                ? pageNumber * FAVORITES_PAGE_SIZE < pagination.totalAvailable
+                : null;
+              const nextReachable =
+                maxResultLimit == null || pageNumber * FAVORITES_PAGE_SIZE < maxResultLimit;
+              return new Ok({
+                favorites,
+                pageNumber,
+                hasMore,
+                ...(hasMore !== false && nextReachable && { nextPageNumber: pageNumber + 1 }),
+                note: 'Unsupported, deleted, and unverifiable favorites are omitted. Counts and metadata for omitted entries are not returned. hasMore is null when Tableau omits pagination; even a short or empty page does not establish completeness. limit trims this page; use a larger limit to retrieve additional matches from the same page.',
+              });
+            },
+          });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       }),

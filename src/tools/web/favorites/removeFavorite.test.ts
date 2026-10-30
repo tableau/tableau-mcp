@@ -177,4 +177,13 @@ describe('remove-favorite', () => {
     mocks.removeFavorite.mockRejectedValue(new Error('404 fixture content missing'));
     expect((await invoke()).isError).toBe(true);
   });
+  it('returns the curated identity error without sending a removal', async () => {
+    mocks.identity.userId = '../other-user';
+    const result = await invoke();
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: 'text', text: 'The authenticated Tableau user ID is unavailable or invalid.' },
+    ]);
+    expect(mocks.removeFavorite).not.toHaveBeenCalled();
+  });
 });

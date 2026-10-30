@@ -150,7 +150,9 @@ describe('favorite mutation PAT lifecycle', () => {
         disableLogging: true,
         jwtScopes: ['tableau:favorites:update'],
         callback: async (restApi) => {
-          expect(await createFavoriteAccessChecker(context)(target('project'))).toBe(true);
+          expect((await createFavoriteAccessChecker(context)(target('project'))).unwrap()).toBe(
+            true,
+          );
           await restApi.favoritesMethods.addFavorite({
             siteId,
             userId,
