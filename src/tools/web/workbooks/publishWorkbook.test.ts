@@ -1125,8 +1125,10 @@ describe('publishWorkbookTool', () => {
         expect(response.permissions).toEqual([]);
         expect(response.permissionsNote).toBeUndefined();
       } else {
+        // Optional scope withheld: the read is skipped (consent boundary), not attempted-and-failed,
+        // so the note names the missing scope rather than reporting a retrieval failure.
         expect(response.permissions).toBeUndefined();
-        expect(response.permissionsNote).toContain('could not be retrieved');
+        expect(response.permissionsNote).toContain('was not granted');
         expect(response).not.toHaveProperty('permissionsMessage');
       }
     },

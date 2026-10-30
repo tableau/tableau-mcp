@@ -482,6 +482,21 @@ describe('server', () => {
       expect(registered).toContain('query-datasource');
     });
 
+    it('registers a tool whose optional API scope is not granted (optional scopes never gate registration)', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'publish-workbook');
+      const server = getServer();
+      // publish-workbook declares tableau:permissions:read as an OPTIONAL api scope (read by a
+      // separate REST session after publishing). The grant of everything it REQUIRES does not carry
+      // that scope...
+      const grant = allScopes('publish-workbook');
+      expect(grant).not.toContain('tableau:permissions:read');
+      // ...and the tool must still register: optional scopes are advertised, never required, so a
+      // token missing one never causes omission.
+      await server.registerTools(bearerAuth, grant);
+      expect(registeredNames(server)).toContain('publish-workbook');
+    });
+
     it('omits nothing when no explicit scope grant is present (e.g. PAT, stdio, passthrough)', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       const server = getServer();

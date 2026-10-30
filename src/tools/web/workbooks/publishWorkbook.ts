@@ -279,17 +279,31 @@ export const getPublishWorkbookTool = (
             return result;
           }
           const published = result.value;
+
+          // The permissions read is OPTIONAL: it bypasses the tool's mandatory-scope middleware
+          // check (the scope is not in requiredApiScopes), so honor the same OAuth consent boundary
+          // here. When the caller didn't grant the optional scope, skipping the read is the expected
+          // path — not a failure. Log it and return the published workbook so a withheld optional
+          // scope never breaks an already-completed publish.
+          const optionalScopeWithheld =
+            (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
+            extra.config.oauth.enforceScopes &&
+            extra.config.oauth.advertiseApiScopes &&
+            !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+          if (optionalScopeWithheld) {
+            log({
+              message: `publish-workbook: optional scope ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE} not granted; skipping the workbook permissions read and returning the published workbook`,
+              level: 'info',
+              logger: 'publish-workbook',
+            });
+            return new Ok({
+              ...published,
+              permissionsNote: `Published successfully, but the workbook permission rules were not retrieved because the optional ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE} scope was not granted.`,
+            });
+          }
+
+          // Best-effort: a permissions-read failure must not fail an already-completed publish.
           try {
-            // The optional read bypasses the tool's mandatory-scope middleware check.
-            // Honor the same OAuth consent boundary before minting its REST credentials.
-            if (
-              (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
-              extra.config.oauth.enforceScopes &&
-              extra.config.oauth.advertiseApiScopes &&
-              !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
-            ) {
-              throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
-            }
             const permissions = await useRestApi({
               ...extra,
               jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
