@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+
+Please review our XSD guidelines before editing XSDs: https://confluence.internal.salesforce.com/x/lTO7Hw
+
+-->
+<xs:schema
+    attributeFormDefault="qualified"
+    elementFormDefault="qualified"
+    targetNamespace="http://www.tableausoftware.com/xml/user"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <xs:attributeGroup name="UserAttributes-AG">
+    <!--
+    $MARK-cchalmers-2015-11-22: These attributes may have specific restrictions, but they're
+    hidden somewhere non-obvious in the code. Come back to this later (TFS 450621)
+    -->
+    <xs:anyAttribute namespace="##targetNamespace" processContents="skip" />
+  </xs:attributeGroup>
+
+</xs:schema>

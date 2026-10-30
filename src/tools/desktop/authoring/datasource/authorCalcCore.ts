@@ -1295,8 +1295,66 @@ function spliceColumnIntoDatasource(
     )}`;
   }
 
-  // Insert at datasource end; relation/schema columns inside connections are not field defs.
-  return `${xml.slice(0, datasource.closeStart)}${columnXml}${xml.slice(datasource.closeStart)}`;
+  const insertAt = findColumnSlot(xml, datasource);
+  return `${xml.slice(0, insertAt)}${columnXml}${xml.slice(insertAt)}`;
+}
+
+// twb_2026.2.0.xsd (DataSource-CT) orders these direct datasource children after the columns.
+const AFTER_COLUMNS_ELEMENTS = new Set([
+  'column-instance',
+  'group',
+  'mapped-images',
+  'drill-paths',
+  'unlinked-server-hierarchies',
+  'folders-common',
+  'folders-parameters',
+  'actions',
+  'calculated-members',
+  'extract',
+  'layout',
+  'style',
+  'semantic-values',
+  'date-options',
+  'default-date-format',
+  'default-sorts',
+  'field-sort-info',
+  'datasource-dependencies',
+  'explainability',
+  'filter',
+  'analytic-model',
+  'object-graph',
+  'default-calendar-type',
+  'data-source-tree',
+]);
+
+// Desktop prefixes feature-flagged elements, e.g. `_.fcp.ObjectModelEncapsulateLegacy.true...object-graph`.
+function withoutFeatureFlagPrefix(elementName: string): string {
+  return elementName.replace(/^_\.fcp\..*\.\.\./, '');
+}
+
+function findColumnSlot(xml: string, datasource: DatasourceElement): number {
+  const opaqueRanges = findOpaqueXmlRanges(xml);
+  const tagRe = /<(\/?)([A-Za-z_][\w.:-]*)[^>]*?(\/?)>/g;
+  tagRe.lastIndex = datasource.openEnd;
+  let depth = 0;
+  for (let match = tagRe.exec(xml); match !== null; match = tagRe.exec(xml)) {
+    if (match.index >= datasource.closeStart) break;
+    const opaqueRange = containingRange(match.index, opaqueRanges);
+    if (opaqueRange !== undefined) {
+      tagRe.lastIndex = opaqueRange.end;
+      continue;
+    }
+    const [, closing, elementName, selfClosing] = match;
+    if (closing) {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && AFTER_COLUMNS_ELEMENTS.has(withoutFeatureFlagPrefix(elementName))) {
+      return match.index;
+    }
+    if (!selfClosing) depth += 1;
+  }
+  return datasource.closeStart;
 }
 
 function getAttr(tag: string, name: string): string | undefined {

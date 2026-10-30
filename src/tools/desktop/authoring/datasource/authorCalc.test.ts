@@ -1868,3 +1868,21 @@ describe('authorCalcTool parameter references by caption or internal name', () =
     });
   });
 });
+
+describe('prepareCalculationsInWorkbook column placement', () => {
+  it('inserts the calc before a feature-flagged element that follows the columns', () => {
+    const objectGraph =
+      '<_.fcp.ObjectModelEncapsulateLegacy.true...object-graph><objects /></_.fcp.ObjectModelEncapsulateLegacy.true...object-graph>';
+    const workbookXml = BASE_XML.replace('</datasource>', `${objectGraph}</datasource>`);
+    const result = prepareCalculationsInWorkbook({
+      workbookXml,
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const xml = result.value.workbookXml;
+    expect(xml.indexOf("caption='Margin'")).toBeGreaterThan(xml.indexOf("name='[Region]'"));
+    expect(xml.indexOf("caption='Margin'")).toBeLessThan(xml.indexOf('<_.fcp.'));
+  });
+});
