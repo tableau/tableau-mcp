@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   sessionEvents: [] as string[],
   mockIsBlobStorageEnabled: vi.fn(),
   mockDownload: vi.fn(),
+  mockDelete: vi.fn(),
 }));
 
 vi.mock('fs', () => ({
@@ -82,7 +83,7 @@ vi.mock('../../../features/init.js', () => ({
 
 vi.mock('../../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
-  getBlobStorageProvider: vi.fn(() => ({ download: mocks.mockDownload })),
+  getBlobStorageProvider: vi.fn(() => ({ download: mocks.mockDownload, delete: mocks.mockDelete })),
 }));
 
 const validArgs = {
@@ -90,6 +91,8 @@ const validArgs = {
   name: 'My New Workbook',
   projectId: 'target-project-id',
 };
+
+const STAGED_KEY = 'workbook-uploads/site/user/upload/workbook.twb';
 
 async function* streamOf(...pieces: Array<string | Uint8Array>): AsyncGenerator<Uint8Array> {
   for (const piece of pieces) {
@@ -136,12 +139,15 @@ describe('publishWorkbookTool', () => {
     mocks.mockIsBlobStorageEnabled.mockReset();
     mocks.mockDownload.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockDelete.mockReset();
+    mocks.mockDelete.mockResolvedValue(undefined);
     mocks.mockStat.mockResolvedValue({ size: 1024 });
     mocks.mockCreateReadStream.mockImplementation(() => streamOf('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockImplementation(async () => ({
       fileName: 'source-superstore.twb',
       fileType: 'twb',
       fileStream: streamOf('<workbook source="new" />'),
+      stagedKey: STAGED_KEY,
     }));
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
@@ -370,6 +376,7 @@ describe('publishWorkbookTool', () => {
       projectId: 'target-project-id',
       overwrite: false,
     });
+    expect(mocks.mockDelete).toHaveBeenCalledExactlyOnceWith(STAGED_KEY);
   });
 
   it('returns an error without uploading when the staged upload is not found', async () => {
@@ -573,6 +580,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ workbookType: 'twbx' }),
     );
+    expect(mocks.mockDelete).not.toHaveBeenCalled();
   });
 
   it('defaults overwrite to false when publishing', async () => {
@@ -609,6 +617,8 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'My New Workbook', overwrite: false }),
     );
+    // Kept so the user can retry the publish.
+    expect(mocks.mockDelete).not.toHaveBeenCalled();
   });
 
   it('passes overwrite true through when publishing', async () => {
@@ -887,6 +897,7 @@ describe('publishWorkbookTool', () => {
       warnings: [],
     });
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockDelete).not.toHaveBeenCalled();
   });
 
   it('returns an error before validation when the requested project is outside bounded context', async () => {
@@ -1380,6 +1391,23 @@ describe('publishWorkbookTool', () => {
     expect(response).not.toHaveProperty('permissionsMessage');
   });
 
+  it('still returns the published workbook when deleting the staged upload fails', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+    mocks.mockDelete.mockRejectedValue(new Error('AccessDenied'));
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.status).toBe('published');
+    expect(response.data.id).toBe(mockWorkbook.id);
+    expect(mocks.mockDelete).toHaveBeenCalledWith(STAGED_KEY);
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'warning', data: 'AccessDenied' }),
+    );
+  });
+
   it('still returns the published workbook when optional permissions authentication fails', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
     mocks.mockPermissionsSignIn.mockRejectedValue(new Error('Scope not granted'));
@@ -1422,6 +1450,7 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('personal space');
+    expect(mocks.mockDelete).toHaveBeenCalledExactlyOnceWith(STAGED_KEY);
   });
 
   it('maps the site-disabled personal-space publish error to a clean message', async () => {
@@ -1456,6 +1485,7 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('not enabled for this Tableau site');
+    expect(mocks.mockDelete).not.toHaveBeenCalled();
   });
 
   it('returns an error and does not publish when Tableau does not return an upload id', async () => {

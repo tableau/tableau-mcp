@@ -165,6 +165,7 @@ describe('resolveStagedUploadStream (data source consumer)', () => {
 
     expect(resolved.fileName).toBe(`${uploadId}.tds`);
     expect(resolved.fileType).toBe('tds');
+    expect(resolved.stagedKey).toBe(expectedDownload('tds').key);
     expect(await collect(resolved.fileStream)).toBe('<datasource />');
     expect(mocks.download).toHaveBeenCalledExactlyOnceWith(expectedDownload('tds'));
   });
@@ -178,6 +179,7 @@ describe('resolveStagedUploadStream (data source consumer)', () => {
 
     expect(resolved.fileName).toBe(`${uploadId}.tdsx`);
     expect(resolved.fileType).toBe('tdsx');
+    expect(resolved.stagedKey).toBe(expectedDownload('tdsx').key);
     expect(await collect(resolved.fileStream)).toBe('PK\x03\x04');
     expect(mocks.download).toHaveBeenCalledTimes(2);
     expect(mocks.download).toHaveBeenNthCalledWith(1, expectedDownload('tds', 4096));
@@ -294,6 +296,7 @@ describe('resolveStagedUploadStream (workbook consumer)', () => {
     const resolved = await resolveStagedWorkbookUpload({ uploadId, tenant });
     expect(resolved.fileName).toBe(`${uploadId}.twbx`);
     expect(resolved.fileType).toBe('twbx');
+    expect(resolved.stagedKey).toBe(`workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`);
     expect(await collect(resolved.fileStream)).toBe('PK\x03\x04');
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
       key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,

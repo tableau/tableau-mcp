@@ -17,6 +17,7 @@ import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { type TransportName } from '../../../transports.js';
 import { Provider } from '../../../utils/provider.js';
+import { deleteStagedUpload } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import { isDatasourcePublishAvailable } from '../uploadAvailability.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
@@ -127,6 +128,8 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
                 projectId,
                 overwrite,
               });
+
+              await deleteStagedUpload(resolvedDatasourceFile, 'publish-datasource');
 
               return new Ok({
                 status: 'published' as const,

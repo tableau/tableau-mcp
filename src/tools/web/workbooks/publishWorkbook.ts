@@ -23,6 +23,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
+import { deleteStagedUpload } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import { isWorkbookPublishAvailable } from '../uploadAvailability.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
@@ -254,6 +255,8 @@ export const getPublishWorkbookTool = (
                 }
                 throw error;
               }
+
+              await deleteStagedUpload(resolvedWorkbookFile, 'publish-workbook');
 
               if (personalSpaceTarget !== undefined) {
                 const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');
