@@ -687,6 +687,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
+      strictScopeMatch: false,
       external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -708,6 +709,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
+        strictScopeMatch: false,
         external: null,
         ...defaultOAuthTimeoutMs,
       });
@@ -1090,6 +1092,25 @@ describe('Config', () => {
         expect(() => new Config()).toThrow(
           'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
         );
+      });
+    });
+
+    describe('ENFORCE_STRICT_SCOPE_MATCH', () => {
+      it('defaults strictScopeMatch to false', () => {
+        const config = new Config();
+        expect(config.oauth.strictScopeMatch).toBe(false);
+      });
+
+      it('sets strictScopeMatch to true when ENFORCE_STRICT_SCOPE_MATCH is "true"', () => {
+        vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+        const config = new Config();
+        expect(config.oauth.strictScopeMatch).toBe(true);
+      });
+
+      it('treats any non-"true" ENFORCE_STRICT_SCOPE_MATCH as false', () => {
+        vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'false');
+        const config = new Config();
+        expect(config.oauth.strictScopeMatch).toBe(false);
       });
     });
   });
