@@ -1,4 +1,4 @@
-// Test fixture: plain CommonJS so loadCustomProvider() can require() it. Implements all three
+// Test fixture: plain CommonJS so loadCustomProvider() can require() it. Implements all
 // BlobStorageProvider methods.
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- plain JS fixture */
 class ValidProvider {
@@ -16,6 +16,8 @@ class ValidProvider {
   async download() {
     return undefined;
   }
+
+  async delete() {}
 }
 
 module.exports.default = ValidProvider;
