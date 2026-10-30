@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
-  getAlwaysRequiredApiScopes,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
-  getRequiredScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
@@ -150,19 +148,17 @@ describe('scopes', () => {
       'requires the datasource create MCP permission for %s',
       (toolName) => {
         mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
-        expect(getRequiredScopesForTool(toolName)).toEqual(['tableau:mcp:datasource:create']);
+        expect(getRequiredMcpScopesForTool(toolName)).toEqual(['tableau:mcp:datasource:create']);
       },
     );
 
     it.each(['request-datasource-upload', 'publish-datasource'] as const)(
-      'reports the datasource create MCP scope for %s regardless of enforceScopes',
+      'reports no required MCP scopes for %s when enforcement is disabled',
       (toolName) => {
-        // Unlike getRequiredScopesForTool (which returns [] when enforcement is off), the
-        // registration-time getter always reports the declared MCP scopes so tool omission can
-        // decide whether the caller's grant authorizes the tool at the MCP layer.
+        // getRequiredMcpScopesForTool gates on enforceScopes: with enforcement off it reports no
+        // required MCP scopes, so neither the request-time check nor registration omits the tool.
         mockGetConfig.mockReturnValue({ oauth: { enforceScopes: false } } as any);
-        expect(getRequiredScopesForTool(toolName)).toEqual([]);
-        expect(getRequiredMcpScopesForTool(toolName)).toEqual(['tableau:mcp:datasource:create']);
+        expect(getRequiredMcpScopesForTool(toolName)).toEqual([]);
       },
     );
 
@@ -1098,40 +1094,6 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:content:delete');
       expect(scopes).toContain('tableau:tasks:read');
       expect(scopes).toContain('tableau:users:update');
-    });
-
-    it('should always include the site-settings scope when MCP site settings are enabled, even without API scopes', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: true,
-        enableMcpSiteSettings: true,
-      } as any);
-
-      const scopes = await getSupportedScopes({ includeApiScopes: false });
-      expect(scopes).toContain('tableau:mcp_site_settings:read');
-      // Only the always-required scope is forced; other API scopes stay excluded.
-      expect(scopes).not.toContain('tableau:content:read');
-    });
-
-    it('should not force the site-settings scope when MCP site settings are disabled', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: true,
-        enableMcpSiteSettings: false,
-      } as any);
-
-      const scopes = await getSupportedScopes({ includeApiScopes: false });
-      expect(scopes).not.toContain('tableau:mcp_site_settings:read');
-    });
-  });
-
-  describe('getAlwaysRequiredApiScopes', () => {
-    it('should require the site-settings scope when MCP site settings are enabled', () => {
-      mockGetConfig.mockReturnValue({ enableMcpSiteSettings: true } as any);
-      expect(getAlwaysRequiredApiScopes()).toEqual(['tableau:mcp_site_settings:read']);
-    });
-
-    it('should require no scopes when MCP site settings are disabled', () => {
-      mockGetConfig.mockReturnValue({ enableMcpSiteSettings: false } as any);
-      expect(getAlwaysRequiredApiScopes()).toEqual([]);
     });
   });
 
