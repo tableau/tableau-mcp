@@ -259,7 +259,9 @@ describe('remove-content-tag', () => {
     mocks.mutateWorkbook.mockRejectedValue(new ZodiosError(`Malformed response ${sentinel}`));
     const result = await invoke('workbook', 'safe');
     expect(result.isError).toBe(true);
-    expect(text(result)).toContain('may already have been applied');
+    expect(text(result)).toBe(
+      "Tableau returned an invalid tag-mutation response. The change may already have been applied. Read the resource's tags to verify before retrying.",
+    );
     expect(text(result)).toContain('verify before retrying');
     expect(JSON.stringify(result)).not.toContain(sentinel);
     expect(mocks.mutateWorkbook).toHaveBeenCalledTimes(1);

@@ -72,7 +72,7 @@ export const getRemoveContentTagTool = (server: WebMcpServer): WebTool<typeof pa
           );
           if (accessError) return accessError.toErr();
 
-          await withContentTagResponseValidation(
+          const result = await withContentTagResponseValidation(
             () =>
               useRestApi({
                 ...extra,
@@ -104,6 +104,7 @@ export const getRemoveContentTagTool = (server: WebMcpServer): WebTool<typeof pa
               }),
             true,
           );
+          if (result.isErr()) return result;
           return new Ok({ resourceType, resourceId, removedTagLabel: tagLabel });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

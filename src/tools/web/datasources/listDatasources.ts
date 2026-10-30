@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
@@ -145,35 +144,33 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
             return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
           }
 
-          return new Ok(
-            await withContentTagResponseValidation(() =>
-              useRestApi({
-                ...extra,
-                // Raw pages precede bounded-context filtering and must not reach debug notifications.
-                disableLogging: true,
-                jwtScopes: listDatasourcesTool.requiredApiScopes,
-                callback: async (restApi) => {
-                  const page = await getPage({
-                    pageNumber,
-                    limit,
-                    maxResultLimit,
-                    getDataFn: async ({ pageSize, pageNumber }) => {
-                      const { pagination, datasources: data } =
-                        await restApi.datasourcesMethods.listDatasources({
-                          siteId: restApi.siteId,
-                          filter: validatedFilter ?? '',
-                          pageSize,
-                          pageNumber,
-                        });
+          return await withContentTagResponseValidation(() =>
+            useRestApi({
+              ...extra,
+              // Raw pages precede bounded-context filtering and must not reach debug notifications.
+              disableLogging: true,
+              jwtScopes: listDatasourcesTool.requiredApiScopes,
+              callback: async (restApi) => {
+                const page = await getPage({
+                  pageNumber,
+                  limit,
+                  maxResultLimit,
+                  getDataFn: async ({ pageSize, pageNumber }) => {
+                    const { pagination, datasources: data } =
+                      await restApi.datasourcesMethods.listDatasources({
+                        siteId: restApi.siteId,
+                        filter: validatedFilter ?? '',
+                        pageSize,
+                        pageNumber,
+                      });
 
-                      return { pagination, data };
-                    },
-                  });
+                    return { pagination, data };
+                  },
+                });
 
-                  return page;
-                },
-              }),
-            ),
+                return page;
+              },
+            }),
           );
         },
         constrainSuccessResult: (page) => {

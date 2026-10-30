@@ -82,6 +82,12 @@ describe('listWorkbooksTool', () => {
       );
       const result = await getToolResult({ tagLabels: ['Sales'] });
       expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        {
+          type: 'text',
+          text: 'Tableau returned an invalid content response. Tag search results could not be verified.',
+        },
+      ]);
       expect(JSON.stringify(result)).not.toContain(sentinel);
       expect(vi.mocked(useRestApi).mock.calls.at(-1)?.[0].disableLogging).toBe(true);
     });

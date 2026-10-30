@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
@@ -143,89 +142,84 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
             return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
           }
 
-          return new Ok(
-            await withContentTagResponseValidation(() =>
-              useRestApi({
-                ...extra,
-                // Raw pages precede bounded-context checks.
-                disableLogging: true,
-                jwtScopes: listViewsTool.requiredApiScopes,
-                callback: async (restApi) => {
-                  // Fast path: when results are scoped to a specific set of view IDs and the user
-                  // hasn't supplied a filter, fetch those views directly instead of paging the whole
-                  // site. Query Views for Site has no view-ID filter, so the slow path would fetch
-                  // every view only to discard all but the allowed ones. A user filter forces the
-                  // slow path since Get View can't apply server-side filtering.
-                  const viewIds = configWithOverrides.boundedContext.viewIds;
-                  let page: GetPageResult<View>;
-                  if (viewIds !== null && !validatedFilter) {
-                    const allowedViews = await fetchAllowedViewsById({ restApi, viewIds });
-                    page = await getPage({
-                      pageNumber,
-                      limit,
-                      maxResultLimit,
-                      getDataFn: async ({ pageSize, pageNumber }) => ({
-                        pagination: { pageNumber, pageSize, totalAvailable: allowedViews.length },
-                        data: allowedViews.slice(
-                          (pageNumber - 1) * pageSize,
-                          pageNumber * pageSize,
-                        ),
-                      }),
-                    });
-                  } else {
-                    page = await getPage({
-                      pageNumber,
-                      limit,
-                      maxResultLimit,
-                      getDataFn: async ({ pageSize, pageNumber }) => {
-                        const { pagination, views: data } =
-                          await restApi.viewsMethods.queryViewsForSite({
-                            siteId: restApi.siteId,
-                            filter: validatedFilter ?? '',
-                            includeUsageStatistics: true,
-                            pageSize,
-                            pageNumber,
-                          });
+          return await withContentTagResponseValidation(() =>
+            useRestApi({
+              ...extra,
+              // Raw pages precede bounded-context checks.
+              disableLogging: true,
+              jwtScopes: listViewsTool.requiredApiScopes,
+              callback: async (restApi) => {
+                // Fast path: when results are scoped to a specific set of view IDs and the user
+                // hasn't supplied a filter, fetch those views directly instead of paging the whole
+                // site. Query Views for Site has no view-ID filter, so the slow path would fetch
+                // every view only to discard all but the allowed ones. A user filter forces the
+                // slow path since Get View can't apply server-side filtering.
+                const viewIds = configWithOverrides.boundedContext.viewIds;
+                let page: GetPageResult<View>;
+                if (viewIds !== null && !validatedFilter) {
+                  const allowedViews = await fetchAllowedViewsById({ restApi, viewIds });
+                  page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => ({
+                      pagination: { pageNumber, pageSize, totalAvailable: allowedViews.length },
+                      data: allowedViews.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+                    }),
+                  });
+                } else {
+                  page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => {
+                      const { pagination, views: data } =
+                        await restApi.viewsMethods.queryViewsForSite({
+                          siteId: restApi.siteId,
+                          filter: validatedFilter ?? '',
+                          includeUsageStatistics: true,
+                          pageSize,
+                          pageNumber,
+                        });
 
-                        return { pagination, data };
-                      },
-                    });
-                  }
+                      return { pagination, data };
+                    },
+                  });
+                }
 
-                  const views = page.data;
-                  if (configWithOverrides.disableMetadataApiRequests || views.length === 0) {
-                    return { ...page, data: flattenViewUsage(views) };
-                  }
+                const views = page.data;
+                if (configWithOverrides.disableMetadataApiRequests || views.length === 0) {
+                  return { ...page, data: flattenViewUsage(views) };
+                }
 
-                  try {
-                    const response = await restApi.metadataMethods.graphql(
-                      getViewLineageQuery(views.map((view) => view.id)),
-                    );
-                    return {
-                      ...page,
-                      data: flattenViewUsage(
-                        mergeViewLineage(
-                          views,
-                          getViewLineageByLuid(response),
-                          configWithOverrides.boundedContext.datasourceIds,
-                        ),
+                try {
+                  const response = await restApi.metadataMethods.graphql(
+                    getViewLineageQuery(views.map((view) => view.id)),
+                  );
+                  return {
+                    ...page,
+                    data: flattenViewUsage(
+                      mergeViewLineage(
+                        views,
+                        getViewLineageByLuid(response),
+                        configWithOverrides.boundedContext.datasourceIds,
                       ),
-                    };
-                  } catch (error) {
-                    log(
-                      {
-                        message: 'Failed to enrich views with lineage metadata',
-                        level: 'warning',
-                        logger: 'lineage',
-                        data: getExceptionMessage(error),
-                      },
-                      extra,
-                    );
-                    return { ...page, data: flattenViewUsage(views) };
-                  }
-                },
-              }),
-            ),
+                    ),
+                  };
+                } catch (error) {
+                  log(
+                    {
+                      message: 'Failed to enrich views with lineage metadata',
+                      level: 'warning',
+                      logger: 'lineage',
+                      data: getExceptionMessage(error),
+                    },
+                    extra,
+                  );
+                  return { ...page, data: flattenViewUsage(views) };
+                }
+              },
+            }),
           );
         },
         constrainSuccessResult: (page) => {

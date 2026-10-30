@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
 
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -244,10 +245,28 @@ describe('add-content-tags', () => {
     mocks.mutateWorkbook.mockRejectedValue(new ZodiosError(`Malformed response ${sentinel}`));
     const result = await invoke('workbook', ['safe']);
     expect(result.isError).toBe(true);
-    expect(text(result)).toContain('may already have been applied');
+    expect(text(result)).toBe(
+      "Tableau returned an invalid tag-mutation response. The change may already have been applied. Read the resource's tags to verify before retrying.",
+    );
     expect(text(result)).toContain('verify before retrying');
     expect(JSON.stringify(result)).not.toContain(sentinel);
     expect(mocks.mutateWorkbook).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses getErrorText for an uncertain mutation result', async () => {
+    mocks.mutateWorkbook.mockRejectedValue(new ZodiosError('Malformed response'));
+    const render = vi
+      .spyOn(McpToolError.prototype, 'getErrorText')
+      .mockReturnValue('Curated tag guidance');
+    try {
+      const result = await invoke('workbook', ['safe']);
+      expect(result.isError).toBe(true);
+      expect(text(result)).toBe('Curated tag guidance');
+      expect(render).toHaveBeenCalledOnce();
+      expect(mocks.mutateWorkbook).toHaveBeenCalledTimes(1);
+    } finally {
+      render.mockRestore();
+    }
   });
 
   it.each([403, 404])('preserves a Tableau %s failure without retry or success', async (status) => {

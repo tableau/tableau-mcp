@@ -27,26 +27,27 @@ describe('content tag response boundary', () => {
       await methods.queryWorkbooksForSite({ siteId: 'site-id', filter: '' });
     await expect(read()).rejects.toBeInstanceOf(ZodiosError);
     await expect(read()).rejects.toThrow(SENTINEL);
-    try {
-      await withContentTagResponseValidation(read);
-      expect.fail('Expected a curated validation error');
-    } catch (error) {
-      expect(error).toBeInstanceOf(McpToolError);
-      expect(error).toMatchObject({ type: 'invalid-content-response', statusCode: 502 });
-      expect((error as Error).message).not.toContain(SENTINEL);
-    }
+    const result = await withContentTagResponseValidation(read);
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error).toBeInstanceOf(McpToolError);
+    expect(error).toMatchObject({ type: 'invalid-content-response', statusCode: 502 });
+    expect(error.getErrorText()).toBe(
+      'Tableau returned an invalid content response. Tag search results could not be verified.',
+    );
+    expect(error.message).not.toContain(SENTINEL);
   });
 
   it('marks mutation outcome as uncertain without returning raw validation payloads', async () => {
     const callback = vi.fn().mockRejectedValue(new ZodiosError(`Invalid response ${SENTINEL}`));
-    try {
-      await withContentTagResponseValidation(callback, true);
-      expect.fail('Expected an unverified mutation error');
-    } catch (error) {
-      expect(error).toMatchObject({ type: 'tag-mutation-result-unverified', statusCode: 502 });
-      expect((error as Error).message).toContain('may already have been applied');
-      expect((error as Error).message).not.toContain(SENTINEL);
-    }
+    const result = await withContentTagResponseValidation(callback, true);
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error).toMatchObject({ type: 'tag-mutation-result-unverified', statusCode: 502 });
+    expect(error.getErrorText()).toBe(
+      "Tableau returned an invalid tag-mutation response. The change may already have been applied. Read the resource's tags to verify before retrying.",
+    );
+    expect(error.message).not.toContain(SENTINEL);
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
@@ -64,21 +65,19 @@ describe('content tag response boundary', () => {
         }),
       },
     );
-    try {
-      await withContentTagResponseValidation(
-        async () =>
-          await methods.addTagsToWorkbook({
-            siteId: 'site-id',
-            workbookId: '22222222-2222-4222-8222-222222222222',
-            tagLabels: ['safe'],
-          }),
-        true,
-      );
-      expect.fail('Expected an uncertain mutation result');
-    } catch (error) {
-      expect(error).toMatchObject({ type: 'tag-mutation-result-unverified' });
-      expect((error as Error).message).not.toContain(SENTINEL);
-    }
+    const result = await withContentTagResponseValidation(
+      async () =>
+        await methods.addTagsToWorkbook({
+          siteId: 'site-id',
+          workbookId: '22222222-2222-4222-8222-222222222222',
+          tagLabels: ['safe'],
+        }),
+      true,
+    );
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error).toMatchObject({ type: 'tag-mutation-result-unverified' });
+    expect(error.message).not.toContain(SENTINEL);
   });
 
   it.each([new RouteSafetyError('unsafe route'), new Error('transport failed')])(

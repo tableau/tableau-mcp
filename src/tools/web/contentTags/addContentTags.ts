@@ -71,7 +71,7 @@ export const getAddContentTagsTool = (server: WebMcpServer): WebTool<typeof para
           const accessError = await getContentTagAccessError(resourceType, resourceId, extra);
           if (accessError) return accessError.toErr();
 
-          await withContentTagResponseValidation(
+          const result = await withContentTagResponseValidation(
             () =>
               useRestApi({
                 ...extra,
@@ -101,6 +101,7 @@ export const getAddContentTagsTool = (server: WebMcpServer): WebTool<typeof para
               }),
             true,
           );
+          if (result.isErr()) return result;
           return new Ok({ resourceType, resourceId, addedTagLabels: tagLabels });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
