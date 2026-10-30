@@ -1,3 +1,4 @@
+import { DOMParser } from '@xmldom/xmldom';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
@@ -56,6 +57,36 @@ describe('createDataAppWorkspace', () => {
   describe('disk output (S3 not configured)', () => {
     beforeAll(async () => {
       await buildTemplateZip();
+    });
+
+    it('preserves Desktop compatibility metadata in the finalized workbook', async () => {
+      const result = await createDataAppWorkspace({
+        datappName: 'Desktop Compatibility',
+        allowedOrigins: [],
+        wiring,
+        config: getConfig(),
+      });
+
+      invariant(result.isOk(), result.isErr() ? result.error.message : '');
+      const { filePath, postUnzip } = result.value;
+      invariant(filePath);
+      invariant(postUnzip);
+      const workbookPath = 'Data App Name/Data App Name.twb';
+      let xml = execFileSync('unzip', ['-p', filePath, workbookPath], { encoding: 'utf8' });
+      const edit = postUnzip.edits.find(({ file }) => file === workbookPath);
+      invariant(edit);
+      for (const { find, replace } of edit.replacements) {
+        xml = xml.split(find).join(replace);
+      }
+
+      const workbook = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
+      invariant(workbook);
+      expect.soft(workbook.getAttribute('source-build')).toEqual(expect.stringMatching(/\S/));
+      const manifest = workbook.getElementsByTagName('document-format-change-manifest')[0];
+      invariant(manifest);
+      for (const declaration of ['Extensions', 'VizExtensions', '_.fcp.Packages.true...Packages']) {
+        expect.soft(manifest.getElementsByTagName(declaration).length, declaration).toBe(1);
+      }
     });
 
     it('serves the static, un-substituted template zip plus a postUnzip plan', async () => {

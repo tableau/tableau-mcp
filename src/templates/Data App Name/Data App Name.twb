@@ -1,7 +1,10 @@
 <?xml version='1.0' encoding='utf-8' ?>
 
-<workbook version='18.1' xml:base='https://localhost' xmlns:user='http://www.tableausoftware.com/xml/user'>
+<workbook source-build='0.0.0 (0000.0.0.0)' version='18.1' xml:base='https://localhost' xmlns:user='http://www.tableausoftware.com/xml/user'>
   <document-format-change-manifest>
+    <Extensions />
+    <VizExtensions />
+    <_.fcp.Packages.true...Packages />
     <AnimationOnByDefault />
     <MarkAnimation />
     <SheetIdentifierTracking />
