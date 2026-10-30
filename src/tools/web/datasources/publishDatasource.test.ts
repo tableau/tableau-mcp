@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   mockResolveStagedDatasourceUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockIsBlobStorageEnabled: vi.fn(),
+  mockDelete: vi.fn(),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -25,6 +27,7 @@ vi.mock('fs/promises', () => ({
 
 vi.mock('../../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+  getBlobStorageProvider: vi.fn(() => ({ delete: mocks.mockDelete })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -67,6 +70,8 @@ const validArgs = {
   projectId: 'target-project-id',
 };
 
+const STAGED_KEY = 'datasource-uploads/site/user/upload/datasource.tds';
+
 const validLocalArgs = {
   datasourceFilePath: '/tmp/source-superstore.tds',
   name: 'My New Datasource',
@@ -84,11 +89,14 @@ describe('publishDatasourceTool', () => {
     mocks.mockReadFile.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockDelete.mockReset();
+    mocks.mockDelete.mockResolvedValue(undefined);
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<datasource source="local" />'));
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tds',
       bytes: Buffer.from('<datasource source="new" />'),
+      stagedKey: STAGED_KEY,
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishDatasource.mockResolvedValue(mockPublishedDatasource);
@@ -228,6 +236,23 @@ describe('publishDatasourceTool', () => {
       projectId: 'target-project-id',
       overwrite: false,
     });
+    expect(mocks.mockDelete).toHaveBeenCalledExactlyOnceWith(STAGED_KEY);
+  });
+
+  it('still returns the published datasource when deleting the staged upload fails', async () => {
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+    mocks.mockDelete.mockRejectedValue(new Error('AccessDenied'));
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).status).toBe('published');
+    expect(mocks.mockDelete).toHaveBeenCalledWith(STAGED_KEY);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'warning', data: 'AccessDenied' }),
+    );
+    logSpy.mockRestore();
   });
 
   it('uploads and publishes a staged TDSX file', async () => {
@@ -268,6 +293,7 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
+    expect(mocks.mockDelete).not.toHaveBeenCalled();
   });
 
   it('uploads and publishes a local TDS data source file path', async () => {
@@ -312,6 +338,8 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'My New Datasource', overwrite: false }),
     );
+    // Kept so the user can retry the publish.
+    expect(mocks.mockDelete).not.toHaveBeenCalled();
   });
 
   it('rejects local data source file paths when blob storage is configured', async () => {

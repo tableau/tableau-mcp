@@ -94,7 +94,8 @@ describe('notInPersonalSpaceError', () => {
       { project: { id: 'p-1', name: 'Default' } },
       'This Tableau site published the workbook to the "Default" project instead of your ' +
         'personal space — its REST API does not support personal-space publishing. Delete it ' +
-        'there if unwanted, or publish to a project explicitly by passing projectId.',
+        'there if unwanted, or re-publish to a project by passing projectId; a staged upload ' +
+        'must be re-requested with request-workbook-upload.',
     ],
     [
       'move',

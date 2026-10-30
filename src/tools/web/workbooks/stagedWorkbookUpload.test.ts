@@ -137,6 +137,7 @@ describe('resolveStagedWorkbookUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.twb`,
       bytes: Buffer.from('<workbook />'),
+      stagedKey: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
     });
     expect(mocks.download).toHaveBeenCalledWith({
       key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
@@ -154,6 +155,7 @@ describe('resolveStagedWorkbookUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
       bytes: Buffer.from('PK\x03\x04'),
+      stagedKey: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`,
     });
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
       key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,

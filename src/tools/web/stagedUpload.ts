@@ -3,6 +3,8 @@ import { extname } from 'path';
 
 import { getBlobStorageProvider } from '../../blobStorage/init.js';
 import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
+import { log } from '../../logging/logger.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under common blob storage
 // single-PUT ceilings (e.g. S3's 5GB limit).
@@ -21,6 +23,8 @@ export type StagedUploadKind<FileType extends string> = {
 export type ResolvedStagedFile = {
   fileName: string;
   bytes: Buffer;
+  // Set only when read from blob storage; the key to delete once published.
+  stagedKey?: string;
 };
 
 export async function requestStagedUpload<FileType extends string>({
@@ -78,10 +82,8 @@ export async function resolveStagedUpload<FileType extends string>({
 
   // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
   for (const fileType of kind.fileTypes) {
-    const download = await getBlobStorageProvider().download({
-      key: buildStagedUploadKey(kind, tenant, uploadId, fileType),
-      maxBytes,
-    });
+    const key = buildStagedUploadKey(kind, tenant, uploadId, fileType);
+    const download = await getBlobStorageProvider().download({ key, maxBytes });
 
     if (download === undefined) {
       continue;
@@ -92,12 +94,29 @@ export async function resolveStagedUpload<FileType extends string>({
       throw new Error(`${kind.label} upload bytes must not be empty.`);
     }
 
-    return { fileName: `${uploadId}.${fileType}`, bytes };
+    return { fileName: `${uploadId}.${fileType}`, bytes, stagedKey: key };
   }
 
   throw new Error(
     `${kind.label} upload not found. Upload the ${kind.noun} bytes before publishing.`,
   );
+}
+
+/** Best-effort deletion of a published staged upload; never throws. No-op for local files. */
+export async function deleteStagedUpload(file: ResolvedStagedFile, logger: string): Promise<void> {
+  if (file.stagedKey === undefined) {
+    return;
+  }
+  try {
+    await getBlobStorageProvider().delete(file.stagedKey);
+  } catch (error) {
+    log({
+      message: `${logger}: failed to delete staged upload (best-effort)`,
+      level: 'warning',
+      logger,
+      data: getExceptionMessage(error),
+    });
+  }
 }
 
 /** Buffers a provider download stream, throwing once it exceeds `maxBytes`. */

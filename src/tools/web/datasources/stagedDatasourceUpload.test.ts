@@ -110,6 +110,7 @@ describe('resolveStagedDatasourceUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.tds`,
       bytes: Buffer.from('<datasource />'),
+      stagedKey: `datasource-uploads/${tenantPrefix}/${uploadId}/datasource.tds`,
     });
 
     expect(mocks.download).toHaveBeenCalledExactlyOnceWith(expectedDownload('tds'));
@@ -123,7 +124,11 @@ describe('resolveStagedDatasourceUpload', () => {
 
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant, maxBytes: 4096 }),
-    ).resolves.toEqual({ fileName: `${uploadId}.tdsx`, bytes });
+    ).resolves.toEqual({
+      fileName: `${uploadId}.tdsx`,
+      bytes,
+      stagedKey: `datasource-uploads/${tenantPrefix}/${uploadId}/datasource.tdsx`,
+    });
 
     expect(mocks.download).toHaveBeenCalledTimes(2);
     expect(mocks.download).toHaveBeenNthCalledWith(1, expectedDownload('tds', 4096));
