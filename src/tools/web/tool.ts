@@ -12,7 +12,13 @@ import { log } from '../../logging/logger.js';
 import { RouteSafetyError } from '../../sdks/routeSafety/core.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
-import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
+import {
+  getConditionApiScopesForTool,
+  getRequiredApiScopesForTool,
+  getRequiredMcpScopesForTool,
+  McpScope,
+  TableauApiScope,
+} from '../../server/oauth/scopes.js';
 import { getAuthTypeForTelemetry } from '../../telemetry/authType.js';
 import {
   getClientDisplayName,
@@ -137,6 +143,11 @@ export class WebTool<
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
+  requiredMcpScopes: ReadonlyArray<McpScope>;
+  // API scopes the server needs to *probe* this tool's registration conditions (not to run the tool).
+  // Kept separate from requiredApiScopes so registration can omit a tool whose token lacks a probe
+  // scope — rather than running the probe, which 4xxs and gets mislabeled as the feature being absent.
+  requiredConditionApiScopes: ReadonlyArray<TableauApiScope>;
   minRequiredRole: SiteRole;
   registrationConditions: ReadonlyArray<RegistrationCondition>;
   app?: AppDetails;
@@ -158,6 +169,8 @@ export class WebTool<
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
+    this.requiredMcpScopes = getRequiredMcpScopesForTool(name as WebToolName);
+    this.requiredConditionApiScopes = Array.from(getConditionApiScopesForTool(name as WebToolName));
     this.minRequiredRole = minRequiredRole;
     this.registrationConditions = registrationConditions ?? [];
     this.app = app;
