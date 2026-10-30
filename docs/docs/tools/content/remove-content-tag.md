@@ -55,8 +55,8 @@ the JSON body but cannot be removed by this tool; use Tableau's normal UI when a
 The tool rejects the reserved `pending-deletion` prefix and all its case/whitespace/malformed-date
 variants before REST access. Cleanup marker removal remains in the dedicated lifecycle workflow.
 Bounded percent-escape aliases of that prefix are rejected too, without normalizing outbound labels.
-Removing the last allowed tag under `INCLUDE_TAGS` may make the content inaccessible to subsequent
-calls through this MCP server; the current request must still pass the pre-mutation access check.
+A label configured by `INCLUDE_TAGS` is an admission boundary and cannot be removed through this
+tool. Other labels still require the target to pass the pre-mutation bounded-context access check.
 
 ## References
 

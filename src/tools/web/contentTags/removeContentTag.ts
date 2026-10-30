@@ -14,6 +14,7 @@ import {
   ContentTagResourceType,
   contentTagResourceTypeSchema,
   getContentTagAccessError,
+  getProtectedBoundaryTagError,
   removableContentTagLabelSchema,
 } from './contentTags.js';
 
@@ -60,7 +61,15 @@ export const getRemoveContentTagTool = (server: WebMcpServer): WebTool<typeof pa
           const parsed = z.object(paramsSchema).safeParse(args);
           if (!parsed.success) return new ArgsValidationError(parsed.error.message).toErr();
           const { resourceType, resourceId, tagLabel } = parsed.data;
-          const accessError = await getContentTagAccessError(resourceType, resourceId, extra);
+          const config = await extra.getConfigWithOverrides();
+          const boundaryError = getProtectedBoundaryTagError(tagLabel, config);
+          if (boundaryError) return boundaryError.toErr();
+          const accessError = await getContentTagAccessError(
+            resourceType,
+            resourceId,
+            extra,
+            config,
+          );
           if (accessError) return accessError.toErr();
 
           await withContentTagResponseValidation(

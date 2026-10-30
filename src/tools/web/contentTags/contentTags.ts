@@ -6,6 +6,7 @@ import {
   ViewNotAllowedError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
+import { OverridableConfig } from '../../../overridableConfig.js';
 import { encodeTagLabel } from '../../../sdks/tableau/methods/tagUtils.js';
 import { PENDING_DELETION_TAG_PREFIX } from '../_lib/pendingDeletionTag.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -75,13 +76,16 @@ export async function getContentTagAccessError(
   resourceType: ContentTagResourceType,
   resourceId: string,
   extra: TableauWebRequestHandlerExtra,
+  config?: OverridableConfig,
 ): Promise<McpToolError | undefined> {
   // The access checker spreads this request extra into each nested useRestApi call. Disable raw
   // REST notifications until authorization is known, so rejected metadata cannot leak at debug.
   // The original extra is retained by WebTool for normal invocation logging and telemetry.
+  const configSnapshot = config ?? (await extra.getConfigWithOverrides());
   const probeExtra: TableauWebRequestHandlerExtra & { disableLogging: true } = {
     ...extra,
     disableLogging: true,
+    getConfigWithOverrides: async () => configSnapshot,
   };
   // Access-check failure messages can include malformed raw REST payloads. Return only a curated
   // boundary decision; callers must never learn metadata from a target that was not admitted.
@@ -109,4 +113,18 @@ export async function getContentTagAccessError(
       return result.allowed ? undefined : new DatasourceNotAllowedError(denialMessage);
     }
   }
+}
+
+/** A tag that grants bounded-context admission cannot be removed through the same boundary. */
+export function getProtectedBoundaryTagError(
+  tagLabel: string,
+  config: OverridableConfig,
+): McpToolError | undefined {
+  if (!config.boundedContext.tags?.has(tagLabel)) return undefined;
+  return new McpToolError({
+    type: 'bounded-context-tag-removal-forbidden',
+    statusCode: 403,
+    message:
+      "This tag is part of the MCP server's bounded-context admission policy and cannot be removed through this tool.",
+  });
 }

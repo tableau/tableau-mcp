@@ -186,6 +186,18 @@ describe('remove-content-tag', () => {
     },
   );
 
+  it.each(resourceTypes)(
+    'refuses removing the %s tag that grants bounded-context admission',
+    async (resourceType) => {
+      vi.stubEnv('INCLUDE_TAGS', 'allowed');
+      const result = await invoke(resourceType, 'allowed');
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain('bounded-context admission policy');
+      expect(mutators[resourceType]).not.toHaveBeenCalled();
+      expect(useRestApi).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     'pending-deletion',
     'pending-deletion-2026-10-14',
