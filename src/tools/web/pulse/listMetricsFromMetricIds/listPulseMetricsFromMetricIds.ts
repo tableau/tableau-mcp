@@ -9,9 +9,10 @@ import { WebTool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
 const paramsSchema = {
-  // Bound the id list at the server's tool-input element cap (2,000): the schema
-  // then advertises maxItems and still refuses an oversized list when the SDK's
-  // maxToolInputElements check is not in force.
+  // Bound the id list at 2,000 ids: the schema then advertises maxItems and still
+  // refuses an oversized list when the SDK's maxToolInputElements check is not in
+  // force. {metricIds: [...2,000 ids]} counts 2,001 input elements (the argument
+  // key included), below the server's 2,100-element cap.
   metricIds: z.array(luidSchema).max(2000),
 };
 

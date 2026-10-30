@@ -86,7 +86,7 @@ export abstract class Server {
             prompts: {},
           },
           ...(instructions ? { instructions } : {}),
-          maxToolInputElements: 2_000,
+          maxToolInputElements: 2_100,
         },
       );
 

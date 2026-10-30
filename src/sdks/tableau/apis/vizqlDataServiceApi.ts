@@ -154,9 +154,11 @@ const simpleFilterBaseSchema = z.object({
 
 export const setFilterSchema = filterBaseSchema.extend({
   filterType: z.literal('SET'),
-  // Bound the SET member list at the server's tool-input element cap (2,000): the
-  // schema then advertises maxItems and still refuses an oversized list when the
-  // SDK's maxToolInputElements check is not in force.
+  // Bound the SET member list at 2,000 values: the schema then advertises maxItems
+  // and still refuses an oversized list when the SDK's maxToolInputElements check
+  // is not in force. One SET filter of 2,000 values counts 2,009 input elements
+  // (the arguments object and the nesting above the values included), below the
+  // server's 2,100-element cap.
   values: z.union([
     z.array(z.string()).max(2000),
     z.array(z.number()).max(2000),
