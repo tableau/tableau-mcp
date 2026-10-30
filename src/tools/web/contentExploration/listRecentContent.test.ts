@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { setNotificationLevel } from '../../../logging/notification.js';
 import { OverridableConfig } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -272,7 +273,9 @@ describe('list-recent-content', () => {
     const result = await callTool();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('version 3.5 or later');
+    expect(result.content[0].text).toBe(
+      'Recently viewed content requires Tableau REST API version 3.5 or later.',
+    );
     expect(RestApi.versionIsAtLeast).toHaveBeenCalledWith('3.5');
     expect(mocks.getRecentlyViewedForSite).not.toHaveBeenCalled();
   });
@@ -286,10 +289,31 @@ describe('list-recent-content', () => {
     const result = await callTool();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('invalid recent-content response');
+    expect(result.content[0].text).toBe('Tableau returned an invalid recent-content response.');
     expect(result.content[0].text).not.toContain('private-unfiltered-name');
     expect(viewCheck).not.toHaveBeenCalled();
   });
+
+  it.each(['version', 'response'] as const)(
+    'uses getErrorText for an expected %s failure',
+    async (failure) => {
+      if (failure === 'version') vi.mocked(RestApi.versionIsAtLeast).mockReturnValue(false);
+      else mocks.getRecentlyViewedForSite.mockResolvedValue([{ privateMetadata: 'do-not-return' }]);
+      const render = vi
+        .spyOn(McpToolError.prototype, 'getErrorText')
+        .mockReturnValue('Curated recent-content guidance');
+      try {
+        const result = await callTool();
+        expect(result.isError).toBe(true);
+        expect(result.content).toEqual([{ type: 'text', text: 'Curated recent-content guidance' }]);
+        expect(render).toHaveBeenCalledOnce();
+        expect(mocks.getView).not.toHaveBeenCalled();
+        expect(mocks.getWorkbook).not.toHaveBeenCalled();
+      } finally {
+        render.mockRestore();
+      }
+    },
+  );
 
   it('does not notify raw denied, limit-trimmed, or unsupported rows at debug level', async () => {
     const actual = await vi.importActual<typeof import('../../../restApiInstance.js')>(

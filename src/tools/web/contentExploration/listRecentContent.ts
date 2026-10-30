@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { RecentContent, recentContentSchema } from '../../../sdks/tableau/types/recentContent.js';
@@ -27,7 +28,7 @@ export const getListRecentContentTool = (server: WebMcpServer): WebTool<typeof p
     server,
     name: 'list-recent-content',
     minRequiredRole: SiteRole.VIEWER,
-    description: `Retrieves the signed-in user's recent views and workbooks on the current Tableau site using Get Recently Viewed for Site (GET /api/{version}/sites/{siteId}/content/recent, REST API 3.5+).
+    description: `Retrieves the signed-in user's recent views and workbooks on the current Tableau site.
 Returns an ordered array of { view: metadata } or { workbook: metadata } entries after server-configured resource restrictions. The API window contains at most 24 items recently created, updated, or accessed by this user and may lag several minutes. Optional limit is an integer from 1 to 24, default 24, and is applied after resource restrictions along with MAX_RESULT_LIMIT/MAX_RESULT_LIMITS.
 Use this tool to revisit your own recent content. Use search-content for relevance/popularity discovery or list-views/list-workbooks for general listings. It does not support another user, pagination, sorting, or date filters, and does not reproduce the full UI Recents experience or include flows. createdAt/updatedAt describe content changes; no last-viewed/access timestamp is returned.`,
     paramsSchema,
@@ -61,19 +62,29 @@ Use this tool to revisit your own recent content. Use search-content for relevan
             jwtScopes: ['tableau:content:read'],
             callback: async (restApi) => {
               if (!RestApi.versionIsAtLeast('3.5')) {
-                throw new Error(
-                  'Recently viewed content requires Tableau REST API version 3.5 or later.',
-                );
+                return new McpToolError({
+                  type: 'recent-content-version-unsupported',
+                  statusCode: 400,
+                  message:
+                    'Recently viewed content requires Tableau REST API version 3.5 or later.',
+                }).toErr();
               }
-              return await restApi.recentContentMethods.getRecentlyViewedForSite({
-                siteId: restApi.siteId,
-              });
+              return new Ok(
+                await restApi.recentContentMethods.getRecentlyViewedForSite({
+                  siteId: restApi.siteId,
+                }),
+              );
             },
           });
+          if (recentContent.isErr()) return recentContent;
 
-          const parsed = z.array(recentContentSchema).max(24).safeParse(recentContent);
+          const parsed = z.array(recentContentSchema).max(24).safeParse(recentContent.value);
           if (!parsed.success) {
-            throw new Error('Tableau returned an invalid recent-content response.');
+            return new McpToolError({
+              type: 'invalid-recent-content-response',
+              statusCode: 502,
+              message: 'Tableau returned an invalid recent-content response.',
+            }).toErr();
           }
 
           const allowedContent: RecentContent[] = [];
