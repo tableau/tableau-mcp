@@ -465,6 +465,10 @@ const toolScopeMap: Record<
       ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
     ]),
   },
+  'list-recent-content': {
+    mcp: ['tableau:mcp:content:read'],
+    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'search-content': {
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),

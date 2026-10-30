@@ -164,6 +164,17 @@ describe('scopes', () => {
     });
   });
 
+  it('uses the existing content-read scopes for list-recent-content', () => {
+    mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as ReturnType<
+      typeof configModule.getConfig
+    >);
+    expect(getRequiredScopesForTool('list-recent-content')).toEqual(['tableau:mcp:content:read']);
+    expect(getRequiredApiScopesForTool('list-recent-content')).toEqual([
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+    ]);
+  });
+
   describe('getSupportedMcpScopes', () => {
     it('should include tableau:mcp:tasks:read when adminToolsEnabled and admin-tools are both on', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(

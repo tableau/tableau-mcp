@@ -46,6 +46,25 @@ describe('restApiInstance', () => {
   });
 
   describe('useRestApi', () => {
+    it('omits raw REST notification interceptors when disableLogging is set', async () => {
+      await useRestApi({
+        config: getConfig(),
+        disableLogging: true,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: ['tableau:content:read'],
+        signal: new AbortController().signal,
+        ...defaultLuidGetters,
+        callback: async () => ({ recents: { recent: [{ name: 'private-rejected-content' }] } }),
+      });
+
+      expect(RestApi).toHaveBeenCalledWith(
+        expect.objectContaining({ requestInterceptor: undefined, responseInterceptor: undefined }),
+      );
+      expect(notifier.info).not.toHaveBeenCalled();
+      expect(notifier.error).not.toHaveBeenCalled();
+    });
+
     it('should sign in with PAT when auth is PAT', async () => {
       vi.stubEnv('AUTH', 'pat');
 
