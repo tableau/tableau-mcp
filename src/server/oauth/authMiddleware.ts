@@ -9,7 +9,7 @@ import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
   getRequiredApiScopesForTool,
-  getRequiredScopesForTool,
+  getRequiredMcpScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
 } from './scopes.js';
@@ -181,7 +181,7 @@ async function getRequiredMcpScopesForRequest(body: unknown, clientId?: string):
   }
 
   const scopes = new Set<string>();
-  for (const scope of getRequiredScopesForTool(toolName)) {
+  for (const scope of getRequiredMcpScopesForTool(toolName)) {
     scopes.add(scope);
   }
 

@@ -695,18 +695,6 @@ export async function getSupportedApiScopes(
   return Array.from(scopes);
 }
 
-/**
- * Tableau API scopes that must be granted and advertised whenever MCP site settings are enabled,
- * independent of enforceScopes/advertiseApiScopes. The server reads the per-site settings — a
- * security layer that can disable tools and restrict request overrides — using
- * `tableau:mcp_site_settings:read`; if the caller's token lacks that scope the read 403s and the
- * layer is silently skipped. Always including it also keeps the granted scope set non-empty, which
- * a delegated authorization server (Tableau) would otherwise reject with invalid_scope.
- */
-export function getAlwaysRequiredApiScopes(): ReadonlyArray<TableauApiScope> {
-  return getConfig().enableMcpSiteSettings ? ['tableau:mcp_site_settings:read'] : [];
-}
-
 export async function getSupportedScopes({
   includeApiScopes,
   clientId,
@@ -716,8 +704,7 @@ export async function getSupportedScopes({
 }): Promise<string[]> {
   const mcpScopes = await getSupportedMcpScopes(clientId);
   const apiScopes = await getSupportedApiScopes(clientId);
-  const base = includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
-  return Array.from(new Set([...base, ...getAlwaysRequiredApiScopes()]));
+  return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
 }
 
 /**
@@ -772,7 +759,7 @@ export function validateScopes(
  * @param endpoint - The MCP endpoint or tool name
  * @returns Array of required scopes for the endpoint
  */
-export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<McpScope> {
+export function getRequiredMcpScopesForTool(toolName: WebToolName): ReadonlyArray<McpScope> {
   const oauthConfig = getConfig().oauth;
   if (!oauthConfig || !oauthConfig.enforceScopes) {
     return [];
@@ -783,15 +770,6 @@ export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<M
 
 export function getRequiredApiScopesForTool(toolName: WebToolName): ReadonlyArray<TableauApiScope> {
   return Array.from(toolScopeMap[toolName].api);
-}
-
-/**
- * A tool's required MCP scopes, independent of `enforceScopes`. Unlike {@link getRequiredScopesForTool}
- * (which gates the request-time check behind `enforceScopes`), this always returns the declared scopes
- * so registration can decide whether the caller's grant authorizes the tool at the MCP layer.
- */
-export function getRequiredMcpScopesForTool(toolName: WebToolName): ReadonlyArray<McpScope> {
-  return toolScopeMap[toolName].mcp;
 }
 
 /**

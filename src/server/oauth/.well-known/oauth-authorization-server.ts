@@ -11,7 +11,7 @@ import { getSupportedScopes } from '../scopes.js';
  */
 export function oauthAuthorizationServer(app: express.Application): void {
   app.get('/.well-known/oauth-authorization-server', async (_req, res) => {
-    const { issuer, advertiseApiScopes, clientIdSecretPairs } = getConfig().oauth;
+    const { issuer, advertiseApiScopes, enforceScopes, clientIdSecretPairs } = getConfig().oauth;
 
     const grant_types_supported = ['authorization_code', 'refresh_token'];
     const token_endpoint_auth_methods_supported = ['none'];
@@ -31,9 +31,9 @@ export function oauthAuthorizationServer(app: express.Application): void {
       response_types_supported: ['code'],
       grant_types_supported,
       code_challenge_methods_supported: ['S256'],
-      // See oauth-protected-resource.ts: advertise supported scopes even when enforcement is off,
-      // so clients request valid scopes instead of an empty set the authorization server rejects.
-      scopes_supported: await getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+      scopes_supported: enforceScopes
+        ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+        : [],
       token_endpoint_auth_methods_supported,
       subject_types_supported: ['public'],
       client_id_metadata_document_supported: true,

@@ -13,15 +13,14 @@ import { getSupportedScopes } from '../scopes.js';
  */
 export function oauthProtectedResource(app: express.Application): void {
   app.get('/.well-known/oauth-protected-resource', async (_req, res) => {
-    const { issuer, advertiseApiScopes, resourceUri } = getConfig().oauth;
+    const { issuer, advertiseApiScopes, resourceUri, enforceScopes } = getConfig().oauth;
     res.json({
       resource: buildResourceIdentifier(resourceUri),
       authorization_servers: [issuer],
       bearer_methods_supported: ['header'],
-      // Advertise supported scopes regardless of enforceScopes. A client that sees an empty list
-      // requests no scope, which the authorization server (Tableau, in delegated mode) rejects with
-      // invalid_scope. Enforcing those scopes is a separate concern, handled at the request gate.
-      scopes_supported: await getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+      scopes_supported: enforceScopes
+        ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+        : [],
     });
   });
 }
