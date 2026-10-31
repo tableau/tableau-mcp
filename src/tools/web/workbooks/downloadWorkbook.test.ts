@@ -204,9 +204,9 @@ describe('downloadWorkbookTool', () => {
 
   it('fails closed without uploading or writing a temp file when the session has no site LUID', async () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
-    const content = Buffer.from('<workbook/>');
+    const fileStream = Readable.from([Buffer.from('<workbook/>')]);
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content,
+      fileStream,
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -222,6 +222,7 @@ describe('downloadWorkbookTool', () => {
       'Unable to determine the signed-in Tableau site and user',
     );
     expect(mocks.mockUpload).not.toHaveBeenCalled();
+    expect(fileStream.destroyed).toBe(true);
   });
 
   it('should fall back to temp path and log warning when blob storage upload fails', async () => {

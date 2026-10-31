@@ -77,6 +77,7 @@ async function buildWorkbookToolResultInner({
   // Resolved outside the try so a missing tenant fails closed instead of falling back.
   const tenantLuids = getTenantLuids(tenant);
   if (tenantLuids.isErr()) {
+    discard(fileStream);
     return tenantLuids;
   }
 
