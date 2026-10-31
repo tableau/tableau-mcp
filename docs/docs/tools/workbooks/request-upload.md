@@ -41,9 +41,9 @@ Example: `Superstore.twbx`
 
 ## Response behavior
 
-The tool returns a presigned `PUT` URL and an opaque `uploadId`. A publish tool rejects an `uploadId`
-whose file type it does not accept (for example, passing a `.tdsx` upload to Publish Workbook). Each
-upload is limited to 5 GB (`maxSizeBytes`).
+The tool returns a presigned `PUT` URL and an opaque `uploadId`. A publish tool reports an `uploadId`
+whose file type it does not accept as not found (for example, passing a `.tdsx` upload to Publish
+Workbook). Each upload is limited to 5 GB (`maxSizeBytes`).
 
 ## Example result
 

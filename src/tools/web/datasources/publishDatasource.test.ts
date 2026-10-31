@@ -248,16 +248,18 @@ describe('publishDatasourceTool', () => {
     });
   });
 
-  it('returns an error without uploading when the staged upload is not a data source type', async () => {
+  it('returns an error without uploading when the staged upload is not found', async () => {
     mocks.mockResolveStagedDatasourceUpload.mockRejectedValue(
-      new Error('Upload is a .twbx file, but data source publishing accepts .tds or .tdsx.'),
+      new Error(
+        'Upload not found. Call request-upload and upload the data source bytes before publishing.',
+      ),
     );
 
     const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('data source publishing accepts .tds or .tdsx');
+    expect(result.content[0].text).toContain('Upload not found');
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
     expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });

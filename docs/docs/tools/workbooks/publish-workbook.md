@@ -67,7 +67,7 @@ Exactly one of these must be provided — providing both, or neither, returns an
 ### `uploadId`
 
 The upload id returned by [Request Upload](request-upload.md) for a `.twb` or `.twbx` file; uploads
-of other file types are rejected. Use this for hosted clients that cannot pass a local path. Requires a
+of other file types are reported as not found. Use this for hosted clients that cannot pass a local path. Requires a
 [blob storage provider](../../configuration/mcp-config/env-vars.md#blob_storage_provider) to be
 configured.
 

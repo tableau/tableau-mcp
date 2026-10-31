@@ -372,16 +372,18 @@ describe('publishWorkbookTool', () => {
     });
   });
 
-  it('returns an error without uploading when the staged upload is not a workbook type', async () => {
+  it('returns an error without uploading when the staged upload is not found', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockRejectedValue(
-      new Error('Upload is a .tdsx file, but workbook publishing accepts .twb or .twbx.'),
+      new Error(
+        'Upload not found. Call request-upload and upload the workbook bytes before publishing.',
+      ),
     );
 
     const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('workbook publishing accepts .twb or .twbx');
+    expect(result.content[0].text).toContain('Upload not found');
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();

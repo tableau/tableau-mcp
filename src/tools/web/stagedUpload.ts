@@ -145,26 +145,6 @@ export async function resolveStagedUploadStream<FileType extends string>({
     };
   }
 
-  // Not under this consumer's kind: distinguish a wrong-type upload from a missing one.
-  const accepted = consumer.fileTypes.map((type) => `.${type}`).join(' or ');
-  for (const other of registeredConsumers) {
-    if (other.kind === consumer.kind) {
-      continue;
-    }
-    for (const fileType of other.fileTypes) {
-      const download = await getBlobStorageProvider().download({
-        key: buildStagedUploadKey(other, tenant, uploadId, fileType),
-        maxBytes,
-      });
-      if (download !== undefined) {
-        discard(download.data);
-        throw new ArgsValidationError(
-          `Upload is a .${fileType} file, but ${consumer.noun} publishing accepts ${accepted}.`,
-        );
-      }
-    }
-  }
-
   throw new ArgsValidationError(
     `Upload not found. Call request-upload and upload the ${consumer.noun} bytes before publishing.`,
   );

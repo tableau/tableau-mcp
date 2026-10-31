@@ -215,15 +215,22 @@ describe('resolveStagedUploadStream (data source consumer)', () => {
     );
   });
 
-  it('throws after every supported file type is absent', async () => {
-    mocks.download.mockResolvedValue(undefined);
+  it('throws not found without probing other kinds, even when the id was staged as a workbook', async () => {
+    mocks.download.mockImplementation(async ({ key }: { key: string }) =>
+      key === `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`
+        ? { data: streamOf('PK\x03\x04') }
+        : undefined,
+    );
 
     const error = await resolveStagedDatasourceUpload({ uploadId, tenant }).catch((e) => e);
     expect(error).toBeInstanceOf(ArgsValidationError);
     expect(error.message).toBe(
       'Upload not found. Call request-upload and upload the data source bytes before publishing.',
     );
-    expect(mocks.download).toHaveBeenCalledTimes(4);
+    expect(mocks.download).toHaveBeenCalledTimes(2);
+    for (const [{ key }] of mocks.download.mock.calls) {
+      expect(key).toMatch(/^datasource-uploads\//);
+    }
   });
 
   it.each(['../not-safe', '', 'not-a-uuid'])(
@@ -273,21 +280,6 @@ describe('resolveStagedUploadStream (data source consumer)', () => {
     await expect(resolveStagedDatasourceUpload({ uploadId, tenant })).rejects.toBe(error);
     expect(mocks.download).toHaveBeenCalledTimes(1);
   });
-
-  it("probes the other consumers' kinds and rejects an upload of another type", async () => {
-    const data = Readable.from([Buffer.from('PK\x03\x04')]);
-    mocks.download.mockImplementation(async ({ key }: { key: string }) =>
-      key === `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx` ? { data } : undefined,
-    );
-
-    const error = await resolveStagedDatasourceUpload({ uploadId, tenant }).catch((e) => e);
-    expect(error).toBeInstanceOf(ArgsValidationError);
-    expect(error.statusCode).toBe(400);
-    expect(error.message).toBe(
-      'Upload is a .twbx file, but data source publishing accepts .tds or .tdsx.',
-    );
-    expect(data.destroyed).toBe(true);
-  });
 });
 
 describe('resolveStagedUploadStream (workbook consumer)', () => {
@@ -313,7 +305,7 @@ describe('resolveStagedUploadStream (workbook consumer)', () => {
     });
   });
 
-  it('rejects an upload staged as a data source', async () => {
+  it('throws not found for an id staged as a data source', async () => {
     mocks.download.mockImplementation(async ({ key }: { key: string }) =>
       key === `datasource-uploads/${tenantPrefix}/${uploadId}/datasource.tds`
         ? { data: streamOf('<datasource />') }
@@ -323,16 +315,9 @@ describe('resolveStagedUploadStream (workbook consumer)', () => {
     const error = await resolveStagedWorkbookUpload({ uploadId, tenant }).catch((e) => e);
     expect(error).toBeInstanceOf(ArgsValidationError);
     expect(error.message).toBe(
-      'Upload is a .tds file, but workbook publishing accepts .twb or .twbx.',
+      'Upload not found. Call request-upload and upload the workbook bytes before publishing.',
     );
-  });
-
-  it('throws when nothing was uploaded', async () => {
-    mocks.download.mockResolvedValue(undefined);
-
-    await expect(resolveStagedWorkbookUpload({ uploadId, tenant })).rejects.toBeInstanceOf(
-      ArgsValidationError,
-    );
+    expect(mocks.download).toHaveBeenCalledTimes(2);
   });
 });
 
