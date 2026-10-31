@@ -86,6 +86,40 @@ describe('update-flow-connection', () => {
     expect((await call()).isError).toBe(true);
     expect(mocks.update).not.toHaveBeenCalled();
   });
+  it('accepts a hostname returned with different letter casing', async () => {
+    mocks.update.mockResolvedValue({ id: connectionId, serverAddress: 'db.example.test' });
+    expect((await call({ serverAddress: 'DB.Example.Test' })).isError).toBe(false);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+  it('verifies the normalized hostname that was actually submitted', async () => {
+    mocks.update.mockResolvedValue({ id: connectionId, serverAddress: 'db.example.test' });
+    expect((await call({ serverAddress: ' DB.Example.Test ' })).isError).toBe(false);
+    expect(mocks.update.mock.calls[0][0].updates.serverAddress).toBe('DB.Example.Test');
+  });
+  it.each([undefined, ''])('accepts a cleared username returned as %j', async (userName) => {
+    mocks.update.mockResolvedValue({ id: connectionId, userName });
+    expect((await call({ userName: '' })).isError).toBe(false);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.update.mock.calls[0][0].updates.userName).toBe('');
+  });
+  it.each([undefined, 'analyst', 'different-user'])(
+    'keeps a missing or changed non-empty username %j unverified',
+    async (userName) => {
+      mocks.update.mockResolvedValue({ id: connectionId, userName });
+      expect((await call({ userName: 'Analyst' })).isError).toBe(true);
+      expect(mocks.update).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('keeps a missing returned hostname unverified', async () => {
+    mocks.update.mockResolvedValue({ id: connectionId });
+    expect((await call()).isError).toBe(true);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+  it('does not assume a different FQDN is equivalent to the requested hostname', async () => {
+    mocks.update.mockResolvedValue({ id: connectionId, serverAddress: 'db.example.test' });
+    expect((await call({ serverAddress: 'db' })).isError).toBe(true);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
   it('refuses an empty update before any API access', async () => {
     expect((await call({})).isError).toBe(true);
     expect(mocks.allowed).not.toHaveBeenCalled();

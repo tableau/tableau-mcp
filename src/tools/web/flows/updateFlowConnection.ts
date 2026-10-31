@@ -96,9 +96,13 @@ export const getUpdateFlowConnectionTool = (server: WebMcpServer): WebTool<typeo
               });
               if (
                 connection.id.toLowerCase() !== connectionId.toLowerCase() ||
-                (serverAddress !== undefined && connection.serverAddress !== serverAddress) ||
-                (serverPort !== undefined && Number(connection.serverPort) !== serverPort) ||
-                (userName !== undefined && connection.userName !== userName)
+                (parsed.data.serverAddress !== undefined &&
+                  connection.serverAddress?.toLowerCase() !==
+                    parsed.data.serverAddress.toLowerCase()) ||
+                (parsed.data.serverPort !== undefined &&
+                  Number(connection.serverPort) !== parsed.data.serverPort) ||
+                (parsed.data.userName !== undefined &&
+                  (connection.userName ?? '') !== parsed.data.userName)
               )
                 return new McpToolError({
                   type: 'flow-connection-update-unverified',
