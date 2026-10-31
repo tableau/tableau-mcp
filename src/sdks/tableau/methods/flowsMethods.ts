@@ -2,6 +2,7 @@ import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowsApis } from '../apis/flowsApi.js';
+import { getFilenameFromContentDisposition, getHeader } from '../responseHeaders.js';
 import { RestApiCredentials } from '../restApi.js';
 import { TableauRestError } from '../tableauRestError.js';
 import { DownloadFlowResult } from '../types/downloadFlowResult.js';
@@ -36,26 +37,12 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
       buildRestPath('sites', siteId, 'flows', assertLuid('flowId', flowId), 'content'),
       { ...this.authHeader, responseType: 'arraybuffer', maxContentLength: 256 * 1024 * 1024 },
     );
-    const disposition = response.headers['content-disposition'];
-    const match =
-      typeof disposition === 'string'
-        ? /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(disposition)
-        : null;
-    let filename = match?.[1] ?? match?.[2] ?? match?.[3];
-    if (match?.[1]) {
-      try {
-        filename = decodeURIComponent(match[1]);
-      } catch {
-        filename = undefined;
-      }
-    }
     return {
       content: Buffer.from(response.data),
-      contentType:
-        typeof response.headers['content-type'] === 'string'
-          ? response.headers['content-type']
-          : undefined,
-      filename,
+      contentType: getHeader(response.headers, 'content-type'),
+      filename: getFilenameFromContentDisposition(
+        getHeader(response.headers, 'content-disposition'),
+      ),
     };
   };
 
