@@ -32,8 +32,8 @@ an allowed project. Tableau permissions still govern the mutation.
 Local paths are accepted only when the MCP server runs over stdio, and use the server process's
 filesystem permissions. Don't put a stdio server behind a stdio-to-HTTP proxy: it still counts as
 stdio, so remote callers could read files on the server. HTTP servers must use staged uploads
-instead. Staged uploads retain the **5 GB (5000000000 bytes)** limit. Files are buffered in server
-memory before uploading to Tableau. See
+instead. Staged uploads retain the **5 GB (5000000000 bytes)** limit. Files are streamed to Tableau,
+never held in server memory whole. See
 [Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing) for
 the input and project bounds.
 

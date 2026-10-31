@@ -14,7 +14,7 @@ import {
 } from './init.js';
 import { blobStorageProviderSchema, isBlobStorageProviderType } from './types.js';
 
-// Plain-JS fixture missing getPresignedUploadUrl/download: loads, then fails duck-type validation.
+// Fixture missing getPresignedUploadUrl/download/delete; fails validation.
 const incompleteProviderPath = join(__dirname, '__fixtures__', 'incompleteProvider.js');
 
 function mockCustomConfig(module: string): void {
@@ -64,8 +64,15 @@ describe('BlobStorage', () => {
 
       expect(() => initializeBlobStorageProvider()).toThrow(
         `Failed to load custom blob storage provider from "${incompleteProviderPath}". ` +
-          'Custom provider missing required methods: getPresignedUploadUrl, download',
+          'Custom provider missing required methods: getPresignedUploadUrl, download, delete',
       );
+      expect(isBlobStorageEnabled()).toBe(false);
+    });
+
+    it('should throw when the custom provider does not implement delete', () => {
+      mockCustomConfig(join(__dirname, '__fixtures__', 'noDeleteProvider.js'));
+
+      expect(() => initializeBlobStorageProvider()).toThrow(/missing required methods: delete$/);
       expect(isBlobStorageEnabled()).toBe(false);
     });
 

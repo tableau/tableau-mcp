@@ -4,8 +4,8 @@ import {
   getStagedFileType,
   MAX_STAGED_UPLOAD_BYTES,
   requestStagedUpload,
-  type ResolvedStagedFile,
-  resolveStagedUpload,
+  type ResolvedStagedFileStream,
+  resolveStagedUploadStream,
   type StagedUploadKind,
 } from '../stagedUpload.js';
 
@@ -23,7 +23,7 @@ const datasourceKind: StagedUploadKind<DatasourceFileType> = {
   xmlFileType: 'tds',
 };
 
-export type ResolvedDatasource = ResolvedStagedFile;
+export type ResolvedDatasource = ResolvedStagedFileStream<DatasourceFileType>;
 
 export type RequestDatasourceUploadResult = {
   datasourceUploadId: string;
@@ -57,7 +57,7 @@ export async function resolveStagedDatasourceUpload({
   tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedDatasource> {
-  return await resolveStagedUpload({
+  return await resolveStagedUploadStream({
     kind: datasourceKind,
     uploadId: datasourceUploadId,
     tenant,

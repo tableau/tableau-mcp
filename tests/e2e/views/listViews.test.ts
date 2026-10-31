@@ -5,6 +5,7 @@ import invariant from '../../../src/utils/invariant.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
+// Calls are scoped to Superstore so content other e2e files publish/delete concurrently can't reach them.
 describe('list-views', () => {
   let client: McpClient;
 

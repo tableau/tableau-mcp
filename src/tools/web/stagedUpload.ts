@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
+import { Readable } from 'stream';
 
 import { getBlobStorageProvider } from '../../blobStorage/init.js';
 import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
+import { ArgsValidationError } from '../../errors/mcpToolError.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under common blob storage
 // single-PUT ceilings (e.g. S3's 5GB limit).
@@ -16,11 +18,6 @@ export type StagedUploadKind<FileType extends string> = {
   noun: string;
   fileTypes: ReadonlyArray<FileType>;
   xmlFileType: FileType;
-};
-
-export type ResolvedStagedFile = {
-  fileName: string;
-  bytes: Buffer;
 };
 
 export async function requestStagedUpload<FileType extends string>({
@@ -63,7 +60,19 @@ export async function requestStagedUpload<FileType extends string>({
   };
 }
 
-export async function resolveStagedUpload<FileType extends string>({
+export type ResolvedStagedFileStream<FileType extends string> = {
+  fileName: string;
+  fileType: FileType;
+  fileStream: AsyncIterable<Uint8Array>;
+  contentLength?: number;
+};
+
+/**
+ * Locates a staged upload and returns its bytes as a stream, without buffering. Rejects up front
+ * when the provider reports a length over `maxBytes`; otherwise non-byte chunks are rejected as
+ * they are consumed, and size and emptiness are enforced by the consumer.
+ */
+export async function resolveStagedUploadStream<FileType extends string>({
   kind,
   uploadId,
   tenant,
@@ -73,7 +82,7 @@ export async function resolveStagedUpload<FileType extends string>({
   uploadId: string;
   tenant: TenantLuids;
   maxBytes?: number;
-}): Promise<ResolvedStagedFile> {
+}): Promise<ResolvedStagedFileStream<FileType>> {
   assertStagedUploadId(kind, uploadId);
 
   // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
@@ -87,12 +96,20 @@ export async function resolveStagedUpload<FileType extends string>({
       continue;
     }
 
-    const bytes = await collectBytes(kind, download.data, maxBytes);
-    if (bytes.byteLength === 0) {
-      throw new Error(`${kind.label} upload bytes must not be empty.`);
+    // Fail before the caller opens a Tableau upload session it would abandon at the cap.
+    if (download.contentLength !== undefined && download.contentLength > maxBytes) {
+      discard(download.data);
+      throw new ArgsValidationError(
+        `${kind.label} upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
+      );
     }
 
-    return { fileName: `${uploadId}.${fileType}`, bytes };
+    return {
+      fileName: `${uploadId}.${fileType}`,
+      fileType,
+      fileStream: requireByteChunks(download.data),
+      contentLength: download.contentLength,
+    };
   }
 
   throw new Error(
@@ -100,29 +117,23 @@ export async function resolveStagedUpload<FileType extends string>({
   );
 }
 
-/** Buffers a provider download stream, throwing once it exceeds `maxBytes`. */
-async function collectBytes(
-  kind: StagedUploadKind<string>,
-  stream: AsyncIterable<Uint8Array>,
-  maxBytes: number,
-): Promise<Buffer> {
-  const pieces: Uint8Array[] = [];
-  let totalBytes = 0;
+async function* requireByteChunks(stream: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Array> {
   for await (const piece of stream) {
-    // A string- or object-mode stream would make byteLength undefined and the total NaN, which
-    // never exceeds maxBytes.
     if (!(piece instanceof Uint8Array)) {
       throw new Error('Blob storage provider yielded a non-byte chunk.');
     }
-    totalBytes += piece.byteLength;
-    if (totalBytes > maxBytes) {
-      throw new Error(
-        `${kind.label} upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
-      );
-    }
-    pieces.push(piece);
+    yield piece;
   }
-  return Buffer.concat(pieces, totalBytes);
+}
+
+/** Best-effort release of a provider stream that won't be read (destroys a Node `Readable`). */
+function discard(stream: AsyncIterable<Uint8Array>): void {
+  // `return()` on a fresh, unstarted Readable iterator is a no-op, so destroy it directly.
+  if (stream instanceof Readable) {
+    stream.destroy();
+    return;
+  }
+  Promise.resolve(stream[Symbol.asyncIterator]().return?.()).catch(() => undefined);
 }
 
 export function buildStagedUploadKey<FileType extends string>(

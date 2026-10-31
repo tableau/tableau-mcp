@@ -857,9 +857,10 @@ await s3.send(new PutObjectCommand({ Bucket, Key: key, Body: Readable.from(data)
 When `contentLength` is absent, use `@aws-sdk/lib-storage`'s `Upload` (multipart) instead.
 
 `download` returns `{ data, contentLength? }`, where `data` is a stream
-(`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found. Throw (don't truncate) if the
-object is known to exceed `maxBytes`; tableau-mcp also enforces `maxBytes` while reading. In Node,
-S3's GetObject `Body` is already an async iterable (map `NoSuchKey` to `undefined` and check
+(`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found, so multi-GB staged workbooks
+are never held in memory whole. Throw (don't truncate) if the object is known to exceed `maxBytes`;
+tableau-mcp also enforces `maxBytes` while reading. In Node, S3's GetObject `Body` is already an
+async iterable (map `NoSuchKey` to `undefined` and check
 `ContentLength` against `maxBytes` first):
 
 ```ts
@@ -870,6 +871,11 @@ return { data: Body as Readable, contentLength: ContentLength }; // Readable fro
 `getPresignedUploadUrl` receives an optional `maxBytes`. Providers may enforce it in the signature
 (e.g. an S3 POST policy `content-length-range`); tableau-mcp still enforces it when reading the
 upload back.
+
+Custom providers must implement `delete(key)`, which removes that object; deleting a key that does
+not exist must resolve, not throw (S3's `DeleteObjectCommand` already behaves this way). tableau-mcp
+calls it once Tableau completes a publish from a staged workbook or data source upload; a
+failure is logged and does not fail the publish.
 
 :::
 

@@ -16,7 +16,7 @@ function isRecord(obj: unknown): obj is Record<string, unknown> {
  * Validate that a provider implements the BlobStorageProvider interface.
  *
  * The contract is intentionally checked against the interface itself, not a
- * concrete class prototype: `upload`, `getPresignedUploadUrl`, and `download` are
+ * concrete class prototype: `upload`, `getPresignedUploadUrl`, `download`, and `delete` are
  * the only required methods.
  */
 function validateBlobStorageProvider(provider: unknown): asserts provider is BlobStorageProvider {
@@ -24,7 +24,7 @@ function validateBlobStorageProvider(provider: unknown): asserts provider is Blo
     throw new Error('Provider must be an object');
   }
 
-  const requiredMethods = ['upload', 'getPresignedUploadUrl', 'download'];
+  const requiredMethods = ['upload', 'getPresignedUploadUrl', 'download', 'delete'];
   const missingMethods = requiredMethods.filter((method) => typeof provider[method] !== 'function');
 
   if (missingMethods.length > 0) {

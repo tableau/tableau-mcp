@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import {
   buildWorkbookUploadKey,
@@ -24,6 +26,12 @@ const MOCK_SITE_LUID = '0a1b2c3d-1111-4222-8333-444455556666';
 const MOCK_USER_LUID = '9f8e7d6c-aaaa-4bbb-8ccc-ddddeeeeffff';
 const tenant: TenantLuids = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
 const tenantPrefix = `${MOCK_SITE_LUID}/${MOCK_USER_LUID}`;
+
+async function collect(stream: AsyncIterable<Uint8Array>): Promise<string> {
+  const pieces: Uint8Array[] = [];
+  for await (const piece of stream) pieces.push(piece);
+  return Buffer.concat(pieces).toString();
+}
 
 async function* streamOf(...pieces: string[]): AsyncGenerator<Uint8Array> {
   for (const piece of pieces) {
@@ -132,12 +140,11 @@ describe('resolveStagedWorkbookUpload', () => {
   it('returns the staged workbook stream from the .twb key when it exists', async () => {
     mocks.download.mockResolvedValue({ data: streamOf('<work', 'book />'), contentLength: 12 });
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant }),
-    ).resolves.toEqual({
-      fileName: `${uploadId}.twb`,
-      bytes: Buffer.from('<workbook />'),
-    });
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
+    expect(resolved.fileName).toBe(`${uploadId}.twb`);
+    expect(resolved.fileType).toBe('twb');
+    expect(resolved.contentLength).toBe(12);
+    expect(await collect(resolved.fileStream)).toBe('<workbook />');
     expect(mocks.download).toHaveBeenCalledWith({
       key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
@@ -149,12 +156,10 @@ describe('resolveStagedWorkbookUpload', () => {
     mocks.download.mockResolvedValueOnce(undefined);
     mocks.download.mockResolvedValueOnce({ data: streamOf('PK\x03\x04') });
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant }),
-    ).resolves.toEqual({
-      fileName: `${uploadId}.twbx`,
-      bytes: Buffer.from('PK\x03\x04'),
-    });
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
+    expect(resolved.fileName).toBe(`${uploadId}.twbx`);
+    expect(resolved.fileType).toBe('twbx');
+    expect(await collect(resolved.fileStream)).toBe('PK\x03\x04');
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
       key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
@@ -163,6 +168,19 @@ describe('resolveStagedWorkbookUpload', () => {
       key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
+  });
+
+  it('rejects and destroys the stream when the provider reports a length over the limit', async () => {
+    const data = Readable.from([Buffer.from('PK\x03\x04')]);
+    mocks.download.mockResolvedValueOnce(undefined);
+    mocks.download.mockResolvedValueOnce({ data, contentLength: MAX_STAGED_WORKBOOK_BYTES + 1 });
+
+    await expect(
+      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant }),
+    ).rejects.toThrow(
+      `Workbook upload exceeds the maximum allowed size of ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
+    );
+    expect(data.destroyed).toBe(true);
   });
 
   it('throws when neither the .twb nor .twbx key exists', async () => {
@@ -208,32 +226,24 @@ describe('resolveStagedWorkbookUpload', () => {
   });
 });
 
-describe('resolveStagedWorkbookUpload limits', () => {
-  it('rejects empty uploaded workbook bytes', async () => {
+describe('resolveStagedWorkbookUpload streaming', () => {
+  it('does not buffer or reject at resolve time; the consumer enforces size and emptiness', async () => {
     mocks.download.mockResolvedValue({ data: streamOf() });
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant }),
-    ).rejects.toThrow('must not be empty');
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
+    expect(await collect(resolved.fileStream)).toBe('');
   });
 
-  it('rejects a stream that exceeds maxBytes', async () => {
-    mocks.download.mockResolvedValue({ data: streamOf('1234', '5678') });
-
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant, maxBytes: 6 }),
-    ).rejects.toThrow('exceeds the maximum allowed size of 6 bytes');
-  });
-
-  it('rejects a stream that yields a non-byte chunk', async () => {
+  it('rejects a stream that yields a non-byte chunk when consumed', async () => {
     async function* stringChunks(): AsyncGenerator<unknown> {
       yield '1234';
     }
     mocks.download.mockResolvedValue({ data: stringChunks() });
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant, maxBytes: 2 }),
-    ).rejects.toThrow('Blob storage provider yielded a non-byte chunk.');
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
+    await expect(collect(resolved.fileStream)).rejects.toThrow(
+      'Blob storage provider yielded a non-byte chunk.',
+    );
   });
 });
 

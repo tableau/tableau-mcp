@@ -4,8 +4,8 @@ import {
   getStagedFileType,
   MAX_STAGED_UPLOAD_BYTES,
   requestStagedUpload,
-  type ResolvedStagedFile,
-  resolveStagedUpload,
+  type ResolvedStagedFileStream,
+  resolveStagedUploadStream,
   type StagedUploadKind,
 } from '../stagedUpload.js';
 
@@ -23,7 +23,7 @@ const workbookKind: StagedUploadKind<WorkbookFileType> = {
   xmlFileType: 'twb',
 };
 
-export type ResolvedWorkbook = ResolvedStagedFile;
+export type ResolvedWorkbook = ResolvedStagedFileStream<WorkbookFileType>;
 
 export type RequestWorkbookUploadResult = {
   workbookUploadId: string;
@@ -53,7 +53,7 @@ export async function resolveStagedWorkbookUpload({
   tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedWorkbook> {
-  return await resolveStagedUpload({
+  return await resolveStagedUploadStream({
     kind: workbookKind,
     uploadId: workbookUploadId,
     tenant,
