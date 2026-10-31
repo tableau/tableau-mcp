@@ -125,6 +125,10 @@ const getDatasourceMetadataToolDescription20263 = `
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau data sources.
     `;
 
+const fieldNameQueryGuidance = `
+    name is the display caption; fieldName is the internal query name. For duplicate captions, choose the intended logical table and use exact fieldName values with query-datasource's interpretFieldCaptionsAsFieldNames option. parameterName is the corresponding internal parameter name.
+    `;
+
 export const getGetDatasourceMetadataTool = (
   server: WebMcpServer,
   productVersion: ProductVersion,
@@ -134,15 +138,16 @@ export const getGetDatasourceMetadataTool = (
     server,
     name: 'get-datasource-metadata',
     minRequiredRole: SiteRole.VIEWER,
-    description: new Provider(() =>
-      getResultForTableauVersion({
+    description: new Provider(() => {
+      const description = getResultForTableauVersion({
         productVersion,
         mappings: {
           '2026.3.0': getDatasourceMetadataToolDescription20263,
           default: getDatasourceMetadataToolDescription,
         },
-      }),
-    ),
+      });
+      return rules.fieldNamesAreUnavailable ? description : description + fieldNameQueryGuidance;
+    }),
     paramsSchema,
     annotations: {
       title: 'Get Datasource Metadata',
@@ -301,6 +306,7 @@ function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
       '2025.3.0': {},
       default: {
         datasourceModelIsUnavailable: true,
+        fieldNamesAreUnavailable: true,
       },
     },
   });

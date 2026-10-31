@@ -77,6 +77,12 @@ Top-level keys are returned in this order:
 `datasourceModel` is available on Tableau versions that support the VDS `get-datasource-model`
 endpoint (2025.3+). On older versions, it is omitted.
 
+Fields expose their display caption as `name` and, when available from VDS, their underlying query
+name as `fieldName`. Parameters similarly expose `name` and optional `parameterName`. If captions
+repeat across logical tables, choose the intended table and use its exact query names with
+[`query-datasource`](query-datasource.md#interpretfieldcaptionsasfieldnames) on Tableau 2025.3+.
+Metadata API-only fallback results do not include underlying query names.
+
 ## Example result
 
 ```json
