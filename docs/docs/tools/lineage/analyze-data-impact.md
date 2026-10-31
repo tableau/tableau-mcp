@@ -31,6 +31,12 @@ To analyze a field at a specific Prep step, use:
 proposed operation; the analysis does not simulate values, infer native result types or prove that a
 particular calculation will break. Traversal is always downstream.
 
+The same `local-flow` origin as [Get Data Lineage](get-data-lineage.md#local-tfl-and-tflx-files)
+supports local TFL/TFLX files, steps and output fields in self-hosted stdio with `LOCAL_FLOW_ROOTS`.
+Local impact is limited to saved internal dependencies; it never guesses a published flow or
+dashboard from names or embedded identifiers. Whole-file membership remains `unknown`; select an
+exact field for supported column mappings, or an exact step for topology.
+
 The response includes the lineage graph plus an `impacts` list. Each entry identifies a target and
 one strongest known path (`nodeIds` and `edgeIds`), then prefers a shorter path of the same
 certainty:

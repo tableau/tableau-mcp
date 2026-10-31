@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import * as config from '../../../config.js';
 import { dataLineageParams, LineageOptions } from '../../../sdks/tableau/types/dataLineage.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { DATA_LINEAGE_API_SCOPES, DESCRIBE_FLOW_API_SCOPES } from '../../../server/oauth/scopes.js';
@@ -94,6 +95,30 @@ describe('data lineage tools and optional document guards', () => {
     expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
     expect(mocks.useRestApi.mock.calls[0][0].jwtScopes).not.toContain('tableau:flows:download');
   });
+  it.each(['stdio', 'http'] as const)(
+    'rejects unconfigured/remote local access on %s without Tableau calls',
+    async (transport) => {
+      const spy = vi.spyOn(config, 'getConfig').mockReturnValue({
+        ...config.getConfig(),
+        transport,
+        localFlowRoots: transport === 'stdio' ? [] : ['C:/Prep'],
+      });
+      const context = extra();
+      try {
+        const graph = await executeDataLineage(
+          args({ source: { type: 'local-flow', path: 'C:/Prep/flow.tfl' } }),
+          context,
+          version,
+        );
+        expect(graph.resolution).toBe('not-allowed');
+        expect(graph.coverage.requests).toBe(0);
+        expect(mocks.useRestApi).not.toHaveBeenCalled();
+        expect(context.getConfigWithOverrides).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
   it('mints optional download scopes only after flow authorization', async () => {
     await executeDataLineage(args({ includePrepDetails: true }), extra(), version);
     expect(mocks.document).toHaveBeenCalledWith({ siteId: 'site', flowId: luid });

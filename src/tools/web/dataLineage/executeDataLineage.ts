@@ -11,6 +11,7 @@ import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLea
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { lineageAccess } from './lineageAccess.js';
+import { executeLocalDataLineage } from './localDataLineage.js';
 import { addPrepTopology } from './prepLineage.js';
 
 /** Share one Metadata session, but mint download scopes only for an explicitly
@@ -20,6 +21,8 @@ export async function executeDataLineage(
   extra: TableauWebRequestHandlerExtra,
   productVersion: ProductVersion,
 ): Promise<DataLineageResult> {
+  if (options.source.type === 'local-flow')
+    return executeLocalDataLineage(options, getConfig(), extra.signal);
   const overrides = await extra.getConfigWithOverrides();
   const prepEnabled = await isFlowReadToolsEnabled(getConfig());
   const internalSource =

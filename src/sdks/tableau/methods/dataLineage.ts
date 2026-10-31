@@ -131,7 +131,8 @@ export class DataLineageTraversal {
 
   truncate(code: string): void {
     this.result.coverage.truncated = true;
-    this.result.coverage.metadata = 'partial';
+    if (this.result.coverage.metadata !== 'not-requested')
+      this.result.coverage.metadata = 'partial';
     this.warn(code, 'Traversal reached a configured limit; additional dependencies may exist.');
   }
 
@@ -298,7 +299,8 @@ export class DataLineageTraversal {
   /** Resolve names across every candidate page; never choose the first match. */
   async resolve(): Promise<void> {
     const source = this.options.source;
-    if (source.type === 'prep-step' || source.type === 'prep-field') return;
+    if (source.type === 'prep-step' || source.type === 'prep-field' || source.type === 'local-flow')
+      return;
     const roots = metadataRoots[source.type] ?? [];
     const filter =
       'id' in source

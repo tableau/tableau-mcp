@@ -35,6 +35,7 @@ candidates with their Metadata API IDs and table qualifications. It never choose
 | `flow-input-field`, `flow-output-field`, `flow-output-step` | Opaque Metadata API `id`                                                                         |
 | `prep-step`                                                 | `flowLuid` and document `stepId`                                                                 |
 | `prep-field`                                                | `flowLuid`, `stepId`, output field `name`; add `namespace` for a Group with several output ports |
+| `local-flow`                                                | Absolute `.tfl`/`.tflx` `path`; optional `at` selects an exact local step or output field |
 
 Metadata IDs, document step IDs and REST LUIDs are distinct namespaces. Returned graph `id` values
 identify nodes in this response; use `metadataId`, `luid` or `stepId` for the corresponding source.
@@ -95,8 +96,43 @@ because this read-only lineage analyzer does not consume them. Full JSON equalit
 The API object corresponds to the native `flow` document, not a package-reader envelope containing
 `flow`, `displaySettings` and `maestroMetadata`. Unknown API formats produce
 `PREP_DOCUMENT_FORMAT_UNSUPPORTED`; wrappers are not guessed. This implementation uses Flow Document
-API rather than downloading archives. The comparison does not establish every possible node type or
+API for published flows. Local files use the bounded native package reader. The comparison does not establish every possible node type or
 future release's format.
+
+## Local TFL and TFLX files
+
+Self-hosted stdio operators can opt in with `LOCAL_FLOW_ROOTS`, a JSON array of absolute directories
+(at most 20). For example, set it to `["C:/Prep/flows"]` or `["/home/me/prep-flows"]` in the MCP
+process environment. It defaults to `[]`. HTTP transport cannot read local flow files. Tableau
+server/auth configuration is still required to start the existing web MCP server.
+
+```json
+{
+  "source": {
+    "type": "local-flow",
+    "path": "C:/Prep/flows/sales.tflx",
+    "at": { "type": "field", "stepId": "clean-step-id", "name": "Amount" }
+  },
+  "direction": "downstream"
+}
+```
+
+Omit `at` to inspect the whole saved file, or use `{"type":"step","stepId":"clean-step-id"}`
+for step topology. A field origin refers to that step's output; supply `namespace` when it has
+multiple output ports. A step topology link does not prove that every column is used by the step.
+
+Only unchanged regular files within canonical configured roots are accepted. Network paths,
+symlinks, hardlinks, unsupported archives and oversized input are rejected. Reads are bounded to
+32 MiB per file and 16 MiB of native JSON, with bounded nested packages, counts and static analysis.
+Archives are inspected in memory without extracting embedded data or writing the source. File
+fingerprints namespace local graph identities; an embedded ID or matching name does not establish
+identity with a published flow.
+
+Local responses set `coverage.metadata=not-requested`, `coverage.permissionMode=NOT_REQUESTED` and
+zero request count. They return saved static dependencies and an explicit publication warning.
+Remote resource restrictions apply to catalog calls; local file access is governed separately by
+transport and operator roots. No Tableau, database, Python/R, model, publish or flow-run request is
+made. Published downstream impact requires a separately verified published origin.
 
 ## Results and Prep coverage
 

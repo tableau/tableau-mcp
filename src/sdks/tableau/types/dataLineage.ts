@@ -6,6 +6,30 @@ const metadataId = z.string().min(1).max(2048).describe('Opaque Metadata API ID,
 const text = z.string().min(1).max(1024);
 
 export const lineageSourceSchema = z.union([
+  z.object({
+    type: z.literal('local-flow'),
+    path: z
+      .string()
+      .min(1)
+      .max(4096)
+      .describe(
+        'Absolute TFL/TFLX path inside configured LOCAL_FLOW_ROOTS. Self-hosted stdio only.',
+      ),
+    at: z
+      .union([
+        z.object({ type: z.literal('step'), stepId: text }),
+        z.object({
+          type: z.literal('field'),
+          stepId: text,
+          name: text,
+          namespace: text.optional(),
+        }),
+      ])
+      .optional()
+      .describe(
+        'Optional exact local step or output-field origin; otherwise analyze the whole file.',
+      ),
+  }),
   z.object({ type: z.literal('column'), id: metadataId }),
   z.object({
     type: z.literal('column'),
@@ -105,6 +129,7 @@ export type LineageNode = {
   operation?: string;
   flowLuid?: string;
   documentPath?: string;
+  documentId?: string;
   table?: { name?: string; schema?: string; database?: string };
 };
 
@@ -114,7 +139,7 @@ export type LineageEdge = {
   to: string;
   relationship: string;
   evidence: EvidenceLevel;
-  provenance: 'metadata-api' | 'flow-document';
+  provenance: 'metadata-api' | 'flow-document' | 'local-flow-file';
   // Container membership is terminal: expanding it would attribute every
   // unrelated field/sheet in the same container to the original column.
   propagates: boolean;
@@ -131,7 +156,9 @@ export type DataLineageResult = {
   edges: LineageEdge[];
   warnings: LineageWarning[];
   prepDetails?: Array<{
-    flowLuid: string;
+    flowLuid?: string;
+    documentId?: string;
+    source?: { kind: 'native-flow-file'; sha256: string; byteLength: number; name: string };
     // Syntactic references remain local to each operation. They are not joined
     // to catalog column IDs or other steps by name.
     fieldAnalysis?: {
@@ -156,11 +183,11 @@ export type DataLineageResult = {
     }>;
   }>;
   coverage: {
-    metadata: 'indexed-visible-subgraph' | 'partial' | 'unavailable';
+    metadata: 'indexed-visible-subgraph' | 'partial' | 'unavailable' | 'not-requested';
     prep: 'not-requested' | 'static-fields-with-gaps' | 'unavailable';
     truncated: boolean;
     requests: number;
-    permissionMode: 'FILTER' | 'FILTER_WITH_VERIFIED_PREP_INPUTS';
+    permissionMode: 'FILTER' | 'FILTER_WITH_VERIFIED_PREP_INPUTS' | 'NOT_REQUESTED';
   };
   limitations: string[];
 };
