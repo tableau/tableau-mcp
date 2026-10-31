@@ -1,3 +1,5 @@
+import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+
 /**
  * Single source of truth for turning a `datappName` into a data app's identity
  * (package id / display name) and for describing how the committed
@@ -38,6 +40,7 @@ const PLACEHOLDER_DISPLAY_NAME = 'TODO App Name';
 const PLACEHOLDER_SHEET_NAME = 'TODO Sheet Name';
 const PLACEHOLDER_VERSION = 'TODO-MANIFEST-VERSION';
 const PLACEHOLDER_AUTHOR = 'TODO Author Name';
+const PLACEHOLDER_SOURCE_BUILD = 'TODO-SOURCE-BUILD';
 
 /** Every scaffolded app starts at this version, authored as this name. */
 export const DEFAULT_VERSION = '1.0.0';
@@ -135,10 +138,17 @@ function escapeJsonString(value: string): string {
  * the .twb/.trex and JSON-escaped for manifest.json. `packageId` (a slug) and `version` contain no
  * characters needing escaping.
  */
-export function buildTextReplacements(identity: DataAppIdentity): Record<string, Replacement[]> {
+export function buildTextReplacements(
+  identity: DataAppIdentity,
+  productVersion: ProductVersion,
+): Record<string, Replacement[]> {
   const displayNameXml = escapeXmlText(identity.displayName);
   return {
     [TWB_RELPATH]: [
+      {
+        find: PLACEHOLDER_SOURCE_BUILD,
+        replace: escapeXmlText(`${productVersion.value} (${productVersion.build})`),
+      },
       { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },
       { find: PLACEHOLDER_DISPLAY_NAME, replace: displayNameXml },
       { find: PLACEHOLDER_SHEET_NAME, replace: displayNameXml },
@@ -165,9 +175,12 @@ export function buildTextReplacements(identity: DataAppIdentity): Record<string,
  * first, then the `renames` in order (deepest paths first, the root dir last).
  * Paths are relative to the unzip directory and include the template root dir.
  */
-export function buildPostUnzipPlan(identity: DataAppIdentity): PostUnzipPlan {
+export function buildPostUnzipPlan(
+  identity: DataAppIdentity,
+  productVersion: ProductVersion,
+): PostUnzipPlan {
   const root = TEMPLATE_ROOT_DIRNAME;
-  const edits: FileEdit[] = Object.entries(buildTextReplacements(identity)).map(
+  const edits: FileEdit[] = Object.entries(buildTextReplacements(identity, productVersion)).map(
     ([relPath, replacements]) => ({ file: `${root}/${relPath}`, replacements }),
   );
   const renames: Rename[] = [
