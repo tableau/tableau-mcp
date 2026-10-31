@@ -30,6 +30,7 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
+  | 'tableau:mcp:flow:create'
   | 'tableau:mcp:flow:run'
   | 'tableau:mcp:flow:cancel'
   | 'tableau:mcp:pulse:read'
@@ -51,6 +52,7 @@ export type TableauApiScope =
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:flows:read'
+  | 'tableau:flows:create'
   | 'tableau:flows:download'
   | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
@@ -308,6 +310,18 @@ const toolScopeMap: Record<
   'list-flows': {
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'request-flow-upload': {
+    mcp: ['tableau:mcp:flow:create'],
+    api: new Set<TableauApiScope>(),
+  },
+  'publish-flow': {
+    mcp: ['tableau:mcp:flow:create'],
+    api: new Set([
+      'tableau:flows:create',
+      'tableau:file_uploads:create',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'get-flow': {
     mcp: ['tableau:mcp:flow:read'],
@@ -602,6 +616,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
+    enabledTools.delete('publish-flow');
+    enabledTools.delete('request-flow-upload');
     enabledTools.delete('run-flow-task');
     enabledTools.delete('cancel-flow-run');
   }
@@ -617,6 +633,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!authoringAllowedForClient) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
+    enabledTools.delete('publish-flow');
+    enabledTools.delete('request-flow-upload');
     enabledTools.delete('download-workbook');
   }
 
