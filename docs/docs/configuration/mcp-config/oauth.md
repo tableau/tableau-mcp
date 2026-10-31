@@ -467,6 +467,11 @@ interface. `consume` must be implemented as a truly atomic operation against the
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
 Redis, or a transaction for a relational store).
 
+The store holds live Tableau access/refresh tokens and bearer secrets (authorization codes,
+refresh token IDs), so secure it like a secrets store: require authentication and TLS (e.g. Redis
+`AUTH` + TLS), keep it unreachable from outside the trusted network, and restrict access to its
+backups and logs.
+
 :::
 
 <hr />
