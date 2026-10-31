@@ -1,5 +1,6 @@
 {
   "mcp-apps": false,
+  "mcp-apps-for-claude": false,
   "enforce-role-requirements": false,
   "enforce-registration-conditions": false,
   "datasource-authoring": false,

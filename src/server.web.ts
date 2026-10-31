@@ -341,7 +341,9 @@ export class WebMcpServer extends Server {
     mcpAppsEnabled: boolean,
   ): Promise<boolean> => {
     const config = getConfig();
-    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
+    const isKnownIncompatibleClient =
+      getClientDisplayName(this.clientId) === 'Claude' &&
+      !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
       args: typeof tool.paramsSchema,

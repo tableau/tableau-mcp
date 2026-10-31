@@ -877,20 +877,29 @@ describe('server', () => {
   it.each([
     {
       clientId: 'https://cursor.com/some/cimd',
+      claudeFlag: false,
       expectedRenderable: true,
       registration: 'app',
     },
     {
       clientId: 'https://claude.ai/some/cimd',
+      claudeFlag: false,
       expectedRenderable: false,
       registration: 'plain',
     },
+    {
+      clientId: 'https://claude.ai/some/cimd',
+      claudeFlag: true,
+      expectedRenderable: true,
+      registration: 'app',
+    },
   ])(
-    'passes mcpAppToolsRenderable=$expectedRenderable through a lazily registered $registration tool',
-    async ({ clientId, expectedRenderable, registration }) => {
+    'passes mcpAppToolsRenderable=$expectedRenderable through a lazily registered $registration tool (clientId=$clientId, mcp-apps-for-claude=$claudeFlag)',
+    async ({ clientId, claudeFlag, expectedRenderable, registration }) => {
       vi.stubEnv('TOOL_PROFILE', 'combined-lean');
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (featureName: string) => featureName === 'mcp-apps',
+        (featureName: string) =>
+          featureName === 'mcp-apps' || (claudeFlag && featureName === 'mcp-apps-for-claude'),
       );
 
       const server = getServer({ clientId, shared: true });
@@ -1658,7 +1667,7 @@ describe('server', () => {
   });
 
   it('should register as standard tool for a known-incompatible client (claude.ai) despite UI support', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) => name === 'mcp-apps');
 
     // Flag on + UI-capable, but clientId resolves to 'Claude' via getClientDisplayName → plain tool.
     const server = getServer({
@@ -1700,8 +1709,27 @@ describe('server', () => {
     expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
   });
 
-  it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
+  it('should register as app tool for claude.ai when mcp-apps-for-claude is on', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) => name === 'mcp-apps');
 
     // UI-capable but claude.ai → app path is blocked; hideWhenUnsupported means no plain fallback either.
     const server = getServer({
