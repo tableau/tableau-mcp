@@ -22,6 +22,8 @@ import type { WebToolName } from '../../tools/web/toolName.js';
  * when authenticating with the MCP server.
  */
 export type McpScope =
+  | 'tableau:mcp:subscriptions:read'
+  | 'tableau:mcp:subscriptions:write'
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:datasource:create'
@@ -45,6 +47,8 @@ export type McpScope =
   | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
+  | 'tableau:tasks:create'
+  | 'tableau:tasks:update'
   | 'tableau:content:read'
   | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
@@ -93,6 +97,8 @@ export type TableauApiScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
+  'tableau:mcp:subscriptions:read',
+  'tableau:mcp:subscriptions:write',
   'tableau:mcp:datasource:read',
   'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
@@ -225,6 +231,32 @@ const toolScopeMap: Record<
     conditionApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
+  // Subscriptions document tasks:create/tasks:update rather than the tasks:write mappings below.
+  // https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_subscriptions.htm
+  'list-subscriptions': {
+    mcp: ['tableau:mcp:subscriptions:read'],
+    api: new Set(['tableau:tasks:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'create-subscription': {
+    mcp: ['tableau:mcp:subscriptions:write'],
+    api: new Set(['tableau:tasks:create', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'suspend-subscription': {
+    mcp: ['tableau:mcp:subscriptions:write'],
+    api: new Set([
+      'tableau:tasks:read',
+      'tableau:tasks:update',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  'resume-subscription': {
+    mcp: ['tableau:mcp:subscriptions:write'],
+    api: new Set([
+      'tableau:tasks:read',
+      'tableau:tasks:update',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),

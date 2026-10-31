@@ -559,13 +559,15 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:users:update');
     });
 
-    it('should exclude tableau:tasks:read when adminToolsEnabled is false', async () => {
+    it('should retain personal subscription API scopes when adminToolsEnabled is false', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
 
       const scopes = await getSupportedApiScopes();
-      expect(scopes).not.toContain('tableau:tasks:read');
+      expect(scopes).toContain('tableau:tasks:read');
+      expect(scopes).toContain('tableau:tasks:create');
+      expect(scopes).toContain('tableau:tasks:update');
     });
 
     it('should include tableau:tasks:write when adminToolsEnabled and admin-tools are both on', async () => {
@@ -1060,7 +1062,8 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:tasks:read');
       expect(scopes).not.toContain('tableau:mcp:tasks:write');
       expect(scopes).not.toContain('tableau:mcp:jobs:read');
-      expect(scopes).not.toContain('tableau:tasks:read');
+      // Personal subscriptions remain available without admin tools.
+      expect(scopes).toContain('tableau:tasks:read');
       expect(scopes).not.toContain('tableau:tasks:write');
       expect(scopes).not.toContain('tableau:jobs:read');
       expect(scopes).not.toContain('tableau:users:read');
