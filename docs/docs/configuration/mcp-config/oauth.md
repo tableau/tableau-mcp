@@ -440,8 +440,7 @@ spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 The session store provider to use for the embedded OAuth authorization server's session state
 (pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
-Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
-enabled (the default; see [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above).
+Also stores [flow confirmation state](env-vars.md#mutation_preview_ttl_minutes) in every authentication mode.
 
 - Default: `memory`
 - Possible values:

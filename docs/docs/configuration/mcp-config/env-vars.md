@@ -659,6 +659,11 @@ the preview.
 - Minimum: `1`
 - Maximum: `1440` (24 hours)
 
+For `run-flow`, `run-flow-task`, and `cancel-flow-run`, confirmation across replicas requires a shared
+[`SESSION_STORE_PROVIDER=custom`](oauth.md#session_store_provider) store and the same
+`OAUTH_JWE_PRIVATE_KEY` (or key file via `OAUTH_JWE_PRIVATE_KEY_PATH`) on every replica.
+With the default `memory` store or no configured key, preview and confirm must reach the same process.
+
 Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
 time between preview and confirmation.
 
