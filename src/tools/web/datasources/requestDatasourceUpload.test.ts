@@ -1,10 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { getConfig } from '../../../config.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getRequestDatasourceUploadTool } from './requestDatasourceUpload.js';
 import { MAX_STAGED_DATASOURCE_BYTES } from './stagedDatasourceUpload.js';
 
@@ -12,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
   mockIsBlobStorageEnabled: vi.fn(),
   mockRequestStagedDatasourceUpload: vi.fn(),
+  mockUseRestApi: vi.fn(),
+}));
+
+vi.mock('../../../restApiInstance.js', () => ({
+  useRestApi: mocks.mockUseRestApi,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -34,6 +40,7 @@ describe('requestDatasourceUploadTool', () => {
     stubDefaultEnvVars();
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockUseRestApi.mockImplementation(async (opts) => opts.callback({}));
     mocks.mockRequestStagedDatasourceUpload.mockResolvedValue({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://blob.example.com/signed-put',
@@ -110,10 +117,11 @@ describe('requestDatasourceUploadTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
-  it('returns a staged upload URL when blob storage is configured', async () => {
-    const result = await getToolResult({
-      fileName: 'Superstore.tds',
-    });
+  it('returns a staged upload URL from the OAuth session LUIDs without useRestApi', async () => {
+    const result = await getToolResult(
+      { fileName: 'Superstore.tds' },
+      { config: { ...getConfig(), auth: 'oauth' } },
+    );
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -126,7 +134,94 @@ describe('requestDatasourceUploadTool', () => {
     });
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tds',
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
+    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['pat', 'uat', 'direct-trust'] as const)(
+    'signs in and stages under the signed-in identity even when the session has LUIDs for AUTH=%s',
+    async (auth) => {
+      const signedIn = {
+        siteLuid: '11111111-2222-4333-8444-555555555555',
+        userLuid: '66666666-7777-4888-9999-000000000000',
+      };
+      mocks.mockUseRestApi.mockImplementation(async (opts) => {
+        opts.setSiteLuid(signedIn.siteLuid);
+        opts.setUserLuid(signedIn.userLuid);
+        return opts.callback({});
+      });
+      let siteLuid = MOCK_SITE_LUID;
+      let userLuid = MOCK_USER_LUID;
+
+      const result = await getToolResult(
+        { fileName: 'Superstore.tds' },
+        {
+          config: { ...getConfig(), auth },
+          getSiteLuid: () => siteLuid,
+          getUserLuid: () => userLuid,
+          setSiteLuid: (luid: string) => {
+            siteLuid = luid;
+          },
+          setUserLuid: (luid: string) => {
+            userLuid = luid;
+          },
+        },
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
+      expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith(
+        expect.objectContaining({ tenant: signedIn }),
+      );
+    },
+  );
+
+  it('signs in without API scopes and stages under the signed-in identity when the session has no tenant LUIDs', async () => {
+    const signedIn = {
+      siteLuid: '11111111-2222-4333-8444-555555555555',
+      userLuid: '66666666-7777-4888-9999-000000000000',
+    };
+    mocks.mockUseRestApi.mockImplementation(async (opts) => {
+      opts.setSiteLuid(signedIn.siteLuid);
+      opts.setUserLuid(signedIn.userLuid);
+      return opts.callback({});
+    });
+    let siteLuid = '';
+    let userLuid = '';
+
+    const result = await getToolResult(
+      { fileName: 'Superstore.tds' },
+      {
+        getSiteLuid: () => siteLuid,
+        getUserLuid: () => userLuid,
+        setSiteLuid: (luid: string) => {
+          siteLuid = luid;
+        },
+        setUserLuid: (luid: string) => {
+          userLuid = luid;
+        },
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
+    expect(mocks.mockUseRestApi.mock.calls[0][0].jwtScopes).toEqual([]);
+    expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ tenant: signedIn }),
+    );
+  });
+
+  it('fails closed without staging when the session still has no valid tenant LUIDs after sign-in', async () => {
+    const result = await getToolResult({ fileName: 'Superstore.tds' }, { _siteLuid: '' });
+
+    expect(result.isError).toBe(true);
+    expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Unable to determine the signed-in Tableau site and user',
+    );
+    expect(mocks.mockRequestStagedDatasourceUpload).not.toHaveBeenCalled();
   });
 
   it('returns a staged upload URL for a .tdsx filename', async () => {
@@ -145,6 +240,7 @@ describe('requestDatasourceUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tdsx',
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
   });
 
@@ -201,9 +297,5 @@ async function getToolResult(
 function getMockExtra(
   overrides: Partial<ReturnType<typeof getMockRequestHandlerExtra>> = {},
 ): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
-  return {
-    ...extra,
-    ...overrides,
-  };
+  return getMockRequestHandlerExtra(overrides);
 }

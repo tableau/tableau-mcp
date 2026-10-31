@@ -2,13 +2,14 @@ import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
 import { getBlobStorageProvider } from '../../blobStorage/init.js';
+import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under common blob storage
 // single-PUT ceilings (e.g. S3's 5GB limit).
 export const MAX_STAGED_UPLOAD_BYTES = 5 * 1000 * 1000 * 1000;
 
 export type StagedUploadKind<FileType extends string> = {
-  // Keys are `<prefixSegment>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
+  // Keys are `<prefixSegment>/<siteLuid>/<userLuid>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
   prefixSegment: string;
   objectStem: string;
   label: string;
@@ -25,9 +26,11 @@ export type ResolvedStagedFile = {
 export async function requestStagedUpload<FileType extends string>({
   kind,
   fileName,
+  tenant,
 }: {
   kind: StagedUploadKind<FileType>;
   fileName: string;
+  tenant: TenantLuids;
 }): Promise<{
   uploadId: string;
   uploadUrl: string;
@@ -46,7 +49,7 @@ export async function requestStagedUpload<FileType extends string>({
     fileType === kind.xmlFileType ? 'application/xml' : 'application/octet-stream';
   const { uploadUrl, requiredHeaders, expiresAt } =
     await getBlobStorageProvider().getPresignedUploadUrl({
-      key: buildStagedUploadKey(kind, uploadId, fileType),
+      key: buildStagedUploadKey(kind, tenant, uploadId, fileType),
       contentType,
       maxBytes: MAX_STAGED_UPLOAD_BYTES,
     });
@@ -63,17 +66,20 @@ export async function requestStagedUpload<FileType extends string>({
 export async function resolveStagedUpload<FileType extends string>({
   kind,
   uploadId,
+  tenant,
   maxBytes = MAX_STAGED_UPLOAD_BYTES,
 }: {
   kind: StagedUploadKind<FileType>;
   uploadId: string;
+  tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedStagedFile> {
   assertStagedUploadId(kind, uploadId);
 
+  // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
   for (const fileType of kind.fileTypes) {
     const download = await getBlobStorageProvider().download({
-      key: buildStagedUploadKey(kind, uploadId, fileType),
+      key: buildStagedUploadKey(kind, tenant, uploadId, fileType),
       maxBytes,
     });
 
@@ -121,11 +127,16 @@ async function collectBytes(
 
 export function buildStagedUploadKey<FileType extends string>(
   kind: StagedUploadKind<FileType>,
+  tenant: TenantLuids,
   uploadId: string,
   fileType: FileType,
 ): string {
   assertStagedUploadId(kind, uploadId);
-  return `${kind.prefixSegment}/${uploadId}/${kind.objectStem}.${fileType}`;
+  return buildTenantBlobKey(
+    tenant,
+    kind.prefixSegment,
+    `${uploadId}/${kind.objectStem}.${fileType}`,
+  );
 }
 
 export function getStagedFileType<FileType extends string>(

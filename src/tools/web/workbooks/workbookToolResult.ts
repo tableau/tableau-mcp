@@ -4,9 +4,17 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Ok, Result } from 'ts-results-es';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import {
+  buildTenantBlobKey,
+  getTenantLuids,
+  TenantIdentitySource,
+  TenantLuids,
+} from '../../../blobStorage/tenantKey.js';
 import { toUploadData } from '../../../blobStorage/uploadData.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -21,15 +29,23 @@ export async function buildWorkbookToolResult({
   filename,
   resourceId,
   toolName,
+  tenant,
 }: {
   content: Buffer;
   mimeType: string;
   filename: string;
   resourceId: string;
   toolName: string;
-}): Promise<WorkbookToolResult> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<WorkbookToolResult, McpToolError>> {
   if (!isBlobStorageEnabled() || !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))) {
-    return await persistWorkbookToTempPath({ content, mimeType, filename });
+    return new Ok(await persistWorkbookToTempPath({ content, mimeType, filename }));
+  }
+
+  // Resolved outside the try so a missing tenant fails closed instead of falling back.
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
   }
 
   let url: string;
@@ -38,7 +54,7 @@ export async function buildWorkbookToolResult({
     const ext = mimeType === 'application/xml' ? 'twb' : 'twbx';
     const { data, contentLength } = toUploadData(content);
     ({ url } = await getBlobStorageProvider().upload({
-      key: buildWorkbookKey(resourceId, ext),
+      key: buildWorkbookKey(tenantLuids.value, resourceId, ext),
       data: markStarted(data, () => (started = true)),
       contentType: mimeType,
       contentLength,
@@ -51,18 +67,18 @@ export async function buildWorkbookToolResult({
       level: 'warning',
       logger: 'tool',
     });
-    return await persistWorkbookToTempPath({ content, mimeType, filename });
+    return new Ok(await persistWorkbookToTempPath({ content, mimeType, filename }));
   }
 
   if (!started) {
     throw new Error('Blob storage provider returned without reading the upload data.');
   }
-  return { kind: 'url', url, mimeType, filename };
+  return new Ok({ kind: 'url', url, mimeType, filename });
 }
 
-/** Builds the blob storage key for a workbook; any base path is the provider's concern. */
-function buildWorkbookKey(resourceId: string, ext: 'twb' | 'twbx'): string {
-  return `workbook-files/${resourceId}/${randomUUID()}.${ext}`;
+/** Builds the tenant-scoped blob key for a workbook; any base path is the provider's concern. */
+function buildWorkbookKey(tenant: TenantLuids, resourceId: string, ext: 'twb' | 'twbx'): string {
+  return buildTenantBlobKey(tenant, 'workbook-files', `${resourceId}/${randomUUID()}.${ext}`);
 }
 
 // `started` flips on the first pull, so a provider that drained an empty payload still counts.
