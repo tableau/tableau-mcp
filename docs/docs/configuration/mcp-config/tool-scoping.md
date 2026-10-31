@@ -153,7 +153,7 @@ permissions still apply.
 `datasourceFilePath` refers to the MCP server's filesystem and uses the process's file permissions.
 It is accepted only when the server runs over stdio. Don't put a stdio server behind a stdio-to-HTTP
 proxy: it still counts as stdio, so remote callers could read files on the server. HTTP servers must
-use `request-datasource-upload` and pass its staged upload ID, which requires a
+use `request-upload` and pass its upload ID, which requires a
 [blob storage provider](env-vars.md#blob_storage_provider). When a blob storage provider is
 configured, the publisher also rejects local paths. Staged datasource uploads retain the **5 GB
 (5000000000 bytes)** limit. Files are streamed to Tableau in chunks, never held in server memory

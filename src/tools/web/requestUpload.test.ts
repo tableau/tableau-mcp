@@ -1,44 +1,44 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from '../../../config.js';
-import * as loggerModule from '../../../logging/logger.js';
-import { WebMcpServer } from '../../../server.web.js';
-import { stubDefaultEnvVars } from '../../../testShared.js';
-import invariant from '../../../utils/invariant.js';
-import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
-import { getRequestWorkbookUploadTool } from './requestWorkbookUpload.js';
-import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
+import { getConfig } from '../../config.js';
+import * as loggerModule from '../../logging/logger.js';
+import { WebMcpServer } from '../../server.web.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
+import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
+import { getRequestUploadTool } from './requestUpload.js';
+import { MAX_STAGED_UPLOAD_BYTES } from './stagedUpload.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from './toolContext.mock.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
   mockIsBlobStorageEnabled: vi.fn(),
-  mockRequestStagedWorkbookUpload: vi.fn(),
+  mockRequestStagedUpload: vi.fn(),
   mockUseRestApi: vi.fn(),
 }));
 
-vi.mock('../../../restApiInstance.js', () => ({
+vi.mock('../../restApiInstance.js', () => ({
   useRestApi: mocks.mockUseRestApi,
 }));
 
-vi.mock('../../../features/init.js', () => ({
+vi.mock('../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
-vi.mock('../../../blobStorage/init.js', () => ({
+vi.mock('../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
-vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./stagedWorkbookUpload.js')>()),
-  requestStagedWorkbookUpload: mocks.mockRequestStagedWorkbookUpload,
+vi.mock('./stagedUpload.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./stagedUpload.js')>()),
+  requestStagedUpload: mocks.mockRequestStagedUpload,
 }));
 
 beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
-describe('requestWorkbookUploadTool', () => {
+describe('requestUploadTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
@@ -46,11 +46,11 @@ describe('requestWorkbookUploadTool', () => {
     mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag !== 'authoring-with-slack');
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockUseRestApi.mockImplementation(async (opts) => opts.callback({}));
-    mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
-      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+    mocks.mockRequestStagedUpload.mockResolvedValue({
+      uploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
+      maxSizeBytes: MAX_STAGED_UPLOAD_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
   });
@@ -59,18 +59,26 @@ describe('requestWorkbookUploadTool', () => {
     vi.unstubAllEnvs();
   });
 
-  it('creates a tool instance with staged upload properties', () => {
-    const tool = getRequestWorkbookUploadTool(new WebMcpServer());
+  it('creates a tool instance with staged upload properties', async () => {
+    const tool = getRequestUploadTool(new WebMcpServer());
 
-    expect(tool.name).toBe('request-workbook-upload');
-    expect(tool.description).toContain('staged upload URL');
+    expect(tool.name).toBe('request-upload');
+    const description = await Provider.from(tool.description);
+    for (const extension of ['.twb', '.twbx', '.tds', '.tdsx']) {
+      expect(description).toContain(extension);
+    }
+
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag !== 'datasource-authoring');
+    const gatedDescription = await Provider.from(tool.description);
+    expect(gatedDescription).toContain('.twbx');
+    expect(gatedDescription).not.toContain('.tds');
     expect(tool.paramsSchema).toMatchObject({
       fileName: expect.any(Object),
     });
   });
 
   it('is enabled for ChatGPT', async () => {
-    const tool = getRequestWorkbookUploadTool(
+    const tool = getRequestUploadTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
@@ -78,23 +86,19 @@ describe('requestWorkbookUploadTool', () => {
   });
 
   it('is enabled for a non-Slack client', async () => {
-    const tool = getRequestWorkbookUploadTool(
-      new WebMcpServer({ clientId: 'https://claude.ai/mcp' }),
-    );
+    const tool = getRequestUploadTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('is enabled for an unknown client', async () => {
-    const tool = getRequestWorkbookUploadTool(
-      new WebMcpServer({ clientId: 'https://example.com/mcp' }),
-    );
+    const tool = getRequestUploadTool(new WebMcpServer({ clientId: 'https://example.com/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
-    const tool = getRequestWorkbookUploadTool(
+    const tool = getRequestUploadTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
 
@@ -104,7 +108,7 @@ describe('requestWorkbookUploadTool', () => {
   it('is enabled for Slack when the authoring-with-slack flag is ON', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
-    const tool = getRequestWorkbookUploadTool(
+    const tool = getRequestUploadTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
 
@@ -112,8 +116,34 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
   });
 
+  it('is enabled with only the workbook path available (datasource-authoring off)', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+
+    const tool = getRequestUploadTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
+
+    expect(await Provider.from(tool.disabled)).toBe(false);
+  });
+
+  it('is enabled with both consuming paths available (datasource-authoring on)', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'datasource-authoring');
+
+    const tool = getRequestUploadTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
+
+    expect(await Provider.from(tool.disabled)).toBe(false);
+  });
+
+  it('is disabled when no consuming path is available (Slack without authoring-with-slack)', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'datasource-authoring');
+
+    const tool = getRequestUploadTool(
+      new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+    );
+
+    expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
   it('is enabled when there is no OAuth client id (stdio)', async () => {
-    const tool = getRequestWorkbookUploadTool(new WebMcpServer());
+    const tool = getRequestUploadTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
@@ -127,13 +157,13 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
-      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+      uploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
+      maxSizeBytes: MAX_STAGED_UPLOAD_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
-    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
+    expect(mocks.mockRequestStagedUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twb',
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
@@ -172,7 +202,7 @@ describe('requestWorkbookUploadTool', () => {
 
       expect(result.isError).toBe(false);
       expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
-      expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith(
+      expect(mocks.mockRequestStagedUpload).toHaveBeenCalledWith(
         expect.objectContaining({ tenant: signedIn }),
       );
     },
@@ -208,7 +238,7 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
     expect(mocks.mockUseRestApi.mock.calls[0][0].jwtScopes).toEqual([]);
-    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith(
+    expect(mocks.mockRequestStagedUpload).toHaveBeenCalledWith(
       expect.objectContaining({ tenant: signedIn }),
     );
   });
@@ -222,15 +252,39 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.content[0].text).toContain(
       'Unable to determine the signed-in Tableau site and user',
     );
-    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockRequestStagedUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns a staged upload URL for a data source filename', async () => {
+    const result = await getToolResult({ fileName: 'Sales.tdsx' });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockRequestStagedUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: 'Sales.tdsx',
+        tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
+      }),
+    );
+  });
+
+  it('surfaces the rejection for an unsupported extension', async () => {
+    mocks.mockRequestStagedUpload.mockRejectedValue(
+      new Error('Upload filename must end in one of: .twb, .twbx, .tds, .tdsx.'),
+    );
+
+    const result = await getToolResult({ fileName: 'Sales.hyper' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Upload filename must end in one of');
   });
 
   it('returns a staged upload URL for a .twbx filename', async () => {
-    mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
-      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+    mocks.mockRequestStagedUpload.mockResolvedValue({
+      uploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
+      maxSizeBytes: MAX_STAGED_UPLOAD_BYTES,
       requiredHeaders: { 'Content-Type': 'application/octet-stream' },
     });
 
@@ -239,7 +293,7 @@ describe('requestWorkbookUploadTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
+    expect(mocks.mockRequestStagedUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twbx',
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
@@ -253,9 +307,9 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Blob storage provider must be configured before requesting staged workbook uploads.',
+      'Blob storage provider must be configured before requesting staged uploads.',
     );
-    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockRequestStagedUpload).not.toHaveBeenCalled();
   });
 
   it('returns an error for Passthrough auth before creating a signed upload URL', async () => {
@@ -277,12 +331,12 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Passthrough authentication');
-    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockRequestStagedUpload).not.toHaveBeenCalled();
     expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
   });
 
   it('redacts no presigned URL from logs because it is only produced after execution', async () => {
-    const tool = getRequestWorkbookUploadTool(new WebMcpServer());
+    const tool = getRequestUploadTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const logAndExecute = vi
       .spyOn(tool, 'logAndExecute')
@@ -305,7 +359,7 @@ async function getToolResult(
   params: { fileName: string },
   extraOverrides: Parameters<typeof getMockExtra>[0] = {},
 ): Promise<CallToolResult> {
-  const tool = getRequestWorkbookUploadTool(new WebMcpServer());
+  const tool = getRequestUploadTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

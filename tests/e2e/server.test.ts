@@ -80,10 +80,7 @@ describe('server', () => {
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
       // datasource publishing tools are gated off by default (datasource-authoring feature flag)
-      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = [
-        'request-datasource-upload',
-        'publish-datasource',
-      ];
+      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = ['publish-datasource'];
       // knowledge tools are gated off by default (knowledge-tools feature flag)
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
@@ -278,10 +275,7 @@ describe('server', () => {
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
       // datasource publishing tools are gated off by default (datasource-authoring feature flag)
-      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = [
-        'request-datasource-upload',
-        'publish-datasource',
-      ];
+      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = ['publish-datasource'];
       // knowledge tools are gated off by default (knowledge-tools feature flag)
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',

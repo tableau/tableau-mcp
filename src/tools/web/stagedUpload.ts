@@ -10,23 +10,51 @@ import { ArgsValidationError } from '../../errors/mcpToolError.js';
 // single-PUT ceilings (e.g. S3's 5GB limit).
 export const MAX_STAGED_UPLOAD_BYTES = 5 * 1000 * 1000 * 1000;
 
-export type StagedUploadKind<FileType extends string> = {
-  // Keys are `<prefixSegment>/<siteLuid>/<userLuid>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
-  prefixSegment: string;
+export type UploadConsumer<FileType extends string = string> = {
+  // Keys are `<kind>/<siteLuid>/<userLuid>/<uuid>/<objectStem>.<fileType>`.
+  kind: string;
   objectStem: string;
-  label: string;
   noun: string;
   fileTypes: ReadonlyArray<FileType>;
   xmlFileType: FileType;
+  isAvailable: (clientId?: string) => Promise<boolean>;
 };
 
-export async function requestStagedUpload<FileType extends string>({
-  kind,
+const registeredConsumers = new Set<UploadConsumer>();
+
+/**
+ * Declares a tool that consumes staged uploads, the file types it accepts, and the key kind
+ * they are staged under. request-upload accepts the union of all declared file types.
+ */
+export function defineUploadConsumer<FileType extends string>(
+  consumer: UploadConsumer<FileType>,
+): UploadConsumer<FileType> {
+  registeredConsumers.add(consumer);
+  return consumer;
+}
+
+export function getSupportedUploadFileTypes(): string[] {
+  return [...new Set([...registeredConsumers].flatMap((consumer) => consumer.fileTypes))];
+}
+
+/** File types whose consuming publish tool is currently available to the client. */
+export async function getAvailableUploadFileTypes(clientId?: string): Promise<string[]> {
+  const available: string[] = [];
+  for (const consumer of registeredConsumers) {
+    if (await consumer.isAvailable(clientId)) {
+      available.push(...consumer.fileTypes);
+    }
+  }
+  return [...new Set(available)];
+}
+
+export async function requestStagedUpload({
   fileName,
+  clientId,
   tenant,
 }: {
-  kind: StagedUploadKind<FileType>;
   fileName: string;
+  clientId?: string;
   tenant: TenantLuids;
 }): Promise<{
   uploadId: string;
@@ -35,19 +63,24 @@ export async function requestStagedUpload<FileType extends string>({
   maxSizeBytes: number;
   requiredHeaders: Record<string, string>;
 }> {
-  const fileType = getStagedFileType(kind, fileName);
-  if (!fileType) {
-    const extensions = kind.fileTypes.map((type) => `.${type}`).join(' or ');
-    throw new Error(`${kind.label} upload filename must end in ${extensions}.`);
+  const supported = await getAvailableUploadFileTypes(clientId);
+  const extension = extname(fileName).toLowerCase();
+  const fileType = supported.find((type) => extension === `.${type}`);
+  const consumer = fileType
+    ? [...registeredConsumers].find((candidate) => candidate.fileTypes.includes(fileType))
+    : undefined;
+  if (!fileType || !consumer) {
+    throw new ArgsValidationError(
+      `Upload filename must end in one of: ${supported.map((type) => `.${type}`).join(', ')}.`,
+    );
   }
 
   const uploadId = randomUUID();
-  const contentType =
-    fileType === kind.xmlFileType ? 'application/xml' : 'application/octet-stream';
   const { uploadUrl, requiredHeaders, expiresAt } =
     await getBlobStorageProvider().getPresignedUploadUrl({
-      key: buildStagedUploadKey(kind, tenant, uploadId, fileType),
-      contentType,
+      key: buildStagedUploadKey(consumer, tenant, uploadId, fileType),
+      contentType:
+        fileType === consumer.xmlFileType ? 'application/xml' : 'application/octet-stream',
       maxBytes: MAX_STAGED_UPLOAD_BYTES,
     });
 
@@ -73,22 +106,22 @@ export type ResolvedStagedFileStream<FileType extends string> = {
  * they are consumed, and size and emptiness are enforced by the consumer.
  */
 export async function resolveStagedUploadStream<FileType extends string>({
-  kind,
+  consumer,
   uploadId,
   tenant,
   maxBytes = MAX_STAGED_UPLOAD_BYTES,
 }: {
-  kind: StagedUploadKind<FileType>;
+  consumer: UploadConsumer<FileType>;
   uploadId: string;
   tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedStagedFileStream<FileType>> {
-  assertStagedUploadId(kind, uploadId);
+  assertStagedUploadId(uploadId);
 
   // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
-  for (const fileType of kind.fileTypes) {
+  for (const fileType of consumer.fileTypes) {
     const download = await getBlobStorageProvider().download({
-      key: buildStagedUploadKey(kind, tenant, uploadId, fileType),
+      key: buildStagedUploadKey(consumer, tenant, uploadId, fileType),
       maxBytes,
     });
 
@@ -100,7 +133,7 @@ export async function resolveStagedUploadStream<FileType extends string>({
     if (download.contentLength !== undefined && download.contentLength > maxBytes) {
       discard(download.data);
       throw new ArgsValidationError(
-        `${kind.label} upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
+        `Upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
       );
     }
 
@@ -112,8 +145,8 @@ export async function resolveStagedUploadStream<FileType extends string>({
     };
   }
 
-  throw new Error(
-    `${kind.label} upload not found. Upload the ${kind.noun} bytes before publishing.`,
+  throw new ArgsValidationError(
+    `Upload not found. Call request-upload and upload the ${consumer.noun} bytes before publishing.`,
   );
 }
 
@@ -136,32 +169,28 @@ function discard(stream: AsyncIterable<Uint8Array>): void {
   Promise.resolve(stream[Symbol.asyncIterator]().return?.()).catch(() => undefined);
 }
 
-export function buildStagedUploadKey<FileType extends string>(
-  kind: StagedUploadKind<FileType>,
+export function buildStagedUploadKey(
+  consumer: Pick<UploadConsumer, 'kind' | 'objectStem'>,
   tenant: TenantLuids,
   uploadId: string,
-  fileType: FileType,
+  fileType: string,
 ): string {
-  assertStagedUploadId(kind, uploadId);
-  return buildTenantBlobKey(
-    tenant,
-    kind.prefixSegment,
-    `${uploadId}/${kind.objectStem}.${fileType}`,
-  );
+  assertStagedUploadId(uploadId);
+  return buildTenantBlobKey(tenant, consumer.kind, `${uploadId}/${consumer.objectStem}.${fileType}`);
 }
 
-export function getStagedFileType<FileType extends string>(
-  kind: StagedUploadKind<FileType>,
+export function getUploadFileType<FileType extends string>(
+  consumer: UploadConsumer<FileType>,
   fileName: string,
 ): FileType | undefined {
   const extension = extname(fileName).toLowerCase();
-  return kind.fileTypes.find((fileType) => extension === `.${fileType}`);
+  return consumer.fileTypes.find((fileType) => extension === `.${fileType}`);
 }
 
-function assertStagedUploadId(kind: StagedUploadKind<string>, uploadId: string): void {
+function assertStagedUploadId(uploadId: string): void {
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uploadId)
   ) {
-    throw new Error(`${kind.label} upload id is invalid.`);
+    throw new ArgsValidationError('Upload id is invalid.');
   }
 }

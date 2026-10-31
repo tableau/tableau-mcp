@@ -8,7 +8,6 @@ import { z } from 'zod';
 import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
 import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
-import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -25,6 +24,7 @@ import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/sc
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
+import { isWorkbookPublishAvailable } from '../uploadAvailability.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   mapPersonalSpaceSiteDisabledError,
@@ -40,12 +40,12 @@ import {
 } from './stagedWorkbookUpload.js';
 
 const paramsSchema = {
-  workbookUploadId: z
+  uploadId: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path.',
+      'Upload id returned by request-upload (.twb or .twbx). Use this for hosted clients that cannot pass a local path.',
     ),
   workbookFilePath: z
     .string()
@@ -148,10 +148,10 @@ export const getPublishWorkbookTool = (
       idempotentHint: false,
       openWorldHint: true,
     },
-    disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
+    disabled: new Provider(async () => !(await isWorkbookPublishAvailable(server.clientId))),
     callback: async (args, extra): Promise<CallToolResult> => {
       const {
-        workbookUploadId,
+        uploadId,
         workbookFilePath,
         name,
         projectId,
@@ -161,7 +161,7 @@ export const getPublishWorkbookTool = (
       return await tool.logAndExecute<PublishWorkbookResult>({
         extra,
         args: {
-          workbookUploadId: workbookUploadId ? '<redacted>' : undefined,
+          uploadId: uploadId ? '<redacted>' : undefined,
           workbookFilePath: workbookFilePath ? '<redacted>' : undefined,
           name,
           projectId,
@@ -206,7 +206,7 @@ export const getPublishWorkbookTool = (
               // The resolver supplies the file type, so nothing can throw between opening the
               // stream and handing it to a consumer that closes it.
               const resolvedWorkbookInput = await resolveWorkbookInput({
-                workbookUploadId,
+                uploadId,
                 workbookFilePath,
                 tenant: extra,
               });
@@ -407,30 +407,30 @@ async function uploadTwbx({
 }
 
 async function resolveWorkbookInput({
-  workbookUploadId,
+  uploadId,
   workbookFilePath,
   tenant,
 }: {
-  workbookUploadId?: string;
+  uploadId?: string;
   workbookFilePath?: string;
   tenant: TenantIdentitySource;
 }): Promise<Result<ResolvedWorkbook, McpToolError>> {
-  if (workbookUploadId && workbookFilePath) {
-    throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
+  if (uploadId && workbookFilePath) {
+    throw new ArgsValidationError('Provide either workbookFilePath or uploadId, not both.');
   }
 
   if (workbookFilePath) {
     if (isBlobStorageEnabled()) {
       throw new ArgsValidationError(
-        'workbookFilePath is only supported when staged uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
+        'workbookFilePath is only supported when staged uploads are not configured. Call request-upload first and pass uploadId.',
       );
     }
     return new Ok(await resolveLocalWorkbookFile(workbookFilePath));
   }
 
-  if (!workbookUploadId) {
+  if (!uploadId) {
     throw new ArgsValidationError(
-      'Either workbookFilePath or workbookUploadId must be provided. For local MCP servers, pass workbookFilePath. For hosted clients, call request-workbook-upload first and pass workbookUploadId.',
+      'Either workbookFilePath or uploadId must be provided. For local MCP servers, pass workbookFilePath. For hosted clients, call request-upload first and pass uploadId.',
     );
   }
   if (!isBlobStorageEnabled()) {
@@ -442,7 +442,7 @@ async function resolveWorkbookInput({
   if (tenantLuids.isErr()) {
     return tenantLuids;
   }
-  return new Ok(await resolveStagedWorkbookUpload({ workbookUploadId, tenant: tenantLuids.value }));
+  return new Ok(await resolveStagedWorkbookUpload({ uploadId, tenant: tenantLuids.value }));
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {

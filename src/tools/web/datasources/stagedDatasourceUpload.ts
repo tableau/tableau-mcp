@@ -1,78 +1,46 @@
 import type { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import {
-  buildStagedUploadKey,
-  getStagedFileType,
+  defineUploadConsumer,
+  getUploadFileType,
   MAX_STAGED_UPLOAD_BYTES,
-  requestStagedUpload,
   type ResolvedStagedFileStream,
   resolveStagedUploadStream,
-  type StagedUploadKind,
 } from '../stagedUpload.js';
+import { isDatasourcePublishAvailable } from '../uploadAvailability.js';
 
 export const MAX_STAGED_DATASOURCE_BYTES = MAX_STAGED_UPLOAD_BYTES;
 export const DATASOURCE_UPLOAD_PREFIX_SEGMENT = 'datasource-uploads';
 
 export type DatasourceFileType = 'tds' | 'tdsx';
 
-const datasourceKind: StagedUploadKind<DatasourceFileType> = {
-  prefixSegment: DATASOURCE_UPLOAD_PREFIX_SEGMENT,
+const datasourceConsumer = defineUploadConsumer<DatasourceFileType>({
+  kind: DATASOURCE_UPLOAD_PREFIX_SEGMENT,
   objectStem: 'datasource',
-  label: 'Data source',
   noun: 'data source',
   fileTypes: ['tds', 'tdsx'],
   xmlFileType: 'tds',
-};
+  isAvailable: isDatasourcePublishAvailable,
+});
 
 export type ResolvedDatasource = ResolvedStagedFileStream<DatasourceFileType>;
 
-export type RequestDatasourceUploadResult = {
-  datasourceUploadId: string;
-  uploadUrl: string;
-  expiresAt?: string;
-  maxSizeBytes: number;
-  requiredHeaders: Record<string, string>;
-};
-
-export async function requestStagedDatasourceUpload({
-  fileName,
-  tenant,
-}: {
-  fileName: string;
-  tenant: TenantLuids;
-}): Promise<RequestDatasourceUploadResult> {
-  const { uploadId, ...rest } = await requestStagedUpload({
-    kind: datasourceKind,
-    fileName,
-    tenant,
-  });
-  return { datasourceUploadId: uploadId, ...rest };
-}
-
 export async function resolveStagedDatasourceUpload({
-  datasourceUploadId,
+  uploadId,
   tenant,
   maxBytes,
 }: {
-  datasourceUploadId: string;
+  uploadId: string;
   tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedDatasource> {
   return await resolveStagedUploadStream({
-    kind: datasourceKind,
-    uploadId: datasourceUploadId,
+    consumer: datasourceConsumer,
+    uploadId,
     tenant,
     maxBytes,
   });
 }
 
-export function buildDatasourceUploadKey(
-  tenant: TenantLuids,
-  datasourceUploadId: string,
-  fileType: DatasourceFileType,
-): string {
-  return buildStagedUploadKey(datasourceKind, tenant, datasourceUploadId, fileType);
-}
-
 export function getDatasourceFileType(fileName: string): DatasourceFileType | undefined {
-  return getStagedFileType(datasourceKind, fileName);
+  return getUploadFileType(datasourceConsumer, fileName);
 }

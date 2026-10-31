@@ -6,9 +6,8 @@ export const webToolNames = [
   'list-jobs',
   'list-users',
   'list-workbooks',
-  'request-workbook-upload',
+  'request-upload',
   'publish-workbook',
-  'request-datasource-upload',
   'publish-datasource',
   'list-projects',
   'list-views',
@@ -82,12 +81,7 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook', 'download-workbook', 'move-workbook'],
-  authoring: [
-    'request-workbook-upload',
-    'publish-workbook',
-    'request-datasource-upload',
-    'publish-datasource',
-  ],
+  authoring: ['request-upload', 'publish-workbook', 'publish-datasource'],
   project: ['list-projects'],
   view: [
     'list-views',

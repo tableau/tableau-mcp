@@ -35,7 +35,7 @@ Requires Tableau REST API version 3.29 or later (Tableau Server
 
 :::
 
-Related tools: [Request Workbook Upload](request-workbook-upload.md),
+Related tools: [Request Upload](request-upload.md),
 [List Projects](../projects/list-projects.md)
 
 ## Required permissions
@@ -60,14 +60,14 @@ The name to give the published workbook.
 
 Example: `Q3 Sales Overview`
 
-## One of `workbookUploadId` or `workbookFilePath`
+## One of `uploadId` or `workbookFilePath`
 
 Exactly one of these must be provided — providing both, or neither, returns an error.
 
-### `workbookUploadId`
+### `uploadId`
 
-The staged workbook upload id returned by [Request Workbook Upload](request-workbook-upload.md). Use
-this for hosted clients that cannot pass a local path. Requires a
+The upload id returned by [Request Upload](request-upload.md) for a `.twb` or `.twbx` file; uploads
+of other file types are reported as not found. Use this for hosted clients that cannot pass a local path. Requires a
 [blob storage provider](../../configuration/mcp-config/env-vars.md#blob_storage_provider) to be
 configured.
 
@@ -76,7 +76,7 @@ Example: `123e4567-e89b-42d3-a456-426614174000`
 ### `workbookFilePath`
 
 Path to a local TWB or TWBX workbook file on the MCP server's filesystem. Only supported when no
-blob storage provider is configured; otherwise it is rejected and you must use `workbookUploadId`.
+blob storage provider is configured; otherwise it is rejected and you must use `uploadId`.
 Because the path is read from the MCP server's own filesystem, remote/hosted deployments should
 configure a blob storage provider (staged uploads).
 

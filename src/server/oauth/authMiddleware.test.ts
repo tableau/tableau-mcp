@@ -146,6 +146,90 @@ describe('scaffold-data-app required API scope', () => {
   });
 });
 
+describe('request-upload any-of MCP scope', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    // [datasourceAuthoring, scopes, authorized, challenged scope]
+    [false, [], false, 'tableau:mcp:workbook:create'],
+    [false, ['tableau:mcp:content:read'], false, 'tableau:mcp:workbook:create'],
+    [false, ['tableau:mcp:workbook:create'], true, undefined],
+    [false, ['tableau:mcp:datasource:create'], false, 'tableau:mcp:workbook:create'],
+    [true, [], false, 'tableau:mcp:workbook:create tableau:mcp:datasource:create'],
+    [true, ['tableau:mcp:datasource:create'], true, undefined],
+    [true, ['tableau:mcp:workbook:create', 'tableau:mcp:datasource:create'], true, undefined],
+  ])(
+    'datasource-authoring=%s with scopes %j authorized=%s',
+    async (datasourceAuthoring, scopes, authorized, challenge) => {
+      mocks.isFeatureEnabled.mockImplementation(
+        async (flag: string) => datasourceAuthoring && flag === 'datasource-authoring',
+      );
+      const authInfo = { scopes, clientId: 'test-client' };
+      const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+      const req = {
+        headers: { authorization: 'Bearer valid-token' },
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'request-upload', arguments: { fileName: 'Sales.twbx' } },
+        },
+      } as unknown as AuthenticatedRequest;
+      const res = makeRes();
+      const next = vi.fn();
+
+      await middleware(req, res, next);
+
+      if (authorized) {
+        expect(next).toHaveBeenCalledOnce();
+        expect(res.statusCode).toBeUndefined();
+      } else {
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('insufficient_scope');
+        expect(res.headers['WWW-Authenticate']).toContain(`scope="${challenge}"`);
+      }
+    },
+  );
+
+  it.each([
+    [false, 'tableau:mcp:workbook:create'],
+    [true, 'tableau:mcp:workbook:create tableau:mcp:datasource:create'],
+  ])('401 challenge lists only enabled scopes (datasource-authoring=%s)', async (on, challenge) => {
+    mocks.isFeatureEnabled.mockImplementation(
+      async (flag: string) => on && flag === 'datasource-authoring',
+    );
+    const middleware = authMiddleware(makeValidator(new Ok({ scopes: [], clientId: 'c' })));
+    const req = {
+      headers: {},
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'request-upload', arguments: { fileName: 'Sales.twbx' } },
+      },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['WWW-Authenticate']).toContain(`scope="${challenge}"`);
+  });
+});
+
 describe('initialize with optional post-publish permission disclosure', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();

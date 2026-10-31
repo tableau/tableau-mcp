@@ -86,7 +86,7 @@ vi.mock('../../../blobStorage/init.js', () => ({
 }));
 
 const validArgs = {
-  workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+  uploadId: '123e4567-e89b-42d3-a456-426614174000',
   name: 'My New Workbook',
   projectId: 'target-project-id',
 };
@@ -359,7 +359,7 @@ describe('publishWorkbookTool', () => {
       workbook: Buffer.from('<workbook source="new" />'),
     });
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
@@ -370,6 +370,23 @@ describe('publishWorkbookTool', () => {
       projectId: 'target-project-id',
       overwrite: false,
     });
+  });
+
+  it('returns an error without uploading when the staged upload is not found', async () => {
+    mocks.mockResolveStagedWorkbookUpload.mockRejectedValue(
+      new Error(
+        'Upload not found. Call request-upload and upload the workbook bytes before publishing.',
+      ),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Upload not found');
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('uploads and publishes a TWBX file without a separate validation step', async () => {
@@ -611,7 +628,7 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('resolves the staged workbookUploadId before validation', async () => {
+  it('resolves the staged uploadId before validation', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -620,16 +637,16 @@ describe('publishWorkbookTool', () => {
       ...mockWorkbook,
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
-    const workbookUploadId = '123e4567-e89b-42d3-a456-426614174000';
+    const uploadId = '123e4567-e89b-42d3-a456-426614174000';
 
     await getToolResult({
-      workbookUploadId,
+      uploadId,
       name: 'My New Workbook',
       projectId: 'target-project-id',
     });
 
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
-      workbookUploadId,
+      uploadId,
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
@@ -744,7 +761,7 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      `Workbook upload exceeds the maximum allowed size of ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
+      `Upload exceeds the maximum allowed size of ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
     );
     expect(data.destroyed).toBe(true);
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
@@ -813,13 +830,13 @@ describe('publishWorkbookTool', () => {
   it('returns an error when both local path and staged upload id are provided', async () => {
     const result = await getToolResult({
       ...validLocalArgs,
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Provide either workbookFilePath or workbookUploadId, not both',
+      'Provide either workbookFilePath or uploadId, not both',
     );
     expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
@@ -831,7 +848,7 @@ describe('publishWorkbookTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Either workbookFilePath or workbookUploadId');
+    expect(result.content[0].text).toContain('Either workbookFilePath or uploadId');
     expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
@@ -887,7 +904,7 @@ describe('publishWorkbookTool', () => {
 
   it('rejects personalSpace false without projectId before any API or file access', async () => {
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
       personalSpace: false,
     });
@@ -948,7 +965,7 @@ describe('publishWorkbookTool', () => {
     });
 
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
     });
 
@@ -989,7 +1006,7 @@ describe('publishWorkbookTool', () => {
 
     // A bounded context that would reject the personal-space luid if it were checked.
     const result = await getToolResult(
-      { workbookUploadId: validArgs.workbookUploadId, name: validArgs.name, personalSpace: true },
+      { uploadId: validArgs.uploadId, name: validArgs.name, personalSpace: true },
       { boundedProjectIds: new Set(['only-this-project']) },
     );
 
@@ -1005,7 +1022,7 @@ describe('publishWorkbookTool', () => {
     });
 
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
     });
 
@@ -1021,7 +1038,7 @@ describe('publishWorkbookTool', () => {
     mocks.mockGetPersonalSpace.mockRejectedValue(new Error('404 personalSpace not found'));
 
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
       personalSpace: true,
     });
@@ -1066,7 +1083,7 @@ describe('publishWorkbookTool', () => {
     });
 
     await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
       personalSpace: true,
     });
@@ -1323,7 +1340,7 @@ describe('publishWorkbookTool', () => {
     });
 
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
     });
 
@@ -1397,7 +1414,7 @@ describe('publishWorkbookTool', () => {
     });
 
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
       personalSpace: true,
     });
@@ -1431,7 +1448,7 @@ describe('publishWorkbookTool', () => {
     mocks.mockPublishWorkbook.mockRejectedValue(axiosError);
 
     const result = await getToolResult({
-      workbookUploadId: validArgs.workbookUploadId,
+      uploadId: validArgs.uploadId,
       name: validArgs.name,
       personalSpace: true,
     });
@@ -1473,7 +1490,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it('redacts staged workbookUploadId details passed to shared logging', async () => {
+  it('redacts staged uploadId details passed to shared logging', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const logAndExecute = vi
@@ -1482,7 +1499,7 @@ describe('publishWorkbookTool', () => {
 
     await callback(
       {
-        workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+        uploadId: '123e4567-e89b-42d3-a456-426614174000',
         workbookFilePath: undefined,
         name: validArgs.name,
         projectId: validArgs.projectId,
@@ -1494,7 +1511,7 @@ describe('publishWorkbookTool', () => {
 
     const loggedArgs = logAndExecute.mock.calls[0][0].args;
     expect(loggedArgs).toEqual({
-      workbookUploadId: '<redacted>',
+      uploadId: '<redacted>',
       workbookFilePath: undefined,
       name: validArgs.name,
       projectId: validArgs.projectId,
@@ -1520,7 +1537,7 @@ function tableauAxiosError(status: number, data: unknown): AxiosError {
 
 async function getToolResult(
   params: {
-    workbookUploadId?: string;
+    uploadId?: string;
     workbookFilePath?: string;
     name: string;
     projectId?: string;
@@ -1536,7 +1553,7 @@ async function getToolResult(
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
-      workbookUploadId: params.workbookUploadId,
+      uploadId: params.uploadId,
       workbookFilePath: params.workbookFilePath,
       name: params.name,
       projectId: params.projectId,

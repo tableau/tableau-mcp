@@ -218,6 +218,8 @@ const toolScopeMap: Record<
   WebToolName,
   {
     mcp: ReadonlyArray<McpScope>;
+    // When set, holding any one of these satisfies the tool (in addition to all of `mcp`).
+    mcpAnyOf?: ReadonlyArray<McpScope>;
     api: ReadonlySet<TableauApiScope>;
     // Checking registration conditions for a tool involves calling REST APIs.
     // Each condition check has its own set of scopes used. Each tool needs to provide
@@ -277,17 +279,16 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
-  'request-workbook-upload': {
-    mcp: ['tableau:mcp:workbook:create'],
+  // Shared by every upload-consuming publish tool: authorized by holding ANY of their create scopes.
+  // Contributes no advertised scopes of its own, so publish-* gating alone decides what is advertised.
+  'request-upload': {
+    mcp: [],
+    mcpAnyOf: ['tableau:mcp:workbook:create', 'tableau:mcp:datasource:create'],
     api: new Set([]),
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
-  },
-  'request-datasource-upload': {
-    mcp: ['tableau:mcp:datasource:create'],
-    api: new Set([]),
   },
   'publish-datasource': {
     mcp: ['tableau:mcp:datasource:create'],
@@ -615,13 +616,11 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   }
 
   if (!authoringAllowedForClient) {
-    enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
   }
 
   if (!datasourceAuthoringEnabled) {
-    enabledTools.delete('request-datasource-upload');
     enabledTools.delete('publish-datasource');
   }
 
@@ -761,6 +760,28 @@ export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<M
   }
 
   return toolScopeMap[toolName].mcp;
+}
+
+/**
+ * MCP scopes of which a caller must hold at least one; empty when the tool has no any-of
+ * requirement. Limited to scopes currently advertised, since unadvertised ones can't be granted.
+ */
+export async function getAnyOfMcpScopesForTool(
+  toolName: WebToolName,
+  clientId?: string,
+): Promise<ReadonlyArray<McpScope>> {
+  const oauthConfig = getConfig().oauth;
+  if (!oauthConfig || !oauthConfig.enforceScopes) {
+    return [];
+  }
+
+  const anyOf = toolScopeMap[toolName].mcpAnyOf ?? [];
+  if (anyOf.length === 0) {
+    return anyOf;
+  }
+
+  const supported = await getSupportedMcpScopes(clientId);
+  return anyOf.filter((scope) => supported.includes(scope));
 }
 
 export function getRequiredApiScopesForTool(toolName: WebToolName): ReadonlyArray<TableauApiScope> {

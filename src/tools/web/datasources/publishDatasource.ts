@@ -18,6 +18,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { type TransportName } from '../../../transports.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
+import { isDatasourcePublishAvailable } from '../uploadAvailability.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   getDatasourceFileType,
@@ -27,19 +28,19 @@ import {
 } from './stagedDatasourceUpload.js';
 
 const paramsSchema = {
-  datasourceUploadId: z
+  uploadId: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Staged data source upload id returned by request-datasource-upload. Use this for hosted clients that cannot pass a local path.',
+      'Upload id returned by request-upload (.tds or .tdsx). Use this for hosted clients that cannot pass a local path.',
     ),
   datasourceFilePath: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Path to a local TDS or TDSX data source file on the MCP server filesystem. Only supported when the MCP server runs over stdio and blob storage is not configured. On HTTP servers, use datasourceUploadId.',
+      'Path to a local TDS or TDSX data source file on the MCP server filesystem. Only supported when the MCP server runs over stdio and blob storage is not configured. On HTTP servers, use uploadId.',
     ),
   name: z.string().min(1).describe('The name to give the published data source.'),
   projectId: luidSchema.describe(
@@ -74,19 +75,15 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
       idempotentHint: false,
       openWorldHint: true,
     },
-    disabled: new Provider(
-      async () =>
-        !(await getFeatureGate().isFeatureEnabled('datasource-authoring')) ||
-        !(await isAuthoringAllowedForClient(server.clientId)),
-    ),
+    disabled: new Provider(async () => !(await isDatasourcePublishAvailable(server.clientId))),
     callback: async (
-      { datasourceUploadId, datasourceFilePath, name, projectId, overwrite = false },
+      { uploadId, datasourceFilePath, name, projectId, overwrite = false },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<PublishDatasourceResult>({
         extra,
         args: {
-          datasourceUploadId: datasourceUploadId ? '<redacted>' : undefined,
+          uploadId: uploadId ? '<redacted>' : undefined,
           datasourceFilePath: datasourceFilePath ? '<redacted>' : undefined,
           name,
           projectId,
@@ -98,7 +95,7 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
 
           const input = validateDatasourceInput({
             transport: extra.config.transport,
-            datasourceUploadId,
+            uploadId,
             datasourceFilePath,
           });
 
@@ -156,40 +153,38 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
 
 type DatasourceInput =
   | { source: 'local'; datasourceFilePath: string }
-  | { source: 'staged'; datasourceUploadId: string };
+  | { source: 'staged'; uploadId: string };
 
 function validateDatasourceInput({
   transport,
-  datasourceUploadId,
+  uploadId,
   datasourceFilePath,
 }: {
   transport: TransportName;
-  datasourceUploadId?: string;
+  uploadId?: string;
   datasourceFilePath?: string;
 }): DatasourceInput {
-  if (datasourceUploadId && datasourceFilePath) {
-    throw new ArgsValidationError(
-      'Provide either datasourceFilePath or datasourceUploadId, not both.',
-    );
+  if (uploadId && datasourceFilePath) {
+    throw new ArgsValidationError('Provide either datasourceFilePath or uploadId, not both.');
   }
 
   if (datasourceFilePath) {
     if (transport !== 'stdio') {
       throw new ArgsValidationError(
-        'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to configure a blob storage provider.',
+        'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-upload and pass uploadId; that requires the server to configure a blob storage provider.',
       );
     }
     if (isBlobStorageEnabled()) {
       throw new ArgsValidationError(
-        'datasourceFilePath is only supported when staged uploads are not configured. Call request-datasource-upload first and pass datasourceUploadId.',
+        'datasourceFilePath is only supported when staged uploads are not configured. Call request-upload first and pass uploadId.',
       );
     }
     return { source: 'local', datasourceFilePath };
   }
 
-  if (!datasourceUploadId) {
+  if (!uploadId) {
     throw new ArgsValidationError(
-      'Either datasourceFilePath or datasourceUploadId must be provided. For local stdio MCP servers, pass datasourceFilePath. For hosted clients, call request-datasource-upload first and pass datasourceUploadId.',
+      'Either datasourceFilePath or uploadId must be provided. For local stdio MCP servers, pass datasourceFilePath. For hosted clients, call request-upload first and pass uploadId.',
     );
   }
   if (!isBlobStorageEnabled()) {
@@ -197,7 +192,7 @@ function validateDatasourceInput({
       'Blob storage provider must be configured before publishing staged data source uploads.',
     );
   }
-  return { source: 'staged', datasourceUploadId };
+  return { source: 'staged', uploadId };
 }
 
 async function loadDatasourceFile(
@@ -213,7 +208,7 @@ async function loadDatasourceFile(
   }
   return new Ok(
     await resolveStagedDatasourceUpload({
-      datasourceUploadId: input.datasourceUploadId,
+      uploadId: input.uploadId,
       tenant: tenant.value,
     }),
   );
