@@ -1,3 +1,4 @@
+import { DOMParser } from '@xmldom/xmldom';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
@@ -26,6 +27,8 @@ vi.mock('../../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
+const productVersion = { value: '2026.3.2', build: '20263.26.1027.1340' };
+
 const wiring = buildDatasourceWiringInfo({
   serverUrl: 'https://10ax.online.tableau.com',
   siteName: 'mcp-test',
@@ -51,11 +54,42 @@ describe('createDataAppWorkspace', () => {
       await buildTemplateZip();
     });
 
+    it('preserves Desktop compatibility metadata in the finalized workbook', async () => {
+      const result = await createDataAppWorkspace({
+        datappName: 'Desktop Compatibility',
+        allowedOrigins: [],
+        wiring,
+        productVersion,
+      });
+
+      invariant(result.isOk(), result.isErr() ? result.error.message : '');
+      const { filePath, postUnzip } = result.value;
+      invariant(filePath);
+      invariant(postUnzip);
+      const workbookPath = 'Data App Name/Data App Name.twb';
+      let xml = execFileSync('unzip', ['-p', filePath, workbookPath], { encoding: 'utf8' });
+      const edit = postUnzip.edits.find(({ file }) => file === workbookPath);
+      invariant(edit);
+      for (const { find, replace } of edit.replacements) {
+        xml = xml.split(find).join(replace);
+      }
+
+      const workbook = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
+      invariant(workbook);
+      expect.soft(workbook.getAttribute('source-build')).toBe('2026.3.2 (20263.26.1027.1340)');
+      const manifest = workbook.getElementsByTagName('document-format-change-manifest')[0];
+      invariant(manifest);
+      for (const declaration of ['Extensions', 'VizExtensions', '_.fcp.Packages.true...Packages']) {
+        expect.soft(manifest.getElementsByTagName(declaration).length, declaration).toBe(1);
+      }
+    });
+
     it('serves the static, un-substituted template zip plus a postUnzip plan', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
@@ -73,7 +107,9 @@ describe('createDataAppWorkspace', () => {
       // Local mode returns the exact same plan blob storage mode does - the client always unzips and
       // finalizes.
       invariant(value.postUnzip);
-      expect(value.postUnzip).toEqual(buildPostUnzipPlan(deriveIdentity('Sales Demo')));
+      expect(value.postUnzip).toEqual(
+        buildPostUnzipPlan(deriveIdentity('Sales Demo'), productVersion),
+      );
       expect(value.postUnzip.renames).toContainEqual({
         from: 'Data App Name/Packages/TODO-MANIFEST-ID',
         to: 'Data App Name/Packages/com.tableau.mcp.sales-demo',
@@ -202,6 +238,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
@@ -228,7 +265,13 @@ describe('createDataAppWorkspace', () => {
       await expect(buffer(mocks.mockUpload.mock.calls[0][0].data)).resolves.toEqual(expectedBytes);
 
       invariant(value.postUnzip);
-      expect(value.postUnzip.edits.length).toBeGreaterThan(0);
+      const workbookEdit = value.postUnzip.edits.find(
+        ({ file }) => file === 'Data App Name/Data App Name.twb',
+      );
+      expect(workbookEdit?.replacements).toContainEqual({
+        find: 'TODO-SOURCE-BUILD',
+        replace: '2026.3.2 (20263.26.1027.1340)',
+      });
       expect(value.postUnzip.renames).toContainEqual({
         from: 'Data App Name',
         to: 'Sales Demo',
@@ -242,6 +285,7 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
         wiring,
+        productVersion,
       });
 
       invariant(result.isErr());
