@@ -3,6 +3,8 @@ import { AxiosError } from 'axios';
 
 import * as loggerModule from '../../logging/logger.js';
 import { OverridableConfig } from '../../overridableConfig.js';
+import { useRestApi } from '../../restApiInstance.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { TableauRestError } from '../../sdks/tableau/tableauRestError.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
@@ -62,6 +64,54 @@ describe('ResourceAccessChecker', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe.each(['Workbook', 'View'] as const)('provided %s read session', (type) => {
+    const content = type === 'Workbook' ? mockWorkbook : mockView;
+    const get = vi.fn();
+    const restApi = {
+      siteId: 'provided-site',
+      workbooksMethods: { getWorkbook: get },
+      viewsMethods: { getView: get },
+    } as unknown as RestApi;
+    const check = async (projectId: string, tag: string): Promise<boolean> => {
+      const checker = createResourceAccessChecker({
+        projectIds: new Set([projectId]),
+        tags: new Set([tag]),
+        workbookIds: null,
+        viewIds: null,
+        datasourceIds: null,
+      });
+      const result =
+        type === 'Workbook'
+          ? await checker.isWorkbookAllowed({ workbookId: content.id, extra, restApi })
+          : await checker.isViewAllowed({ viewId: content.id, extra, restApi });
+      expect(useRestApi).not.toHaveBeenCalled();
+      return result.allowed;
+    };
+    beforeEach(() => get.mockResolvedValue(content));
+
+    it('checks project and tags through the supplied session without reauthenticating', async () => {
+      expect(await check(content.project!.id, content.tags!.tag[0].label)).toBe(true);
+      expect(get).toHaveBeenCalledTimes(1);
+      expect(get).toHaveBeenCalledWith({
+        siteId: 'provided-site',
+        [type === 'Workbook' ? 'workbookId' : 'viewId']: content.id,
+      });
+    });
+    it('preserves project denials', async () => {
+      expect(await check('other-project', content.tags!.tag[0].label)).toBe(false);
+      expect(get).toHaveBeenCalledTimes(1);
+    });
+    it('preserves tag denials', async () => {
+      expect(await check(content.project!.id, 'other-tag')).toBe(false);
+      expect(get).toHaveBeenCalledTimes(1);
+    });
+    it('fails closed on an inaccessible target without opening a replacement session', async () => {
+      get.mockRejectedValueOnce(new Error('not accessible'));
+      expect(await check(content.project!.id, content.tags!.tag[0].label)).toBe(false);
+      expect(get).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('isDatasourceAllowed', () => {

@@ -49,35 +49,39 @@ export async function subscriptionContext(
   return { ...extra, disableLogging: true as const, getConfigWithOverrides: async () => config };
 }
 
-/** Permission probes finish before a mutation session starts; re-signing in with a PAT invalidates its earlier session. */
+/** List probes reuse its read session; mutation probes finish before the mutation session starts. */
 export async function subscriptionContentAllowed(
   content: Subscription['content'],
   extra: TableauWebRequestHandlerExtra,
+  restApi?: RestApi,
 ): Promise<boolean> {
   const checked =
     content.type === 'Workbook'
-      ? await resourceAccessChecker.isWorkbookAllowed({ workbookId: content.id, extra })
-      : await resourceAccessChecker.isViewAllowed({ viewId: content.id, extra });
+      ? await resourceAccessChecker.isWorkbookAllowed({ workbookId: content.id, extra, restApi })
+      : await resourceAccessChecker.isViewAllowed({ viewId: content.id, extra, restApi });
   if (!checked.allowed) return false;
+  if (restApi && checked.content) return checked.content.id === content.id;
   // The shared checker can short-circuit when unrestricted. Still confirm current visibility.
+  const checkVisibility = async (client: RestApi): Promise<boolean> => {
+    try {
+      const visible =
+        content.type === 'Workbook'
+          ? await client.workbooksMethods.getWorkbook({
+              siteId: client.siteId,
+              workbookId: content.id,
+            })
+          : await client.viewsMethods.getView({ siteId: client.siteId, viewId: content.id });
+      return visible.id === content.id;
+    } catch {
+      return false;
+    }
+  };
+  if (restApi) return checkVisibility(restApi);
   return useRestApi({
     ...extra,
     disableLogging: true,
     jwtScopes: ['tableau:content:read'],
-    callback: async (restApi) => {
-      try {
-        const visible =
-          content.type === 'Workbook'
-            ? await restApi.workbooksMethods.getWorkbook({
-                siteId: restApi.siteId,
-                workbookId: content.id,
-              })
-            : await restApi.viewsMethods.getView({ siteId: restApi.siteId, viewId: content.id });
-        return visible.id === content.id;
-      } catch {
-        return false;
-      }
-    },
+    callback: checkVisibility,
   });
 }
 

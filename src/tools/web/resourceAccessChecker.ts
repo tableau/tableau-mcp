@@ -5,6 +5,7 @@ import {
   getDatasourceNamesAndTagsByLuid,
   getDatasourceNamesAndTagsQuery,
 } from '../../sdks/tableau/methods/lineageUtils.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { DataSource, isEmbeddedDatasource } from '../../sdks/tableau/types/dataSource.js';
 import { Flow, FlowOutputStep } from '../../sdks/tableau/types/flow.js';
 import { View } from '../../sdks/tableau/types/view.js';
@@ -135,13 +136,16 @@ class ResourceAccessChecker {
   async isWorkbookAllowed({
     workbookId,
     extra,
+    restApi,
   }: {
     workbookId: string;
     extra: TableauWebRequestHandlerExtra;
+    restApi?: RestApi;
   }): Promise<AllowedResult<Workbook>> {
     const result = await this._isWorkbookAllowed({
       workbookId,
       extra,
+      restApi,
     });
 
     return result;
@@ -165,13 +169,16 @@ class ResourceAccessChecker {
   async isViewAllowed({
     viewId,
     extra,
+    restApi,
   }: {
     viewId: string;
     extra: TableauWebRequestHandlerExtra;
+    restApi?: RestApi;
   }): Promise<AllowedResult<View>> {
     const result = await this._isViewAllowed({
       viewId,
       extra,
+      restApi,
     });
 
     return result;
@@ -607,9 +614,11 @@ class ResourceAccessChecker {
   private async _isWorkbookAllowed({
     workbookId,
     extra,
+    restApi,
   }: {
     workbookId: string;
     extra: TableauWebRequestHandlerExtra;
+    restApi?: RestApi;
   }): Promise<AllowedResult<Workbook>> {
     const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
     if (allowedWorkbookIds && !allowedWorkbookIds.has(workbookId)) {
@@ -624,12 +633,14 @@ class ResourceAccessChecker {
 
     let workbook: Workbook | undefined;
     async function getWorkbook(): Promise<Workbook> {
+      if (restApi)
+        return restApi.workbooksMethods.getWorkbook({ siteId: restApi.siteId, workbookId });
       return await useRestApi({
         ...extra,
         jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-        callback: async (restApi) =>
-          await restApi.workbooksMethods.getWorkbook({
-            siteId: restApi.siteId,
+        callback: async (client) =>
+          await client.workbooksMethods.getWorkbook({
+            siteId: client.siteId,
             workbookId,
           }),
       });
@@ -808,9 +819,11 @@ class ResourceAccessChecker {
   private async _isViewAllowed({
     viewId,
     extra,
+    restApi,
   }: {
     viewId: string;
     extra: TableauWebRequestHandlerExtra;
+    restApi?: RestApi;
   }): Promise<AllowedResult<View>> {
     const allowedViewIds = await this.getAllowedViewIds({ extra });
     if (allowedViewIds && !allowedViewIds.has(viewId)) {
@@ -825,12 +838,13 @@ class ResourceAccessChecker {
 
     let view: View | undefined;
     async function getView(): Promise<View> {
+      if (restApi) return restApi.viewsMethods.getView({ siteId: restApi.siteId, viewId });
       return await useRestApi({
         ...extra,
         jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-        callback: async (restApi) => {
-          return await restApi.viewsMethods.getView({
-            siteId: restApi.siteId,
+        callback: async (client) => {
+          return await client.viewsMethods.getView({
+            siteId: client.siteId,
             viewId,
           });
         },

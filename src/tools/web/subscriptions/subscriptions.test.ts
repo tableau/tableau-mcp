@@ -150,6 +150,7 @@ describe('subscription tools', () => {
           : 'tableau:mcp:subscriptions:write',
       ]);
       expect(getRequiredApiScopesForTool(tool.name)).toContain('tableau:content:read');
+      expect(getRequiredApiScopesForTool(tool.name)).not.toContain('tableau:tasks:write');
       expect(await Provider.from(tool.annotations)).toMatchObject({
         readOnlyHint: tool.name === 'list-subscriptions',
         destructiveHint: false,
@@ -159,6 +160,88 @@ describe('subscription tools', () => {
     }
     expect(getRequiredApiScopesForTool('create-subscription')).toContain('tableau:tasks:create');
     expect(getRequiredApiScopesForTool('suspend-subscription')).toContain('tableau:tasks:update');
+    expect(getRequiredApiScopesForTool('resume-subscription')).toContain('tableau:tasks:update');
+  });
+  it.each(['Workbook', 'View'] as const)(
+    'uses one REST session for 100 distinct %s visibility checks',
+    async (type) => {
+      const subscriptions = Array.from({ length: 100 }, (_, index) =>
+        subscription({
+          content: { type, id: `11111111-1111-4111-8111-${index.toString().padStart(12, '0')}` },
+        }),
+      );
+      mocks.list.mockResolvedValue(
+        Ok({ subscriptions, pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 100 } }),
+      );
+      mocks.visible.mockImplementation(async ({ workbookId, viewId }) => ({
+        id: workbookId ?? viewId,
+      }));
+
+      expect(payload(await list()).subscriptions).toEqual(subscriptions);
+      expect(useRestApi).toHaveBeenCalledTimes(1);
+      expect(mocks.allowed).toHaveBeenCalledTimes(100);
+      expect(mocks.visible).toHaveBeenCalledTimes(100);
+      const client = mocks.allowed.mock.calls[0][0].restApi;
+      expect(client.siteId).toBe('site');
+      expect(mocks.allowed.mock.calls.every(([args]) => args.restApi === client)).toBe(true);
+      expect(vi.mocked(useRestApi).mock.calls[0][0].jwtScopes).toContain('tableau:content:read');
+    },
+  );
+  it('deduplicates visibility by content type and ID within each list call', async () => {
+    const subscriptions = Array.from({ length: 100 }, (_, index) =>
+      subscription({ content: { id: contentId, type: index % 2 ? 'View' : 'Workbook' } }),
+    );
+    mocks.list.mockResolvedValue(
+      Ok({ subscriptions, pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 100 } }),
+    );
+    expect(payload(await list()).subscriptions).toEqual(subscriptions);
+    expect(useRestApi).toHaveBeenCalledTimes(1);
+    expect(mocks.allowed).toHaveBeenCalledTimes(2);
+    expect(mocks.visible).toHaveBeenCalledTimes(2);
+  });
+  it('caches denied checks only for the current call and rechecks changed access', async () => {
+    mocks.list.mockResolvedValue(
+      Ok({
+        subscriptions: Array.from({ length: 100 }, () => subscription()),
+        pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 100 },
+      }),
+    );
+    mocks.allowed.mockResolvedValueOnce({ allowed: false });
+    expect(payload(await list()).subscriptions).toEqual([]);
+    expect(mocks.allowed).toHaveBeenCalledTimes(1);
+    expect(mocks.visible).not.toHaveBeenCalled();
+
+    mocks.visible.mockRejectedValueOnce(new Error('private visibility error'));
+    expect(payload(await list()).subscriptions).toEqual([]);
+    expect(mocks.allowed).toHaveBeenCalledTimes(2);
+    expect(mocks.visible).toHaveBeenCalledTimes(1);
+
+    expect(payload(await list()).subscriptions).toHaveLength(100);
+    expect(mocks.allowed).toHaveBeenCalledTimes(3);
+    expect(mocks.visible).toHaveBeenCalledTimes(2);
+    expect(useRestApi).toHaveBeenCalledTimes(3);
+  });
+  it('reuses content fetched by a bounded access check without a second fetch', async () => {
+    mocks.allowed.mockResolvedValue({ allowed: true, content: { id: contentId } });
+    expect(payload(await list()).subscriptions).toEqual([subscription()]);
+    expect(useRestApi).toHaveBeenCalledTimes(1);
+    expect(mocks.visible).not.toHaveBeenCalled();
+  });
+  it('rejects mismatched content returned by a bounded access check', async () => {
+    mocks.allowed.mockResolvedValue({ allowed: true, content: { id: otherId } });
+    expect(payload(await list()).subscriptions).toEqual([]);
+    expect(mocks.visible).not.toHaveBeenCalled();
+  });
+  it('filters another owner before any content check', async () => {
+    mocks.list.mockResolvedValue(
+      Ok({
+        subscriptions: [subscription({ user: { id: otherId } })],
+        pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+      }),
+    );
+    expect(payload(await list()).subscriptions).toEqual([]);
+    expect(mocks.allowed).not.toHaveBeenCalled();
+    expect(mocks.visible).not.toHaveBeenCalled();
   });
   it('lists only self-owned visible content and does not reveal site totals', async () => {
     mocks.list.mockResolvedValue(

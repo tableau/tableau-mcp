@@ -10,6 +10,7 @@ import {
 } from '../../../sdks/tableau/types/subscription.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../../../server/oauth/scopes.js';
 import { WebTool } from '../tool.js';
 import {
   getSubscriptionUserId,
@@ -76,9 +77,9 @@ export const getListSubscriptionsTool = (server: WebMcpServer): WebTool<typeof p
             args.limit ?? SUBSCRIPTIONS_PAGE_SIZE,
             cap === null ? SUBSCRIPTIONS_PAGE_SIZE : cap - offset,
           );
-          const result = await useRestApi({
+          return useRestApi({
             ...quiet,
-            jwtScopes: ['tableau:tasks:read'],
+            jwtScopes: ['tableau:tasks:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES],
             callback: async (restApi) => {
               const user = await getSubscriptionUserId(restApi);
               if (user.isErr()) return user;
@@ -88,37 +89,37 @@ export const getListSubscriptionsTool = (server: WebMcpServer): WebTool<typeof p
                 pageSize: SUBSCRIPTIONS_PAGE_SIZE,
               });
               if (page.isErr()) return page;
+              const subscriptions: Subscription[] = [];
+              const candidates = page.value.subscriptions.filter(
+                (subscription) =>
+                  subscription.user.id === user.value &&
+                  (!args.contentType || subscription.content.type === args.contentType) &&
+                  (!args.contentId || subscription.content.id === args.contentId),
+              );
+              const access = new Map<string, boolean>();
+              for (const subscription of candidates) {
+                if (subscriptions.length >= limit) break;
+                const key = `${subscription.content.type}:${subscription.content.id}`;
+                let allowed = access.get(key);
+                if (allowed === undefined) {
+                  allowed = await subscriptionContentAllowed(subscription.content, quiet, restApi);
+                  access.set(key, allowed);
+                }
+                if (allowed) subscriptions.push(subscription);
+              }
+              const hasMore =
+                offset + SUBSCRIPTIONS_PAGE_SIZE < page.value.pagination.totalAvailable &&
+                (cap === null || offset + SUBSCRIPTIONS_PAGE_SIZE < cap);
               return new Ok({
-                ...page.value,
-                subscriptions: page.value.subscriptions.filter(
-                  (subscription) => subscription.user.id === user.value,
-                ),
+                subscriptions,
+                pageNumber,
+                pageSize: SUBSCRIPTIONS_PAGE_SIZE,
+                hasMore,
+                ...(hasMore && { nextPageNumber: pageNumber + 1 }),
+                pageTruncated:
+                  subscriptions.length === limit && candidates.length > subscriptions.length,
               });
             },
-          });
-          if (result.isErr()) return result;
-          const subscriptions: Subscription[] = [];
-          const candidates = result.value.subscriptions.filter(
-            (subscription) =>
-              (!args.contentType || subscription.content.type === args.contentType) &&
-              (!args.contentId || subscription.content.id === args.contentId),
-          );
-          for (const subscription of candidates) {
-            if (subscriptions.length >= limit) break;
-            if (await subscriptionContentAllowed(subscription.content, quiet))
-              subscriptions.push(subscription);
-          }
-          const hasMore =
-            offset + SUBSCRIPTIONS_PAGE_SIZE < result.value.pagination.totalAvailable &&
-            (cap === null || offset + SUBSCRIPTIONS_PAGE_SIZE < cap);
-          return new Ok({
-            subscriptions,
-            pageNumber,
-            pageSize: SUBSCRIPTIONS_PAGE_SIZE,
-            hasMore,
-            ...(hasMore && { nextPageNumber: pageNumber + 1 }),
-            pageTruncated:
-              subscriptions.length === limit && candidates.length > subscriptions.length,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

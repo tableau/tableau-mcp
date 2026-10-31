@@ -231,6 +231,8 @@ const toolScopeMap: Record<
     conditionApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
+  // Subscriptions document tasks:create/tasks:update rather than the tasks:write mappings below.
+  // https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_subscriptions.htm
   'list-subscriptions': {
     mcp: ['tableau:mcp:subscriptions:read'],
     api: new Set(['tableau:tasks:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
