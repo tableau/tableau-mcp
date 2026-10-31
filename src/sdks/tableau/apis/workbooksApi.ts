@@ -6,6 +6,7 @@ import { paginationSchema } from '../types/pagination.js';
 import { workbookPermissionsSchema } from '../types/permissions.js';
 import { tagsSchema } from '../types/tags.js';
 import { workbookConnectionSchema, workbookSchema } from '../types/workbook.js';
+import { workbookRevisionSchema } from '../types/workbookRevision.js';
 import { paginationParameters } from './paginationParameters.js';
 
 const getWorkbookEndpoint = makeEndpoint({
@@ -139,7 +140,25 @@ const deleteTagFromWorkbookEndpoint = makeEndpoint({
   response: z.void(),
 });
 
+const getWorkbookRevisionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/revisions',
+  alias: 'getWorkbookRevisions',
+  description: 'Returns one page of revision history for a workbook.',
+  parameters: [...paginationParameters, pathParam('siteId', 'segment'), pathParam('workbookId')],
+  response: z
+    .object({
+      pagination: paginationSchema,
+      revisions: z.object({ revision: z.array(workbookRevisionSchema).optional() }),
+    })
+    .transform(({ pagination, revisions }) => ({
+      pagination,
+      revisions: revisions.revision ?? [],
+    })),
+});
+
 const workbooksApi = makeApi([
+  getWorkbookRevisionsEndpoint,
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
   queryWorkbookConnectionsEndpoint,
