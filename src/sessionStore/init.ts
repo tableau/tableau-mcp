@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 import type { SessionStore } from './sessionStore.js';
@@ -175,7 +176,7 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
         'If using a file path, ensure the file exists and the path is correct. ' +
         'If using an npm package, ensure it is installed.';
     } else {
-      errorMessage += `Error: ${error}`;
+      errorMessage += getExceptionMessage(error);
     }
 
     throw new Error(errorMessage);

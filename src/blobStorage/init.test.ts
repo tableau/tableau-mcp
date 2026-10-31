@@ -63,7 +63,8 @@ describe('BlobStorage', () => {
       mockCustomConfig(incompleteProviderPath);
 
       expect(() => initializeBlobStorageProvider()).toThrow(
-        /missing required methods: getPresignedUploadUrl, download/,
+        `Failed to load custom blob storage provider from "${incompleteProviderPath}". ` +
+          'Custom provider missing required methods: getPresignedUploadUrl, download',
       );
       expect(isBlobStorageEnabled()).toBe(false);
     });
