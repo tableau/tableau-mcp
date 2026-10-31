@@ -2,6 +2,7 @@ import { Flow } from '../../../../sdks/tableau/types/flow.js';
 import {
   FlowDocument,
   flowDocumentConnectionSchema,
+  flowDocumentSchema,
 } from '../../../../sdks/tableau/types/flowDocument.js';
 import { summarizeFlowDocument } from './flowDocumentSummary.js';
 import { mockFlowDocument } from './mockFlowDocument.js';
@@ -19,6 +20,18 @@ const mockFlow = {
 } satisfies Flow;
 
 describe('summarizeFlowDocument', () => {
+  it('accepts native type-change field maps without reporting them as a field schema', () => {
+    const document = flowDocumentSchema.parse({
+      nodes: {
+        input: { nodeType: '.v1.LoadCsv', fields: [{ name: 'Sales', type: 'real' }] },
+        change: { nodeType: '.v1.ChangeColumnType', fields: { Sales: 'integer' } },
+      },
+    });
+    const result = summarizeFlowDocument({ document, includeFieldSchemas: true });
+    expect(result.fields?.input).toEqual([{ name: 'Sales', type: 'real' }]);
+    expect(result.fields?.change).toBeUndefined();
+  });
+
   it('classifies nodes into inputs / outputs / transforms and counts them', () => {
     const result = summarizeFlowDocument({ document: mockFlowDocument });
 
