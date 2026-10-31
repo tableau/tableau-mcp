@@ -5,6 +5,7 @@ import { z, ZodError } from 'zod';
 
 import {
   AdminOnlyError,
+  ArgsValidationError,
   DatasourceNotAllowedError,
   ServiceUnavailableError,
   ZodiosValidationError,
@@ -444,9 +445,38 @@ describe('Tool', () => {
         expect.objectContaining({
           success: false,
           error_code: '500',
-          error_message: 'requestId: 2, error: Callback failed',
+          error_message: 'unknown',
         }),
       );
+    });
+
+    it('should send only the McpToolError type slug as error_message, never the message text', async () => {
+      const tool = new WebTool(mockParams);
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () =>
+          Promise.resolve(
+            new ArgsValidationError(
+              "Field 'SecretFieldXYZ' was not found in the datasource.",
+            ).toErr(),
+          ),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      // The client still sees the full message.
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('SecretFieldXYZ');
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '400',
+          error_message: 'args-validation',
+        }),
+      );
+      expect(JSON.stringify(mockTelemetrySend.mock.calls)).not.toContain('SecretFieldXYZ');
     });
 
     it('should send telemetry with actual HTTP status code on API error', async () => {
@@ -487,8 +517,35 @@ describe('Tool', () => {
         expect.objectContaining({
           success: false,
           error_code: '',
+          error_message: 'unknown',
         }),
       );
+    });
+
+    it('should send the constrained error type slug as error_message, never the message text', async () => {
+      const tool = new WebTool(mockParams);
+      const message = 'The following fields have sort priorities that are duplicated: "Gene Name"';
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({
+          type: 'error',
+          message,
+          error: new DatasourceNotAllowedError(message),
+        }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '403',
+          error_message: 'datasource-not-allowed',
+        }),
+      );
+      expect(JSON.stringify(mockTelemetrySend.mock.calls)).not.toContain('Gene Name');
     });
 
     it('should send telemetry with success=true on constrained empty result', async () => {

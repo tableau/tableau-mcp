@@ -24,7 +24,6 @@ import {
   buildAuthenticationErrorMessage,
   buildPermissionErrorMessage,
 } from '../../utils/authErrorMessage.js';
-import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
@@ -198,6 +197,9 @@ export class WebTool<
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
+    // McpToolError's stable `type` slug, mirroring the desktop path. The human-readable message is
+    // never sent: it can carry customer data (field names, datasource content).
+    let errorType = '';
     let toolResult: CallToolResult | undefined;
 
     try {
@@ -211,6 +213,9 @@ export class WebTool<
           success = !isError;
           if (isError && constrainedResult.error) {
             errorCode = getHttpStatus(constrainedResult.error);
+            if (constrainedResult.error instanceof McpToolError) {
+              errorType = constrainedResult.error.type;
+            }
           }
           toolResult = {
             isError,
@@ -231,6 +236,7 @@ export class WebTool<
 
       // Handle error result - extract actual HTTP status if available
       errorCode = getHttpStatus(result.error);
+      errorType = result.error.type;
 
       if (result.error instanceof ZodiosValidationError) {
         toolResult = getErrorResult(requestId, result.error);
@@ -251,6 +257,7 @@ export class WebTool<
       if (error instanceof RouteSafetyError) {
         const argsError = new ArgsValidationError(error.message);
         errorCode = getHttpStatus(argsError);
+        errorType = argsError.type;
         log(
           {
             message: `Tool ${this.name} rejected an unsafe REST route: ${error.message}`,
@@ -266,6 +273,9 @@ export class WebTool<
       }
       if (error instanceof Error) {
         errorCode = getHttpStatus(error); // Default to 500 if no HTTP status can be determined
+      }
+      if (error instanceof McpToolError) {
+        errorType = error.type;
       }
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
@@ -307,10 +317,9 @@ export class WebTool<
         user_luid: extra.getUserLuid(),
         success,
         error_code: errorCode,
-        // Only populated for genuine error results (isError: true). The ZodiosValidationError
-        // passthrough returns isError: false with the full API payload, so keying off isError
-        // (not !success) keeps successful response data out of telemetry.
-        error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
+        // Only populated for genuine error results (isError: true); the ZodiosValidationError
+        // passthrough is isError: false.
+        error_message: toolResult?.isError ? errorType || 'unknown' : '',
         oauth_client_id: sanitizedClientId,
         oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
