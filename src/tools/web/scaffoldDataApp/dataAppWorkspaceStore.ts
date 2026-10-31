@@ -8,13 +8,13 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
-import { Config } from '../../../config.js';
+import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import { toUploadData } from '../../../blobStorage/uploadData.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
-import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import { DatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
@@ -30,8 +30,8 @@ import {
  * modes differ only in transport:
  *  - disk: `filePath` points at the template zip already on the local filesystem — skip download,
  *    then unzip and apply `postUnzip`.
- *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip — download it first, then
- *    unzip and apply `postUnzip`.
+ *  - blob storage: `downloadUrl` is a URL (from the configured BlobStorageProvider) for the
+ *    (un-substituted) template zip — download it first, then unzip and apply `postUnzip`.
  * Both also return `requestedOrigins`: where the finalized manifest.json is and how to declare the
  * app's external origins in it, and `wiring`: the server/site values every datasource descriptor needs.
  */
@@ -41,7 +41,7 @@ export type DataAppWorkspaceResult = {
   requestedOrigins: RequestedOriginsGuide;
   wiring: DatasourceWiringInfo;
   filePath?: string;
-  s3URL?: string;
+  downloadUrl?: string;
   postUnzip?: PostUnzipPlan;
 };
 
@@ -127,13 +127,11 @@ export async function createDataAppWorkspace({
   productVersion,
   allowedOrigins,
   wiring,
-  config,
 }: {
   datappName: string;
   productVersion: ProductVersion;
   allowedOrigins: string[];
   wiring: DatasourceWiringInfo;
-  config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
   const workspace: DataAppWorkspaceResult = {
@@ -154,10 +152,9 @@ export async function createDataAppWorkspace({
     ).toErr();
   }
 
-  if (config.bucketS3.enabled) {
-    return await createS3Workspace({
+  if (isBlobStorageEnabled()) {
+    return await createBlobStorageWorkspace({
       workspace,
-      config,
       source,
     });
   }
@@ -173,40 +170,35 @@ export async function createDataAppWorkspace({
   return new Ok({ ...workspace, filePath: zipPath });
 }
 
-async function createS3Workspace({
+async function createBlobStorageWorkspace({
   workspace,
-  config,
   source,
 }: {
   workspace: DataAppWorkspaceResult;
-  config: Config;
   source: TemplateSource;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  // Upload the template zip to S3 fresh on every call, then presign a GET URL for exactly those
-  // bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip` varies),
-  // so a fixed key is intentional — concurrent overwrites are harmless. Nothing is published out of
-  // band; the object is always what this code path just wrote.
+  // Upload the template zip to blob storage fresh on every call and return the URL for exactly
+  // those bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip`
+  // varies), so a fixed key is intentional — concurrent overwrites are harmless. Nothing is
+  // published out of band; the object is always what this code path just wrote.
   //
   // Don't "optimize" this into an exists-check-then-skip-upload: the key has no version or content
   // hash in it, so a stale object from a previous deploy (or a different pod on shared storage)
   // would look like a hit and get served forever instead of refreshed. Always writing first is what
   // guarantees the object matches this instance's on-disk template.
-  let s3URL: string;
+  let downloadUrl: string;
   try {
-    const buffer = 'path' in source ? await readFile(source.path) : source.bytes;
-    const key = `${joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-templates')}${TEMPLATE_ZIP_FILENAME}`;
-    s3URL = await uploadBufferToS3(buffer, {
-      key,
+    const { url } = await getBlobStorageProvider().upload({
+      key: `data-app-templates/${TEMPLATE_ZIP_FILENAME}`,
+      ...toUploadData('path' in source ? await readFile(source.path) : source.bytes),
       contentType: 'application/zip',
-      bucket: config.bucketS3.bucket,
-      region: config.bucketS3.region,
-      presignTtlSeconds: config.bucketS3.presignTtlSeconds,
     });
+    downloadUrl = url;
   } catch (error) {
     return new DataAppTemplateUnavailableError(
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
 
-  return new Ok({ ...workspace, s3URL });
+  return new Ok({ ...workspace, downloadUrl });
 }

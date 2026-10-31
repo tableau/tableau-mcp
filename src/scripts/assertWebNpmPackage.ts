@@ -21,6 +21,7 @@ interface PackedPackage {
 
 const expectedBuildFiles = [
   'build/activityLog/provider.d.ts',
+  'build/blobStorage/blobStorageProvider.d.ts',
   'build/features.json',
   'build/features/featureGateProvider.d.ts',
   'build/index.js',

@@ -325,7 +325,64 @@ Output:
 tableau-mcp v1.17.12 streamable HTTP server available at http://localhost:3927/tableau-mcp
 ```
 
-### Step 4: Optional configuration
+### Step 4: Configure shared infrastructure
+
+A single-instance trial doesn't need any of this: the built-in defaults work. For production, you
+can back each provider below with your own service by writing a module that implements its
+interface.
+
+To plug in a provider, replace `<NAME>` with `SESSION_STORE`, `BLOB_STORAGE`, or `TELEMETRY`:
+
+```bash
+<NAME>_PROVIDER=custom
+<NAME>_PROVIDER_CONFIG='{"module":"./my-provider.js"}'
+```
+
+- `module` is a file path (relative paths resolve from the server's working directory) or an npm
+  package name. Any other fields in the JSON are passed to your class's constructor.
+- Interface types are importable with `import type` from `@tableau/mcp-server/<path>`, using the
+  paths below.
+
+#### Session store
+
+Holds the embedded authorization server's OAuth state. Configure one when
+[`AUTH`](../configuration/mcp-config/env-vars.md#auth) is `oauth` with the embedded authorization
+server and you restart the server or run more than one instance; the default `memory` store loses
+state on restart and isn't shared.
+
+- Interface:
+  [`sessionStore/sessionStore`](https://github.com/tableau/tableau-mcp/blob/main/src/sessionStore/sessionStore.ts)
+- With the embedded authorization server, every instance must also use the same
+  `OAUTH_JWE_PRIVATE_KEY` (or `OAUTH_JWE_PRIVATE_KEY_PATH`), so any instance can decrypt tokens
+  another one issued.
+
+#### Blob storage
+
+Holds workbooks that clients upload for `publish-workbook` or receive as links from
+`download-workbook`, and, when enabled, view images and data returned as URLs. Configure it when the
+server runs remotely from its users; without it, those tools use the server's local filesystem.
+
+- Interface:
+  [`blobStorage/blobStorageProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/blobStorage/blobStorageProvider.ts)
+- The old `MCP_S3_BUCKET`, `MCP_IMAGE_PREFIX`, and `FILE_TTL` variables are no longer supported. The
+  server refuses to start if any is set without `BLOB_STORAGE_PROVIDER`.
+
+#### Telemetry
+
+Sends tool-call metrics and latency to your monitoring stack. Configure it when you monitor the
+server with your own tools; the default `noop` drops them.
+
+- Interface:
+  [`telemetry/telemetryProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/telemetryProvider.ts)
+- The provider loads in a preload script. Without it, telemetry stays `noop`:
+
+```shell
+node -r @tableau/mcp-server/tracing node_modules/@tableau/mcp-server/build/index.js  # npm
+node -r ./build/telemetry/tracing.js build/index.js                                  # source checkout
+NODE_OPTIONS=--require=/app/build/telemetry/tracing.js                               # Docker env file
+```
+
+### Step 5: Optional configuration
 
 #### Available tools
 
@@ -395,21 +452,6 @@ Examples:
    ```
 
 #### Telemetry
-
-##### Service Telemetry
-
-Tableau MCP uses a plugin architecture that allows you to provide your own telemetry provider to
-record service level metrics and latency observations.
-
-1. Create a class that implements the
-   [TelemetryProvider](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/types.ts)
-   interface. Tableau MCP will import it dynamically at runtime.
-2. Set environment variables:
-
-   ```
-   TELEMETRY_PROVIDER=custom
-   TELEMETRY_PROVIDER_CONFIG='{"module":"./path/to/my-telemetry-provider.js"}'
-   ```
 
 ##### Product Telemetry
 
@@ -648,19 +690,13 @@ authentication configuration of the Tableau Server itself. For example, if your 
 configured to require OpenID Connect via an external identity provider, this doesn't change. The
 embedded authorization server only protects the deployment of Tableau MCP, not Tableau Server.
 
-There is one limitation of the embedded authorization server that is worth mentioning. The refresh
-tokens issued to MCP clients are currently stored in the memory of the Tableau MCP server process.
-These are used when an agent determines the access token will soon expire and requests it be
-refreshed using the refresh token. The agent provides the refresh token, the authorization server
-ensures it exists in its memory and is valid for the client, and reissues a fresh set of access and
-refresh tokens to the client. In the event the Tableau MCP process is stopped or restarted, all
-these refresh tokens are effectively forgotten so if a client later attempts to exchange a refresh
-token for a new access token, it will fail and the user will need to reconnect their client. Clients
-may or may not automatically prompt the user to re-authenticate, potentially causing some friction.
-Access tokens expire after 1 hour by default but can be extended to 30 days using the
-`OAUTH_ACCESS_TOKEN_TIMEOUT_MS` environment variable. We are working internally to improve this, but
-for now please be aware. See
-[Add support for persistent storage of refresh tokens and authorization codes · Issue #265 · tableau/tableau-mcp](https://github.com/tableau/tableau-mcp/issues/265)
+By default, the refresh tokens issued to MCP clients are stored in the memory of the Tableau MCP
+server process. A client exchanges its refresh token for a fresh set of tokens when its access token
+is about to expire. If the process restarts, those refresh tokens are forgotten, the exchange fails,
+and the user must reconnect their client. Clients may or may not prompt the user to re-authenticate
+automatically. To keep refresh tokens and authorization codes across restarts and instances,
+configure a persistent [session store](#session-store). Access tokens expire after 1 hour by default
+but can be extended to 30 days using the `OAUTH_ACCESS_TOKEN_TIMEOUT_MS` environment variable.
 
 ### Passthrough authentication
 

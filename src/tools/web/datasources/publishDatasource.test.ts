@@ -16,10 +16,15 @@ const mocks = vi.hoisted(() => ({
   mockUploadFileInChunks: vi.fn(),
   mockResolveStagedDatasourceUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+  mockIsBlobStorageEnabled: vi.fn(),
 }));
 
 vi.mock('fs/promises', () => ({
   readFile: mocks.mockReadFile,
+}));
+
+vi.mock('../../../blobStorage/init.js', () => ({
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -77,6 +82,8 @@ describe('publishDatasourceTool', () => {
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedDatasourceUpload.mockReset();
     mocks.mockReadFile.mockReset();
+    mocks.mockIsBlobStorageEnabled.mockReset();
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<datasource source="local" />'));
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
@@ -206,7 +213,6 @@ describe('publishDatasourceTool', () => {
 
     expect(mocks.mockResolveStagedDatasourceUpload).toHaveBeenCalledWith({
       datasourceUploadId: validArgs.datasourceUploadId,
-      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -247,7 +253,7 @@ describe('publishDatasourceTool', () => {
 
     const result = await getToolResult(
       { ...validLocalArgs, datasourceFilePath: '/tmp/source-superstore.tdsx' },
-      { bucketS3Enabled: false },
+      { blobStorageEnabled: false },
     );
 
     expect(result.isError).toBe(false);
@@ -264,7 +270,7 @@ describe('publishDatasourceTool', () => {
   });
 
   it('uploads and publishes a local TDS data source file path', async () => {
-    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
+    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
 
     expect(result.isError).toBe(false);
     expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.tds');
@@ -307,13 +313,13 @@ describe('publishDatasourceTool', () => {
     );
   });
 
-  it('rejects local data source file paths when staged S3 uploads are configured', async () => {
-    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: true });
+  it('rejects local data source file paths when blob storage is configured', async () => {
+    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: true });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'datasourceFilePath is only supported when staged S3 uploads are not configured',
+      'datasourceFilePath is only supported when staged uploads are not configured',
     );
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
@@ -322,14 +328,14 @@ describe('publishDatasourceTool', () => {
 
   it('rejects local data source file paths on HTTP transport before signing in or reading the file', async () => {
     const result = await getToolResult(validLocalArgs, {
-      bucketS3Enabled: false,
+      blobStorageEnabled: false,
       transport: 'http',
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to set MCP_S3_BUCKET.',
+      'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to configure a blob storage provider.',
     );
     expect(useRestApi).not.toHaveBeenCalled();
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
@@ -337,9 +343,9 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
 
-  it('rejects local data source file paths on HTTP transport even when staged S3 uploads are configured', async () => {
+  it('rejects local data source file paths on HTTP transport even when blob storage is configured', async () => {
     const result = await getToolResult(validLocalArgs, {
-      bucketS3Enabled: true,
+      blobStorageEnabled: true,
       transport: 'http',
     });
 
@@ -363,7 +369,7 @@ describe('publishDatasourceTool', () => {
         ...validLocalArgs,
         datasourceFilePath: '/tmp/source-superstore.xml',
       },
-      { bucketS3Enabled: false },
+      { blobStorageEnabled: false },
     );
 
     expect(result.isError).toBe(true);
@@ -378,7 +384,7 @@ describe('publishDatasourceTool', () => {
   it('returns an args-validation error when local data source file is empty', async () => {
     mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
 
-    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
+    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -466,10 +472,13 @@ async function getToolResult(
   },
   options: {
     boundedProjectIds?: Set<string> | null;
-    bucketS3Enabled?: boolean;
+    blobStorageEnabled?: boolean;
     transport?: 'stdio' | 'http';
   } = {},
 ): Promise<CallToolResult> {
+  if (options.blobStorageEnabled !== undefined) {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(options.blobStorageEnabled);
+  }
   const tool = getPublishDatasourceTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
@@ -486,11 +495,9 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
-  bucketS3Enabled = true,
   transport = 'stdio',
 }: {
   boundedProjectIds?: Set<string> | null;
-  bucketS3Enabled?: boolean;
   transport?: 'stdio' | 'http';
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
@@ -508,13 +515,6 @@ function getMockExtra({
     config: {
       ...extra.config,
       transport,
-      bucketS3: {
-        enabled: bucketS3Enabled,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-        keyPrefix: 'mcp/',
-        presignTtlSeconds: 300,
-      },
     },
   };
 }

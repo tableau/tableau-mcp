@@ -2,19 +2,17 @@ import { readdir, readFile, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { basename, dirname } from 'path';
 
-import { getConfig } from '../../../config.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import { _setSeaApiForTest } from '../../../utils/sea.js';
-import { exportedForTesting as s3ForTesting } from '../s3Client.js';
 import { createDataAppWorkspace, exportedForTesting } from './dataAppWorkspaceStore.js';
 import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 
 const mocks = vi.hoisted(() => ({
   hideDiskZip: false,
   forceDiskZip: false,
-  send: vi.fn(),
-  getSignedUrl: vi.fn(),
+  upload: vi.fn(),
+  isBlobStorageEnabled: vi.fn(),
   writeFile: vi.fn(),
 }));
 
@@ -41,13 +39,10 @@ vi.mock('fs/promises', async (importOriginal) => {
   };
 });
 
-vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: vi.fn().mockImplementation(() => ({ send: mocks.send })),
-  PutObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'put', input })),
-  GetObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'get', input })),
+vi.mock('../../../blobStorage/init.js', () => ({
+  getBlobStorageProvider: vi.fn(() => ({ upload: mocks.upload })),
+  isBlobStorageEnabled: mocks.isBlobStorageEnabled,
 }));
-
-vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: mocks.getSignedUrl }));
 
 const ASSET_KEY = `templates/${TEMPLATE_ZIP_FILENAME}`;
 const ASSET_BYTES = Buffer.from('PK-fake-template-zip-bytes');
@@ -71,7 +66,6 @@ async function create(): ReturnType<typeof createDataAppWorkspace> {
     productVersion: { value: '2026.3.2', build: '20263.26.1027.1340' },
     allowedOrigins: [],
     wiring: buildDatasourceWiringInfo({ serverUrl: 'https://my-tableau-server.com', siteName: '' }),
-    config: getConfig(),
   });
 }
 
@@ -82,11 +76,10 @@ describe('createDataAppWorkspace inside a SEA', () => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
-    s3ForTesting.resetS3Bundle();
     exportedForTesting.resetSeaTemplatePath();
     mocks.hideDiskZip = true;
-    mocks.send.mockResolvedValue(undefined);
-    mocks.getSignedUrl.mockResolvedValue('https://s3.example.com/signed-template-url');
+    mocks.isBlobStorageEnabled.mockReturnValue(false);
+    mocks.upload.mockResolvedValue({ url: 'https://blob.example.com/signed-template-url' });
     mocks.writeFile.mockImplementation((actual: (...a: unknown[]) => unknown, ...args: unknown[]) =>
       actual(...args),
     );
@@ -182,16 +175,21 @@ describe('createDataAppWorkspace inside a SEA', () => {
     expect(mocks.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it('S3 mode uploads the asset bytes', async () => {
-    vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
-    vi.stubEnv('AWS_DEFAULT_REGION', 'us-west-2');
+  it('blob storage mode uploads the asset bytes', async () => {
+    mocks.isBlobStorageEnabled.mockReturnValue(true);
 
     const result = await create();
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap().s3URL).toBe('https://s3.example.com/signed-template-url');
-    expect(mocks.send).toHaveBeenCalledTimes(1);
-    expect(mocks.send.mock.calls[0][0].input.Body).toEqual(ASSET_BYTES);
+    expect(result.unwrap().downloadUrl).toBe('https://blob.example.com/signed-template-url');
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    const { data, contentLength } = mocks.upload.mock.calls[0][0];
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of data) {
+      chunks.push(chunk);
+    }
+    expect(Buffer.concat(chunks)).toEqual(ASSET_BYTES);
+    expect(contentLength).toBe(ASSET_BYTES.byteLength);
   });
 
   it('returns the unavailable error with a reason when the temp write fails', async () => {
