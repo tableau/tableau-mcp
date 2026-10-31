@@ -39,7 +39,8 @@ export const flowConnectionSchema = z.object({
   type: z.string().optional(),
   serverAddress: z.string().optional(),
   userName: z.string().optional(),
-  embedPassword: z.coerce.boolean().optional(),
+  serverPort: z.union([z.string(), z.number()]).transform(String).optional(),
+  embedPassword: looseBooleanFalsy.optional(),
 });
 
 export type FlowConnection = z.infer<typeof flowConnectionSchema>;
