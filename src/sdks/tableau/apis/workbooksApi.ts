@@ -146,10 +146,15 @@ const getWorkbookRevisionsEndpoint = makeEndpoint({
   alias: 'getWorkbookRevisions',
   description: 'Returns one page of revision history for a workbook.',
   parameters: [...paginationParameters, pathParam('siteId', 'segment'), pathParam('workbookId')],
-  response: z.object({
-    pagination: paginationSchema,
-    revisions: z.object({ revision: z.array(workbookRevisionSchema).optional() }),
-  }),
+  response: z
+    .object({
+      pagination: paginationSchema,
+      revisions: z.object({ revision: z.array(workbookRevisionSchema).optional() }),
+    })
+    .transform(({ pagination, revisions }) => ({
+      pagination,
+      revisions: revisions.revision ?? [],
+    })),
 });
 
 const workbooksApi = makeApi([

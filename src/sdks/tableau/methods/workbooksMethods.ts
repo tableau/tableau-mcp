@@ -184,12 +184,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     pageSize?: number;
     pageNumber?: number;
   }): Promise<{ pagination: Pagination; revisions: WorkbookRevision[] }> => {
-    const response = await this._apiClient.getWorkbookRevisions({
+    return this._apiClient.getWorkbookRevisions({
       params: { siteId, workbookId },
       queries: { pageSize, pageNumber },
       ...this.authHeader,
     });
-    return { pagination: response.pagination, revisions: response.revisions.revision ?? [] };
   };
 
   /** Downloads exactly the requested past revision; the server rejects current/deleted revisions.

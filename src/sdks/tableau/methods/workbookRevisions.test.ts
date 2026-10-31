@@ -21,7 +21,7 @@ const setup = (): {
   });
   const getWorkbookRevisions = vi.fn().mockResolvedValue({
     pagination: { pageSize: 1, pageNumber: 2, totalAvailable: 3 },
-    revisions: { revision: [{ revisionNumber: 2 }] },
+    revisions: [{ revisionNumber: 2 }],
   });
   Object.defineProperty(methods, '_apiClient', { value: { axios: { get }, getWorkbookRevisions } });
   return { methods, get, getWorkbookRevisions };
@@ -42,11 +42,11 @@ describe('workbook revision REST methods', () => {
       headers: { Authorization: 'Bearer test' },
     });
   });
-  it('returns an empty revision list when the response omits its optional array', async () => {
+  it('returns the empty revision list supplied by the validated API client', async () => {
     const { methods, getWorkbookRevisions } = setup();
     getWorkbookRevisions.mockResolvedValue({
       pagination: { pageSize: 100, pageNumber: 1, totalAvailable: 0 },
-      revisions: {},
+      revisions: [],
     });
     expect((await methods.getWorkbookRevisions({ siteId, workbookId })).revisions).toEqual([]);
   });
@@ -97,5 +97,72 @@ describe('workbook revision REST methods', () => {
       methods.downloadWorkbookRevision({ siteId, workbookId, revisionNumber: 2 }),
     ).rejects.toThrow('Revision unavailable');
     expect(get).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('workbook revision response validation through the SDK', () => {
+  const pagination = { pageSize: 100, pageNumber: 1, totalAvailable: 0 };
+  const methodsForResponse = (data: unknown): WorkbooksMethods =>
+    new WorkbooksMethods(
+      'https://tableau.example',
+      { type: 'Bearer', token: 'test' },
+      {
+        adapter: async (config) => ({
+          data,
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'application/json' },
+          config,
+        }),
+      },
+    );
+
+  it.each([{}, { revision: [] }])(
+    'normalizes an empty REST history %j before the method returns',
+    async (revisions) => {
+      const methods = methodsForResponse({
+        pagination: { pageSize: '100', pageNumber: '1', totalAvailable: '0' },
+        revisions,
+      });
+      expect(await methods.getWorkbookRevisions({ siteId, workbookId })).toEqual({
+        pagination,
+        revisions: [],
+      });
+    },
+  );
+
+  it('preserves validated revisions, absent authors, markers and page metadata', async () => {
+    const methods = methodsForResponse({
+      pagination: { pageSize: '2', pageNumber: '2', totalAvailable: '3' },
+      revisions: {
+        revision: [
+          { revisionNumber: '2', isCurrent: 'false', isDeleted: 'true', private: 'hidden' },
+          { revisionNumber: '1', user: { id: 'author-1', name: 'Author' } },
+        ],
+      },
+    });
+    expect(await methods.getWorkbookRevisions({ siteId, workbookId })).toEqual({
+      pagination: { pageSize: 2, pageNumber: 2, totalAvailable: 3 },
+      revisions: [
+        { revisionNumber: 2, isCurrent: false, isDeleted: true },
+        { revisionNumber: 1, user: { id: 'author-1', name: 'Author' } },
+      ],
+    });
+  });
+
+  it.each([
+    ['missing revisions container', { pagination }],
+    ['null revisions container', { pagination, revisions: null }],
+    ['null revision array', { pagination, revisions: { revision: null } }],
+    ['non-array revisions', { pagination, revisions: { revision: { revisionNumber: 1 } } }],
+    ['invalid revision number', { pagination, revisions: { revision: [{ revisionNumber: 0 }] } }],
+    [
+      'malformed revision number',
+      { pagination, revisions: { revision: [{ revisionNumber: 'no' }] } },
+    ],
+    ['missing pagination', { revisions: {} }],
+  ])('rejects a malformed REST response: %s', async (_description, response) => {
+    const methods = methodsForResponse(response);
+    await expect(methods.getWorkbookRevisions({ siteId, workbookId })).rejects.toThrow();
   });
 });
