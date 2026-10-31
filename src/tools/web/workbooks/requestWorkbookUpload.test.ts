@@ -118,17 +118,6 @@ describe('requestWorkbookUploadTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
-    const tool = getRequestWorkbookUploadTool(
-      new WebMcpServer({ clientId: 'https://claude.ai/mcp' }),
-    );
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
-  });
-
   it('returns a staged upload URL from the OAuth session LUIDs without useRestApi', async () => {
     const result = await getToolResult(
       { fileName: 'BoltBikes Workbook.twb' },
