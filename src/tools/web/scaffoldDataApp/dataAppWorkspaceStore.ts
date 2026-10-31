@@ -12,13 +12,13 @@ import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStora
 import { toUploadData } from '../../../blobStorage/uploadData.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
+import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
 import { DatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
-  DataAppIdentity,
   deriveIdentity,
   PostUnzipPlan,
   RequestedOriginsGuide,
@@ -124,14 +124,23 @@ export const exportedForTesting = {
 
 export async function createDataAppWorkspace({
   datappName,
+  productVersion,
   allowedOrigins,
   wiring,
 }: {
   datappName: string;
+  productVersion: ProductVersion;
   allowedOrigins: string[];
   wiring: DatasourceWiringInfo;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
+  const workspace: DataAppWorkspaceResult = {
+    datappName,
+    allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
+    wiring,
+    postUnzip: buildPostUnzipPlan(identity, productVersion),
+  };
 
   // Both output modes serve the same static, un-substituted template zip — the artifact built at
   // `npm run build` time, resolved on disk or, inside a SEA, from the embedded asset. If it isn't
@@ -145,10 +154,7 @@ export async function createDataAppWorkspace({
 
   if (isBlobStorageEnabled()) {
     return await createBlobStorageWorkspace({
-      datappName,
-      allowedOrigins,
-      wiring,
-      identity,
+      workspace,
       source,
     });
   }
@@ -161,20 +167,14 @@ export async function createDataAppWorkspace({
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
-  return createLocalWorkspace({ datappName, allowedOrigins, wiring, identity, zipPath });
+  return new Ok({ ...workspace, filePath: zipPath });
 }
 
 async function createBlobStorageWorkspace({
-  datappName,
-  allowedOrigins,
-  wiring,
-  identity,
+  workspace,
   source,
 }: {
-  datappName: string;
-  allowedOrigins: string[];
-  wiring: DatasourceWiringInfo;
-  identity: DataAppIdentity;
+  workspace: DataAppWorkspaceResult;
   source: TemplateSource;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   // Upload the template zip to blob storage fresh on every call and return the URL for exactly
@@ -200,38 +200,5 @@ async function createBlobStorageWorkspace({
     ).toErr();
   }
 
-  return new Ok({
-    datappName,
-    allowedOrigins,
-    requestedOrigins: buildRequestedOriginsGuide(identity),
-    wiring,
-    downloadUrl,
-    postUnzip: buildPostUnzipPlan(identity),
-  });
-}
-
-function createLocalWorkspace({
-  datappName,
-  allowedOrigins,
-  wiring,
-  identity,
-  zipPath,
-}: {
-  datappName: string;
-  allowedOrigins: string[];
-  wiring: DatasourceWiringInfo;
-  identity: DataAppIdentity;
-  zipPath: string;
-}): Result<DataAppWorkspaceResult, McpToolError> {
-  // Local mode serves the same static, un-substituted template zip as blob storage mode — just
-  // from the local filesystem instead of a URL. Nothing is written per call, so nothing can
-  // collide; the client unzips and applies the same `postUnzip` plan to finalize.
-  return new Ok({
-    datappName,
-    allowedOrigins,
-    requestedOrigins: buildRequestedOriginsGuide(identity),
-    wiring,
-    filePath: zipPath,
-    postUnzip: buildPostUnzipPlan(identity),
-  });
+  return new Ok({ ...workspace, downloadUrl });
 }
