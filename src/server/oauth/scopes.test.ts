@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  getAnyOfMcpScopesForTool,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
   getSupportedApiScopes,
@@ -144,13 +145,39 @@ describe('scopes', () => {
       },
     );
 
-    it.each(['request-datasource-upload', 'publish-datasource'] as const)(
-      'requires the datasource create MCP permission for %s',
-      (toolName) => {
-        mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
-        expect(getRequiredScopesForTool(toolName)).toEqual(['tableau:mcp:datasource:create']);
-      },
-    );
+    it('requires the datasource create MCP permission for publish-datasource', () => {
+      mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+      expect(getRequiredScopesForTool('publish-datasource')).toEqual([
+        'tableau:mcp:datasource:create',
+      ]);
+    });
+
+    it('authorizes request-upload with any one of the enabled consuming tools create scopes', async () => {
+      mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+      expect(getRequiredScopesForTool('request-upload')).toEqual([]);
+
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      expect(await getAnyOfMcpScopesForTool('request-upload')).toEqual([
+        'tableau:mcp:workbook:create',
+        'tableau:mcp:datasource:create',
+      ]);
+
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      expect(await getAnyOfMcpScopesForTool('request-upload')).toEqual([
+        'tableau:mcp:workbook:create',
+      ]);
+      expect(await getAnyOfMcpScopesForTool('publish-workbook')).toEqual([]);
+    });
+
+    it('does not advertise request-upload scopes beyond the publish tools that are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+      const mcpScopes = await getSupportedMcpScopes(chatGptClientId);
+
+      expect(mcpScopes).toContain('tableau:mcp:workbook:create');
+      expect(mcpScopes).not.toContain('tableau:mcp:datasource:create');
+    });
 
     it('requires datasource and file upload API permissions when publishing', () => {
       expect(getRequiredApiScopesForTool('publish-datasource')).toEqual([
@@ -159,8 +186,8 @@ describe('scopes', () => {
       ]);
     });
 
-    it('requires no Tableau API permissions to request an S3 upload URL', () => {
-      expect(getRequiredApiScopesForTool('request-datasource-upload')).toEqual([]);
+    it('requires no Tableau API permissions to request an upload URL', () => {
+      expect(getRequiredApiScopesForTool('request-upload')).toEqual([]);
     });
   });
 

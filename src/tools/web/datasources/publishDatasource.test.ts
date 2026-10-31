@@ -72,7 +72,7 @@ const mockPublishedDatasource = {
 const validLuid = '7c1d2f3a-4b5e-4f60-8a7b-9c0d1e2f3a4b';
 
 const validArgs = {
-  datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
+  uploadId: '123e4567-e89b-42d3-a456-426614174000',
   name: 'My New Datasource',
   projectId: 'target-project-id',
 };
@@ -121,7 +121,7 @@ describe('publishDatasourceTool', () => {
     expect(tool.name).toBe('publish-datasource');
     expect(tool.description).toContain('Publishes a TDS or TDSX data source');
     expect(paramsSchema).toMatchObject({
-      datasourceUploadId: expect.any(Object),
+      uploadId: expect.any(Object),
       datasourceFilePath: expect.any(Object),
       name: expect.any(Object),
       projectId: expect.any(Object),
@@ -226,7 +226,7 @@ describe('publishDatasourceTool', () => {
     expect(response.url).toBe(mockPublishedDatasource.webpageUrl);
 
     expect(mocks.mockResolveStagedDatasourceUpload).toHaveBeenCalledWith({
-      datasourceUploadId: validArgs.datasourceUploadId,
+      uploadId: validArgs.uploadId,
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
@@ -246,6 +246,20 @@ describe('publishDatasourceTool', () => {
       projectId: 'target-project-id',
       overwrite: false,
     });
+  });
+
+  it('returns an error without uploading when the staged upload is not a data source type', async () => {
+    mocks.mockResolveStagedDatasourceUpload.mockRejectedValue(
+      new Error('Upload is a .twbx file, but data source publishing accepts .tds or .tdsx.'),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('data source publishing accepts .tds or .tdsx');
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
 
   it('uploads and publishes a staged TDSX file', async () => {
@@ -386,7 +400,7 @@ describe('publishDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to configure a blob storage provider.',
+      'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-upload and pass uploadId; that requires the server to configure a blob storage provider.',
     );
     expect(useRestApi).not.toHaveBeenCalled();
     expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
@@ -491,7 +505,7 @@ describe('publishDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      `Data source upload exceeds the maximum allowed size of ${MAX_STAGED_DATASOURCE_BYTES} bytes.`,
+      `Upload exceeds the maximum allowed size of ${MAX_STAGED_DATASOURCE_BYTES} bytes.`,
     );
     expect(data.destroyed).toBe(true);
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
@@ -525,13 +539,13 @@ describe('publishDatasourceTool', () => {
   it('returns an error when both local path and staged upload id are provided', async () => {
     const result = await getToolResult({
       ...validLocalArgs,
-      datasourceUploadId: validArgs.datasourceUploadId,
+      uploadId: validArgs.uploadId,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Provide either datasourceFilePath or datasourceUploadId, not both',
+      'Provide either datasourceFilePath or uploadId, not both',
     );
     expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
@@ -543,7 +557,7 @@ describe('publishDatasourceTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Either datasourceFilePath or datasourceUploadId');
+    expect(result.content[0].text).toContain('Either datasourceFilePath or uploadId');
     expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
@@ -562,7 +576,7 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
 
-  it('redacts staged datasourceUploadId details passed to shared logging', async () => {
+  it('redacts staged uploadId details passed to shared logging', async () => {
     const tool = getPublishDatasourceTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const logAndExecute = vi
@@ -571,7 +585,7 @@ describe('publishDatasourceTool', () => {
 
     await callback(
       {
-        datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
+        uploadId: '123e4567-e89b-42d3-a456-426614174000',
         datasourceFilePath: undefined,
         name: validArgs.name,
         projectId: validArgs.projectId,
@@ -582,7 +596,7 @@ describe('publishDatasourceTool', () => {
 
     const loggedArgs = logAndExecute.mock.calls[0][0].args;
     expect(loggedArgs).toEqual({
-      datasourceUploadId: '<redacted>',
+      uploadId: '<redacted>',
       datasourceFilePath: undefined,
       name: validArgs.name,
       projectId: validArgs.projectId,
@@ -601,7 +615,7 @@ async function useActualStagedResolver(): Promise<void> {
 
 async function getToolResult(
   params: {
-    datasourceUploadId?: string;
+    uploadId?: string;
     datasourceFilePath?: string;
     name: string;
     projectId: string;
@@ -621,7 +635,7 @@ async function getToolResult(
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
-      datasourceUploadId: params.datasourceUploadId,
+      uploadId: params.uploadId,
       datasourceFilePath: params.datasourceFilePath,
       name: params.name,
       projectId: params.projectId,

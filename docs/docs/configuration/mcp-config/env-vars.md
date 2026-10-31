@@ -800,8 +800,8 @@ See [Blob storage](../../enterprise/tableau-server.md#blob-storage) in the Table
 - Default: unset (no blob storage). Tools fall back to file paths and inline results: inline
   base64/text for view images and data, local file paths for workbook downloads and the data app
   template, and `workbookFilePath` for `publish-workbook`. Tools that require staged uploads (e.g.
-  `request-workbook-upload`) return a clear "not configured" error instead. When a provider is
-  configured, `workbookFilePath` is rejected in favor of `workbookUploadId`. Remote/hosted
+  `request-upload`) return a clear "not configured" error instead. When a provider is
+  configured, `workbookFilePath` is rejected in favor of `uploadId`. Remote/hosted
   deployments should configure a provider, since `workbookFilePath` reads from the MCP server's own
   filesystem.
 - Possible values:

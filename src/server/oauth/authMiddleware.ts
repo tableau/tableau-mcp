@@ -8,6 +8,7 @@ import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
+  getAnyOfMcpScopesForTool,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
   getSupportedApiScopes,
@@ -55,7 +56,10 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
       const baseUrl = new URL(resourceUri).origin;
       const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
-      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body);
+      const requiredMcpScopes = [
+        ...(await getRequiredMcpScopesForRequest(req.body)),
+        ...(await getAnyOfMcpScopesForRequest(req.body)),
+      ];
       const requiredApiScopes = await getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
         enforceScopes && requiredMcpScopes.length > 0
@@ -117,9 +121,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         advertiseApiScopes,
         authInfo.clientId,
       );
-      const missingMcpScopes = requiredMcpScopes.filter(
-        (scope) => !authInfo.scopes.includes(scope),
-      );
+      const anyOfMcpScopes = await getAnyOfMcpScopesForRequest(req.body, authInfo.clientId);
+      const anyOfSatisfied =
+        anyOfMcpScopes.length === 0 ||
+        anyOfMcpScopes.some((scope) => authInfo.scopes.includes(scope));
+      const missingMcpScopes = [
+        ...requiredMcpScopes.filter((scope) => !authInfo.scopes.includes(scope)),
+        ...(anyOfSatisfied ? [] : [`one of (${anyOfMcpScopes.join(' | ')})`]),
+      ];
       const shouldCheckApiScopes = advertiseApiScopes;
       const missingApiScopes = shouldCheckApiScopes
         ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
@@ -137,6 +146,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
         const requiredScopesForChallenge = [
           ...requiredMcpScopes,
+          ...anyOfMcpScopes,
           ...(shouldCheckApiScopes ? requiredApiScopes : []),
         ];
         const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
@@ -186,6 +196,11 @@ async function getRequiredMcpScopesForRequest(body: unknown, clientId?: string):
   }
 
   return Array.from(scopes);
+}
+
+async function getAnyOfMcpScopesForRequest(body: unknown, clientId?: string): Promise<string[]> {
+  const toolName = getToolNameFromRequestBody(body);
+  return toolName === undefined ? [] : [...(await getAnyOfMcpScopesForTool(toolName, clientId))];
 }
 
 async function getRequiredApiScopesForRequest(

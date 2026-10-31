@@ -376,12 +376,7 @@ describe('server', () => {
   });
 
   describe('publishing tool discovery', () => {
-    const publishingNames = [
-      'request-workbook-upload',
-      'request-datasource-upload',
-      'publish-workbook',
-      'publish-datasource',
-    ];
+    const publishingNames = ['request-upload', 'publish-workbook', 'publish-datasource'];
     const caller = {
       username: 'publisher@example.com',
       userId: 'test-user-id',

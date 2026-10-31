@@ -4,7 +4,6 @@ import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getPublishDatasourceTool } from './datasources/publishDatasource.js';
-import { getRequestDatasourceUploadTool } from './datasources/requestDatasourceUpload.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
@@ -35,6 +34,7 @@ import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscript
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getRecordEventTool } from './recordEvent/recordEvent.js';
 import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderInteractiveViz.js';
+import { getRequestUploadTool } from './requestUpload.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
@@ -52,7 +52,6 @@ import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 import { getMoveWorkbookTool } from './workbooks/moveWorkbook.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
-import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
@@ -60,7 +59,7 @@ export const webToolFactories = [
   getRecordEventTool,
   getRenderInteractiveVizTool,
   getListDatasourcesTool,
-  getRequestDatasourceUploadTool,
+  getRequestUploadTool,
   getPublishDatasourceTool,
   getListExtractRefreshTasksTool,
   getUpdateCloudExtractRefreshTaskTool,
@@ -91,7 +90,6 @@ export const webToolFactories = [
   getGenerateInsightCardsTool,
   getDownloadWorkbookTool,
   getGetWorkbookTool,
-  getRequestWorkbookUploadTool,
   getPublishWorkbookTool,
   getMoveWorkbookTool,
   getGetViewTool,
