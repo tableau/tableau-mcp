@@ -384,7 +384,7 @@ export function summarizeFlowDocument({
       }
     }
 
-    if (includeFieldSchemas && node.fields && node.fields.length > 0) {
+    if (includeFieldSchemas && Array.isArray(node.fields) && node.fields.length > 0) {
       fields[node.name ?? id] = node.fields.map((f) => prune({ name: f.name, type: f.type }));
     }
 

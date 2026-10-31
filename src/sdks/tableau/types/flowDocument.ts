@@ -4,12 +4,14 @@ import { z } from 'zod';
  * Sanitized flow document returned by the experimental
  * `GET /api/exp/sites/:siteId/flows/:flowId/document` endpoint.
  *
+ * Also used to validate native JSON read from a downloaded flow package.
  * The real document is large and, because the endpoint is experimental, its
  * shape may evolve. We therefore validate only the handful of structural fields
  * the describe-flow summarizer reads and keep everything permissive: every
  * object uses `.passthrough()` and nearly every field is optional. The endpoint
- * already strips credentials/secrets and redacts email-shaped PII server-side,
- * so nothing sensitive is expected here.
+ * strips credentials/secrets and redacts email-shaped PII server-side. Native
+ * downloads may still contain private attributes: this schema is NOT a sanitizer.
+ * Consumers must project an explicit allowlist and never emit the raw document.
  */
 
 export const flowDocumentNodeNextNodeSchema = z
@@ -37,7 +39,8 @@ export const flowDocumentNodeSchema = z
     baseType: z.string().optional(),
     connectionId: z.string().optional(),
     nextNodes: z.array(flowDocumentNodeNextNodeSchema).optional(),
-    fields: z.array(flowDocumentFieldSchema).optional(),
+    // Input schemas use a list; ChangeColumnType uses a map keyed by name.
+    fields: z.union([z.array(flowDocumentFieldSchema), z.record(z.unknown())]).optional(),
   })
   .passthrough();
 
@@ -76,7 +79,8 @@ export const flowDocumentConnectionSchema = z
     name: z.string().optional(),
     isPackaged: looseBooleanSchema,
     // Descriptive topology (class, server, dbname, filename, ...). Credentials are
-    // stripped server-side, so we read these freely but keep the shape open.
+    // stripped by the experimental endpoint, but native downloads are untrusted.
+    // Downstream consumers must project only the attributes their tool allows.
     connectionAttributes: z.record(z.unknown()).optional(),
   })
   .passthrough();

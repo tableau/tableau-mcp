@@ -14,6 +14,27 @@ describe('Config', () => {
     vi.unstubAllEnvs();
   });
 
+  it('keeps local lineage disabled unless operator roots are configured', () => {
+    vi.stubEnv('LOCAL_FLOW_ROOTS', undefined);
+    expect(new Config().localFlowRoots).toEqual([]);
+    vi.stubEnv('LOCAL_FLOW_ROOTS', JSON.stringify(['C:/Prep/flows']));
+    expect(new Config().localFlowRoots).toEqual(['C:/Prep/flows']);
+  });
+
+  it.each([
+    'not-json',
+    '{}',
+    '[1]',
+    '[""]',
+    JSON.stringify(Array(21).fill('C:/Prep')),
+    JSON.stringify(['x'.repeat(4097)]),
+  ])('rejects malformed local root configuration without echoing its contents (%s)', (roots) => {
+    vi.stubEnv('LOCAL_FLOW_ROOTS', roots);
+    expect(() => new Config()).toThrow(
+      'LOCAL_FLOW_ROOTS must be a JSON array of at most 20 nonempty directory paths.',
+    );
+  });
+
   it('should throw error when SERVER is missing', () => {
     vi.stubEnv('SERVER', undefined);
 
