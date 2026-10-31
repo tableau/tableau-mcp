@@ -1325,4 +1325,45 @@ describe('Config', () => {
       );
     });
   });
+
+  describe('custom provider config parse errors', () => {
+    // Short enough that Node 24's SyntaxError would echo it in full.
+    const secret = 'sk-SECRET';
+    const providers = [
+      'TELEMETRY',
+      'FEATURE_GATE',
+      'SESSION_STORE',
+      'ACTIVITY_LOG',
+      'BLOB_STORAGE',
+    ] as const;
+
+    function getThrownMessage(): string {
+      try {
+        new Config();
+      } catch (error) {
+        return (error as Error).message;
+      }
+      throw new Error('Expected new Config() to throw');
+    }
+
+    it.each(providers)('should name %s_PROVIDER_CONFIG when it is not valid JSON', (name) => {
+      vi.stubEnv(`${name}_PROVIDER`, 'custom');
+      vi.stubEnv(`${name}_PROVIDER_CONFIG`, secret);
+
+      const message = getThrownMessage();
+      expect(message).toBe(`${name}_PROVIDER_CONFIG is not valid JSON.`);
+      expect(message).not.toContain(secret);
+    });
+
+    it.each(providers)('should name %s_PROVIDER_CONFIG when it fails validation', (name) => {
+      vi.stubEnv(`${name}_PROVIDER`, 'custom');
+      vi.stubEnv(`${name}_PROVIDER_CONFIG`, `{"token":"${secret}"}`);
+
+      const message = getThrownMessage();
+      expect(message).toMatch(new RegExp(`^${name}_PROVIDER_CONFIG is invalid: `));
+      expect(message).toContain('Custom provider requires "module" path');
+      expect(message).toContain('"module"');
+      expect(message).not.toContain(secret);
+    });
+  });
 });
