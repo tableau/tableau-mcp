@@ -9,6 +9,7 @@ import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
 import { GranteeCapability } from '../types/permissions.js';
 import { Workbook, WorkbookConnection, workbookSchema } from '../types/workbook.js';
+import { revisionNumberSchema, WorkbookRevision } from '../types/workbookRevision.js';
 import {
   WorkbookValidationResult,
   workbookValidationResultSchema,
@@ -160,6 +161,64 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     );
 
+    return {
+      content: Buffer.from(response.data),
+      contentType: getHeader(response.headers, 'content-type'),
+      filename: getFilenameFromContentDisposition(
+        getHeader(response.headers, 'content-disposition'),
+      ),
+    };
+  };
+
+  /** Lists one page of workbook revisions without changing the current workbook.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_workbook_revisions
+   */
+  getWorkbookRevisions = async ({
+    siteId,
+    workbookId,
+    pageSize,
+    pageNumber,
+  }: {
+    siteId: string;
+    workbookId: string;
+    pageSize?: number;
+    pageNumber?: number;
+  }): Promise<{ pagination: Pagination; revisions: WorkbookRevision[] }> => {
+    const response = await this._apiClient.getWorkbookRevisions({
+      params: { siteId, workbookId },
+      queries: { pageSize, pageNumber },
+      ...this.authHeader,
+    });
+    return { pagination: response.pagination, revisions: response.revisions.revision ?? [] };
+  };
+
+  /** Downloads exactly the requested past revision; the server rejects current/deleted revisions.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook_revision
+   */
+  downloadWorkbookRevision = async ({
+    siteId,
+    workbookId,
+    revisionNumber,
+    includeExtract,
+  }: {
+    siteId: string;
+    workbookId: string;
+    revisionNumber: number;
+    includeExtract?: boolean;
+  }): Promise<DownloadWorkbookResult> => {
+    const revision = revisionNumberSchema.parse(revisionNumber);
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      buildRestPath(
+        'sites',
+        siteId,
+        'workbooks',
+        assertLuid('workbookId', workbookId),
+        'revisions',
+        String(revision),
+        'content',
+      ),
+      { params: { includeExtract }, ...this.authHeader, responseType: 'arraybuffer' },
+    );
     return {
       content: Buffer.from(response.data),
       contentType: getHeader(response.headers, 'content-type'),
