@@ -309,6 +309,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flows:read', 'tableau:mcp_site_settings:read']),
   },
+  'download-flow': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flows:download', ...RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES]),
+  },
   'get-flow': {
     mcp: ['tableau:mcp:flow:read'],
     // Maximum scope surface for the MCP-layer OAuth gate, composed from the same
@@ -594,6 +598,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!flowReadToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
+    enabledTools.delete('download-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
     enabledTools.delete('describe-flow');

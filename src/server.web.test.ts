@@ -413,6 +413,7 @@ describe('server', () => {
   });
 
   const readFlowToolNames = [
+    'download-flow',
     'list-flows',
     'get-flow',
     'list-flow-runs',
@@ -426,7 +427,7 @@ describe('server', () => {
     (featureName === 'flow-read-tools' && readFlag) ||
     (featureName === 'flow-write-tools' && writeFlag);
 
-  it('registers all nine flow tools with shipped feature defaults and unset environment controls', async () => {
+  it('registers all flow tools with shipped feature defaults and unset environment controls', async () => {
     vi.stubEnv('FLOW_READ_TOOLS_ENABLED', undefined);
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
