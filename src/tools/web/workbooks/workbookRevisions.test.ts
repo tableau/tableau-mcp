@@ -2,9 +2,11 @@ import { readFile, rm } from 'fs/promises';
 import { z } from 'zod';
 
 import { WebMcpServer } from '../../../server.web.js';
+import { getSupportedApiScopes } from '../../../server/oauth/scopes.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { webToolGroups } from '../toolName.js';
+import { getDownloadWorkbookTool } from './downloadWorkbook.js';
 import { getDownloadWorkbookRevisionTool } from './downloadWorkbookRevision.js';
 import { getListWorkbookRevisionsTool } from './listWorkbookRevisions.js';
 
@@ -51,6 +53,54 @@ afterEach(async () => {
 });
 
 describe('workbook revision tools', () => {
+  it.each([
+    { client: 'stdio', clientId: undefined, slackAuthoring: false, enabled: true },
+    {
+      client: 'ChatGPT',
+      clientId: 'https://chatgpt.com/connector',
+      slackAuthoring: false,
+      enabled: true,
+    },
+    {
+      client: 'Claude',
+      clientId: 'https://claude.ai/mcp',
+      slackAuthoring: false,
+      enabled: true,
+    },
+    {
+      client: 'unknown',
+      clientId: 'https://example.com/mcp',
+      slackAuthoring: false,
+      enabled: true,
+    },
+    {
+      client: 'Slack',
+      clientId: 'https://mcp.slack.com/connector',
+      slackAuthoring: false,
+      enabled: false,
+    },
+    {
+      client: 'Slack',
+      clientId: 'https://mcp.slack.com/connector',
+      slackAuthoring: true,
+      enabled: true,
+    },
+  ])(
+    'aligns revision/current download registration and OAuth scopes for $client (Slack authoring: $slackAuthoring)',
+    async ({ clientId, slackAuthoring, enabled }) => {
+      mocks.flag.mockImplementation(
+        async (flag: string) => flag === 'authoring-with-slack' && slackAuthoring,
+      );
+      const server = new WebMcpServer({ clientId });
+      const revision = getDownloadWorkbookRevisionTool(server);
+      const current = getDownloadWorkbookTool(server);
+
+      expect(await Provider.from(revision.disabled)).toBe(!enabled);
+      expect(await Provider.from(current.disabled)).toBe(!enabled);
+      const scopes = await getSupportedApiScopes(clientId, { includeOptionalScopes: false });
+      expect(scopes.includes('tableau:workbooks:download')).toBe(enabled);
+    },
+  );
   it('registers in the workbook group with documented scopes and role', () => {
     const list = getListWorkbookRevisionsTool(new WebMcpServer());
     const download = getDownloadWorkbookRevisionTool(new WebMcpServer());
