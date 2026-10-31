@@ -1,3 +1,4 @@
+import type { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import {
   buildStagedUploadKey,
   getStagedFileType,
@@ -34,35 +35,42 @@ export type RequestDatasourceUploadResult = {
 
 export async function requestStagedDatasourceUpload({
   fileName,
+  tenant,
 }: {
   fileName: string;
+  tenant: TenantLuids;
 }): Promise<RequestDatasourceUploadResult> {
   const { uploadId, ...rest } = await requestStagedUpload({
     kind: datasourceKind,
     fileName,
+    tenant,
   });
   return { datasourceUploadId: uploadId, ...rest };
 }
 
 export async function resolveStagedDatasourceUpload({
   datasourceUploadId,
+  tenant,
   maxBytes,
 }: {
   datasourceUploadId: string;
+  tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedDatasource> {
   return await resolveStagedUploadStream({
     kind: datasourceKind,
     uploadId: datasourceUploadId,
+    tenant,
     maxBytes,
   });
 }
 
 export function buildDatasourceUploadKey(
+  tenant: TenantLuids,
   datasourceUploadId: string,
   fileType: DatasourceFileType,
 ): string {
-  return buildStagedUploadKey(datasourceKind, datasourceUploadId, fileType);
+  return buildStagedUploadKey(datasourceKind, tenant, datasourceUploadId, fileType);
 }
 
 export function getDatasourceFileType(fileName: string): DatasourceFileType | undefined {

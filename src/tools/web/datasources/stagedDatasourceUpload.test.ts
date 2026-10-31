@@ -20,6 +20,10 @@ vi.mock('../../../blobStorage/init.js', () => ({
   })),
 }));
 
+import { MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
+
+const tenant = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
+const tenantPrefix = `${MOCK_SITE_LUID}/${MOCK_USER_LUID}`;
 const uploadId = '123e4567-e89b-42d3-a456-426614174000';
 
 async function* streamOf(...pieces: Array<string | Buffer>): AsyncGenerator<Uint8Array> {
@@ -53,7 +57,7 @@ describe('requestStagedDatasourceUpload', () => {
         expiresAt: '2026-10-14T18:05:00.000Z',
       });
 
-      const result = await requestStagedDatasourceUpload({ fileName });
+      const result = await requestStagedDatasourceUpload({ fileName, tenant });
 
       expect(result.datasourceUploadId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -67,7 +71,7 @@ describe('requestStagedDatasourceUpload', () => {
         requiredHeaders: { 'Content-Type': contentType },
       });
       expect(mocks.getPresignedUploadUrl).toHaveBeenCalledExactlyOnceWith({
-        key: `datasource-uploads/${result.datasourceUploadId}/datasource.${fileType}`,
+        key: `datasource-uploads/${tenantPrefix}/${result.datasourceUploadId}/datasource.${fileType}`,
         contentType,
         maxBytes: MAX_STAGED_DATASOURCE_BYTES,
       });
@@ -77,7 +81,7 @@ describe('requestStagedDatasourceUpload', () => {
   it.each(['Sales.xml', 'Sales.tds.exe', 'Sales', ''])(
     'rejects unsupported filename %j before presigning',
     async (fileName) => {
-      await expect(requestStagedDatasourceUpload({ fileName })).rejects.toThrow(
+      await expect(requestStagedDatasourceUpload({ fileName, tenant })).rejects.toThrow(
         'Data source upload filename must end in .tds or .tdsx.',
       );
       expect(mocks.getPresignedUploadUrl).not.toHaveBeenCalled();
@@ -88,7 +92,9 @@ describe('requestStagedDatasourceUpload', () => {
     const error = new Error('Unable to presign');
     mocks.getPresignedUploadUrl.mockRejectedValue(error);
 
-    await expect(requestStagedDatasourceUpload({ fileName: 'Sales.tds' })).rejects.toBe(error);
+    await expect(requestStagedDatasourceUpload({ fileName: 'Sales.tds', tenant })).rejects.toBe(
+      error,
+    );
   });
 });
 
@@ -103,13 +109,13 @@ describe('resolveStagedDatasourceUpload', () => {
     maxBytes = 5 * 1000 * 1000 * 1000,
   ): { key: string; maxBytes: number } {
     return {
-      key: `datasource-uploads/${uploadId}/datasource.${fileType}`,
+      key: `datasource-uploads/${tenantPrefix}/${uploadId}/datasource.${fileType}`,
       maxBytes,
     };
   }
 
   it('returns the TDS stream and applies the default download limit without looking up TDSX', async () => {
-    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
+    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant });
     expect(resolved.fileName).toBe(`${uploadId}.tds`);
     expect(resolved.fileType).toBe('tds');
     expect(await collect(resolved.fileStream)).toEqual(Buffer.from('<datasource />'));
@@ -125,6 +131,7 @@ describe('resolveStagedDatasourceUpload', () => {
 
     const resolved = await resolveStagedDatasourceUpload({
       datasourceUploadId: uploadId,
+      tenant,
       maxBytes: 4096,
     });
     expect(resolved.fileName).toBe(`${uploadId}.tdsx`);
@@ -140,6 +147,7 @@ describe('resolveStagedDatasourceUpload', () => {
   it('passes a caller-supplied byte limit to the provider download', async () => {
     await resolveStagedDatasourceUpload({
       datasourceUploadId: uploadId,
+      tenant,
       maxBytes: 200 * 1024 * 1024,
     });
 
@@ -154,7 +162,7 @@ describe('resolveStagedDatasourceUpload', () => {
     }
     mocks.download.mockResolvedValue({ data: stringChunks() });
 
-    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
+    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant });
     await expect(collect(resolved.fileStream)).rejects.toThrow(
       'Blob storage provider yielded a non-byte chunk.',
     );
@@ -165,7 +173,7 @@ describe('resolveStagedDatasourceUpload', () => {
     mocks.download.mockResolvedValue({ data, contentLength: 4097 });
 
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, maxBytes: 4096 }),
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant, maxBytes: 4096 }),
     ).rejects.toThrow('Data source upload exceeds the maximum allowed size of 4096 bytes.');
     expect(data.destroyed).toBe(true);
     expect(mocks.download).toHaveBeenCalledTimes(1);
@@ -174,7 +182,9 @@ describe('resolveStagedDatasourceUpload', () => {
   it('throws after both file types are absent', async () => {
     mocks.download.mockResolvedValue(undefined);
 
-    await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).rejects.toThrow(
+    await expect(
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant }),
+    ).rejects.toThrow(
       'Data source upload not found. Upload the data source bytes before publishing.',
     );
     expect(mocks.download).toHaveBeenCalledTimes(2);
@@ -183,7 +193,7 @@ describe('resolveStagedDatasourceUpload', () => {
   it.each(['../not-safe', '', 'not-a-uuid'])(
     'rejects invalid upload id %j before provider lookup',
     async (datasourceUploadId) => {
-      await expect(resolveStagedDatasourceUpload({ datasourceUploadId })).rejects.toThrow(
+      await expect(resolveStagedDatasourceUpload({ datasourceUploadId, tenant })).rejects.toThrow(
         'Data source upload id is invalid.',
       );
       expect(mocks.download).not.toHaveBeenCalled();
@@ -193,7 +203,7 @@ describe('resolveStagedDatasourceUpload', () => {
   it('returns an empty TDS stream without falling back; the consumer enforces emptiness', async () => {
     mocks.download.mockResolvedValue({ data: streamOf() });
 
-    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
+    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant });
     expect(resolved.fileName).toBe(`${uploadId}.tds`);
     expect(await collect(resolved.fileStream)).toEqual(Buffer.alloc(0));
     expect(mocks.download).toHaveBeenCalledTimes(1);
@@ -203,22 +213,46 @@ describe('resolveStagedDatasourceUpload', () => {
     const error = new Error('Object exceeds byte limit');
     mocks.download.mockRejectedValue(error);
 
-    await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).rejects.toBe(
-      error,
-    );
+    await expect(
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant }),
+    ).rejects.toBe(error);
     expect(mocks.download).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('cross-tenant isolation', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("does not resolve an upload staged by another tenant, since the key is rebuilt from the caller's identity", async () => {
+    const otherTenant = {
+      siteLuid: '11111111-2222-4333-8444-555555555555',
+      userLuid: tenant.userLuid,
+    };
+    const stagedKey = buildDatasourceUploadKey(tenant, uploadId, 'tds');
+    mocks.download.mockImplementation(async ({ key }: { key: string }) =>
+      key === stagedKey ? { data: streamOf('<datasource />') } : undefined,
+    );
+
+    await expect(
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, tenant: otherTenant }),
+    ).rejects.toThrow('Data source upload not found');
+    for (const [{ key }] of mocks.download.mock.calls) {
+      expect(key).toContain(`${otherTenant.siteLuid}/${otherTenant.userLuid}/`);
+    }
   });
 });
 
 describe('buildDatasourceUploadKey', () => {
   it.each(['tds', 'tdsx'] as const)('includes the %s extension', (fileType) => {
-    expect(buildDatasourceUploadKey(uploadId, fileType)).toBe(
-      `datasource-uploads/${uploadId}/datasource.${fileType}`,
+    expect(buildDatasourceUploadKey(tenant, uploadId, fileType)).toBe(
+      `datasource-uploads/${tenantPrefix}/${uploadId}/datasource.${fileType}`,
     );
   });
 
   it('rejects an invalid upload id', () => {
-    expect(() => buildDatasourceUploadKey('../other', 'tds')).toThrow(
+    expect(() => buildDatasourceUploadKey(tenant, '../other', 'tds')).toThrow(
       'Data source upload id is invalid.',
     );
   });

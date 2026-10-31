@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 
+import { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import {
   buildWorkbookUploadKey,
   getWorkbookFileType,
@@ -21,6 +22,10 @@ vi.mock('../../../blobStorage/init.js', () => ({
 }));
 
 const uploadId = '123e4567-e89b-42d3-a456-426614174000';
+const MOCK_SITE_LUID = '0a1b2c3d-1111-4222-8333-444455556666';
+const MOCK_USER_LUID = '9f8e7d6c-aaaa-4bbb-8ccc-ddddeeeeffff';
+const tenant: TenantLuids = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
+const tenantPrefix = `${MOCK_SITE_LUID}/${MOCK_USER_LUID}`;
 
 async function collect(stream: AsyncIterable<Uint8Array>): Promise<string> {
   const pieces: Uint8Array[] = [];
@@ -47,6 +52,7 @@ describe('requestStagedWorkbookUpload', () => {
   it('returns a presigned upload URL and workbook upload id', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
+      tenant,
     });
 
     expect(result).toMatchObject({
@@ -59,7 +65,7 @@ describe('requestStagedWorkbookUpload', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
     expect(mocks.getPresignedUploadUrl).toHaveBeenCalledWith({
-      key: `workbook-uploads/${result.workbookUploadId}/workbook.twb`,
+      key: `workbook-uploads/${tenantPrefix}/${result.workbookUploadId}/workbook.twb`,
       contentType: 'application/xml',
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
@@ -74,13 +80,14 @@ describe('requestStagedWorkbookUpload', () => {
 
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twbx',
+      tenant,
     });
 
     expect(result).toMatchObject({
       requiredHeaders: { 'Content-Type': 'application/octet-stream' },
     });
     expect(mocks.getPresignedUploadUrl).toHaveBeenCalledWith({
-      key: `workbook-uploads/${result.workbookUploadId}/workbook.twbx`,
+      key: `workbook-uploads/${tenantPrefix}/${result.workbookUploadId}/workbook.twbx`,
       contentType: 'application/octet-stream',
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
@@ -95,6 +102,7 @@ describe('requestStagedWorkbookUpload', () => {
 
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
+      tenant,
     });
 
     expect(result.requiredHeaders).toEqual({
@@ -108,8 +116,19 @@ describe('requestStagedWorkbookUpload', () => {
     await expect(
       requestStagedWorkbookUpload({
         fileName: 'workbook.xml',
+        tenant,
       }),
     ).rejects.toThrow('filename must end in .twb or .twbx');
+  });
+
+  it('rejects an invalid tenant without presigning anything', async () => {
+    await expect(
+      requestStagedWorkbookUpload({
+        fileName: 'workbook.twb',
+        tenant: { siteLuid: '../other-site', userLuid: MOCK_USER_LUID },
+      }),
+    ).rejects.toThrow('Invalid tenant LUIDs for blob storage key.');
+    expect(mocks.getPresignedUploadUrl).not.toHaveBeenCalled();
   });
 });
 
@@ -121,13 +140,13 @@ describe('resolveStagedWorkbookUpload', () => {
   it('returns the staged workbook stream from the .twb key when it exists', async () => {
     mocks.download.mockResolvedValue({ data: streamOf('<work', 'book />'), contentLength: 12 });
 
-    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
     expect(resolved.fileName).toBe(`${uploadId}.twb`);
     expect(resolved.fileType).toBe('twb');
     expect(resolved.contentLength).toBe(12);
     expect(await collect(resolved.fileStream)).toBe('<workbook />');
     expect(mocks.download).toHaveBeenCalledWith({
-      key: `workbook-uploads/${uploadId}/workbook.twb`,
+      key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
     expect(mocks.download).toHaveBeenCalledTimes(1);
@@ -137,16 +156,16 @@ describe('resolveStagedWorkbookUpload', () => {
     mocks.download.mockResolvedValueOnce(undefined);
     mocks.download.mockResolvedValueOnce({ data: streamOf('PK\x03\x04') });
 
-    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
     expect(resolved.fileName).toBe(`${uploadId}.twbx`);
     expect(resolved.fileType).toBe('twbx');
     expect(await collect(resolved.fileStream)).toBe('PK\x03\x04');
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
-      key: `workbook-uploads/${uploadId}/workbook.twb`,
+      key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
     expect(mocks.download).toHaveBeenNthCalledWith(2, {
-      key: `workbook-uploads/${uploadId}/workbook.twbx`,
+      key: `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
   });
@@ -156,7 +175,9 @@ describe('resolveStagedWorkbookUpload', () => {
     mocks.download.mockResolvedValueOnce(undefined);
     mocks.download.mockResolvedValueOnce({ data, contentLength: MAX_STAGED_WORKBOOK_BYTES + 1 });
 
-    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
+    await expect(
+      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant }),
+    ).rejects.toThrow(
       `Workbook upload exceeds the maximum allowed size of ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
     );
     expect(data.destroyed).toBe(true);
@@ -165,15 +186,43 @@ describe('resolveStagedWorkbookUpload', () => {
   it('throws when neither the .twb nor .twbx key exists', async () => {
     mocks.download.mockResolvedValue(undefined);
 
-    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
-      'Workbook upload not found',
+    await expect(
+      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant }),
+    ).rejects.toThrow('Workbook upload not found');
+  });
+
+  it("does not resolve an upload staged by another tenant, since the key is rebuilt from the caller's identity", async () => {
+    const otherTenant = {
+      siteLuid: '11111111-2222-4333-8444-555555555555',
+      userLuid: MOCK_USER_LUID,
+    };
+    const stagedKey = buildWorkbookUploadKey(tenant, uploadId, 'twb');
+    mocks.download.mockImplementation(async ({ key }: { key: string }) =>
+      key === stagedKey ? streamOf('<workbook />') : undefined,
     );
+
+    await expect(
+      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant: otherTenant }),
+    ).rejects.toThrow('Workbook upload not found');
+    for (const [{ key }] of mocks.download.mock.calls) {
+      expect(key).toContain(`${otherTenant.siteLuid}/${otherTenant.userLuid}/`);
+    }
+  });
+
+  it('rejects an empty tenant without downloading', async () => {
+    await expect(
+      resolveStagedWorkbookUpload({
+        workbookUploadId: uploadId,
+        tenant: { siteLuid: MOCK_SITE_LUID, userLuid: '' },
+      }),
+    ).rejects.toThrow('Invalid tenant LUIDs for blob storage key.');
+    expect(mocks.download).not.toHaveBeenCalled();
   });
 
   it('rejects invalid workbook upload ids', async () => {
-    await expect(resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe' })).rejects.toThrow(
-      'upload id is invalid',
-    );
+    await expect(
+      resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe', tenant }),
+    ).rejects.toThrow('upload id is invalid');
   });
 });
 
@@ -181,7 +230,7 @@ describe('resolveStagedWorkbookUpload streaming', () => {
   it('does not buffer or reject at resolve time; the consumer enforces size and emptiness', async () => {
     mocks.download.mockResolvedValue({ data: streamOf() });
 
-    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
     expect(await collect(resolved.fileStream)).toBe('');
   });
 
@@ -191,7 +240,7 @@ describe('resolveStagedWorkbookUpload streaming', () => {
     }
     mocks.download.mockResolvedValue({ data: stringChunks() });
 
-    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
+    const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId, tenant });
     await expect(collect(resolved.fileStream)).rejects.toThrow(
       'Blob storage provider yielded a non-byte chunk.',
     );
@@ -199,15 +248,15 @@ describe('resolveStagedWorkbookUpload streaming', () => {
 });
 
 describe('buildWorkbookUploadKey', () => {
-  it('builds a key without any prefix', () => {
-    expect(buildWorkbookUploadKey(uploadId, 'twb')).toBe(
-      `workbook-uploads/${uploadId}/workbook.twb`,
+  it('builds a tenant-scoped key without any other prefix', () => {
+    expect(buildWorkbookUploadKey(tenant, uploadId, 'twb')).toBe(
+      `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
     );
   });
 
   it('includes the file type extension', () => {
-    expect(buildWorkbookUploadKey(uploadId, 'twbx')).toBe(
-      `workbook-uploads/${uploadId}/workbook.twbx`,
+    expect(buildWorkbookUploadKey(tenant, uploadId, 'twbx')).toBe(
+      `workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`,
     );
   });
 });

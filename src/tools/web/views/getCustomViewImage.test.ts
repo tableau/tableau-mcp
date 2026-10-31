@@ -9,7 +9,7 @@ import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetCustomViewImageTool } from './getCustomViewImage.js';
 import { mockCustomView } from './mockCustomView.js';
 import { mockView } from './mockView.js';
@@ -328,7 +328,11 @@ describe('getCustomViewImageTool', () => {
       expect(result.content.some((c) => c.type === 'image')).toBe(false);
 
       expect(mocks.mockUpload).toHaveBeenCalledWith({
-        key: expect.stringMatching(new RegExp(`^images/${mockCustomView.id}/[0-9a-f-]{36}\\.png$`)),
+        key: expect.stringMatching(
+          new RegExp(
+            `^images/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/${mockCustomView.id}/[0-9a-f-]{36}\\.png$`,
+          ),
+        ),
         data: expect.anything(),
         contentLength: Buffer.from(mockPngData).byteLength,
         contentType: 'image/png',

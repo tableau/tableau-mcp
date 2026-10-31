@@ -6,6 +6,7 @@ import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import type { TelemetryProvider } from './telemetryProvider.js';
@@ -179,7 +180,7 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
         'If using a file path, ensure the file exists and the path is correct. ' +
         'If using an npm package, ensure it is installed.';
     } else {
-      errorMessage += `Error: ${error}`;
+      errorMessage += getExceptionMessage(error);
     }
 
     throw new Error(errorMessage);

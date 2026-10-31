@@ -7,7 +7,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetCustomViewDataTool } from './getCustomViewData.js';
 import { mockCustomView } from './mockCustomView.js';
 import { mockView } from './mockView.js';
@@ -171,7 +171,11 @@ describe('getCustomViewDataTool', () => {
       expect(result._meta).toBeUndefined();
 
       expect(mocks.mockUpload).toHaveBeenCalledWith({
-        key: expect.stringMatching(new RegExp(`^data/${mockCustomView.id}/[0-9a-f-]{36}\\.csv$`)),
+        key: expect.stringMatching(
+          new RegExp(
+            `^data/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/${mockCustomView.id}/[0-9a-f-]{36}\\.csv$`,
+          ),
+        ),
         data: expect.anything(),
         contentLength: Buffer.from(mockCsv, 'utf-8').byteLength,
         contentType: 'text/csv; charset=utf-8',

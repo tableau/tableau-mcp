@@ -2,11 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createReadStream } from 'fs';
 import { stat } from 'fs/promises';
 import { basename } from 'path';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
-import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
+import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
+import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -101,13 +102,17 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
             datasourceFilePath,
           });
 
-          const result = await useRestApi<PublishDatasourceResult>({
+          const result = await useRestApi<Result<PublishDatasourceResult, McpToolError>>({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
               // The resolver supplies the file type, so nothing can throw between opening the
               // stream and handing it to uploadFileInChunks, which closes it.
-              const resolvedDatasourceFile = await loadDatasourceFile(input);
+              const resolvedDatasourceInput = await loadDatasourceFile(input, extra);
+              if (resolvedDatasourceInput.isErr()) {
+                return resolvedDatasourceInput;
+              }
+              const resolvedDatasourceFile = resolvedDatasourceInput.value;
               const { fileType } = resolvedDatasourceFile;
 
               const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
@@ -126,15 +131,15 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
                 overwrite,
               });
 
-              return {
+              return new Ok({
                 status: 'published' as const,
                 data: publishedDatasource,
                 url: publishedDatasource.webpageUrl ?? '',
-              };
+              });
             },
           });
 
-          return new Ok(result);
+          return result;
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({
@@ -195,10 +200,23 @@ function validateDatasourceInput({
   return { source: 'staged', datasourceUploadId };
 }
 
-async function loadDatasourceFile(input: DatasourceInput): Promise<ResolvedDatasource> {
-  return input.source === 'local'
-    ? await resolveLocalDatasourceFile(input.datasourceFilePath)
-    : await resolveStagedDatasourceUpload({ datasourceUploadId: input.datasourceUploadId });
+async function loadDatasourceFile(
+  input: DatasourceInput,
+  tenantSource: TenantIdentitySource,
+): Promise<Result<ResolvedDatasource, McpToolError>> {
+  if (input.source === 'local') {
+    return new Ok(await resolveLocalDatasourceFile(input.datasourceFilePath));
+  }
+  const tenant = getTenantLuids(tenantSource);
+  if (tenant.isErr()) {
+    return tenant;
+  }
+  return new Ok(
+    await resolveStagedDatasourceUpload({
+      datasourceUploadId: input.datasourceUploadId,
+      tenant: tenant.value,
+    }),
+  );
 }
 
 async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<ResolvedDatasource> {

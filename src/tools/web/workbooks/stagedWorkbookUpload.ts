@@ -1,3 +1,4 @@
+import type { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import {
   buildStagedUploadKey,
   getStagedFileType,
@@ -34,32 +35,38 @@ export type RequestWorkbookUploadResult = {
 
 export async function requestStagedWorkbookUpload({
   fileName,
+  tenant,
 }: {
   fileName: string;
+  tenant: TenantLuids;
 }): Promise<RequestWorkbookUploadResult> {
-  const { uploadId, ...rest } = await requestStagedUpload({ kind: workbookKind, fileName });
+  const { uploadId, ...rest } = await requestStagedUpload({ kind: workbookKind, fileName, tenant });
   return { workbookUploadId: uploadId, ...rest };
 }
 
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
+  tenant,
   maxBytes,
 }: {
   workbookUploadId: string;
+  tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedWorkbook> {
   return await resolveStagedUploadStream({
     kind: workbookKind,
     uploadId: workbookUploadId,
+    tenant,
     maxBytes,
   });
 }
 
 export function buildWorkbookUploadKey(
+  tenant: TenantLuids,
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
-  return buildStagedUploadKey(workbookKind, workbookUploadId, fileType);
+  return buildStagedUploadKey(workbookKind, tenant, workbookUploadId, fileType);
 }
 
 export function getWorkbookFileType(fileName: string): WorkbookFileType | undefined {
