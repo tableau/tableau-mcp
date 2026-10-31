@@ -1,9 +1,15 @@
+import { z } from 'zod';
+
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { buildRestPath } from '../../routeSafety/core.js';
+import { luidSchema } from '../../routeSafety/ids.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowsApis } from '../apis/flowsApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { TableauRestError } from '../tableauRestError.js';
-import { Flow, FlowConnection, FlowOutputStep, FlowRun } from '../types/flow.js';
+import { Flow, FlowConnection, FlowOutputStep, FlowRun, flowSchema } from '../types/flow.js';
 import { RunFlowJob } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -19,6 +25,45 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }
+
+  /** Commits a chunked flow upload; all XML attributes are escaped before transmission.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#publish_flow
+   */
+  publishFlow = async ({
+    siteId,
+    uploadSessionId,
+    flowType,
+    name,
+    projectId,
+    overwrite = false,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    flowType: 'tfl' | 'tflx';
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  }): Promise<Flow> => {
+    luidSchema.parse(projectId);
+    z.enum(['tfl', 'tflx']).parse(flowType);
+    const payload = `<tsRequest><flow name="${escapeXmlAttribute(name)}"><project id="${escapeXmlAttribute(projectId)}" /></flow></tsRequest>`;
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: payload },
+    ]);
+    const response = await this._apiClient.axios.post(
+      buildRestPath('sites', siteId, 'flows'),
+      body,
+      {
+        params: { uploadSessionId, flowType, overwrite },
+        headers: {
+          ...this.authHeader.headers,
+          'Content-Type': contentType,
+          Accept: 'application/json',
+        },
+      },
+    );
+    return z.object({ flow: flowSchema }).parse(response.data).flow;
+  };
 
   /**
    * Returns the flows on a site.
