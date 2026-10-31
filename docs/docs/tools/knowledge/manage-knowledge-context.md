@@ -18,13 +18,13 @@ is available. Read access alone does not enable writes.
 
 | `action` | Behavior                                                          | Mutation |
 | -------- | ----------------------------------------------------------------- | -------- |
-| `create` | Creates a global context or one attached to `targetNodeId`        | Yes      |
+| `create` | Creates a global context                                          | Yes      |
 | `update` | Updates an existing customer-managed context by exact `contextId` | Yes      |
 | `delete` | Deletes an existing customer-managed context by exact `contextId` | Yes      |
 
-`create` requires one to 100 non-empty statements and exactly one placement: `isGlobal: true` or
-`targetNodeId`. `update` requires `contextId` and at least one changed field. `delete` requires the
-exact `contextId`.
+`create` requires one to 100 non-empty statements and `isGlobal: true`. Node-scoped contexts
+(`targetNodeId`) are not supported yet, for `create` and `update`. `update` requires `contextId` and
+at least one changed field. `delete` requires the exact `contextId`.
 
 Use [inspect-knowledge-context](inspect-knowledge-context.md) when you need to find existing
 context, check for possible duplicates, or obtain a `contextId`. Inspection is not required when the
