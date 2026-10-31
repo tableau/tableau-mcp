@@ -420,13 +420,13 @@ describe('server', () => {
     'describe-flow',
     'get-flow-task',
   ];
-  const writeFlowToolNames = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
+  const writeFlowToolNames = ['move-flow', 'run-flow', 'run-flow-task', 'cancel-flow-run'];
 
   const flowFlag = (readFlag: boolean, writeFlag: boolean) => (featureName: string) =>
     (featureName === 'flow-read-tools' && readFlag) ||
     (featureName === 'flow-write-tools' && writeFlag);
 
-  it('registers all nine flow tools with shipped feature defaults and unset environment controls', async () => {
+  it('registers all flow tools with shipped feature defaults and unset environment controls', async () => {
     vi.stubEnv('FLOW_READ_TOOLS_ENABLED', undefined);
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
@@ -472,9 +472,9 @@ describe('server', () => {
 
   it.each([
     { exclude: 'flow', envEnabled: false, readsEnabled: false },
-    { exclude: 'run-flow,run-flow-task,cancel-flow-run', envEnabled: false, readsEnabled: true },
+    { exclude: writeFlowToolNames.join(','), envEnabled: false, readsEnabled: true },
     { exclude: 'flow', envEnabled: true, readsEnabled: false },
-    { exclude: 'run-flow,run-flow-task,cancel-flow-run', envEnabled: true, readsEnabled: true },
+    { exclude: writeFlowToolNames.join(','), envEnabled: true, readsEnabled: true },
   ])(
     'honors self-hosted exclusions ($exclude) with environment overrides=$envEnabled and shipped flags',
     async ({ exclude, envEnabled, readsEnabled }) => {

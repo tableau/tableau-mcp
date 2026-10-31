@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { pathParam } from '../../routeSafety/ids.js';
+import { luidSchema, pathParam } from '../../routeSafety/ids.js';
 import {
   flowConnectionSchema,
   flowOutputStepSchema,
@@ -176,7 +176,25 @@ const cancelFlowRunEndpoint = makeEndpoint({
   response: cancelFlowRunResponseSchema,
 });
 
+const updateFlowEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/flows/:flowId',
+  alias: 'updateFlow',
+  description: 'Moves a flow to a project without changing its owner.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('flowId'),
+    {
+      name: 'body',
+      type: 'Body',
+      schema: z.object({ flow: z.object({ project: z.object({ id: luidSchema }) }) }),
+    },
+  ],
+  response: z.object({ flow: flowSchema }),
+});
+
 const flowsApi = makeApi([
+  updateFlowEndpoint,
   queryFlowsForSiteEndpoint,
   queryFlowEndpoint,
   queryFlowConnectionsEndpoint,
