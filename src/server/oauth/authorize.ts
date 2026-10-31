@@ -8,6 +8,7 @@ import { fromError } from 'zod-validation-error/v3';
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
+import { getTelemetryProvider } from '../../telemetry/init.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
@@ -198,7 +199,7 @@ export function authorize(
   });
 }
 
-async function getOAuthRedirectUrl(
+export async function getOAuthRedirectUrl(
   initialOAuthUrl: URL,
   { lockSite }: { lockSite: boolean },
 ): Promise<URL> {
@@ -213,6 +214,8 @@ async function getOAuthRedirectUrl(
   // Tableau does not show the site picker.
   // We can force it to by changing the path from #/signin to #/site.
 
+  const span = getTelemetryProvider().startSpan?.('tableau.oauth.site_picker_redirect');
+  let redirectError: unknown;
   try {
     const response = await fetch(initialOAuthUrl, { redirect: 'manual' });
     if (response.status === 302) {
@@ -225,6 +228,7 @@ async function getOAuthRedirectUrl(
       }
     }
   } catch (error) {
+    redirectError = error;
     log({
       message: 'Failed to follow Tableau OAuth redirect for site picker',
       level: 'error',
@@ -232,13 +236,15 @@ async function getOAuthRedirectUrl(
       data: error,
     });
     return initialOAuthUrl;
+  } finally {
+    span?.end(redirectError);
   }
 
   return initialOAuthUrl;
 }
 
 // https://client.dev/servers
-async function getClientFromMetadataDoc(
+export async function getClientFromMetadataDoc(
   clientMetadataUrl: URL,
 ): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
   const originalUrl = clientMetadataUrl.toString();
@@ -293,6 +299,10 @@ async function getClientFromMetadataDoc(
   }
 
   let response: AxiosResponse;
+  const span = getTelemetryProvider().startSpan?.('tableau.oauth.client_metadata_fetch', {
+    url: originalUrl,
+  });
+  let fetchError: unknown;
   try {
     const client = axios.create();
     response = await retry(
@@ -322,6 +332,7 @@ async function getClientFromMetadataDoc(
       },
     );
   } catch (error) {
+    fetchError = error;
     log({
       message: `Failed to fetch client metadata from ${originalUrl}`,
       level: 'error',
@@ -332,6 +343,8 @@ async function getClientFromMetadataDoc(
       error: 'invalid_request',
       error_description: 'Unable to fetch client metadata',
     });
+  } finally {
+    span?.end(fetchError);
   }
 
   const contentType = getStringResponseHeader(response.headers, 'content-type');
