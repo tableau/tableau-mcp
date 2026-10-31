@@ -25,6 +25,9 @@ describe('createOAuthProvider', () => {
   it('returns the embedded provider when the embedded authorization server is enabled', () => {
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'true');
+    // Advertise API scopes so the embedded mint is satisfiable under the default enforce +
+    // site-settings-on posture; otherwise Config refuses to start. Irrelevant to provider selection.
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     vi.stubEnv(
       'OAUTH_JWE_PRIVATE_KEY',
       privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),

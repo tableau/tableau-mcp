@@ -95,6 +95,9 @@ describe('renderInteractiveVizTool', () => {
       vi.stubEnv('OAUTH_ISSUER', 'https://sso.online.tableau.com');
       vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'true');
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', './private_key.test.pem');
+      // Advertise API scopes so the embedded mint is satisfiable under the default enforce +
+      // site-settings-on posture; otherwise Config refuses to start. Irrelevant to tool gating.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       const tool = getRenderInteractiveVizTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });

@@ -503,6 +503,24 @@ export class Config extends BaseConfig {
             `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
           );
         }
+
+        // Under non-strict scope matching with MCP site settings enabled, the mint demands the
+        // tableau:mcp_site_settings:read API scope on every grant. That scope is only in the
+        // supported set when API scopes are advertised, so with ADVERTISE_API_SCOPES off a client
+        // can neither omit it (rejected as missing) nor request it (rejected as unsupported) — the
+        // mint cannot issue any token. Only the env half of strict is read here (the feature flag
+        // resolves asynchronously at request time); with it off, strict can never engage, so the
+        // combination is statically unsatisfiable. Refuse to start rather than silently never mint.
+        if (
+          this.oauth.enforceScopes &&
+          !this.oauth.strictScopeMatch &&
+          this.enableMcpSiteSettings &&
+          !this.oauth.advertiseApiScopes
+        ) {
+          throw new Error(
+            'ADVERTISE_API_SCOPES must be "true" when the embedded authz server enforces scopes with MCP site settings enabled and ENFORCE_STRICT_SCOPE_MATCH is not "true"',
+          );
+        }
       }
 
       if (this.transport === 'stdio') {

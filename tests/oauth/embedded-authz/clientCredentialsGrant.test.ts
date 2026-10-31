@@ -172,12 +172,26 @@ describe('client credentials grant type', () => {
     beforeEach(() => {
       // enforceScopes on; the suite default is OAUTH_DISABLE_SCOPES=true (enforcement off).
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+      // Advertise API scopes so the embedded mint is satisfiable: under enforce + site-settings + non-strict
+      // the mint requires the mandatory API scope, and Config refuses to start unless it is advertised
+      // (see the startup-refusal test below). This matches every documented embedded-authz deployment.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       mocks.strictFlag.value = false;
     });
 
     afterEach(() => {
       vi.unstubAllEnvs();
       mocks.strictFlag.value = false;
+    });
+
+    it('refuses to start when the mandatory scope is required but API scopes are not advertised', () => {
+      // enforce on + site-settings on (default) + strict off + advertise off ⇒ the mint can never
+      // issue a token, so Config throws at construction rather than starting an unusable server.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
+
+      expect(() => getConfig()).toThrow(
+        'ADVERTISE_API_SCOPES must be "true" when the embedded authz server enforces scopes with MCP site settings enabled and ENFORCE_STRICT_SCOPE_MATCH is not "true"',
+      );
     });
 
     it('rejects a client_credentials grant that omits the mandatory scope when site settings are on and strict is off', async () => {

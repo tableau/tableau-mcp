@@ -473,6 +473,9 @@ describe('EmbeddedAccessTokenValidator site binding', () => {
     vi.stubEnv('OAUTH_ISSUER', ISSUER);
     vi.stubEnv('OAUTH_LOCK_SITE', String(lockSite));
     vi.stubEnv('OAUTH_JWE_PRIVATE_KEY', 'unused');
+    // Advertise API scopes so the embedded mint is satisfiable under the default enforce +
+    // site-settings-on posture; otherwise Config refuses to start. Irrelevant to site binding.
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     vi.stubEnv('UAT_TENANT_ID', 'tenant');
     vi.stubEnv('UAT_ISSUER', 'uat-issuer');
     vi.stubEnv('UAT_USERNAME_CLAIM', 'sub');

@@ -664,6 +664,11 @@ describe('Config', () => {
       vi.stubEnv('OAUTH_ISSUER', 'https://example.com');
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', 'path/to/private.pem');
       vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+      // The embedded authz mint requires ADVERTISE_API_SCOPES=true under the default non-strict +
+      // site-settings-on posture (otherwise Config refuses to start, see 'embedded authz mint
+      // satisfiability'). This is the pairing every documented embedded-authz deployment uses, so it
+      // is the correct satisfiable baseline; tests that exercise the refusal flip a term explicitly.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     }
 
     const defaultOAuthTimeoutMs = {
@@ -686,7 +691,7 @@ describe('Config', () => {
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
-      advertiseApiScopes: false,
+      advertiseApiScopes: true,
       strictScopeMatch: false,
       external: null,
       ...defaultOAuthTimeoutMs,
@@ -1111,6 +1116,71 @@ describe('Config', () => {
         vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'false');
         const config = new Config();
         expect(config.oauth.strictScopeMatch).toBe(false);
+      });
+    });
+
+    describe('embedded authz mint satisfiability', () => {
+      // The minimal embedded-authz env WITHOUT ADVERTISE_API_SCOPES, so the four-term combination is
+      // in its unsatisfiable state by default. Each 'does not throw' case flips exactly one term to
+      // prove that term independently rescues the mint. (Note: the shared stubDefaultOAuthEnvVars()
+      // sets advertise on, so it cannot be used here.)
+      function stubUnsatisfiableEmbeddedAuthzEnvVars(): void {
+        vi.stubEnv('OAUTH_ISSUER', 'https://example.com');
+        vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', 'path/to/private.pem');
+        vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+      }
+
+      // Under non-strict + site-settings-on, the mint requires tableau:mcp_site_settings:read, but
+      // that is an API scope the mint neither advertises nor accepts unless ADVERTISE_API_SCOPES is
+      // on. With all four env terms at these values no scope string can mint a token, so Config
+      // refuses to start (embedded authz on, enforce on, advertise off, strict off, site settings on
+      // by default).
+      it('throws when embedded authz + enforce + site settings are on with advertise and strict off', () => {
+        stubUnsatisfiableEmbeddedAuthzEnvVars();
+
+        expect(() => new Config()).toThrow(
+          'ADVERTISE_API_SCOPES must be "true" when the embedded authz server enforces scopes with MCP site settings enabled and ENFORCE_STRICT_SCOPE_MATCH is not "true"',
+        );
+      });
+
+      it('does not throw when ADVERTISE_API_SCOPES is "true" (mandatory scope becomes requestable)', () => {
+        stubUnsatisfiableEmbeddedAuthzEnvVars();
+        vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+
+        const config = new Config();
+        expect(config.oauth.advertiseApiScopes).toBe(true);
+      });
+
+      it('does not throw when ENFORCE_STRICT_SCOPE_MATCH is "true" (mandatory rule inactive)', () => {
+        stubUnsatisfiableEmbeddedAuthzEnvVars();
+        vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+
+        const config = new Config();
+        expect(config.oauth.strictScopeMatch).toBe(true);
+      });
+
+      it('does not throw when ENABLE_MCP_SITE_SETTINGS is "false" (no mandatory scope)', () => {
+        stubUnsatisfiableEmbeddedAuthzEnvVars();
+        vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
+
+        const config = new Config();
+        expect(config.enableMcpSiteSettings).toBe(false);
+      });
+
+      it('does not throw when OAUTH_DISABLE_SCOPES is "true" (scopes not enforced)', () => {
+        stubUnsatisfiableEmbeddedAuthzEnvVars();
+        vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+
+        const config = new Config();
+        expect(config.oauth.enforceScopes).toBe(false);
+      });
+
+      it('does not throw when the embedded authz server is off', () => {
+        stubUnsatisfiableEmbeddedAuthzEnvVars();
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+
+        const config = new Config();
+        expect(config.oauth.embeddedAuthzServer).toBe(false);
       });
     });
   });
