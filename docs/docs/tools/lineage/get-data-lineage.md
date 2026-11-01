@@ -60,7 +60,9 @@ create derived fields; multi-row calculations also depend on their saved partiti
 compute columns. Prediction edges describe the saved model input mappings, not model execution.
 
 Catalog handoffs require an exact native `fieldId`, an authorized owning Flow and, for an output,
-the exact output step. Captions and field order are never identity evidence. Inspect
+the exact output step. Observed Cloud node-scoped field IDs are resolved only when the outer
+scope repeats the native origin or matches that output step; arbitrary UUID prefixes are refused.
+Captions and field order are never identity evidence. Inspect
 `prepDetails[].fieldAnalysis.catalogBindings` for confirmed and unresolved counts/reasons.
 
 For input or script output schemas that are absent from the document, the optional

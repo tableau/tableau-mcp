@@ -20,16 +20,28 @@ export function prepCatalogBindings(
     .map((node) => {
       if (!node.fieldId) return { catalog: node, reason: 'missing-native-field-id' };
       const identified = analysis.nativeFieldIds.get(node.fieldId) ?? new Set<string>();
+      // Observed Cloud IDs add a node scope around a native field identifier.
+      // A repeated origin scope or the exact output-step scope is structural
+      // evidence; an arbitrary UUID prefix is not a removable decoration.
+      const envelope = node.fieldId.match(
+        /^([a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})-([a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}-.+)$/i,
+      );
+      const repeatedScope = envelope?.[2].startsWith(`${envelope[1]}-`) ?? false;
+      const outputScope = node.kind === 'flow-output-field' && envelope?.[1] === node.stepId;
+      const nativeId = envelope && (repeatedScope || outputScope) ? envelope[2] : undefined;
+      const scoped = nativeId
+        ? (analysis.nativeFieldIds.get(nativeId) ?? new Set<string>())
+        : new Set<string>();
       let candidates: string[];
       if (node.kind === 'flow-input-field') {
-        candidates = [...identified].filter((id) =>
+        candidates = [...new Set([...identified, ...scoped])].filter((id) =>
           ['input', 'input-union', 'generated-source-row-number'].includes(
             versions.get(id)?.operation ?? '',
           ),
         );
         const qualified = candidates.filter((id) => {
           const version = versions.get(id)!;
-          return node.fieldId === `${version.stepId}-${version.name}`;
+          return (nativeId ?? node.fieldId) === `${version.stepId}-${version.name}`;
         });
         if (qualified.length) candidates = qualified;
       } else {
@@ -38,7 +50,12 @@ export function prepCatalogBindings(
         candidates = [
           ...new Set(
             [...(outputs?.values() ?? [])].flatMap((state) =>
-              [...state.fields.values()].filter((id) => identified.has(id)),
+              [...state.fields.values()].filter(
+                (id) =>
+                  identified.has(id) ||
+                  scoped.has(id) ||
+                  (outputScope && nativeId === `${node.stepId}-${versions.get(id)?.name}`),
+              ),
             ),
           ),
         ];

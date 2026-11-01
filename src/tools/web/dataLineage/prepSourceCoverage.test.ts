@@ -402,6 +402,62 @@ describe('native Flow fieldId handoff', () => {
     expect(resolved.every((b) => !b.reason)).toBe(true);
   });
 
+  it('resolves observed nested node scopes and exact output-step field identities without using catalog captions', () => {
+    const output = '44444444-4444-4444-8444-444444444444';
+    const a = analyzePrepFields(
+      flow(
+        node(source, '.v1.LoadCsv', { fields: fields('Amount') }),
+        node(calculation, '.v1.AddColumn', { columnName: 'Gross', expression: '[Amount] + 1' }),
+        node(output, '.v1.PublishExtract'),
+      ),
+      luid,
+    );
+    const bindings = prepCatalogBindings(
+      [
+        {
+          id: 'in',
+          kind: 'flow-input-field',
+          flowLuid: luid,
+          fieldId: `${source}-${source}-Amount`,
+          name: 'Unrelated caption',
+        },
+        {
+          id: 'origin',
+          kind: 'flow-output-field',
+          flowLuid: luid,
+          fieldId: `${calculation}-${calculation}-Gross`,
+          stepId: output,
+        },
+        {
+          id: 'rebased',
+          kind: 'flow-output-field',
+          flowLuid: luid,
+          fieldId: `${output}-${output}-Gross`,
+          stepId: output,
+        },
+        {
+          id: 'foreign-prefix',
+          kind: 'flow-output-field',
+          flowLuid: luid,
+          fieldId: `${luid}-${calculation}-Gross`,
+          stepId: output,
+        },
+        {
+          id: 'wrong-field',
+          kind: 'flow-output-field',
+          flowLuid: luid,
+          fieldId: `${output}-${output}-Missing`,
+          stepId: output,
+          name: 'Gross',
+        },
+      ],
+      luid,
+      a,
+    );
+    expect(bindings.slice(0, 3).every((b) => b.version)).toBe(true);
+    expect(bindings.slice(3).every((b) => !b.version)).toBe(true);
+  });
+
   it('rejects name-only, wrong-output-step and foreign-flow lookalikes', () => {
     const a = analyzePrepFields(native(), luid);
     const rows = prepCatalogBindings(
