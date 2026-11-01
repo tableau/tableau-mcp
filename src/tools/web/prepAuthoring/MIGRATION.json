@@ -4,7 +4,7 @@
   "sourceProvenance": {
     "sourceProject": "ghidra-prep",
     "sourceWorktree": "yaml-flow-builder",
-    "sourceThreadTitle": "TFLのYMLスキーマ化による削減量",
+    "sourceThreadTitle": "TFL\u306eYML\u30b9\u30ad\u30fc\u30de\u5316\u306b\u3088\u308b\u524a\u6e1b\u91cf",
     "snapshot": "Authoring implementation and schema from the user-selected worktree, including its uncommitted snapshot; no release/commit provenance is invented.",
     "files": [
       {
@@ -241,11 +241,36 @@
     }
   ],
   "compatibilityNotes": [
+    "The synthesized starter also supplies native canvas colors for every node. The retained schema permits absent colors, but the actual Cloud Web renderer reads color.hexCss. Imported display settings and the matching reference schema/default contracts are not rewritten.",
     "The new synthetic CSV template explicitly declares native Region/string and Sales/real field metadata. The reference template omitted this metadata, which caused an actual Tableau Cloud run to reject the Sales calculation; existing imported native metadata is preserved.",
     "Value/metadata/type/attachment equivalence is checked; YAML formatting and ZIP compression/timestamps are not a byte identity promise across Python and Node. Preview/generate within Node releases byte-identical reviewed archives.",
     "The retained matching authoring schema is not the reference project later exhaustive node catalog. Native Tableau execution remains unverified.",
     "Only bounded store/deflate native ZIP members (including ZIP64) are supported. No native Tableau binary or external script is executed.",
     "The immutable fixture contains synthetic data and expected reference results; the private twelve-flow corpus is not redistributed.",
     "Python is used only as a development oracle at migration time; shipped source/runtime and ongoing Node regression tests require no Python."
-  ]
+  ],
+  "canvasColorContract": {
+    "project": "ghidra-prep",
+    "nativePaletteSize": 20,
+    "caseHandling": "Case-insensitive validation without changing saved source strings",
+    "generation": "Every visible canvas node requires a permitted color and matching RGB/opaque alpha; invalid imported metadata can be inspected without coercion but cannot pass strict preview/release. The compatible schema/default contract remains unchanged.",
+    "sources": [
+      {
+        "path": "apps/prep-flow-workbench/src/dev-samples/Examine Metadata_Colored.tflx",
+        "sha256": "5ed2f1a231090a4514ea46d828e1e9ec1a8c0e949e557536364746bc064c6b9c",
+        "evidence": "19 distinct case-insensitive native colors"
+      },
+      {
+        "path": "apps/prep-flow-workbench/src/dev-samples/Created in Tableau Prep App boolean input.tfl",
+        "sha256": "dd78f27c5046317a8e0cb585776497cecbe8b51a98082e237636a54b63cd617e",
+        "evidence": "Native green #86AF6A completes the palette, also present in other native samples"
+      }
+    ],
+    "corroboration": {
+      "url": "https://10ax.online.tableau.com/flow-editor/static/webApp.js?1792707165036",
+      "sha256": "18d6fa9b8f421a86c38128514673639d43a72ad475f8c07687ca133ca43be9e9",
+      "evidence": "The official Web client Node Colors declaration lists the same20 colors. Its thumbnail renderer reads saved color.hexCss directly."
+    },
+    "starterLayout": "Explicit native-style color/position/size metadata follows the current ghidra-prep authoring examples; imported layouts are not rewritten."
+  }
 }

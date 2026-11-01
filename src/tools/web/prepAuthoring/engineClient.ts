@@ -51,6 +51,10 @@ const resultSchema = z.object({
   attachmentCount: z.number().int().min(0).optional(),
   errorCount: z.number().int().min(0).optional(),
   errors: z.array(z.string().max(256)).max(20).optional(),
+  canvasPalette: z
+    .array(z.string().regex(/^#[0-9A-F]{6}$/))
+    .length(20)
+    .optional(),
   summary: engineSummarySchema.optional(),
   nativeExecutionVerified: z.literal(false).optional(),
 });

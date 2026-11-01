@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
+import { defaultCanvasColor } from './canvasColors.js';
 import {
   CompactYaml,
   ensureJson,
@@ -402,6 +403,19 @@ export function newFlowYaml(io: ProjectIo, project: string, format: PackageType)
     ['West', '200'],
   ];
   const bytes = Buffer.from(rows.map((row) => row.join(separator)).join('\n') + '\n');
+  // Web authoring reads color.hexCss for each saved canvas node. The reference
+  // schema permits an absent color, so supply complete display metadata only for
+  // this synthesized starter; imported display settings remain untouched.
+  const display = values.template('displaySettings'),
+    positions = object(object(display.flowDisplaySettings).flowNodeDisplaySettings);
+  ['input', 'calculate', 'output'].forEach((name, index) => {
+    const node = values.template('nodeDisplaySettings');
+    node.position = { x: index * 2, y: 0 };
+    node.size = { width: 1, height: 1 };
+    node.color = defaultCanvasColor();
+    positions[codec.ref('id', name)] = node;
+  });
+  authored.displaySettings = display;
   writeProject(io, project, codec, authored, new Map([['sales.csv', bytes]]));
 }
 export function buildFlowPackage(compiled: CompiledFlow): Buffer {

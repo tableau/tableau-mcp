@@ -8,6 +8,7 @@ import {
   newFlowYaml,
   PackageType,
 } from './authoringCompiler.js';
+import { canvasColorErrors, nativeCanvasColors } from './canvasColors.js';
 import { CompactYaml, jsonBytes, object, parseJson } from './compactYaml.js';
 import { scopeCheck } from './credentialPolicy.js';
 import type { EngineResult } from './engineClient.js';
@@ -81,9 +82,13 @@ export function runAuthoringEngine(request: Record<string, unknown>): EngineResu
     const yaml = io.read(join(base, 'project.yml'), MAX_YAML).toString('utf8');
     const compiled = compileFlowYaml(io, base, yaml, format);
     scopeCheck(compiled.document);
+    const errors = [...compiled.errors, ...canvasColorErrors(compiled.document)];
     return {
       ok: true,
-      valid: !compiled.errors.length,
+      valid: !errors.length,
+      errorCount: errors.length,
+      errors: errors.slice(0, 20).map((error) => error.slice(0, 256)),
+      canvasPalette: [...nativeCanvasColors],
       yaml,
       projectSha256: io.manifest(base).sha256,
       sourceSha256,
@@ -108,12 +113,14 @@ export function runAuthoringEngine(request: Record<string, unknown>): EngineResu
     io.replacePrivate(candidate, request.yaml);
     const compiled = compileFlowYaml(io, project, request.yaml, format);
     scopeCheck(compiled.document);
-    if (compiled.errors.length)
+    const errors = [...compiled.errors, ...canvasColorErrors(compiled.document)];
+    if (errors.length)
       return {
         ok: true,
         valid: false,
-        errorCount: compiled.errors.length,
-        errors: compiled.errors.slice(0, 20).map((e) => e.slice(0, 256)),
+        errorCount: errors.length,
+        errors: errors.slice(0, 20).map((e) => e.slice(0, 256)),
+        canvasPalette: [...nativeCanvasColors],
         nativeExecutionVerified: false,
       };
     const payload = buildFlowPackage(compiled),

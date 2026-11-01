@@ -71,6 +71,8 @@ describe('Node compact Prep authoring parity', () => {
   it.each(['tfl', 'tflx'] as const)('ports new/edit/preview/exact generation for %s', (format) => {
     const { request, prepared } = prepare(format);
     const yaml = prepared.yaml!.replace('[Sales] * 1.1', '[Sales] * 1.2');
+    expect(prepared.canvasPalette).toHaveLength(20);
+    expect(prepared.canvasPalette).toContain('#86AF6A');
     expect(yaml).toContain('!id');
     const candidate = preview(request, yaml);
     expect(candidate.valid).toBe(true);
@@ -88,6 +90,22 @@ describe('Node compact Prep authoring parity', () => {
       { name: 'Region', type: 'string', collation: null },
       { name: 'Sales', type: 'real', collation: null },
     ]);
+    const display = object(parseJson(entries.get('displaySettings')!)),
+      positions = object(object(display.flowDisplaySettings).flowNodeDisplaySettings);
+    expect(Object.keys(positions).sort()).toEqual(Object.keys(object(flow.nodes)).sort());
+    for (const value of Object.values(positions)) {
+      const color = object(object(value).color);
+      expect(color.hexCss).toMatch(/^#[0-9a-f]{6}$/i);
+      const rgba = color.rgba as string[];
+      expect(rgba).toHaveLength(4);
+      expect(rgba.slice(0, 3).map(Number)).toEqual(
+        String(color.hexCss)
+          .slice(1)
+          .match(/../g)!
+          .map((channel) => parseInt(channel, 16)),
+      );
+      expect(Number(rgba[3])).toBe(1);
+    }
     expect(
       Object.values(object(flow.nodes)).some((n) => object(n).expression === '[Sales] * 1.2'),
     ).toBe(true);
@@ -147,6 +165,55 @@ describe('Node compact Prep authoring parity', () => {
     expect(metadataErrors(original)).toEqual([]);
     calculation.expression = 123;
     expect(metadataErrors(original).length).toBeGreaterThan(0);
+  });
+  it('stops release when edited canvas colors are outside the native palette', () => {
+    const { request, prepared } = prepare(),
+      codec = new CompactYaml(),
+      authored = codec.load(prepared.yaml!),
+      layout = object(
+        object(object(authored.displaySettings).flowDisplaySettings).flowNodeDisplaySettings,
+      ),
+      node = object(Object.values(layout)[0]);
+    node.color = { hexCss: '#000000', rgba: [0, 0, 0, 1] };
+    const candidate = preview(request, codec.dump(authored));
+    expect(candidate.valid).toBe(false);
+    expect(candidate.errors!.some((error) => error.includes('CANVAS_COLOR_OUTSIDE_PALETTE'))).toBe(
+      true,
+    );
+    expect(candidate.previewId).toBeUndefined();
+    expect(candidate.previewSha256).toBeUndefined();
+    expect(candidate.canvasPalette).toEqual(prepared.canvasPalette);
+  });
+  it('preserves unsupported imported colors for inspection but blocks strict generation', () => {
+    const doc = document(),
+      layout = object(
+        object(object(doc.displaySettings).flowDisplaySettings).flowNodeDisplaySettings,
+      ),
+      node = object(Object.values(layout)[0]);
+    node.color = { hexCss: '#123456', rgba: ['18', '52', '86', '1'] };
+    expect(metadataErrors(doc)).toEqual([]);
+    const source = writeNativeArchive(
+        new Map(Object.entries(doc).map(([key, value]) => [key, jsonBytes(value)])),
+      ),
+      request = { workspace, jobId: randomUUID(), format: 'tflx' },
+      prepared = run({
+        ...request,
+        operation: 'prepare',
+        source: { type: 'download', base64: source.toString('base64') },
+      });
+    expect(prepared.valid).toBe(false);
+    expect(prepared.errors!.some((error) => error.includes('CANVAS_COLOR_OUTSIDE_PALETTE'))).toBe(
+      true,
+    );
+    expect(
+      readFileSync(join(workspace, '.tableau-prep-mcp', request.jobId, 'original.tflx')),
+    ).toEqual(source);
+    const candidate = preview(
+      { ...request, projectSha256: prepared.projectSha256 },
+      prepared.yaml!,
+    );
+    expect(candidate.valid).toBe(false);
+    expect(candidate.previewSha256).toBeUndefined();
   });
   it.each([
     ['id', 'bad-id'],
