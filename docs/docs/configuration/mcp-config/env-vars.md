@@ -558,7 +558,7 @@ separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the 
 ## `FLOW_READ_TOOLS_ENABLED`
 
 Optional compact YAML generation is controlled separately by `PREP_AUTHORING_ENABLED` and is
-disabled by default. It requires operator-selected Python/dependencies and a local workspace;
+disabled by default. It uses the existing Node.js runtime and an operator-selected local workspace;
 HTTP cannot use it. See [Native Prep YAML authoring](../../tools/flows/prep-yaml-authoring.md).
 
 Controls the read-only Tableau Prep flow tools. They are enabled by default.

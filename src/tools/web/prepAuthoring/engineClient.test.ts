@@ -3,90 +3,91 @@ import { resolve } from 'node:path';
 
 import { runPrepEngine } from './engineClient.js';
 
-const mocks = vi.hoisted(() => ({ spawn: vi.fn() }));
-vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
+const mocks = vi.hoisted(() => ({ start: vi.fn() }));
+vi.mock('node:worker_threads', () => ({
+  Worker: class {
+    constructor(...args: unknown[]) {
+      return mocks.start(...args);
+    }
+  },
+}));
 
-describe('fixed Prep engine subprocess protocol', () => {
-  const config = { enabled: true, python: resolve('python'), workspace: resolve('workspace') };
-  let child: EventEmitter & {
-    stdin: EventEmitter & { end: ReturnType<typeof vi.fn> };
+describe('isolated Node Prep worker protocol', () => {
+  const config = { enabled: true, workspace: resolve('workspace') };
+  let worker: EventEmitter & {
     stdout: EventEmitter;
     stderr: EventEmitter;
-    kill: ReturnType<typeof vi.fn>;
+    terminate: ReturnType<typeof vi.fn>;
   };
   beforeEach(() => {
     vi.clearAllMocks();
-    child = Object.assign(new EventEmitter(), {
-      stdin: Object.assign(new EventEmitter(), { end: vi.fn() }),
+    worker = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
       stderr: new EventEmitter(),
-      kill: vi.fn(),
+      terminate: vi.fn().mockResolvedValue(0),
     });
-    mocks.spawn.mockReturnValue(child);
+    mocks.start.mockReturnValue(worker);
   });
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
   });
-
-  it('uses a fixed program with stdin data and an environment excluding authentication', async () => {
+  it('uses only a bundled Node worker with data and no ambient environment/Node flags', async () => {
     vi.stubEnv('PAT_VALUE', 'DUMMY_PAT');
     vi.stubEnv('UNKNOWN_SERVICE_SECRET', 'DUMMY_UNKNOWN');
-    const result = runPrepEngine(
+    const pending = runPrepEngine(
       config,
       { yaml: 'PRIVATE_FLOW_TEXT' },
       new AbortController().signal,
-      '/bundled/runner.py',
+      '/bundled/worker.cjs',
     );
-    const [program, args, options] = mocks.spawn.mock.calls[0];
-    expect(program).toBe(config.python);
-    expect(args).toEqual(['-I', '-B', '-X', 'utf8', '/bundled/runner.py']);
-    expect(options.shell).toBe(false);
-    expect(
-      Object.keys(options.env).every((key) =>
-        ['SYSTEMROOT', 'TEMP', 'TMP'].includes(key.toUpperCase()),
-      ),
-    ).toBe(true);
-    expect(JSON.stringify(options.env)).not.toContain('DUMMY');
-    expect(child.stdin.end.mock.calls[0][0]).toContain('PRIVATE_FLOW_TEXT');
-    child.stdout.emit('data', Buffer.from('{"ok":true,"valid":false,"errorCount":1}'));
-    child.emit('close', 0);
-    expect((await result).valid).toBe(false);
+    const [program, options] = mocks.start.mock.calls[0];
+    expect(program).toBe('/bundled/worker.cjs');
+    expect(options.env).toEqual({});
+    expect(options.execArgv).toEqual([]);
+    expect(options.resourceLimits.maxOldGenerationSizeMb).toBe(256);
+    expect(options.workerData).toEqual({ yaml: 'PRIVATE_FLOW_TEXT', workspace: config.workspace });
+    worker.emit('message', { ok: true, valid: false, errorCount: 1 });
+    expect((await pending).valid).toBe(false);
+    expect(worker.terminate).toHaveBeenCalledOnce();
   });
-  it.each(['malformed', 'nonzero', 'oversize', 'stderr'] as const)(
-    'rejects %s results without exposing diagnostics',
+  it.each(['malformed', 'exit', 'oversize', 'stderr', 'error'] as const)(
+    'rejects %s results without raw diagnostics',
     async (failure) => {
-      const result = runPrepEngine(config, {}, new AbortController().signal, '/bundled/runner.py');
-      const assertion = expect(result).rejects.not.toThrow('PRIVATE_DIAGNOSTIC');
-      if (failure === 'oversize') child.stdout.emit('data', Buffer.alloc(2 * 1024 * 1024 + 1));
-      else if (failure === 'stderr') child.stderr.emit('data', Buffer.alloc(128 * 1024 + 1));
-      else
-        child.stdout.emit(
-          'data',
-          Buffer.from(failure === 'malformed' ? 'PRIVATE_DIAGNOSTIC' : '{"ok":true,"valid":true}'),
-        );
-      child.emit('close', failure === 'nonzero' ? 1 : 0);
+      const pending = runPrepEngine(
+        config,
+        {},
+        new AbortController().signal,
+        '/bundled/worker.cjs',
+      );
+      const assertion = expect(pending).rejects.not.toThrow('PRIVATE_DIAGNOSTIC');
+      if (failure === 'oversize') worker.stdout.emit('data', Buffer.alloc(2 * 1024 * 1024 + 1));
+      else if (failure === 'stderr') worker.stderr.emit('data', Buffer.alloc(128 * 1024 + 1));
+      else if (failure === 'exit') worker.emit('exit', 1);
+      else if (failure === 'error') worker.emit('error', new Error('PRIVATE_DIAGNOSTIC'));
+      else worker.emit('message', 'PRIVATE_DIAGNOSTIC');
       await assertion;
+      expect(worker.terminate).toHaveBeenCalledOnce();
     },
   );
-  it('does not spawn when already cancelled and kills an in-flight child on cancellation', async () => {
+  it('does not start when cancelled and terminates an in-flight worker on cancellation', async () => {
     const first = new AbortController();
     first.abort();
     await expect(runPrepEngine(config, {}, first.signal)).rejects.toThrow();
-    expect(mocks.spawn).not.toHaveBeenCalled();
-    const second = new AbortController();
-    const result = runPrepEngine(config, {}, second.signal, '/bundled/runner.py');
-    const assertion = expect(result).rejects.toThrow();
-    second.abort();
+    expect(mocks.start).not.toHaveBeenCalled();
+    const next = new AbortController();
+    const pending = runPrepEngine(config, {}, next.signal, '/bundled/worker.cjs');
+    const assertion = expect(pending).rejects.toThrow();
+    next.abort();
     await assertion;
-    expect(child.kill).toHaveBeenCalledOnce();
+    expect(worker.terminate).toHaveBeenCalledOnce();
   });
-  it('stops a stalled engine at the fixed deadline', async () => {
+  it('terminates a stalled worker at the fixed deadline', async () => {
     vi.useFakeTimers();
-    const result = runPrepEngine(config, {}, new AbortController().signal, '/bundled/runner.py');
-    const assertion = expect(result).rejects.toThrow('could not complete');
+    const pending = runPrepEngine(config, {}, new AbortController().signal, '/bundled/worker.cjs');
+    const assertion = expect(pending).rejects.toThrow('could not complete');
     await vi.advanceTimersByTimeAsync(60001);
     await assertion;
-    expect(child.kill).toHaveBeenCalledOnce();
+    expect(worker.terminate).toHaveBeenCalledOnce();
   });
 });

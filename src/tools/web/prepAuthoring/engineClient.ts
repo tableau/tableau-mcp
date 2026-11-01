@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
 import { isAbsolute, join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 
 import { z } from 'zod';
 
@@ -64,87 +64,75 @@ export function prepAuthoringEnabled(config: Pick<Config, 'transport' | 'prepAut
 export function assertPrepAuthoringConfig(
   config: Pick<Config, 'transport' | 'prepAuthoring'>,
 ): void {
-  if (
-    !prepAuthoringEnabled(config) ||
-    !isAbsolute(config.prepAuthoring.python) ||
-    !isAbsolute(config.prepAuthoring.workspace) ||
-    (config.prepAuthoring.dependencies && !isAbsolute(config.prepAuthoring.dependencies))
-  )
+  if (!prepAuthoringEnabled(config) || !isAbsolute(config.prepAuthoring.workspace))
     throw new ArgsValidationError(
-      'Prep authoring requires opt-in stdio and operator-configured absolute Python/workspace paths.',
+      'Prep authoring requires opt-in stdio and an operator-configured absolute workspace path.',
     );
 }
 
-/** Fixed bundled program, JSON stdin, no shell or inherited Tableau credentials. */
+/** A bundled Node worker has no shell, Python, inherited credentials or ambient Node flags. */
 export async function runPrepEngine(
   config: PrepAuthoringConfig,
   request: Record<string, unknown>,
   signal: AbortSignal,
-  runner = join(getDirname(), 'prep-authoring/engine/runner.py'),
+  runner = join(getDirname(), 'prep-authoring-worker.cjs'),
 ): Promise<EngineResult> {
   signal.throwIfAborted();
   const fail = (): ArgsValidationError =>
     new ArgsValidationError(
-      'The Prep authoring engine could not complete. Check its optional Python dependencies, workspace access and bounded input; raw subprocess diagnostics are omitted.',
+      'The Prep authoring engine could not complete. Check workspace access and bounded input; raw worker diagnostics are omitted.',
     );
-  const payload = JSON.stringify({
-    ...request,
-    workspace: config.workspace,
-    dependencies: config.dependencies,
-  });
-  if (Buffer.byteLength(payload) > 48 * 1024 * 1024) throw fail();
+  const data = { ...request, workspace: config.workspace };
+  if (Buffer.byteLength(JSON.stringify(data)) > 48 * 1024 * 1024) throw fail();
   return await new Promise((resolve, reject) => {
-    const env = { ...process.env };
-    for (const key of Object.keys(env)) if (key.toUpperCase() !== 'SYSTEMROOT') delete env[key];
-    env.TEMP = config.workspace;
-    env.TMP = config.workspace;
-    const child = spawn(config.python, ['-I', '-B', '-X', 'utf8', runner], {
-      shell: false,
-      windowsHide: true,
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const chunks: Buffer[] = [];
-    let stdoutBytes = 0,
-      stderrBytes = 0,
-      settled = false;
+    let worker: Worker;
+    try {
+      worker = new Worker(runner, {
+        workerData: data,
+        env: {},
+        execArgv: [],
+        stdout: true,
+        stderr: true,
+        resourceLimits: { maxOldGenerationSizeMb: 256, stackSizeMb: 4 },
+      });
+    } catch {
+      reject(fail());
+      return;
+    }
+    let settled = false,
+      stdout = 0,
+      stderr = 0;
     const finish = (error?: Error, result?: EngineResult): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);
+      void worker.terminate().catch(() => undefined);
       if (error) reject(error);
       else resolve(result!);
     };
-    const abort = (): void => {
-      child.kill();
-      finish(signal.reason instanceof Error ? signal.reason : fail());
-    };
-    const timer = setTimeout(() => {
-      child.kill();
-      finish(fail());
-    }, 60000);
+    const abort = (): void => finish(signal.reason instanceof Error ? signal.reason : fail());
+    const timer = setTimeout(() => finish(fail()), 60000);
     signal.addEventListener('abort', abort, { once: true });
-    child.on('error', () => finish(fail()));
-    child.stdin.on('error', () => finish(fail()));
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdoutBytes += chunk.length;
-      if (stdoutBytes > 2 * 1024 * 1024) {
-        child.kill();
-        finish(fail());
-      } else chunks.push(chunk);
+    worker.on('error', () => finish(fail()));
+    worker.on('exit', () => {
+      if (!settled) finish(fail());
     });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderrBytes += chunk.length;
-      if (stderrBytes > 128 * 1024) {
-        child.kill();
-        finish(fail());
-      }
+    worker.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.length;
+      if (stdout > 2 * 1024 * 1024) finish(fail());
     });
-    child.on('close', (code) => {
-      if (settled) return;
+    worker.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.length;
+      if (stderr > 128 * 1024) finish(fail());
+    });
+    worker.on('message', (message: unknown) => {
       try {
-        const result = resultSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        if (Buffer.byteLength(JSON.stringify(message)) > 2 * 1024 * 1024) {
+          finish(fail());
+          return;
+        }
+        const result = resultSchema.parse(message);
         if (!result.ok) {
           const messages: Record<string, string> = {
             SOURCE_CHANGED: 'Prepared source/resources changed. Prepare a fresh project.',
@@ -157,24 +145,15 @@ export async function runPrepEngine(
               'A numeric value cannot round-trip exactly through the supported compiler. Generation stopped.',
             WORKSPACE_PROJECT_LIMIT:
               'The workspace reached its prepared-project limit. Retain wanted outputs and clean only owned cache projects, or select a new workspace.',
-            WORKSPACE_PATH_TOO_LONG:
-              'The workspace path exceeds Windows file limits. Configure a shorter dedicated workspace.',
           };
           finish(
             messages[result.code ?? ''] ? new ArgsValidationError(messages[result.code!]) : fail(),
           );
-          return;
-        }
-        if (code !== 0) {
-          finish(fail());
-          return;
-        }
-        finish(undefined, result);
+        } else finish(undefined, result);
       } catch {
         finish(fail());
       }
     });
-    child.stdin.end(payload);
     if (signal.aborted) abort();
   });
 }

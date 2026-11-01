@@ -1,0 +1,242 @@
+{
+  "format": "prep-node-migration/v1",
+  "referencePythonCommit": "acb9bd623866bc92818346e4a5a122e00da06ef7",
+  "sourceProvenance": {
+    "sourceProject": "ghidra-prep",
+    "sourceWorktree": "yaml-flow-builder",
+    "sourceThreadTitle": "TFLのYMLスキーマ化による削減量",
+    "snapshot": "Authoring implementation and schema from the user-selected worktree, including its uncommitted snapshot; no release/commit provenance is invented.",
+    "files": [
+      {
+        "sourcePath": "src/ghidra_prep_schema/authoring.py",
+        "destination": "prep_engine/authoring.py",
+        "sourceSha256": "23fc6cca811bab5d59baa05aaa2cfd868c7e84eb69962dcd7e653dc85d205fe9",
+        "canonicalLfSha256": "23fc6cca811bab5d59baa05aaa2cfd868c7e84eb69962dcd7e653dc85d205fe9",
+        "migration": "identical after LF normalization"
+      },
+      {
+        "sourcePath": "src/ghidra_prep_schema/authoring_models.py",
+        "destination": "prep_engine/authoring_models.py",
+        "sourceSha256": "b3b89055539e8244ad9cf0cac21976d2bc491e996512d99adf29f7022ee36fc0",
+        "canonicalLfSha256": "b3b89055539e8244ad9cf0cac21976d2bc491e996512d99adf29f7022ee36fc0",
+        "migration": "identical after LF normalization"
+      },
+      {
+        "sourcePath": "src/ghidra_prep_schema/value_contracts.py",
+        "destination": "prep_engine/value_contracts.py",
+        "sourceSha256": "1a3b72fb49bd71dfdb99e223333630bc719e4bac6bb1f9ed7d321393c837cbf3",
+        "canonicalLfSha256": "1a3b72fb49bd71dfdb99e223333630bc719e4bac6bb1f9ed7d321393c837cbf3",
+        "migration": "identical after LF normalization"
+      },
+      {
+        "sourcePath": "schemas/tableau_prep_flow.schema.yaml",
+        "destination": "prep_engine/tableau_prep_flow.schema.yaml",
+        "sourceSha256": "797bdd3646435d9f0849af34108747bb2be77d5d0e97dedfc684bcfd589a58d4",
+        "canonicalLfSha256": "797bdd3646435d9f0849af34108747bb2be77d5d0e97dedfc684bcfd589a58d4",
+        "migration": "identical after LF normalization"
+      },
+      {
+        "sourcePath": "src/ghidra_prep_schema/bounded_io.py",
+        "sourceRevision": "564b5017074d505f771a9b27b66ed006de4e5156",
+        "destination": "prep_engine/bounded_io.py",
+        "sourceSha256": "643fb015a7b432bec56d280ee37e77f432b742077df9fb207e4e8243bb0abd76",
+        "canonicalLfSha256": "643fb015a7b432bec56d280ee37e77f432b742077df9fb207e4e8243bb0abd76",
+        "migration": "identical after LF normalization; stable descriptor reads reused from current reference project"
+      },
+      {
+        "sourcePath": "src/ghidra_prep_schema/credential_policy.py",
+        "sourceRevision": "564b5017074d505f771a9b27b66ed006de4e5156",
+        "destination": "prep_engine/credential_policy.py",
+        "sourceSha256": "89a5b1b4068d7ffcdc9ba8947f7cdc7a4ab10f9d28f6f3f2ec7a73a3dd7a2c9b",
+        "canonicalLfSha256": "89a5b1b4068d7ffcdc9ba8947f7cdc7a4ab10f9d28f6f3f2ec7a73a3dd7a2c9b",
+        "migration": "identical after LF normalization; shared pure credential classifier"
+      }
+    ],
+    "facades": [
+      "io.py supplies only the required native entry-name constants",
+      "schema.py loads the bundled matching schema without network",
+      "logging.py uses a private NullHandler"
+    ],
+    "limitations": [
+      "No Tableau/native binaries copied.",
+      "No native execution guarantee.",
+      "This matching authoring schema is distinct from the later broader catalog in the reference project."
+    ],
+    "portedTests": [
+      {
+        "sourcePath": "tests/test_authoring_models.py",
+        "sourceSha256": "db4ab8f930c0f567d8011cf5df9bb032494238de5f88d59307c468dfde8b9591",
+        "destination": "../tests/test_authoring_models.py",
+        "canonicalLfSha256": "d3a55403661e75c31af0726b49e60e213a7ec7d0e20fd1ac03bda1cb0ad51089",
+        "adaptation": "Only import package name changes from ghidra_prep_schema to prep_engine."
+      }
+    ]
+  },
+  "runtime": "Existing TypeScript/Node.js stack; isolated bundled worker, no Python runtime, dependency tree, subprocess or interpreter configuration.",
+  "schemaSha256": "797bdd3646435d9f0849af34108747bb2be77d5d0e97dedfc684bcfd589a58d4",
+  "matrix": [
+    {
+      "pythonFile": "prep_engine/authoring.py",
+      "pythonSha256": "23fc6cca811bab5d59baa05aaa2cfd868c7e84eb69962dcd7e653dc85d205fe9",
+      "allDeclaredTopLevelAndClassSymbols": [
+        "AuthoringError",
+        "IdRef",
+        "JsonRef",
+        "PathRef",
+        "CompiledFlow",
+        "CompiledFlow.result",
+        "_event",
+        "_codec",
+        "_json_bytes",
+        "_json_load",
+        "_entry_name",
+        "_local_file",
+        "_read_limited",
+        "_ensure_json",
+        "_uuid",
+        "_prepare_graph",
+        "_graph_errors",
+        "_schema_errors",
+        "compile_flow_yaml",
+        "validate_flow_yaml",
+        "_publish_bytes",
+        "build_flow_package",
+        "_source_entries",
+        "_write_project",
+        "export_flow_yaml",
+        "new_flow_yaml"
+      ],
+      "nodeDestination": "authoringCompiler.ts / compactYaml.ts / metadata.ts / nativeArchive.ts / projectIo.ts",
+      "behavior": "newFlowYaml, exportFlowYaml, compileFlowYaml.errors, buildFlowPackage; CompactYaml and ProjectIo replace Python value classes/context helpers; metadataErrors validates without replacing native data",
+      "verification": "authoringEngine.test.ts; pythonParity.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/authoring_models.py",
+      "pythonSha256": "b3b89055539e8244ad9cf0cac21976d2bc491e996512d99adf29f7022ee36fc0",
+      "allDeclaredTopLevelAndClassSymbols": [
+        "ExtensibleMetadata",
+        "FlowEdge",
+        "ConnectionAttributes",
+        "FlowConnection",
+        "DataConnection",
+        "NamespaceBinding",
+        "FlowField",
+        "FlowNode",
+        "FlowGraph",
+        "DisplayPoint",
+        "DisplaySize",
+        "NodeDisplaySettings",
+        "FlowDisplaySettings",
+        "DisplaySettings",
+        "MaestroMetadata",
+        "FlowDocument",
+        "FlowDocument.to_document",
+        "ValidationResult"
+      ],
+      "nodeDestination": "metadata.ts",
+      "behavior": "strict passthrough Zod field/edge/binding/node/graph/display/document validators plus recursive metadataErrors; original document retained instead of model reserialization",
+      "verification": "authoringEngine.test.ts; pythonParity.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/bounded_io.py",
+      "pythonSha256": "643fb015a7b432bec56d280ee37e77f432b742077df9fb207e4e8243bb0abd76",
+      "allDeclaredTopLevelAndClassSymbols": [
+        "_is_reparse",
+        "_same_snapshot",
+        "read_bounded_regular_file",
+        "open_bounded_regular_file",
+        "hash_bounded_regular_file"
+      ],
+      "nodeDestination": "projectIo.ts",
+      "behavior": "ProjectIo.read validates lstat/fstat identity, size, timestamps, link count and containment before/after descriptor reads; digest supplies hashing; all reads use this gate",
+      "verification": "authoringEngine.test.ts; nodeWorker.integration.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/credential_policy.py",
+      "pythonSha256": "89a5b1b4068d7ffcdc9ba8947f7cdc7a4ab10f9d28f6f3f2ec7a73a3dd7a2c9b",
+      "allDeclaredTopLevelAndClassSymbols": [
+        "_parts",
+        "credential_kind",
+        "credential_key",
+        "contains_inline_credential",
+        "connection_scope_has_credentials"
+      ],
+      "nodeDestination": "credentialPolicy.ts",
+      "behavior": "credentialKind, credentialKey, containsInlineCredential, connectionScopeHasCredentials, scopeCheck; inspection normalizes Python Unicode regex behavior",
+      "verification": "authoringEngine.test.ts; pythonParity.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/io.py",
+      "pythonSha256": "46755906e7c87ad2dd7cdacea8dd96bd002205aabd74a6517bbebd12d6011cc9",
+      "allDeclaredTopLevelAndClassSymbols": [],
+      "nodeDestination": "metadata.ts / nativeArchive.ts",
+      "behavior": "knownEntries and bounded native archive reader/writer",
+      "verification": "authoringEngine.test.ts; pythonParity.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/logging.py",
+      "pythonSha256": "b381797b70b3f78ec4316e72adb3ee8f97f90427bc78edaffe5a3d78b352fb30",
+      "allDeclaredTopLevelAndClassSymbols": ["get_logger"],
+      "nodeDestination": "authoringWorker.ts / engineClient.ts",
+      "behavior": "no raw compiler logging; bounded worker result/error codes replace the private NullHandler/event helper",
+      "verification": "engineClient.test.ts; nodeWorker.integration.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/schema.py",
+      "pythonSha256": "fc5fa46a777228606bc1457ecae23b8d58d91c3d5def0c0ddbafdb8b358c8c64",
+      "allDeclaredTopLevelAndClassSymbols": ["load_schema"],
+      "nodeDestination": "tableau_prep_flow.schema.json / metadata.ts",
+      "behavior": "byte-identical schema is statically bundled, validated by non-mutating Ajv2020, no network schema loading",
+      "verification": "authoringEngine.test.ts; pythonParity.test.ts; prepAuthoringAssets.test.ts"
+    },
+    {
+      "pythonFile": "prep_engine/value_contracts.py",
+      "pythonSha256": "1a3b72fb49bd71dfdb99e223333630bc719e4bac6bb1f9ed7d321393c837cbf3",
+      "allDeclaredTopLevelAndClassSymbols": [
+        "SchemaValues",
+        "SchemaValues.definition",
+        "SchemaValues._resolve",
+        "SchemaValues.expand",
+        "SchemaValues.template",
+        "SchemaValues.apply_defaults",
+        "SchemaValues.node_variant",
+        "SchemaValues.describe"
+      ],
+      "nodeDestination": "metadata.ts",
+      "behavior": "SchemaValues.definition/expand/template/defaults/variant/describe",
+      "verification": "pythonParity.test.ts; authoringEngine.test.ts"
+    },
+    {
+      "pythonFile": "runner.py",
+      "pythonSha256": "3e9f9cc19c82db5e0e5c31380f230d902fe90740d4bc7042dc9edd67fd1c88f9",
+      "allDeclaredTopLevelAndClassSymbols": [
+        "NativeBuffer",
+        "NativeBuffer.is_dir",
+        "BoundaryError",
+        "BoundaryError.__init__",
+        "identity",
+        "no_links",
+        "local_path",
+        "read_regular",
+        "digest",
+        "exact_json_numbers",
+        "manifest",
+        "scope_check",
+        "summary",
+        "copy_project",
+        "execute",
+        "main"
+      ],
+      "nodeDestination": "authoringEngine.ts / projectIo.ts / compactYaml.ts / credentialPolicy.ts / metadata.ts / authoringWorker.ts / engineClient.ts",
+      "behavior": "runAuthoringEngine preserves prepare/preview/generate contracts and snapshots; ProjectIo handles paths/copies/manifests; parseJsonTyped/CompactYaml guard exact numbers; scopeCheck and summary; fixed isolated Worker replaces stdin process protocol",
+      "verification": "authoringEngine.test.ts; workflow.test.ts; engineClient.test.ts; nodeWorker.integration.test.ts"
+    }
+  ],
+  "compatibilityNotes": [
+    "Value/metadata/type/attachment equivalence is checked; YAML formatting and ZIP compression/timestamps are not a byte identity promise across Python and Node. Preview/generate within Node releases byte-identical reviewed archives.",
+    "The retained matching authoring schema is not the reference project later exhaustive node catalog. Native Tableau execution remains unverified.",
+    "Only bounded store/deflate native ZIP members (including ZIP64) are supported. No native Tableau binary or external script is executed.",
+    "The immutable fixture contains synthetic data and expected reference results; the private twelve-flow corpus is not redistributed.",
+    "Python is used only as a development oracle at migration time; shipped source/runtime and ongoing Node regression tests require no Python."
+  ]
+}

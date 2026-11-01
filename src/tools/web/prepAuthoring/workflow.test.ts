@@ -54,7 +54,7 @@ describe('source-bound compact YAML workflow', () => {
     vi.clearAllMocks();
     mocks.config = Object.assign(new Config(), {
       transport: 'stdio',
-      prepAuthoring: { enabled: true, python: resolve('python'), workspace: resolve('tmp') },
+      prepAuthoring: { enabled: true, workspace: resolve('tmp') },
     });
     mocks.flowReads = true;
     mocks.allowed.mockResolvedValue({ allowed: true });

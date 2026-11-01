@@ -11,6 +11,7 @@
 !build/features/
 !build/features/featureGateProvider.d.ts
 !build/index.js
+!build/prep-authoring-worker.cjs
 !build/index.js.map
 !build/sessionStore/
 !build/sessionStore/sessionStore.d.ts

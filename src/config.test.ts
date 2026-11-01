@@ -18,12 +18,10 @@ describe('Config', () => {
     vi.stubEnv('PREP_AUTHORING_ENABLED', undefined);
     expect(new Config().prepAuthoring.enabled).toBe(false);
     vi.stubEnv('PREP_AUTHORING_ENABLED', 'true');
-    vi.stubEnv('PREP_AUTHORING_PYTHON', '/operator/python');
     vi.stubEnv('PREP_AUTHORING_WORKSPACE', '/operator/workspace');
     const config = new Config();
     expect(config.prepAuthoring).toMatchObject({
       enabled: true,
-      python: '/operator/python',
       workspace: '/operator/workspace',
     });
   });

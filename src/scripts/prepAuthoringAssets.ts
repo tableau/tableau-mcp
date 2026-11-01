@@ -1,27 +1,19 @@
-import { copyFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { build } from 'esbuild';
 
-export const prepAuthoringAssets = [
-  'runner.py',
-  'MIGRATION.json',
-  'requirements.txt',
-  'prep_engine/__init__.py',
-  'prep_engine/authoring.py',
-  'prep_engine/authoring_models.py',
-  'prep_engine/bounded_io.py',
-  'prep_engine/credential_policy.py',
-  'prep_engine/io.py',
-  'prep_engine/logging.py',
-  'prep_engine/schema.py',
-  'prep_engine/value_contracts.py',
-  'prep_engine/tableau_prep_flow.schema.yaml',
-] as const;
-
-/** Stage only the reviewed source/schema closure, never caches or native binaries. */
-export function stagePrepAuthoringAssets(source: string, destination: string): void {
-  for (const relative of prepAuthoringAssets) {
-    const target = join(destination, relative);
-    mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(join(source, relative), target);
-  }
+/** Bundle the reviewed Node compiler, schema and npm dependencies; no Python assets. */
+export async function buildPrepAuthoringWorker(outfile: string): Promise<void> {
+  const result = await build({
+    entryPoints: ['./src/tools/web/prepAuthoring/authoringWorker.ts'],
+    outfile,
+    bundle: true,
+    platform: 'node',
+    target: 'node22',
+    format: 'cjs',
+    packages: 'bundle',
+    sourcemap: false,
+    metafile: true,
+    logLevel: 'silent',
+  });
+  if (Object.keys(result.metafile!.inputs).some((path) => /\.(py|pyc|jar|exe|dll)$/i.test(path)))
+    throw new Error('Unexpected native/Python asset in Prep authoring worker.');
 }

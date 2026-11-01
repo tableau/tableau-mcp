@@ -1,46 +1,26 @@
-import {
-  cpSync,
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 
-import { prepAuthoringAssets, stagePrepAuthoringAssets } from './prepAuthoringAssets.js';
+import { buildPrepAuthoringWorker } from './prepAuthoringAssets.js';
 
-function cleanOwnedDirectory(root: string): void {
-  const rel = relative(resolve(tmpdir()), resolve(root));
-  if (!rel.startsWith('prep-assets-') || rel.includes(sep))
-    throw new Error('Unexpected temporary directory.');
-  rmSync(root, { recursive: true });
-}
-
-describe('Prep authoring runtime asset staging', () => {
-  it('ships the matching compiler/model/schema closure without caches or native binaries', () => {
+describe('Prep authoring Node worker packaging', () => {
+  it('bundles one self-contained Node runtime without Python assets', async () => {
     const root = mkdtempSync(join(tmpdir(), 'prep-assets-'));
+    const rel = relative(resolve(tmpdir()), resolve(root));
+    if (!rel.startsWith('prep-assets-') || rel.includes(sep))
+      throw new Error('Unexpected temporary directory.');
     try {
-      const source = join(root, 'source'),
-        target = join(root, 'target');
-      cpSync(resolve('src/tools/web/prepAuthoring/engine'), source, { recursive: true });
-      writeFileSync(join(source, 'unexpected.jar'), 'not a shipped asset');
-      writeFileSync(join(source, 'cached.pyc'), 'not a shipped asset');
-      stagePrepAuthoringAssets(source, target);
-      expect(existsSync(join(target, 'unexpected.jar'))).toBe(false);
-      expect(existsSync(join(target, 'cached.pyc'))).toBe(false);
-      for (const path of prepAuthoringAssets)
-        expect(readFileSync(join(target, path))).toEqual(readFileSync(join(source, path)));
-      expect(readdirSync(target).sort()).toEqual([
-        'MIGRATION.json',
-        'prep_engine',
-        'requirements.txt',
-        'runner.py',
-      ]);
+      const output = join(root, 'prep-authoring-worker.cjs');
+      await buildPrepAuthoringWorker(output);
+      expect(readdirSync(root)).toEqual(['prep-authoring-worker.cjs']);
+      const text = readFileSync(output, 'utf8');
+      expect(text).toContain('tableau-prep-flow/v1');
+      expect(text).not.toContain('runner.py');
+      expect(text).not.toContain('child_process');
+      expect(text).not.toContain('PREP_AUTHORING_PYTHON');
     } finally {
-      cleanOwnedDirectory(root);
+      rmSync(root, { recursive: true });
     }
   });
 });
