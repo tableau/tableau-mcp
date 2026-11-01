@@ -164,7 +164,7 @@ export function relationSelection(
 ): string {
   const selection = identitySelection(relation.target);
   const value = relation.connection
-    ? `${alias}: ${relation.field}(first: ${pageSize}${relation.permissionMode === false ? '' : ', permissionMode: FILTER'}${after ? `, after: ${JSON.stringify(after)}` : ''}) { nodes { ${selection} } pageInfo { hasNextPage endCursor } }`
+    ? `${alias}: ${relation.field}(first: ${pageSize}${relation.permissionMode === false ? '' : ', permissionMode: FILTER_RESULTS'}${after ? `, after: ${JSON.stringify(after)}` : ''}) { nodes { ${selection} } pageInfo { hasNextPage endCursor } }`
     : `${alias}: ${relation.field} { ${selection} }`;
   const interfaces: Record<string, string> = {
     FlowColumnInputField: 'FlowInputField',
@@ -186,8 +186,9 @@ export function metadataQuery(
   after?: string,
 ): string {
   // This one published root has no permissionMode argument. Its values are
-  // discovery-only until re-fetched through an owning Flow's FILTER connection.
-  const permission = root === 'flowFieldInputFieldsConnection' ? '' : ', permissionMode: FILTER';
+  // discovery-only until re-fetched through an owning Flow's FILTER_RESULTS connection.
+  const permission =
+    root === 'flowFieldInputFieldsConnection' ? '' : ', permissionMode: FILTER_RESULTS';
   return `query dataLineage { asset: ${root}(filter: { ${filter} }, first: ${first}${permission}${after ? `, after: ${JSON.stringify(after)}` : ''}) { nodes { ${selection} } pageInfo { hasNextPage endCursor } } }`;
 }
 
@@ -195,6 +196,6 @@ export function prepInputVisibilityQuery(flowId: string, inputId: string): strin
   return metadataQuery(
     'flowsConnection',
     `id: ${JSON.stringify(flowId)}`,
-    `${identitySelection('flow')} r0: inputFieldsConnection(filter: { id: ${JSON.stringify(inputId)} }, first: 1, permissionMode: FILTER) { nodes { ${identitySelection('flow-input-field')} } pageInfo { hasNextPage endCursor } }`,
+    `${identitySelection('flow')} r0: inputFieldsConnection(filter: { id: ${JSON.stringify(inputId)} }, first: 1, permissionMode: FILTER_RESULTS) { nodes { ${identitySelection('flow-input-field')} } pageInfo { hasNextPage endCursor } }`,
   );
 }

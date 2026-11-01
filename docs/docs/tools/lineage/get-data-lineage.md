@@ -35,7 +35,7 @@ candidates with their Metadata API IDs and table qualifications. It never choose
 | `flow-input-field`, `flow-output-field`, `flow-output-step` | Opaque Metadata API `id`                                                                         |
 | `prep-step`                                                 | `flowLuid` and document `stepId`                                                                 |
 | `prep-field`                                                | `flowLuid`, `stepId`, output field `name`; add `namespace` for a Group with several output ports |
-| `local-flow`                                                | Absolute `.tfl`/`.tflx` `path`; optional `at` selects an exact local step or output field |
+| `local-flow`                                                | Absolute `.tfl`/`.tflx` `path`; optional `at` selects an exact local step or output field        |
 
 Metadata IDs, document step IDs and REST LUIDs are distinct namespaces. Returned graph `id` values
 identify nodes in this response; use `metadataId`, `luid` or `stepId` for the corresponding source.
@@ -96,8 +96,8 @@ because this read-only lineage analyzer does not consume them. Full JSON equalit
 The API object corresponds to the native `flow` document, not a package-reader envelope containing
 `flow`, `displaySettings` and `maestroMetadata`. Unknown API formats produce
 `PREP_DOCUMENT_FORMAT_UNSUPPORTED`; wrappers are not guessed. This implementation uses Flow Document
-API for published flows. Local files use the bounded native package reader. The comparison does not establish every possible node type or
-future release's format.
+API for published flows. Local files use the bounded native package reader. The comparison does not
+establish every possible node type or future release's format.
 
 ## Local TFL and TFLX files
 
@@ -117,13 +117,13 @@ server/auth configuration is still required to start the existing web MCP server
 }
 ```
 
-Omit `at` to inspect the whole saved file, or use `{"type":"step","stepId":"clean-step-id"}`
-for step topology. A field origin refers to that step's output; supply `namespace` when it has
-multiple output ports. A step topology link does not prove that every column is used by the step.
+Omit `at` to inspect the whole saved file, or use `{"type":"step","stepId":"clean-step-id"}` for
+step topology. A field origin refers to that step's output; supply `namespace` when it has multiple
+output ports. A step topology link does not prove that every column is used by the step.
 
 Only unchanged regular files within canonical configured roots are accepted. Network paths,
-symlinks, hardlinks, unsupported archives and oversized input are rejected. Reads are bounded to
-32 MiB per file and 16 MiB of native JSON, with bounded nested packages, counts and static analysis.
+symlinks, hardlinks, unsupported archives and oversized input are rejected. Reads are bounded to 32
+MiB per file and 16 MiB of native JSON, with bounded nested packages, counts and static analysis.
 Archives are inspected in memory without extracting embedded data or writing the source. File
 fingerprints namespace local graph identities; an embedded ID or matching name does not establish
 identity with a published flow.
@@ -172,9 +172,9 @@ a data-source-ID ceiling.
 
 The published `flowFieldInputFieldsConnection` root and reverse field-input relationship do not
 accept `permissionMode`. Such discovery results are never returned directly. Each input is
-re-fetched through its owning Flow's `inputFieldsConnection` with `FILTER`, and its owners are
-checked again before output. Unconfirmed inputs are omitted with a warning. When this exception is
-used, `coverage.permissionMode` is `FILTER_WITH_VERIFIED_PREP_INPUTS`.
+re-fetched through its owning Flow's `inputFieldsConnection` with `FILTER_RESULTS`, and its owners
+are checked again before output. Unconfirmed inputs are omitted with a warning. When this exception
+is used, `coverage.permissionMode` is `FILTER_WITH_VERIFIED_PREP_INPUTS`.
 
 Metadata can be missing because of permissions, indexing delays, unsupported/custom SQL or API
 availability. A missing or empty graph is **not evidence that a change is safe**. Coverage describes

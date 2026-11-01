@@ -3,6 +3,11 @@ import { z } from 'zod';
 import { analyzeLineageImpact } from '../../../tools/web/dataLineage/dataImpact.js';
 import { dataLineageParams, DataLineageResult, LineageOptions } from '../types/dataLineage.js';
 import { DataLineageTraversal, LineageWireNode } from './dataLineage.js';
+import {
+  metadataQuery,
+  prepInputVisibilityQuery,
+  relationSelection,
+} from './dataLineageQueries.js';
 
 const flowLuid = '11111111-1111-4111-8111-111111111111';
 const options = (values: Partial<LineageOptions> = {}): LineageOptions =>
@@ -87,6 +92,30 @@ async function traverse(
 }
 
 describe('Metadata data lineage traversal', () => {
+  it('uses the published PermissionMode enum for root, relation and visibility queries', () => {
+    // Tableau's public enum is FILTER_RESULTS; FILTER is rejected by GraphQL validation.
+    const queries = [
+      metadataQuery('flowsConnection', 'id: "f"', '__typename id'),
+      relationSelection(
+        {
+          field: 'inputFieldsConnection',
+          target: 'flow-input-field',
+          direction: 'upstream',
+          evidence: 'direct',
+          connection: true,
+        },
+        'r0',
+        25,
+      ),
+      prepInputVisibilityQuery('f', 'i'),
+    ];
+    for (const query of queries) {
+      const modes = [...query.matchAll(/permissionMode:\s*(\w+)/g)].map((match) => match[1]);
+      expect(modes.length).toBeGreaterThan(0);
+      expect(modes.every((mode) => mode === 'FILTER_RESULTS')).toBe(true);
+    }
+  });
+
   it('traces published datasource fields through a permitted Prep input/output to a dashboard', async () => {
     const flow = node('f', 'Flow', { luid: flowLuid });
     const input = node('i', 'FlowFieldInputField', { flow: { id: 'f', luid: flowLuid } });
@@ -334,7 +363,8 @@ describe('Metadata data lineage traversal', () => {
     expect(
       api.mock.calls.some(
         ([q]) =>
-          q.includes('flowFieldInputFieldsConnection') && !q.includes('permissionMode: FILTER'),
+          q.includes('flowFieldInputFieldsConnection') &&
+          !q.includes('permissionMode: FILTER_RESULTS'),
       ),
     ).toBe(true);
     expect(graph.nodes.map((n) => n.metadataId)).not.toContain('hidden');
@@ -358,7 +388,7 @@ describe('Metadata data lineage traversal', () => {
         ([q]) =>
           q.includes('asset: flowsConnection') &&
           q.includes(
-            'inputFieldsConnection(filter: { id: "i" }, first: 1, permissionMode: FILTER)',
+            'inputFieldsConnection(filter: { id: "i" }, first: 1, permissionMode: FILTER_RESULTS)',
           ),
       ),
     ).toBe(true);
