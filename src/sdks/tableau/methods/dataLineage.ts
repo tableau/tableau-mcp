@@ -101,7 +101,7 @@ export type LineageDependencies = {
 export const lineageLimitations = [
   'Results describe indexed, permission-visible metadata, not a proof that a change is safe. Indexing delays and unsupported/custom SQL can omit dependencies.',
   'Metadata downstream/upstream rollups are marked possible; their intermediate column or step paths are not inferred. Both-direction requests use separate upstream/downstream walks and do not fan out through shared ancestors.',
-  'Optional Prep details statically follow supported saved operations and namespaces. Catalog-field identity bindings, dynamic schemas, unsupported expressions and external/model execution remain unverified.',
+  'Optional Prep details statically follow supported saved operations and namespaces. Unmatched catalog-field identities, future dynamic schemas, unsupported expressions and external execution remain unverified; confirmed native-ID handoffs retain their evidence.',
   'Prep operation lists describe the owning document. Only supported field-version dependencies prove that the selected field uses an operation; unbound catalog/document mappings remain unknown.',
   'Container membership is terminal and does not imply that every field or sheet in that container depends on the source.',
   'Detailed Prep input/output settings are scoped to non-database files and published Tableau data sources. Provider-specific database connection and database-write settings are outside this iteration; catalog database-column lineage is separate.',

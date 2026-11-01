@@ -1,5 +1,6 @@
 import { LineageNode } from '../../../sdks/tableau/types/dataLineage.js';
 import { PrepFieldAnalysis } from './prepFieldLineage.js';
+import policies from './prepNodePolicies.json';
 
 /** fieldId is the published API's identifier internal to the owning Flow.
  * Exact native identifiers/qualified node identities establish a handoff;
@@ -44,6 +45,26 @@ export function prepCatalogBindings(
           return (nativeId ?? node.fieldId) === `${version.stepId}-${version.name}`;
         });
         if (qualified.length) candidates = qualified;
+        if (
+          !candidates.length &&
+          envelope &&
+          repeatedScope &&
+          analysis.schemaRequirements?.nodes.some(
+            (input) =>
+              input.nodeId === envelope[1] &&
+              (policies as Record<string, string>)[input.nodeType] === 'input',
+          )
+        ) {
+          // Input-local actions may rename or create a field before its exposed
+          // schema. Resolve the full native identity at that exact input output.
+          const scopedInputs = [...(analysis.outputs.get(envelope[1])?.values() ?? [])].flatMap(
+            (state) =>
+              [...state.fields.values()].filter(
+                (id) => nativeId === `${envelope[1]}-${versions.get(id)?.name}`,
+              ),
+          );
+          candidates = [...new Set([...candidates, ...scopedInputs])];
+        }
       } else {
         if (!node.stepId) return { catalog: node, reason: 'missing-output-step-id' };
         const outputs = analysis.outputs.get(node.stepId);

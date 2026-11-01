@@ -458,6 +458,44 @@ describe('native Flow fieldId handoff', () => {
     expect(bindings.slice(3).every((b) => !b.version)).toBe(true);
   });
 
+  it('resolves exact input-node identities after input-local renaming while rejecting a calculation-node input lookalike', () => {
+    const a = analyzePrepFields(
+      flow(
+        node(source, '.v2022_4_1.LoadExcel', {
+          fields: fields('Amount'),
+          actions: [
+            node('55555555-5555-4555-8555-555555555555', '.v1.RenameColumn', {
+              columnName: 'Amount',
+              rename: 'Net',
+            }),
+          ],
+        }),
+        node(calculation, '.v1.AddColumn', { columnName: 'Gross', expression: '[Net] + 1' }),
+      ),
+      luid,
+    );
+    const bindings = prepCatalogBindings(
+      [
+        {
+          id: 'input',
+          kind: 'flow-input-field',
+          flowLuid: luid,
+          fieldId: `${source}-${source}-Net`,
+        },
+        {
+          id: 'calc',
+          kind: 'flow-input-field',
+          flowLuid: luid,
+          fieldId: `${calculation}-${calculation}-Gross`,
+        },
+      ],
+      luid,
+      a,
+    );
+    expect(bindings[0].version).toBe(a.outputs.get(source)?.get('Default')?.fields.get('Net'));
+    expect(bindings[1].version).toBeUndefined();
+  });
+
   it('rejects name-only, wrong-output-step and foreign-flow lookalikes', () => {
     const a = analyzePrepFields(native(), luid);
     const rows = prepCatalogBindings(
