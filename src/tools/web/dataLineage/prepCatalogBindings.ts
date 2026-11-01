@@ -37,7 +37,7 @@ export function prepCatalogBindings(
       let absentFromInputSchema = false;
       if (node.kind === 'flow-input-field') {
         candidates = [...new Set([...identified, ...scoped])].filter((id) =>
-          ['input', 'input-union', 'generated-source-row-number'].includes(
+          ['input', 'input-union', 'generated-source-row-number', 'catalog-input'].includes(
             versions.get(id)?.operation ?? '',
           ),
         );

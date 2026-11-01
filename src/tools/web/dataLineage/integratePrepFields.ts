@@ -85,6 +85,7 @@ export function integratePrepFields(
     relationship: string,
     evidence: 'direct' | 'possible' | 'unknown',
     propagates: boolean,
+    provenance: 'flow-document' | 'metadata-api' = 'flow-document',
   ): boolean => {
     if (!included.has(from) || !included.has(to)) return false;
     const id = JSON.stringify([from, to, relationship]);
@@ -99,7 +100,7 @@ export function integratePrepFields(
       to,
       relationship,
       evidence,
-      provenance: 'flow-document',
+      provenance,
       propagates,
     });
     return true;
@@ -126,6 +127,9 @@ export function integratePrepFields(
         'native-flow-field-id',
         'direct',
         true,
+        analysis.nodes.find((node) => node.id === binding.version)?.operation === 'catalog-input'
+          ? 'metadata-api'
+          : 'flow-document',
       )
     ) {
       confirmed++;

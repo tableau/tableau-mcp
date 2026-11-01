@@ -49,7 +49,12 @@ export type PrepFieldAnalysis = {
     nodes: Array<{ nodeId: string; nodeType: string }>;
   };
   appliedSchemaObservations: number;
+  catalogInputsAdded: number;
 };
+
+// Internal, permission-checked Metadata input identities. These establish the
+// existence of individual fields, not a complete current input schema.
+export type PrepCatalogInput = { nodeId: string; name: string; fieldId: string };
 
 /** Static field versions over saved JSON. Port/name effects reuse the user's
  * established Prep schema contract. No Python runtime, native compiler, model,
@@ -59,6 +64,7 @@ export function analyzePrepFields(
   flowLuid: string,
   maxVersions = 5000,
   observations: PrepSchemaObservation[] = [],
+  catalogInputs: PrepCatalogInput[] = [],
 ): PrepFieldAnalysis {
   const result: PrepFieldAnalysis = {
     nodes: [],
@@ -68,7 +74,11 @@ export function analyzePrepFields(
     issues: [],
     truncated: false,
     appliedSchemaObservations: 0,
+    catalogInputsAdded: 0,
   };
+  const catalogByInput = new Map<string, PrepCatalogInput[]>();
+  for (const input of catalogInputs.slice(0, maxVersions))
+    catalogByInput.set(input.nodeId, [...(catalogByInput.get(input.nodeId) ?? []), input]);
   const byId = new Map<string, LineageNode>();
   const edgeIds = new Set<string>();
   let visits = 0;
@@ -881,6 +891,28 @@ export function analyzePrepFields(
           source.complete = false;
         }
       }
+      if (!observation)
+        for (const input of catalogByInput.get(String(node.id)) ?? []) {
+          if (source.fields.has(input.name)) continue;
+          const id = emit(
+            input.name,
+            `${path}/catalogInputFields`,
+            owner,
+            'catalog-input',
+            [],
+            true,
+            undefined,
+            text(node.id),
+          );
+          if (id) {
+            source.fields.set(input.name, id);
+            registerIdentity(id, input.fieldId);
+            result.catalogInputsAdded++;
+            // Catalog supplies this exact input field, not all current fields.
+            source.complete = false;
+            issue('catalog-input-schema-drift', path, undefined, 'unresolved');
+          }
+        }
       const restricted = object(node.restrictedFields);
       for (const [old, value] of Object.entries(restricted)) {
         const name = text(value),

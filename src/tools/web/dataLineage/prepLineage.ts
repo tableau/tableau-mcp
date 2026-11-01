@@ -6,7 +6,7 @@ import {
 } from '../../../sdks/tableau/types/dataLineage.js';
 import { FlowDocument } from '../../../sdks/tableau/types/flowDocument.js';
 import { integratePrepFields } from './integratePrepFields.js';
-import { analyzePrepFields } from './prepFieldLineage.js';
+import { analyzePrepCatalogFields } from './prepCatalogInputs.js';
 import { extractPrepOperations } from './prepOperations.js';
 
 /** Combine top-level step topology with allowlisted operation details. Local
@@ -48,11 +48,12 @@ export function addPrepTopology(
     document.nodes ?? {},
     Math.min(500, traversal.options.maxNodes * 5),
   );
-  const analysis = analyzePrepFields(
+  const analysis = analyzePrepCatalogFields(
     document,
     flow.luid ?? '',
     Math.min(10000, traversal.options.maxNodes * 20),
     observations,
+    graph.nodes,
   );
   if (flow.luid)
     (graph.prepDetails ??= []).push({
@@ -64,6 +65,7 @@ export function addPrepTopology(
         truncated: analysis.truncated,
         schemaRequirements: analysis.schemaRequirements,
         appliedSchemaObservations: analysis.appliedSchemaObservations,
+        ...(analysis.catalogInputsAdded ? { catalogInputsAdded: analysis.catalogInputsAdded } : {}),
       },
     });
   if (details.truncated) traversal.truncate('PREP_DETAIL_LIMIT');
@@ -155,9 +157,15 @@ export function addPrepTopology(
       const created = details.operations.filter(
         (op) => op.parentStepId === step.stepId && op.outputs.includes(internalSource.name),
       );
+      const ports = analysis.outputs.get(step.stepId!);
+      const state = internalSource.namespace
+        ? ports?.get(internalSource.namespace)
+        : ports?.size === 1
+          ? [...ports.values()][0]
+          : undefined;
       const matches = declared.length
         ? declared
-        : created.length === 1
+        : created.length === 1 || state?.fields.has(internalSource.name)
           ? [{ name: internalSource.name }]
           : [];
       if (matches.length === 1) {

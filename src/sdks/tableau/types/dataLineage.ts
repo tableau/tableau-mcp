@@ -244,6 +244,7 @@ export type DataLineageResult = {
         nodes: Array<{ nodeId: string; nodeType: string }>;
       };
       appliedSchemaObservations?: number;
+      catalogInputsAdded?: number;
     };
     operations: Array<{
       path: string[];

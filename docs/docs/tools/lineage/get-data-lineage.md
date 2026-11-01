@@ -259,11 +259,18 @@ a join key. Graph nodes can include context; use the explicit `impacts` list fro
 [Analyze Data Impact](analyze-data-impact.md) when deciding which targets have a path from the
 proposed change.
 
-`prepDetails.fieldAnalysis.catalogBindings.unresolvedReasons` distinguishes
-`native-input-field-absent-from-saved-schema`: the catalog's exact input-node identity names a field
-absent from that node's resolved saved schema. Check saved-reference issues and reconcile the source
-schema or flow definition before completing the field journey. No missing field version is
-fabricated; unavailable schemas retain the generic unresolved-identity reason.
+Saved input `fields` can be an outdated cache. For an already-permitted catalog input with an exact
+native input-node-qualified `fieldId`, the analyzer can add the individually indexed field and
+follow its explicit processing references. `catalogInputsAdded` records these additions and
+`catalog-input-schema-drift` records that the full current input schema remains unknown. Catalog
+captions never establish identity. Input-local calculations/renames are resolved first, complete
+operator observations are not overridden, and incomplete/ambiguous mappings remain unresolved.
+
+`prepDetails.fieldAnalysis.catalogBindings.unresolvedReasons` can still report
+`native-input-field-absent-from-saved-schema` when no supported catalog recovery is available.
+Absence from saved declarations alone does not establish absence from the current file or a broken
+published Flow. Full wildcard membership requires a complete current schema; individually indexed
+fields do not establish that completeness.
 
 ## Boundaries and limitations
 
