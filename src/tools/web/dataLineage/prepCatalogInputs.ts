@@ -1,4 +1,5 @@
 import { LineageNode, PrepSchemaObservation } from '../../../sdks/tableau/types/dataLineage.js';
+import { PrepScriptContext } from '../../../sdks/tableau/types/prepScript.js';
 import { prepCatalogBindings } from './prepCatalogBindings.js';
 import { analyzePrepFields, PrepCatalogInput, PrepFieldAnalysis } from './prepFieldLineage.js';
 import policies from './prepNodePolicies.json';
@@ -17,8 +18,9 @@ export function analyzePrepCatalogFields(
   maxVersions: number,
   observations: PrepSchemaObservation[],
   catalog: LineageNode[],
+  scriptContext?: PrepScriptContext,
 ): PrepFieldAnalysis {
-  const baseline = analyzePrepFields(flow, flowLuid, maxVersions, observations);
+  const baseline = analyzePrepFields(flow, flowLuid, maxVersions, observations, [], scriptContext);
   if (baseline.truncated) return baseline;
   const inputs = new Set(
     baseline.schemaRequirements?.nodes
@@ -68,6 +70,13 @@ export function analyzePrepCatalogFields(
     if (additions.size >= maxVersions) break;
   }
   return additions.size
-    ? analyzePrepFields(flow, flowLuid, maxVersions, observations, [...additions.values()])
+    ? analyzePrepFields(
+        flow,
+        flowLuid,
+        maxVersions,
+        observations,
+        [...additions.values()],
+        scriptContext,
+      )
     : baseline;
 }

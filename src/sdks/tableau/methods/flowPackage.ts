@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 
 import { FlowDocument, flowDocumentSchema } from '../types/flowDocument.js';
+import { PrepScriptContext } from '../types/prepScript.js';
+import { analyzePrepScript, MAX_PREP_SCRIPT_BYTES } from './prepScriptAnalysis.js';
+import { packagedScriptReferences } from './prepScriptBindings.js';
 
 export const MAX_FLOW_FILE_BYTES = 32 * 1024 * 1024;
 export const MAX_FLOW_JSON_BYTES = 16 * 1024 * 1024;
@@ -15,6 +18,7 @@ export class FlowPackageError extends Error {
 export type FlowPackageDocument = {
   document: FlowDocument;
   source: { kind: 'native-flow-file'; sha256: string; byteLength: number };
+  scriptContext?: PrepScriptContext;
 };
 
 type Entry = {
@@ -41,7 +45,10 @@ function crc32(bytes: Buffer): number {
 
 /** Read a single native member from ZIP32. No files are extracted, no embedded
  * rows are decoded, and no script or external program is executed. */
-function nativeJson(bytes: Buffer, depth: number): Buffer {
+function nativeJson(
+  bytes: Buffer,
+  depth: number,
+): { json: Buffer; member?: (name: string, limit: number) => Buffer | undefined } {
   if (depth > 2) return fail('LIMIT');
   const prefix = bytes
     .subarray(0, 256)
@@ -50,7 +57,7 @@ function nativeJson(bytes: Buffer, depth: number): Buffer {
     .trimStart();
   if (prefix.startsWith('{')) {
     if (bytes.length > MAX_FLOW_JSON_BYTES) return fail('LIMIT');
-    return bytes;
+    return { json: bytes };
   }
   let end = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--)
@@ -100,36 +107,44 @@ function nativeJson(bytes: Buffer, depth: number): Buffer {
   const nested = entries.filter((entry) => /\.tfl$/i.test(entry.name));
   const candidates = flow.length ? flow : nested;
   if (candidates.length !== 1) return fail('UNSUPPORTED');
-  const entry = candidates[0];
-  if (entry.flags & 1 || ![0, 8].includes(entry.method)) return fail('UNSUPPORTED');
-  if (entry.size > MAX_FLOW_JSON_BYTES || entry.compressed > MAX_FLOW_FILE_BYTES)
-    return fail('LIMIT');
-  const local = entry.offset;
-  if (local + 30 > central || bytes.readUInt32LE(local) !== 0x04034b50) return fail('INVALID');
-  const nameLength = bytes.readUInt16LE(local + 26),
-    extra = bytes.readUInt16LE(local + 28);
-  const start = local + 30 + nameLength + extra,
-    finish = start + entry.compressed;
-  if (
-    finish > central ||
-    start > central ||
-    bytes.readUInt16LE(local + 6) !== entry.flags ||
-    bytes.readUInt16LE(local + 8) !== entry.method ||
-    bytes.subarray(local + 30, local + 30 + nameLength).toString('utf8') !== entry.name
-  )
-    return fail('INVALID');
-  let content: Buffer;
-  try {
-    const compressed = bytes.subarray(start, finish);
-    content =
-      entry.method === 0
-        ? compressed
-        : inflateRawSync(compressed, { maxOutputLength: MAX_FLOW_JSON_BYTES });
-  } catch {
-    return fail('INVALID');
-  }
-  if (content.length !== entry.size || crc32(content) !== entry.crc) return fail('INVALID');
-  return flow.length ? content : nativeJson(content, depth + 1);
+  const readEntry = (entry: Entry, limit: number): Buffer => {
+    if (entry.flags & 1 || ![0, 8].includes(entry.method)) return fail('UNSUPPORTED');
+    if (entry.size > limit || entry.compressed > MAX_FLOW_FILE_BYTES) return fail('LIMIT');
+    const local = entry.offset;
+    if (local + 30 > central || bytes.readUInt32LE(local) !== 0x04034b50) return fail('INVALID');
+    const nameLength = bytes.readUInt16LE(local + 26),
+      extra = bytes.readUInt16LE(local + 28);
+    const start = local + 30 + nameLength + extra,
+      finish = start + entry.compressed;
+    if (
+      finish > central ||
+      start > central ||
+      bytes.readUInt16LE(local + 6) !== entry.flags ||
+      bytes.readUInt16LE(local + 8) !== entry.method ||
+      bytes.subarray(local + 30, local + 30 + nameLength).toString('utf8') !== entry.name
+    )
+      return fail('INVALID');
+    let content: Buffer;
+    try {
+      const compressed = bytes.subarray(start, finish);
+      content =
+        entry.method === 0 ? compressed : inflateRawSync(compressed, { maxOutputLength: limit });
+    } catch {
+      return fail('INVALID');
+    }
+    if (content.length !== entry.size || crc32(content) !== entry.crc) return fail('INVALID');
+    return content;
+  };
+  const content = readEntry(candidates[0], MAX_FLOW_JSON_BYTES);
+  return flow.length
+    ? {
+        json: content,
+        member: (name, limit) => {
+          const selected = entries.filter((entry) => entry.name === name);
+          return selected.length === 1 ? readEntry(selected[0], limit) : undefined;
+        },
+      }
+    : nativeJson(content, depth + 1);
 }
 
 /** Decode only the native `flow` JSON, retaining a hash of the original file
@@ -137,8 +152,10 @@ function nativeJson(bytes: Buffer, depth: number): Buffer {
 export function parseFlowPackage(content: Buffer): FlowPackageDocument {
   if (content.length > MAX_FLOW_FILE_BYTES) return fail('LIMIT');
   let document: FlowDocument;
+  let native: ReturnType<typeof nativeJson>;
   try {
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(nativeJson(content, 0));
+    native = nativeJson(content, 0);
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(native.json);
     const value = JSON.parse(text);
     if (!value?.nodes || typeof value.nodes !== 'object' || Array.isArray(value.nodes))
       return fail('UNSUPPORTED');
@@ -147,11 +164,52 @@ export function parseFlowPackage(content: Buffer): FlowPackageDocument {
     if (error instanceof FlowPackageError) throw error;
     return fail('INVALID');
   }
+  const sha256 = createHash('sha256').update(content).digest('hex');
+  const references = packagedScriptReferences(document);
+  const scriptContext: PrepScriptContext = { scripts: {}, packageSha256: sha256, unavailable: {} };
+  let scriptBytes = 0;
+  for (const ref of references) {
+    try {
+      if (scriptBytes >= 8 * MAX_PREP_SCRIPT_BYTES) {
+        Object.defineProperty(scriptContext.unavailable!, ref.nodeId, {
+          value: 'limited',
+          enumerable: true,
+        });
+        continue;
+      }
+      const script = native.member?.(ref.entry, MAX_PREP_SCRIPT_BYTES);
+      if (!script) {
+        Object.defineProperty(scriptContext.unavailable!, ref.nodeId, {
+          value: 'missing',
+          enumerable: true,
+        });
+        continue;
+      }
+      scriptBytes += script.length;
+      if (scriptBytes > 8 * MAX_PREP_SCRIPT_BYTES) {
+        Object.defineProperty(scriptContext.unavailable!, ref.nodeId, {
+          value: 'limited',
+          enumerable: true,
+        });
+        continue;
+      }
+      Object.defineProperty(scriptContext.scripts, ref.nodeId, {
+        value: analyzePrepScript(script, ref.language),
+        enumerable: true,
+      });
+    } catch (error) {
+      Object.defineProperty(scriptContext.unavailable!, ref.nodeId, {
+        value: error instanceof FlowPackageError && error.code === 'LIMIT' ? 'limited' : 'invalid',
+        enumerable: true,
+      });
+    }
+  }
   return {
     document,
+    ...(references.length ? { scriptContext } : {}),
     source: {
       kind: 'native-flow-file',
-      sha256: createHash('sha256').update(content).digest('hex'),
+      sha256,
       byteLength: content.length,
     },
   };

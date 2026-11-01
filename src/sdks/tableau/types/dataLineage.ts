@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { luidSchema } from '../../routeSafety/ids.js';
+import { PrepExternalStep } from './prepScript.js';
 
 const metadataId = z.string().min(1).max(2048).describe('Opaque Metadata API ID, not a REST LUID.');
 const text = z.string().min(1).max(1024);
@@ -185,6 +186,9 @@ export type LineageNode = {
   metadataId?: string;
   luid?: string;
   metadataType?: string;
+  originKind?: 'script' | 'prediction';
+  sourceSha256?: string;
+  dependencyStatus?: 'static' | 'candidate' | 'unknown';
   dataType?: string;
   formula?: string;
   stepId?: string;
@@ -241,11 +245,17 @@ export type DataLineageResult = {
       };
       schemaRequirements?: {
         documentSha256: string;
-        nodes: Array<{ nodeId: string; nodeType: string }>;
+        nodes: Array<{
+          nodeId: string;
+          nodeType: string;
+          scriptSourceSha256?: string;
+          expectedFields?: Array<{ name: string; type: string }>;
+        }>;
       };
       appliedSchemaObservations?: number;
       catalogInputsAdded?: number;
     };
+    externalSteps?: PrepExternalStep[];
     operations: Array<{
       path: string[];
       parentStepId: string;

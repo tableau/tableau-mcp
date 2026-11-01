@@ -1,0 +1,490 @@
+[
+  {
+    "name": "python-literal",
+    "language": "python",
+    "sourceBase64": "aW1wb3J0IHBhbmRhcyBhcyBwZAoKZGVmIHRyYW5zZm9ybShkYXRhKToKICAgIGRhdGFbJ1RvdGFsJ10gPSBkYXRhWydQcmljZSddICogZGF0YVsnUXR5J10KICAgIHJldHVybiBkYXRhCgpkZWYgZ2V0X291dHB1dF9zY2hlbWEoKToKICAgIHJldHVybiBwZC5EYXRhRnJhbWUoeydUb3RhbCc6IHByZXBfZGVjaW1hbCgpfSkK",
+    "expected": {
+      "sourceSha256": "bb655bbb3b2791d5aeb570e478fcbeaadd2d723ace8056f7636d6c652b096bb0",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "r-literal",
+    "language": "r",
+    "sourceBase64": "dHJhbnNmb3JtIDwtIGZ1bmN0aW9uKGRhdGEpIHsKIGRhdGEkVG90YWwgPC0gZGF0YSRQcmljZSAqIGRhdGEkUXR5CiByZXR1cm4oZGF0YSkKfQpnZXRPdXRwdXRTY2hlbWEgPC0gZnVuY3Rpb24oKSB7CiByZXR1cm4oZGF0YS5mcmFtZShUb3RhbD1wcmVwX2RlY2ltYWwoKSkpCn0K",
+    "expected": {
+      "sourceSha256": "d35b0abe672b99bcf05e27a1ba28894d29f5eba95c0d1330344c52bdc5796beb",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-sequential",
+    "language": "python",
+    "sourceBase64": "ZGVmIHRyYW5zZm9ybShkYXRhKToKIGRhdGFbJ1ByaWNlJ10gPSBkYXRhWydRdHknXQogZGF0YVsnVG90YWwnXSA9IGRhdGFbJ1ByaWNlJ10gKiAyCiByZXR1cm4gZGF0YQo=",
+    "expected": {
+      "sourceSha256": "c8a10b2092cb21224a52185ad2e7abd2a9f82791adf4f555db543877261c4e5b",
+      "fields": {},
+      "schemaStatus": "missing",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Qty"
+        ],
+        "outputs": {
+          "Price": {
+            "inputs": [
+              "Qty"
+            ],
+            "status": "static"
+          },
+          "Total": {
+            "inputs": [
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-identity",
+    "language": "python",
+    "sourceBase64": "ZGVmIHRyYW5zZm9ybShkYXRhKToKIHJldHVybiBkYXRhCg==",
+    "expected": {
+      "sourceSha256": "7b77af0341ff199965959df6b21db075bc22c77f63a84d3b3090e4262d6191b6",
+      "fields": {},
+      "schemaStatus": "missing",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [],
+        "outputs": {},
+        "returnsInput": true,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "r-identity",
+    "language": "r",
+    "sourceBase64": "dHJhbnNmb3JtIDwtIGZ1bmN0aW9uKGRhdGEpIHsgcmV0dXJuKGRhdGEpIH0=",
+    "expected": {
+      "sourceSha256": "82642f7ae8cf90f11f6d4da1d2115020962389e824a2fb1331870ffbd511c768",
+      "fields": {},
+      "schemaStatus": "missing",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [],
+        "outputs": {},
+        "returnsInput": true,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-return-frame",
+    "language": "python",
+    "sourceBase64": "ZGVmIHRyYW5zZm9ybShkYXRhKToKIHJldHVybiBwZC5EYXRhRnJhbWUoeydUb3RhbCc6IGRhdGFbJ1ByaWNlJ10gKiBkYXRhWydRdHknXSwgJ0NvbnN0YW50JzogMX0pCg==",
+    "expected": {
+      "sourceSha256": "c0d2e05f38493e759f9203c25fab000a050f68e4c94437f32a7eea243353125c",
+      "fields": {},
+      "schemaStatus": "missing",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          },
+          "Constant": {
+            "inputs": [],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-call-candidate",
+    "language": "python",
+    "sourceBase64": "aW1wb3J0IHBhbmRhcyBhcyBwZAoKZGVmIHRyYW5zZm9ybShkYXRhKToKICAgIGRhdGFbJ1RvdGFsJ10gPSByZW1vdGUoZGF0YVsnUHJpY2UnXSkKICAgIHJldHVybiBkYXRhCgpkZWYgZ2V0X291dHB1dF9zY2hlbWEoKToKICAgIHJldHVybiBwZC5EYXRhRnJhbWUoeydUb3RhbCc6IHByZXBfZGVjaW1hbCgpfSkK",
+    "expected": {
+      "sourceSha256": "56285db21b793c9e1ae9de564070c2144a05d70781a1e9cade2e0d7b8fb186c7",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price"
+            ],
+            "status": "candidate"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-dynamic-schema",
+    "language": "python",
+    "sourceBase64": "ZGVmIGdldF9vdXRwdXRfc2NoZW1hKCk6CiByZXR1cm4gcmVtb3RlX3NjaGVtYSgpCg==",
+    "expected": {
+      "sourceSha256": "eadb9477040be5605ed96e210189d40d43ace602a62c87e2c8f9e1085c1d21a6",
+      "fields": {},
+      "schemaStatus": "dynamic",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  },
+  {
+    "name": "r-name-repair",
+    "language": "r",
+    "sourceBase64": "Z2V0T3V0cHV0U2NoZW1hIDwtIGZ1bmN0aW9uKCkgeyByZXR1cm4oZGF0YS5mcmFtZShgTmFtZSB3aXRoIHNwYWNlYD1wcmVwX3N0cmluZygpKSkgfQ==",
+    "expected": {
+      "sourceSha256": "a3716bb3a765d7e3f2b4eb6431b1a69b714aa78c9bb934c1aad853607fd1b582",
+      "fields": {},
+      "schemaStatus": "dynamic",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  },
+  {
+    "name": "r-literal-names",
+    "language": "r",
+    "sourceBase64": "Z2V0T3V0cHV0U2NoZW1hIDwtIGZ1bmN0aW9uKCkgeyByZXR1cm4oZGF0YS5mcmFtZShgTmFtZSB3aXRoIHNwYWNlYD1wcmVwX3N0cmluZygpLCBjaGVjay5uYW1lcz1GQUxTRSkpIH0=",
+    "expected": {
+      "sourceSha256": "cff8a4db828f16e700631a06072e825ccb0a1e0fac830afa353019b9ce80b03a",
+      "fields": {
+        "Name with space": "string"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  },
+  {
+    "name": "python-all-types",
+    "language": "python",
+    "sourceBase64": "ZGVmIGdldF9vdXRwdXRfc2NoZW1hKCk6CiByZXR1cm4gcGQuRGF0YUZyYW1lKHsnU3RyaW5nJzpwcmVwX3N0cmluZygpLCdJbnQnOnByZXBfaW50KCksJ1JlYWwnOnByZXBfZGVjaW1hbCgpLCdCb29sJzpwcmVwX2Jvb2woKSwnRGF0ZSc6cHJlcF9kYXRlKCksJ0RhdGV0aW1lJzpwcmVwX2RhdGV0aW1lKCl9KQo=",
+    "expected": {
+      "sourceSha256": "98b45cc43969f11e1417290a1475d6340d8d723f2f1bc2c009955d1a58813c65",
+      "fields": {
+        "String": "string",
+        "Int": "integer",
+        "Real": "real",
+        "Bool": "boolean",
+        "Date": "date",
+        "Datetime": "datetime"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  },
+  {
+    "name": "r-all-types",
+    "language": "r",
+    "sourceBase64": "Z2V0T3V0cHV0U2NoZW1hIDwtIGZ1bmN0aW9uKCkgeyByZXR1cm4oZGF0YS5mcmFtZShTdHJpbmc9cHJlcF9zdHJpbmcoKSxJbnQ9cHJlcF9pbnQoKSxSZWFsPXByZXBfZGVjaW1hbCgpLEJvb2w9cHJlcF9ib29sKCksRGF0ZT1wcmVwX2RhdGUoKSxEYXRldGltZT1wcmVwX2RhdGV0aW1lKCksc3RyaW5nc0FzRmFjdG9ycz1GQUxTRSkpIH0=",
+    "expected": {
+      "sourceSha256": "c1ddf2ef0991ba7ded4f7220c0ccf8e5949eaa485beda21d3bf21cd6d8b53f5a",
+      "fields": {
+        "String": "string",
+        "Int": "integer",
+        "Real": "real",
+        "Bool": "boolean",
+        "Date": "date",
+        "Datetime": "datetime"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  },
+  {
+    "name": "python-literal-decoy",
+    "language": "python",
+    "sourceBase64": "aW1wb3J0IHBhbmRhcyBhcyBwZAoKZGVmIHRyYW5zZm9ybShkYXRhKToKICAgIG5vdGUgPSAiZGF0YVsnT3RoZXInXSIKICAgIGRhdGFbJ1RvdGFsJ10gPSBkYXRhWydQcmljZSddICogZGF0YVsnUXR5J10KICAgIHJldHVybiBkYXRhCgpkZWYgZ2V0X291dHB1dF9zY2hlbWEoKToKICAgIHJldHVybiBwZC5EYXRhRnJhbWUoeydUb3RhbCc6IHByZXBfZGVjaW1hbCgpfSkK",
+    "expected": {
+      "sourceSha256": "2cf342bf4348a9975e0504aa2ff1452154a5550d2ad52ec8cfa87a6b5d4129be",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-getter-isolation",
+    "language": "python",
+    "sourceBase64": "ZGVmIGhlbHBlcihkYXRhKToKIHJldHVybiBwZC5EYXRhRnJhbWUoeydVbnVzZWQnOiAxfSkKaW1wb3J0IHBhbmRhcyBhcyBwZAoKZGVmIHRyYW5zZm9ybShkYXRhKToKICAgIGRhdGFbJ1RvdGFsJ10gPSBkYXRhWydQcmljZSddICogZGF0YVsnUXR5J10KICAgIHJldHVybiBkYXRhCgpkZWYgZ2V0X291dHB1dF9zY2hlbWEoKToKICAgIHJldHVybiBwZC5EYXRhRnJhbWUoeydUb3RhbCc6IHByZXBfZGVjaW1hbCgpfSkK",
+    "expected": {
+      "sourceSha256": "8b5ac1b5589995c2c8ce82fc53f87adee3a50870b20a60c8149ac7672eca8b62",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-no-getter",
+    "language": "python",
+    "sourceBase64": "aW1wb3J0IHBhbmRhcyBhcyBwZAoKZGVmIHRyYW5zZm9ybShkYXRhKToKICAgIGRhdGFbJ1RvdGFsJ10gPSBkYXRhWydQcmljZSddICogZGF0YVsnUXR5J10KICAgIHJldHVybiBkYXRhCgo=",
+    "expected": {
+      "sourceSha256": "c5e2cc63c7c8afd7b13faf72b5ce6909a0fb33ebe03704cbb8fcac8a0f71bf8f",
+      "fields": {},
+      "schemaStatus": "missing",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-dynamic-selector",
+    "language": "python",
+    "sourceBase64": "aW1wb3J0IHBhbmRhcyBhcyBwZAoKZGVmIHRyYW5zZm9ybShkYXRhKToKICAgIGRhdGFbJ1RvdGFsJ10gPSBkYXRhW2NvbHVtbl0KICAgIHJldHVybiBkYXRhCgpkZWYgZ2V0X291dHB1dF9zY2hlbWEoKToKICAgIHJldHVybiBwZC5EYXRhRnJhbWUoeydUb3RhbCc6IHByZXBfZGVjaW1hbCgpfSkK",
+    "expected": {
+      "sourceSha256": "1abda4760c37eb1ba0212d5626d99b5afaa432274260fe097426d6a49b4aec1a",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [],
+        "outputs": {
+          "Total": {
+            "inputs": [],
+            "status": "candidate"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "r-double-selector",
+    "language": "r",
+    "sourceBase64": "dHJhbnNmb3JtIDwtIGZ1bmN0aW9uKGRhdGEpIHsKIGRhdGEkVG90YWwgPC0gZGF0YVtbJ1ByaWNlJ11dICogZGF0YVtbJ1F0eSddXQogcmV0dXJuKGRhdGEpCn0KZ2V0T3V0cHV0U2NoZW1hIDwtIGZ1bmN0aW9uKCkgewogcmV0dXJuKGRhdGEuZnJhbWUoVG90YWw9cHJlcF9kZWNpbWFsKCkpKQp9Cg==",
+    "expected": {
+      "sourceSha256": "ce7538f1b1424eae052b9924c7115cd8de37390a0467d2d4ffbda1d29ad566f7",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "r-control-flow",
+    "language": "r",
+    "sourceBase64": "dHJhbnNmb3JtIDwtIGZ1bmN0aW9uKGRhdGEpIHsKIGlmKFRSVUUpIHt9CiBkYXRhJFRvdGFsIDwtIGRhdGEkUHJpY2UgKiBkYXRhJFF0eQogcmV0dXJuKGRhdGEpCn0KZ2V0T3V0cHV0U2NoZW1hIDwtIGZ1bmN0aW9uKCkgewogcmV0dXJuKGRhdGEuZnJhbWUoVG90YWw9cHJlcF9kZWNpbWFsKCkpKQp9Cg==",
+    "expected": {
+      "sourceSha256": "58091649c74a17df51698893c922f59234a6e1d54ff0cc488c1a5e6a57530701",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "candidate"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "dynamic"
+      }
+    }
+  },
+  {
+    "name": "python-duplicate-schema",
+    "language": "python",
+    "sourceBase64": "ZGVmIGdldF9vdXRwdXRfc2NoZW1hKCk6CiByZXR1cm4gcGQuRGF0YUZyYW1lKHsnQSc6cHJlcF9pbnQoKSwnQSc6cHJlcF9zdHJpbmcoKX0pCg==",
+    "expected": {
+      "sourceSha256": "5ee6a84c07e139472c7054ba6ef29ed9716354b0423b90f92a357458a0326500",
+      "fields": {},
+      "schemaStatus": "dynamic",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  },
+  {
+    "name": "python-comment-decoy",
+    "language": "python",
+    "sourceBase64": "IyBnZXRfb3V0cHV0X3NjaGVtYSBEYXRhRnJhbWUoeydPdGhlcic6IHByZXBfaW50KCl9KQppbXBvcnQgcGFuZGFzIGFzIHBkCgpkZWYgdHJhbnNmb3JtKGRhdGEpOgogICAgZGF0YVsnVG90YWwnXSA9IGRhdGFbJ1ByaWNlJ10gKiBkYXRhWydRdHknXQogICAgcmV0dXJuIGRhdGEKCmRlZiBnZXRfb3V0cHV0X3NjaGVtYSgpOgogICAgcmV0dXJuIHBkLkRhdGFGcmFtZSh7J1RvdGFsJzogcHJlcF9kZWNpbWFsKCl9KQo=",
+    "expected": {
+      "sourceSha256": "3b2a884db8542ad855720dba8e7f98f4c6fdfc4b90fcc5e007a1e943486cf6e2",
+      "fields": {
+        "Total": "real"
+      },
+      "schemaStatus": "static-declaration",
+      "nativeExecutionVerified": false,
+      "transform": {
+        "inputFields": [
+          "Price",
+          "Qty"
+        ],
+        "outputs": {
+          "Total": {
+            "inputs": [
+              "Price",
+              "Qty"
+            ],
+            "status": "static"
+          }
+        },
+        "returnsInput": false,
+        "dependencyStatus": "partial-static"
+      }
+    }
+  },
+  {
+    "name": "python-invalid-utf8",
+    "language": "python",
+    "sourceBase64": "/w==",
+    "expected": {
+      "sourceSha256": "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89",
+      "fields": {},
+      "schemaStatus": "invalid-or-dynamic",
+      "nativeExecutionVerified": false,
+      "transform": null
+    }
+  }
+]

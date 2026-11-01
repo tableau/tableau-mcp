@@ -72,10 +72,20 @@ Only current operator-observed names and physical types are accepted; changed do
 duplicate fields and extra properties are rejected. The limits are 100 observations and 5,000 fields
 in total. Observations require the same document access as other Prep details.
 
-An observed script output is a creation boundary: downstream use can be traced, while arbitrary
-Python/R input-to-output logic still needs external dependency evidence. An output schema alone
-cannot prove that logic, and the tools execute no scripts or models. Future runtime column changes,
-missing saved members, unsupported versions and ambiguous native identifiers remain explicit.
+Script outputs are creation boundaries. For attached Python/R scripts, the analyzer reads literal
+`get_output_schema`/`getOutputSchema` declarations and explicit references in the selected function,
+including sequential assignments and supported identity returns. `prepDetails[].externalSteps`
+reports provided versus explicitly referenced inputs, output fields/types, safe settings, source
+hashes and schema/dependency status. Prediction details include saved model input mappings and native
+output names/types, including coordinated predictor/improvement value and Impact columns.
+
+Script edges remain `possible`, with `static`/`candidate` labels on the created field versions:
+non-executing analysis cannot prove arbitrary calls, dynamic selectors or model internals. An output
+schema alone does not prove input dependencies. Observations are bound to the document and any
+retrieved package/script bytes; changed attachments invalidate them even when flow JSON is unchanged.
+Observed versus declared schemas are compared without silently overriding complete observations.
+The tools execute no scripts or models. Future runtime column changes, missing saved members,
+unsupported versions and ambiguous native identifiers remain explicit.
 
 ## Content and external-asset usage
 
@@ -145,7 +155,7 @@ when `includePrepDetails=true`, a `prep-step`/`prep-field` origin needs its docu
 | `maxDepth` (Metadata traversal)                            |       5 |      12 |
 | `maxNodes` (returned graph, including Prep field versions) |     100 |     500 |
 | `maxEdges`                                                 |     300 |    2000 |
-| `maxRequests` (Metadata and document requests)             |      40 |     200 |
+| `maxRequests` (Metadata, document and attachment requests) |      40 |     200 |
 | `pageSize`                                                 |      25 |     100 |
 
 Resource authorization checks may make additional REST calls. Source lookup and relationship
@@ -193,8 +203,12 @@ because this read-only lineage analyzer does not consume them. Full JSON equalit
 The API object corresponds to the native `flow` document, not a package-reader envelope containing
 `flow`, `displaySettings` and `maestroMetadata`. Unknown API formats produce
 `PREP_DOCUMENT_FORMAT_UNSUPPORTED`; wrappers are not guessed. This implementation uses Flow Document
-API for published flows. Local files use the bounded native package reader. The comparison does not
-establish every possible node type or future release's format.
+API for published flows. When that document references an attached Python/R script, the tool may
+also download the owning Flow through the standard REST content endpoint, within the request budget
+and after another owner check. Only exact matching node, language, packaged path and selected
+function identities attach script metadata to the API document. A missing/denied package preserves
+catalog/document results with explicit gaps. Local files use the bounded native package reader. The
+comparison does not establish every possible node type or future release's format.
 
 ## Local TFL and TFLX files
 
@@ -221,7 +235,10 @@ output ports. A step topology link does not prove that every column is used by t
 Only unchanged regular files within canonical configured roots are accepted. Network paths,
 symlinks, hardlinks, unsupported archives and oversized input are rejected. Reads are bounded to 32
 MiB per file and 16 MiB of native JSON, with bounded nested packages, counts and static analysis.
-Archives are inspected in memory without extracting embedded data or writing the source. File
+Archives are inspected in memory without extracting embedded data or writing the source. Only
+exactly bound attached scripts are read, at most 1 MiB each and 8 MiB total; analysis also bounds
+tokens, functions and fields. External script paths/URLs and script/model services are never opened.
+Source bodies and private path/connection/model values are excluded from responses. File
 fingerprints namespace local graph identities; an embedded ID or matching name does not establish
 identity with a published flow.
 

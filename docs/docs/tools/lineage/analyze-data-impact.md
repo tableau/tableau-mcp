@@ -61,6 +61,13 @@ A transitive API result remains `possible` even when represented by one graph ed
 container membership cannot propagate to unrelated fields or sheets. A known output-step membership
 can be direct while the route through its unverified catalog output fields remains possible.
 
+Attached Python/R scripts can expose literal output schemas and explicit selected-function input
+references. Their output fields are creation boundaries, and paths crossing those script edges stay
+`possible` because the code is not executed. Unrelated provided inputs do not become impacts merely
+because the script receives them. Prediction edges follow saved model input mappings and native
+output-schema rules, without claiming model-internal causality or execution. Inspect
+`prepDetails[].externalSteps` for settings, input roles, output fields/types and dependency status.
+
 Read `resolution`, `coverage`, `warnings`, `limitations` and any Prep field-analysis gaps before
 answering. Permission-filtered assets are omitted from nodes and paths. A failed optional document
 request does not discard usable catalog lineage. Missing metadata and bounded/partial results must

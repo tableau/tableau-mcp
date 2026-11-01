@@ -2,6 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import * as config from '../../../config.js';
+import { parseFlowPackage } from '../../../sdks/tableau/methods/flowPackage.js';
+import scriptFixtures from '../../../sdks/tableau/methods/prepScriptAnalysis.test.fixtures.json';
 import { dataLineageParams, LineageOptions } from '../../../sdks/tableau/types/dataLineage.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { DATA_LINEAGE_API_SCOPES, DESCRIBE_FLOW_API_SCOPES } from '../../../server/oauth/scopes.js';
@@ -15,6 +17,7 @@ import { prepDocumentSha256 } from './prepSchemaObservations.js';
 const mocks = vi.hoisted(() => ({
   graphql: vi.fn(),
   document: vi.fn(),
+  content: vi.fn(),
   useRestApi: vi.fn(),
   flowAllowed: vi.fn(),
   enabled: true,
@@ -80,6 +83,7 @@ describe('data lineage tools and optional document guards', () => {
       callback({
         metadataMethods: { graphql: mocks.graphql },
         flowDocumentMethods: { getFlowDocument: mocks.document },
+        flowsMethods: { downloadFlowContent: mocks.content },
         siteId: 'site',
       }),
     );
@@ -314,5 +318,68 @@ describe('data lineage tools and optional document guards', () => {
     expect(impactResult.direction).toBe('downstream');
     expect(impactResult.change).toBe('delete');
     expect(impactResult.impacts).toEqual([]);
+  });
+  it.each(['python', 'r'] as const)(
+    'reads %s attachment metadata through the real tool callback and existing download scope',
+    async (language) => {
+      const content = Buffer.from(scriptFixtures[language], 'base64');
+      mocks.content.mockResolvedValue(content);
+      mocks.document.mockResolvedValue(parseFlowPackage(content).document);
+      const graph = await executeDataLineage(
+        args({ includePrepDetails: true, maxNodes: 500 }),
+        extra(),
+        version,
+      );
+      expect(mocks.content).toHaveBeenCalledWith(
+        expect.objectContaining({ flowId: luid, siteId: 'site' }),
+      );
+      expect(mocks.useRestApi.mock.calls.at(-1)?.[0].jwtScopes).toEqual(DESCRIBE_FLOW_API_SCOPES);
+      expect(graph.prepDetails?.[0].externalSteps?.[0]).toMatchObject({
+        usedFields: ['Price', 'Qty'],
+        schemaStatus: 'static-declaration',
+        settings: { language, function: 'transform' },
+      });
+      expect(JSON.stringify(graph)).not.toMatch(/NEVER_RETURN|import pandas|transform\.py/);
+    },
+  );
+  it('does not download attachments for metadata-only requests or outside the request budget', async () => {
+    mocks.document.mockResolvedValue(
+      parseFlowPackage(Buffer.from(scriptFixtures.python, 'base64')).document,
+    );
+    await executeDataLineage(args({ includePrepDetails: false }), extra(), version);
+    expect(mocks.content).not.toHaveBeenCalled();
+    const graph = await executeDataLineage(
+      args({ includePrepDetails: true, maxRequests: 2 }),
+      extra(),
+      version,
+    );
+    expect(mocks.content).not.toHaveBeenCalled();
+    expect(graph.coverage.requests).toBeLessThanOrEqual(2);
+  });
+  it('rechecks the Flow owner immediately before the optional package download', async () => {
+    mocks.document.mockResolvedValue(
+      parseFlowPackage(Buffer.from(scriptFixtures.python, 'base64')).document,
+    );
+    mocks.flowAllowed.mockImplementation(async () => ({
+      allowed: mocks.document.mock.calls.length === 0,
+    }));
+    const graph = await executeDataLineage(args({ includePrepDetails: true }), extra(), version);
+    expect(mocks.document).toHaveBeenCalled();
+    expect(mocks.content).not.toHaveBeenCalled();
+    expect(
+      graph.warnings.some((warning) => warning.code === 'PREP_SCRIPT_PACKAGE_UNAVAILABLE'),
+    ).toBe(true);
+  });
+  it('retains catalog and document evidence after a package failure without leaking its contents', async () => {
+    mocks.document.mockResolvedValue(
+      parseFlowPackage(Buffer.from(scriptFixtures.python, 'base64')).document,
+    );
+    mocks.content.mockRejectedValue(new Error('NEVER_RETURN_PRIVATE_ERROR'));
+    const graph = await executeDataLineage(args({ includePrepDetails: true }), extra(), version);
+    expect(graph.resolution).toBe('resolved');
+    expect(
+      graph.warnings.some((warning) => warning.code === 'PREP_SCRIPT_PACKAGE_UNAVAILABLE'),
+    ).toBe(true);
+    expect(JSON.stringify(graph)).not.toContain('NEVER_RETURN');
   });
 });

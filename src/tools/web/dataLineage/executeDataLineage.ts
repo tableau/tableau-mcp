@@ -2,7 +2,13 @@ import { getConfig } from '../../../config.js';
 import { isFlowReadToolsEnabled } from '../../../features/flowTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DataLineageTraversal } from '../../../sdks/tableau/methods/dataLineage.js';
+import { parseFlowPackage } from '../../../sdks/tableau/methods/flowPackage.js';
+import {
+  matchPrepScriptContext,
+  packagedScriptReferences,
+} from '../../../sdks/tableau/methods/prepScriptBindings.js';
 import { DataLineageResult, LineageOptions } from '../../../sdks/tableau/types/dataLineage.js';
+import { PrepScriptContext } from '../../../sdks/tableau/types/prepScript.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { DATA_LINEAGE_API_SCOPES, DESCRIBE_FLOW_API_SCOPES } from '../../../server/oauth/scopes.js';
 import { isAxiosError } from '../../../utils/axios.js';
@@ -121,7 +127,52 @@ export async function executeDataLineage(
               callback: (api) =>
                 api.flowDocumentMethods.getFlowDocument({ siteId: api.siteId, flowId: flow.luid! }),
             });
-            addPrepTopology(traversal, flow, document, options.source, options.observedPrepSchemas);
+            let scriptContext: PrepScriptContext | undefined;
+            if (packagedScriptReferences(document).length) {
+              // Download only a permitted owning Flow, within the same explicit
+              // detail scope and request budget. Native paths never become URLs.
+              if (traversal.reserveRequest()) {
+                try {
+                  if (
+                    !(await resourceAccessChecker.isFlowAllowed({ flowId: flow.luid, extra }))
+                      .allowed
+                  )
+                    throw new Error('Flow package excluded.');
+                  const content = await useRestApi({
+                    ...extra,
+                    jwtScopes: DESCRIBE_FLOW_API_SCOPES,
+                    callback: (api) =>
+                      api.flowsMethods.downloadFlowContent({
+                        siteId: api.siteId,
+                        flowId: flow.luid!,
+                        signal: extra.signal,
+                      }),
+                  });
+                  extra.signal.throwIfAborted();
+                  const native = parseFlowPackage(content);
+                  scriptContext = matchPrepScriptContext(
+                    document,
+                    native.document,
+                    native.scriptContext ?? { scripts: {} },
+                  );
+                } catch {
+                  extra.signal.throwIfAborted();
+                  traversal.warn(
+                    'PREP_SCRIPT_PACKAGE_UNAVAILABLE',
+                    'Attached script metadata was unavailable within the Flow download permission, package format or byte limits. External paths and script/model services are never opened.',
+                    flow.id,
+                  );
+                }
+              }
+            }
+            addPrepTopology(
+              traversal,
+              flow,
+              document,
+              options.source,
+              options.observedPrepSchemas,
+              scriptContext,
+            );
           } catch (error) {
             extra.signal.throwIfAborted();
             // Never expose raw responses or document fragments. Generic403

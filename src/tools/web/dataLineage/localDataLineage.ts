@@ -71,7 +71,14 @@ export function executeLocalDataLineage(
   signal.throwIfAborted();
   const documentId = `local:${file.source.sha256}`;
   const root: LineageNode = { id: documentId, documentId, kind: 'flow', name: file.name };
-  const analysis = analyzePrepFields(file.document, documentId, 10000, options.observedPrepSchemas);
+  const analysis = analyzePrepFields(
+    file.document,
+    documentId,
+    10000,
+    options.observedPrepSchemas,
+    [],
+    file.scriptContext,
+  );
   const fields = analysis.nodes.map(
     ({ flowLuid: _discard, ...node }): LineageNode => ({ ...node, documentId }),
   );
@@ -255,6 +262,7 @@ export function executeLocalDataLineage(
       documentId,
       source: { ...file.source, name: file.name },
       operations: details.operations,
+      ...(analysis.externalSteps.length ? { externalSteps: analysis.externalSteps } : {}),
       fieldAnalysis: {
         versionCount: analysis.nodes.length,
         issues: analysis.issues,

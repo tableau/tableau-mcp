@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 
+import { PrepScriptContext } from '../../../sdks/tableau/types/prepScript.js';
+
 /** A whole-document binding is stricter than the source project's per-node
  * binding: upstream steps, connections and parameter changes invalidate it too.
  * Only its digest is returned. No script, connection or model is executed. */
-export function prepDocumentSha256(document: unknown): string {
+export function prepDocumentSha256(document: unknown, context?: PrepScriptContext): string {
   let count = 0;
   let textBytes = 0;
   const seen = new WeakSet<object>();
@@ -36,7 +38,17 @@ export function prepDocumentSha256(document: unknown): string {
     seen.delete(value);
     return result;
   };
-  const json = JSON.stringify(canonical(document, 0));
+  const material =
+    context && (context.packageSha256 || Object.keys(context.scripts).length)
+      ? {
+          flow: document,
+          packageSha256: context.packageSha256,
+          scriptSources: Object.fromEntries(
+            Object.entries(context.scripts).map(([id, evidence]) => [id, evidence.sourceSha256]),
+          ),
+        }
+      : document;
+  const json = JSON.stringify(canonical(material, 0));
   if (Buffer.byteLength(json) > 16 * 1024 * 1024)
     throw new Error('Prep schema binding exceeds its byte limit.');
   return createHash('sha256').update(json).digest('hex');

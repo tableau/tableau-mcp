@@ -3,6 +3,8 @@ import {
   LineageNode,
   PrepSchemaObservation,
 } from '../../../sdks/tableau/types/dataLineage.js';
+import { PrepExternalStep, PrepScriptContext } from '../../../sdks/tableau/types/prepScript.js';
+import { describePrepExternalStep } from './prepExternalSteps.js';
 import { sourceRowNumberName } from './prepGeneratedFields.js';
 import policies from './prepNodePolicies.json';
 import { expressionReferences, multiRowReferences } from './prepOperations.js';
@@ -46,10 +48,16 @@ export type PrepFieldAnalysis = {
   truncated: boolean;
   schemaRequirements?: {
     documentSha256: string;
-    nodes: Array<{ nodeId: string; nodeType: string }>;
+    nodes: Array<{
+      nodeId: string;
+      nodeType: string;
+      scriptSourceSha256?: string;
+      expectedFields?: Array<{ name: string; type: string }>;
+    }>;
   };
   appliedSchemaObservations: number;
   catalogInputsAdded: number;
+  externalSteps: PrepExternalStep[];
 };
 
 // Internal, permission-checked Metadata input identities. These establish the
@@ -65,6 +73,7 @@ export function analyzePrepFields(
   maxVersions = 5000,
   observations: PrepSchemaObservation[] = [],
   catalogInputs: PrepCatalogInput[] = [],
+  scriptContext?: PrepScriptContext,
 ): PrepFieldAnalysis {
   const result: PrepFieldAnalysis = {
     nodes: [],
@@ -75,6 +84,7 @@ export function analyzePrepFields(
     truncated: false,
     appliedSchemaObservations: 0,
     catalogInputsAdded: 0,
+    externalSteps: [],
   };
   const catalogByInput = new Map<string, PrepCatalogInput[]>();
   for (const input of catalogInputs.slice(0, maxVersions))
@@ -82,6 +92,7 @@ export function analyzePrepFields(
   const byId = new Map<string, LineageNode>();
   const edgeIds = new Set<string>();
   let visits = 0;
+  let externalFieldBudget = Math.min(maxVersions, 5000);
   let identityCount = 0;
   const identitiesByVersion = new Map<string, Set<string>>();
   const registerIdentity = (version: string, identity: unknown): void => {
@@ -125,7 +136,10 @@ export function analyzePrepFields(
     else if (result.issues.length >= 100) result.truncated = true;
   };
   try {
-    result.schemaRequirements = { documentSha256: prepDocumentSha256(flow), nodes: [] };
+    result.schemaRequirements = {
+      documentSha256: prepDocumentSha256(flow, scriptContext),
+      nodes: [],
+    };
   } catch {
     issue('schema-binding-unavailable', '/flow');
   }
@@ -135,7 +149,18 @@ export function analyzePrepFields(
     const requirements = result.schemaRequirements;
     if (requirements && !requirements.nodes.some((row) => row.nodeId === nodeId)) {
       if (requirements.nodes.length < 100)
-        requirements.nodes.push({ nodeId, nodeType: String(node.nodeType) });
+        requirements.nodes.push({
+          nodeId,
+          nodeType: String(node.nodeType),
+          ...(scriptContext && Object.hasOwn(scriptContext.scripts, nodeId)
+            ? {
+                scriptSourceSha256: scriptContext.scripts[nodeId].sourceSha256,
+                expectedFields: Object.entries(scriptContext.scripts[nodeId].fields).map(
+                  ([name, type]) => ({ name, type }),
+                ),
+              }
+            : {}),
+        });
       else result.truncated = true;
     }
     const relevant = observations.filter((value) => value.nodeId === nodeId);
@@ -174,6 +199,7 @@ export function analyzePrepFields(
       operation,
       documentPath: path,
       ...(dataType ? { dataType } : {}),
+      ...(operation === 'prediction-input' ? { originKind: 'prediction' as const } : {}),
     };
     result.nodes.push(node);
     byId.set(id, node);
@@ -279,7 +305,25 @@ export function analyzePrepFields(
         mappingComplete = false;
         return;
       }
-      const id = emit(value, path, owner, operation, parents, complete, datatype, text(node.id));
+      const preservedType = [
+        'rename',
+        'bulk-rename',
+        'row-condition',
+        'join-left',
+        'join-right',
+      ].includes(operation)
+        ? byId.get(parents[0])?.dataType
+        : undefined;
+      const id = emit(
+        value,
+        path,
+        owner,
+        operation,
+        parents,
+        complete,
+        datatype ?? preservedType,
+        text(node.id),
+      );
       if (id) {
         state.fields.set(value, id);
         const retained = [
@@ -610,11 +654,11 @@ export function analyzePrepFields(
     } else if (family === 'prediction') {
       const settings = object(node.predictionSettings),
         deps = Object.keys(object(settings.fieldMappings)).flatMap((name) => requireField(name));
-      write(
-        unique(text(settings.outcomeName) ?? 'Prediction', new Set(state.fields.keys())),
-        deps,
-        'prediction-input',
-      );
+      const base = text(settings.outcomeName) ?? 'Prediction';
+      let name = base,
+        suffix = 1;
+      while (state.fields.has(name)) name = `${base}-${suffix++}`;
+      write(name, deps, 'prediction-input', mappingComplete, 'real');
       for (const [key, label] of [
         ['topPredictors', 'Predictor'],
         ['topImprovements', 'Improvement'],
@@ -636,25 +680,67 @@ export function analyzePrepFields(
             name = `${base}-${suffix}`;
             impact = `${base} Impact-${suffix}`;
           }
-          write(name, deps, 'prediction-input');
-          write(impact, deps, 'prediction-input');
+          write(name, deps, 'prediction-input', mappingComplete, 'string');
+          write(impact, deps, 'prediction-input', mappingComplete, 'real');
         }
       }
-    } else if (family === 'external' && observation) {
+    } else if (family === 'external') {
+      const nodeId = text(node.id) ?? '';
+      const evidence =
+        scriptContext && Object.hasOwn(scriptContext.scripts, nodeId)
+          ? scriptContext.scripts[nodeId]
+          : undefined;
+      const functionName = text(object(node.executionParameters).scriptFunctionName) ?? '';
+      const fn =
+        evidence && Object.hasOwn(evidence.functions, functionName)
+          ? evidence.functions[functionName]
+          : undefined;
+      const fields =
+        observation?.fields ??
+        (evidence?.schemaStatus === 'static-declaration'
+          ? Object.entries(evidence.fields).map(([name, type]) => ({ name, type }))
+          : evidence?.schemaStatus === 'missing'
+            ? [...source.fields].map(([name, id]) => ({ name, type: byId.get(id)?.dataType }))
+            : undefined);
       state.fields.clear();
-      state.complete = true;
-      for (const field of observation.fields)
-        write(field.name, [], 'script-output', true, field.type);
-      result.appliedSchemaObservations++;
-      issue('external-script-dependencies-unavailable', path);
-    } else if (family === 'external' || family === 'opaque') {
+      state.complete = !!fields;
+      let unresolved = false;
+      for (const field of fields ?? []) {
+        mappingComplete = true;
+        const output =
+          fn && Object.hasOwn(fn.outputs, field.name) ? fn.outputs[field.name] : undefined;
+        const refs =
+          output?.inputs ?? (fn?.returnsInput && source.fields.has(field.name) ? [field.name] : []);
+        const deps = refs.flatMap((name) => requireField(name));
+        const known = !!output || !!fn?.returnsInput;
+        write(field.name, deps, 'script-output', mappingComplete && known, field.type);
+        const id = state.fields.get(field.name);
+        const version = id ? byId.get(id) : undefined;
+        if (version) {
+          version.originKind = 'script';
+          version.sourceSha256 = evidence?.sourceSha256;
+          version.dependencyStatus = output?.status ?? (fn?.returnsInput ? 'static' : 'unknown');
+        }
+        // Script provenance stays conditional; code/services are never executed.
+        if (known && id)
+          for (const edge of result.edges)
+            if (
+              edge.to === id &&
+              edge.relationship === 'script-output' &&
+              edge.evidence === 'direct'
+            )
+              edge.evidence = 'possible';
+        if (!known) unresolved = true;
+      }
+      if (observation) result.appliedSchemaObservations++;
+      if (!fields) issue('external-script-schema-unavailable', path);
+      else if (unresolved) issue('external-script-dependencies-unavailable', path);
+      else if (evidence) issue('script-static-analysis-not-executed', path);
+    } else if (family === 'opaque') {
       state.fields.clear();
       state.complete = false;
       mappingComplete = false;
-      issue(
-        family === 'external' ? 'external-script-schema-unavailable' : 'unsupported-node-type',
-        path,
-      );
+      issue('unsupported-node-type', path);
     } else if (family === 'preserve') {
       if (
         [
@@ -987,6 +1073,74 @@ export function analyzePrepFields(
       return outputs;
     }
     let state = apply(node, source, ports, path, owner, observation);
+    if (family === 'external' || family === 'prediction') {
+      const inputFields = [...source.fields].map(([name, id]) => ({
+        name,
+        type: byId.get(id)?.dataType,
+      }));
+      const outputFields = [...state.fields].map(([name, id]) => ({
+        name,
+        type: byId.get(id)?.dataType,
+      }));
+      const nodeId = text(node.id) ?? '';
+      const evidence =
+        scriptContext && Object.hasOwn(scriptContext.scripts, nodeId)
+          ? scriptContext.scripts[nodeId]
+          : undefined;
+      const detail = describePrepExternalStep(
+        node,
+        path,
+        owner,
+        inputFields,
+        outputFields,
+        evidence,
+        !!observation,
+      );
+      if (
+        !evidence &&
+        !observation &&
+        scriptContext?.unavailable &&
+        Object.hasOwn(scriptContext.unavailable, nodeId)
+      )
+        detail.schemaStatus = scriptContext.unavailable[nodeId];
+      if (family === 'external' && observation && evidence?.schemaStatus === 'static-declaration') {
+        const expected = evidence.fields;
+        const actual = new Map(observation.fields.map((field) => [field.name, field.type]));
+        detail.schemaDifferences = [
+          ...Object.keys(expected)
+            .filter((name) => !actual.has(name))
+            .map((name) => ({ name, kind: 'missing' as const })),
+          ...observation.fields
+            .filter((field) => !Object.hasOwn(expected, field.name))
+            .map((field) => ({ name: field.name, kind: 'extra' as const })),
+          ...observation.fields
+            .filter(
+              (field) => Object.hasOwn(expected, field.name) && expected[field.name] !== field.type,
+            )
+            .map((field) => ({ name: field.name, kind: 'type' as const })),
+        ];
+        if (detail.schemaDifferences.length) issue('observed-script-schema-difference', path);
+      }
+      for (const key of [
+        'usedFields',
+        'inputFields',
+        'outputFields',
+        'fieldMappings',
+        'schemaDifferences',
+      ] as const) {
+        const values = detail[key];
+        if (!values) continue;
+        if (values.length > externalFieldBudget) {
+          detail.truncated = true;
+          result.truncated = true;
+        }
+        // Keep one shared detail budget across all external steps.
+        Object.assign(detail, { [key]: values.slice(0, externalFieldBudget) });
+        externalFieldBudget = Math.max(0, externalFieldBudget - values.length);
+      }
+      if (result.externalSteps.length < 100) result.externalSteps.push(detail);
+      else result.truncated = true;
+    }
     if (family === 'prediction' && observation) {
       const observedNames = new Set(observation.fields.map((field) => field.name));
       if (
@@ -999,7 +1153,12 @@ export function analyzePrepFields(
         result.appliedSchemaObservations++;
         for (const field of observation.fields) {
           const version = byId.get(state.fields.get(field.name)!);
-          if (version?.documentPath === path) version.dataType = field.type;
+          if (version?.documentPath === path) {
+            if (version.dataType && version.dataType !== field.type) {
+              issue('observed-prediction-type-difference', path, field.name);
+              state.complete = false;
+            } else version.dataType = field.type;
+          }
         }
       }
     }

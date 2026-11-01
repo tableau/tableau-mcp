@@ -5,6 +5,7 @@ import {
   PrepSchemaObservation,
 } from '../../../sdks/tableau/types/dataLineage.js';
 import { FlowDocument } from '../../../sdks/tableau/types/flowDocument.js';
+import { PrepScriptContext } from '../../../sdks/tableau/types/prepScript.js';
 import { integratePrepFields } from './integratePrepFields.js';
 import { analyzePrepCatalogFields } from './prepCatalogInputs.js';
 import { extractPrepOperations } from './prepOperations.js';
@@ -17,6 +18,7 @@ export function addPrepTopology(
   document: FlowDocument,
   source: LineageSource,
   observations: PrepSchemaObservation[] = [],
+  scriptContext?: PrepScriptContext,
 ): void {
   const graph = traversal.result;
   // Experimental API JSON must expose the supported nodes graph.
@@ -54,11 +56,13 @@ export function addPrepTopology(
     Math.min(10000, traversal.options.maxNodes * 20),
     observations,
     graph.nodes,
+    scriptContext,
   );
   if (flow.luid)
     (graph.prepDetails ??= []).push({
       flowLuid: flow.luid,
       operations: details.operations,
+      ...(analysis.externalSteps.length ? { externalSteps: analysis.externalSteps } : {}),
       fieldAnalysis: {
         versionCount: analysis.nodes.length,
         issues: analysis.issues,
