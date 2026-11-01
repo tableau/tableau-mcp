@@ -155,6 +155,15 @@ describe('manageKnowledgeContextTool', () => {
     );
   });
 
+  it('tells create without a scope to use isGlobal, not targetNodeId', () => {
+    const message = validateArgs({ action: 'create', statements: [{ statement: 'x' }] });
+    expect(message).toBe('create requires isGlobal: true.');
+  });
+
+  it('allows update to make a context global', () => {
+    expect(validateArgs({ action: 'update', contextId: 'ctx-1', isGlobal: true })).toBeNull();
+  });
+
   it('uses mutation annotations and requires the Knowledge write and read scopes', async () => {
     const tool = getTool();
 

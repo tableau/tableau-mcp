@@ -50,9 +50,10 @@ const targetNodeIdSchema = z
   .max(512)
   .optional()
   .describe(
-    'Attach the context to this exact node id (a field, data source, workbook, ...) so it is ' +
-      'returned whenever that node is grounded. Mutually exclusive with isGlobal. Node-scoped ' +
-      'contexts are not currently supported by the service: use isGlobal instead ("create" requires isGlobal: true).',
+    'Not currently supported: node-scoped contexts are rejected, so do not set this. Use ' +
+      'isGlobal: true instead ("create" requires it). Intended meaning once supported: attach ' +
+      'the context to this exact node id (a field, data source, workbook, ...); mutually ' +
+      'exclusive with isGlobal.',
   );
 const isGlobalSchema = z
   .boolean()
@@ -294,17 +295,19 @@ export function validateArgs(args: ManageArgs): string | null {
     return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required when action is "${args.action}".`;
   }
 
-  if (!NODE_SCOPED_ENABLED && args.targetNodeId) {
+  if (!NODE_SCOPED_ENABLED && args.targetNodeId !== undefined) {
     return `Node-scoped contexts (targetNodeId) are not supported yet. ${
       args.action === 'create'
         ? 'Create a global context with isGlobal: true instead.'
-        : 'Use isGlobal instead.'
+        : 'Omit targetNodeId; set isGlobal: true to make the context global.'
     }`;
   }
 
   if (args.action === 'create') {
     if (!args.targetNodeId && args.isGlobal !== true) {
-      return 'create requires targetNodeId or isGlobal: true.';
+      return NODE_SCOPED_ENABLED
+        ? 'create requires targetNodeId or isGlobal: true.'
+        : 'create requires isGlobal: true.';
     }
     if (args.targetNodeId && args.isGlobal === true) {
       return 'create accepts targetNodeId or isGlobal: true, not both.';
