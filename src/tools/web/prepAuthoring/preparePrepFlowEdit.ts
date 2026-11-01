@@ -16,7 +16,7 @@ export const getPreparePrepFlowEditTool = (server: WebMcpServer): WebTool<typeof
     name: 'prepare-prep-flow-edit',
     minRequiredRole: SiteRole.EXPLORER,
     description:
-      'Prepare compact YAML for native Tableau Prep authoring in opt-in self-hosted stdio. Create starter YAML without an existing file, read a local TFL/TFLX within the operator workspace, or download an authorized published flow. Uses the migrated schema-driven compiler: short !id references preserve/generate UUIDs, !include retains large value lists and metadata in project resources, and attachments remain outside the agent context. Returns YAML plus a session-bound source handle. Provider-specific database settings, custom SQL and inline credentials are excluded. No flow or expression is executed and nothing is published. Use generate-prep-flow to preview edited YAML and validate serialized native output before releasing a new file.',
+      'Create starter YAML, prepare a local TFL/TFLX from the configured workspace, or download an authorized published Prep flow. Compact YAML uses !id for identities, !include for unchanged values/metadata and !path for allowed resources; attachments stay outside the edit context. Returns YAML and a session-bound source handle. Edit the YAML, then use generate-prep-flow to preview and release a validated new file. Provider-specific database settings, custom SQL and inline credentials are excluded. Opt-in self-hosted stdio only; no publishing or flow/expression execution.',
     paramsSchema: prepareParams,
     annotations: {
       title: 'Prepare Prep Flow YAML',
