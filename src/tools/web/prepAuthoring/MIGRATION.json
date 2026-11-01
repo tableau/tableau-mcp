@@ -241,6 +241,7 @@
     }
   ],
   "compatibilityNotes": [
+    "The new synthetic CSV template explicitly declares native Region/string and Sales/real field metadata. The reference template omitted this metadata, which caused an actual Tableau Cloud run to reject the Sales calculation; existing imported native metadata is preserved.",
     "Value/metadata/type/attachment equivalence is checked; YAML formatting and ZIP compression/timestamps are not a byte identity promise across Python and Node. Preview/generate within Node releases byte-identical reviewed archives.",
     "The retained matching authoring schema is not the reference project later exhaustive node catalog. Native Tableau execution remains unverified.",
     "Only bounded store/deflate native ZIP members (including ZIP64) are supported. No native Tableau binary or external script is executed.",

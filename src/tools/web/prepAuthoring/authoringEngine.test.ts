@@ -81,6 +81,13 @@ describe('Node compact Prep authoring parity', () => {
     expect(result.nativeExecutionVerified).toBe(false);
     const entries = readNativeArchive(bytes),
       flow = object(parseJson(entries.get('flow')!));
+    const csv = Object.values(object(flow.nodes))
+      .map(object)
+      .find((n) => n.nodeType === '.v1.LoadCsv')!;
+    expect(csv.fields).toEqual([
+      { name: 'Region', type: 'string', collation: null },
+      { name: 'Sales', type: 'real', collation: null },
+    ]);
     expect(
       Object.values(object(flow.nodes)).some((n) => object(n).expression === '[Sales] * 1.2'),
     ).toBe(true);

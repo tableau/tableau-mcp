@@ -347,6 +347,10 @@ export function newFlowYaml(io: ProjectIo, project: string, format: PackageType)
           name: 'Sales',
           connectionId: codec.ref('id', 'csv'),
           connectionAttributes: {},
+          fields: [
+            { name: 'Region', type: 'string', collation: null },
+            { name: 'Sales', type: 'real', collation: null },
+          ],
           nextNodes: [{ ...values.template('edge'), nextNodeId: codec.ref('id', 'calculate') }],
         },
         calculate: {
