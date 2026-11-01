@@ -13,7 +13,7 @@ export const lineageSourceSchema = z.union([
       .min(1)
       .max(4096)
       .describe(
-        'Absolute TFL/TFLX path inside configured LOCAL_FLOW_ROOTS. Self-hosted stdio only.',
+        'Absolute TFL/TFLX path inside operator-configured local flow roots. Self-hosted stdio only.',
       ),
     at: z
       .union([
@@ -79,7 +79,7 @@ export const dataLineageParams = {
     .boolean()
     .default(false)
     .describe(
-      'Read optional sanitized Flow Document API JSON (2026.3+, endpoint availability and download permission; Server requires features.getFlowDocumentRestApi).',
+      'Read optional sanitized Flow Document API JSON (2026.3+, endpoint availability and download permission).',
     ),
   maxDepth: z
     .number()
