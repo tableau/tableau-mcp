@@ -26,6 +26,8 @@ export const lineageWireNodeSchema = z
     dataType: z.string().nullish(),
     formula: z.string().nullish(),
     stepId: z.string().nullish(),
+    fieldId: z.string().max(2048).nullish(),
+    flowOutputStep: z.object({ stepId: z.string().nullish() }).nullish(),
     schema: z.string().nullish(),
     database: z.object({ name: z.string().nullish() }).nullish(),
     datasource: z
@@ -56,6 +58,7 @@ const connectionSchema = z.object({
 
 export function toLineageNode(wire: LineageWireNode, kind: LineageKind): LineageNode {
   const flows = Array.isArray(wire.flow) ? wire.flow : wire.flow ? [wire.flow] : [];
+  const flowLuids = [...new Set(flows.flatMap((flow) => (flow?.luid ? [flow.luid] : [])))];
   const table =
     kind === 'table'
       ? { name: wire.name, schema: wire.schema, database: wire.database }
@@ -70,7 +73,12 @@ export function toLineageNode(wire: LineageWireNode, kind: LineageKind): Lineage
     ...(wire.dataType ? { dataType: wire.dataType } : {}),
     ...(wire.formula != null ? { formula: wire.formula.slice(0, 8000) } : {}),
     ...(wire.stepId ? { stepId: wire.stepId } : {}),
-    ...(flows.length === 1 && flows[0]?.luid ? { flowLuid: flows[0].luid } : {}),
+    ...(wire.fieldId ? { fieldId: wire.fieldId } : {}),
+    ...(kind === 'flow-output-field' && wire.flowOutputStep?.stepId
+      ? { stepId: wire.flowOutputStep.stepId }
+      : {}),
+    ...(flowLuids.length === 1 ? { flowLuid: flowLuids[0] } : {}),
+    ...(flowLuids.length > 1 ? { flowLuids } : {}),
     ...(table
       ? {
           table: {

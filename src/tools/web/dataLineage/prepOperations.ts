@@ -27,6 +27,52 @@ const str = (value: unknown): string | undefined => (typeof value === 'string' ?
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 
+/** Native multi-row controls affect results even when omitted from the expression. */
+export function multiRowReferences(node: Record<string, unknown>): {
+  names: string[];
+  complete: boolean;
+} {
+  const names = new Set<string>();
+  let complete = true;
+  const add = (value: unknown): void => {
+    if (typeof value === 'string' && value.length > 0) names.add(value);
+    else complete = false;
+  };
+  for (const key of ['specificRowCalc', 'specificMultiRowCalc']) {
+    if (node[key] == null) continue;
+    const setting = record(node[key]);
+    if (
+      !setting ||
+      ![
+        'differenceFromCalc',
+        'fillDownCalc',
+        'fixedLodCalc',
+        'movingCalc',
+        'pctDifferenceFromCalc',
+        'rankCalc',
+        'runningCalc',
+        'tileCalc',
+      ].includes(String(setting.calcType))
+    ) {
+      complete = false;
+      continue;
+    }
+    if (setting.groupByColumns != null) {
+      if (Array.isArray(setting.groupByColumns)) setting.groupByColumns.forEach(add);
+      else complete = false;
+    }
+    for (const selector of ['orderByColumns', 'rankedColumns']) {
+      if (setting[selector] == null) continue;
+      if (Array.isArray(setting[selector]))
+        setting[selector].forEach((value) => add(record(value)?.columnName));
+      else complete = false;
+    }
+    for (const selector of ['computeUsingColumnName', 'aggregatedColumn'])
+      if (setting[selector] != null) add(setting[selector]);
+  }
+  return { names: [...names], complete };
+}
+
 /** Read bracketed Tableau references without mistaking string/comment contents
  * for dependencies. These are names at the operation's input, not global IDs.
  * Parameter/qualified-name resolution is deliberately left to the caller. */
@@ -124,8 +170,31 @@ export function extractPrepOperations(
       const modeled = Object.prototype.hasOwnProperty.call(policies, String(node.nodeType));
       if (!modeled) {
         // A familiar suffix under an unknown version is not schema evidence.
-      } else if (['AddColumn', 'QuickCalcColumn', 'CalculatedField'].includes(operation)) {
+      } else if (
+        [
+          'AddColumn',
+          'QuickCalcColumn',
+          'QuickDateCalcColumn',
+          'QuickDateNameCalcColumn',
+          'CustomFiscalYearCalcColumn',
+          'MultiRowCalc',
+          'DuplicateColumn',
+          'CalculatedField',
+        ].includes(operation)
+      ) {
         expression(node.expression);
+        if (operation === 'MultiRowCalc') {
+          const controls = multiRowReferences(node);
+          controls.names.forEach((name) => names.add(name));
+          supported = supported && controls.complete;
+        }
+        if (operation === 'DuplicateColumn' && typeof node.expression !== 'string') {
+          const source = str(node.sourceColumnName) ?? column;
+          if (source) {
+            names.add(source);
+            supported = true;
+          }
+        }
         if (column) result.outputs.push(column);
       } else if (['Filter', 'FilterOperation', 'ValueFilter'].includes(operation)) {
         expression(node.filterExpression ?? node.expression);

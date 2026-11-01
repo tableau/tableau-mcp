@@ -379,7 +379,7 @@ describe('Prep symbolic field lineage', () => {
     expect(field(analysis, 'remove', 'c')).toBeUndefined();
   });
 
-  it('marks external script schemas, models and unknown version suffixes unverified', () => {
+  it('keeps script schemas/unknown versions unresolved and reads declared model input dependencies', () => {
     const script = analyzePrepFields(
       flow([input(), node('script', '.v2019_2_2.ExtensibilityNode')]),
       luid,
@@ -403,8 +403,8 @@ describe('Prep symbolic field lineage', () => {
     expect(field(prediction, 'model', 'Predictor 1 Impact')).toBeDefined();
     expect(
       prediction.edges
-        .filter((e) => e.relationship === 'prediction-unverified')
-        .every((e) => e.evidence === 'unknown'),
+        .filter((e) => e.relationship === 'prediction-input')
+        .every((e) => e.evidence === 'direct'),
     ).toBe(true);
     const future = analyzePrepFields(
       flow([

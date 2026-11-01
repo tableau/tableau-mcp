@@ -1,6 +1,65 @@
-import { expressionReferences, extractPrepOperations } from './prepOperations.js';
+import {
+  expressionReferences,
+  extractPrepOperations,
+  multiRowReferences,
+} from './prepOperations.js';
 
 describe('Prep JSON operation extraction', () => {
+  it('extracts saved rank, LOD, order and partition references and refuses unknown controls', () => {
+    expect(
+      multiRowReferences({
+        specificRowCalc: {
+          calcType: 'rankCalc',
+          groupByColumns: ['Customer'],
+          rankedColumns: [{ columnName: 'Amount' }],
+        },
+        specificMultiRowCalc: {
+          calcType: 'fixedLodCalc',
+          aggregatedColumn: 'Count',
+          groupByColumns: ['Customer'],
+        },
+      }),
+    ).toEqual({
+      names: ['Customer', 'Amount', 'Count'],
+      complete: true,
+    });
+    expect(
+      multiRowReferences({ specificRowCalc: { calcType: 'runningCalc', orderByColumns: [{}] } })
+        .complete,
+    ).toBe(false);
+    expect(multiRowReferences({ specificRowCalc: { calcType: 'futureCalc' } }).complete).toBe(
+      false,
+    );
+  });
+  it('returns the saved expressions and references of derived date and multi-row calculations', () => {
+    const { operations } = extractPrepOperations(
+      {
+        date: {
+          id: 'date',
+          nodeType: '.v2021_1_4.QuickDateNameCalcColumn',
+          columnName: 'Year Name',
+          expression: 'DATENAME("year", [Order Date])',
+        },
+        multi: {
+          id: 'multi',
+          nodeType: '.v2023_3_1.MultiRowCalc',
+          columnName: 'Previous',
+          expression: 'LOOKUP([Amount], -1)',
+        },
+      },
+      20,
+    );
+    expect(
+      operations.map((op) => ({
+        references: op.references,
+        outputs: op.outputs,
+        status: op.status,
+      })),
+    ).toEqual([
+      { references: ['Order Date'], outputs: ['Year Name'], status: 'references-extracted' },
+      { references: ['Amount'], outputs: ['Previous'], status: 'references-extracted' },
+    ]);
+  });
   it('reads nested calculations, filters, joins, aggregates, renames and type changes', () => {
     const nodes = {
       clean: {

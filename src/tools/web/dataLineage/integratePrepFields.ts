@@ -1,5 +1,6 @@
 import { DataLineageTraversal } from '../../../sdks/tableau/methods/dataLineage.js';
 import { LineageNode, LineageSource } from '../../../sdks/tableau/types/dataLineage.js';
+import { prepCatalogBindings } from './prepCatalogBindings.js';
 import { PrepFieldAnalysis } from './prepFieldLineage.js';
 
 /** Import a bounded, source-relevant slice of static field versions. A known
@@ -84,13 +85,13 @@ export function integratePrepFields(
     relationship: string,
     evidence: 'direct' | 'possible' | 'unknown',
     propagates: boolean,
-  ): void => {
-    if (!included.has(from) || !included.has(to)) return;
+  ): boolean => {
+    if (!included.has(from) || !included.has(to)) return false;
     const id = JSON.stringify([from, to, relationship]);
-    if (graph.edges.some((edge) => edge.id === id)) return;
+    if (graph.edges.some((edge) => edge.id === id)) return true;
     if (graph.edges.length >= traversal.options.maxEdges) {
       traversal.truncate('EDGE_LIMIT');
-      return;
+      return false;
     }
     graph.edges.push({
       id,
@@ -101,20 +102,62 @@ export function integratePrepFields(
       provenance: 'flow-document',
       propagates,
     });
+    return true;
   };
   for (const edge of analysis.edges)
     add(edge.from, edge.to, edge.relationship, edge.evidence, true);
   for (const node of candidates)
     if (!fieldSource) add(flow.id, node.id, 'contains-static-field-version', 'unknown', false);
+  const bindings = prepCatalogBindings(graph.nodes, flow.luid ?? '', analysis);
+  let confirmed = 0;
+  const unresolvedReasons: Record<string, number> = {};
+  const confirmedOutputs = new Set<string>();
+  for (const binding of bindings) {
+    if (!binding.version) {
+      const reason = binding.reason ?? 'unresolved';
+      unresolvedReasons[reason] = (unresolvedReasons[reason] ?? 0) + 1;
+      continue;
+    }
+    const input = binding.catalog.kind === 'flow-input-field';
+    if (
+      add(
+        input ? binding.catalog.id : binding.version,
+        input ? binding.version : binding.catalog.id,
+        'native-flow-field-id',
+        'direct',
+        true,
+      )
+    ) {
+      confirmed++;
+      if (!input) confirmedOutputs.add(JSON.stringify([binding.catalog.stepId, binding.version]));
+    } else unresolvedReasons['graph-limit'] = (unresolvedReasons['graph-limit'] ?? 0) + 1;
+  }
+  const details = graph.prepDetails?.find((detail) => detail.flowLuid === flow.luid);
+  if (details?.fieldAnalysis)
+    details.fieldAnalysis.catalogBindings = {
+      confirmed,
+      unresolved: bindings.length - confirmed,
+      ...(Object.keys(unresolvedReasons).length ? { unresolvedReasons } : {}),
+    };
+  let unverifiedOutput = false;
   for (const output of graph.nodes.filter(
     (node) => node.kind === 'flow-output-step' && node.flowLuid === flow.luid && node.stepId,
   )) {
     for (const state of analysis.outputs.get(output.stepId!)?.values() ?? [])
       for (const id of state.fields.values()) {
         add(id, output.id, 'prep-field-in-output-step', 'direct', false);
-        add(id, output.id, 'unverified-catalog-output-field-binding', 'possible', true);
+        if (!confirmedOutputs.has(JSON.stringify([output.stepId, id]))) {
+          unverifiedOutput = true;
+          add(id, output.id, 'unverified-catalog-output-field-binding', 'possible', true);
+        }
       }
   }
+  if (bindings.length > confirmed || unverifiedOutput)
+    traversal.warn(
+      'PREP_CATALOG_BINDING_UNVERIFIED',
+      'Some catalog/document field identities could not be matched by exact native fieldId and output step. Confirmed native-ID handoffs remain direct; unresolved identities are never joined by caption.',
+      flow.id,
+    );
   if (fieldSource) {
     if (included.has(selectedId!)) {
       graph.sourceId = selectedId;
@@ -130,7 +173,7 @@ export function integratePrepFields(
   if (analysis.issues.length)
     traversal.warn(
       'PREP_STATIC_GAPS',
-      'Some static field mappings are unresolved. See prepDetails.fieldAnalysis.issues; unresolved mappings never establish a confirmed dependency.',
+      'Saved field analysis found broken references or unresolved mappings. See prepDetails.fieldAnalysis.issues: broken means a missing name in a complete saved/observed schema; unresolved means the schema or mapping is unavailable. Unresolved mappings never establish a confirmed dependency.',
       flow.id,
     );
   if (analysis.truncated) traversal.truncate('PREP_FIELD_LIMIT');

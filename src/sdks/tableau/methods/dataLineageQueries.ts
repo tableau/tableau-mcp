@@ -208,9 +208,9 @@ export function identitySelection(kind: LineageKind): string {
     case 'flow':
       return `${basic} name luid`;
     case 'flow-input-field':
-      return `${basic} name flow { ${flow} }`;
+      return `${basic} ... on FlowInputField { name flow { ${flow} } ... on FlowColumnInputField { fieldId } ... on FlowFieldInputField { fieldId } }`;
     case 'flow-output-field':
-      return `${basic} name flow { ${flow} }`;
+      return `${basic} ... on FlowOutputField { name flow { ${flow} } flowOutputStep { stepId } ... on FlowColumnOutputField { fieldId } ... on FlowFieldOutputField { fieldId } }`;
     case 'flow-output-step':
       return `${basic} name stepId flow { ${flow} }`;
     case 'sheet':

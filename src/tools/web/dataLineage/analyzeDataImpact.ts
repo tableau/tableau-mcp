@@ -10,11 +10,20 @@ import { WebTool } from '../tool.js';
 import { analyzeLineageImpact } from './dataImpact.js';
 import { executeDataLineage } from './executeDataLineage.js';
 
-const { source, includePrepDetails, maxDepth, maxNodes, maxEdges, maxRequests, pageSize } =
-  dataLineageParams;
+const {
+  source,
+  includePrepDetails,
+  observedPrepSchemas,
+  maxDepth,
+  maxNodes,
+  maxEdges,
+  maxRequests,
+  pageSize,
+} = dataLineageParams;
 const paramsSchema = {
   source,
   includePrepDetails,
+  observedPrepSchemas,
   maxDepth,
   maxNodes,
   maxEdges,

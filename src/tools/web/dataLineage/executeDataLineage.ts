@@ -33,6 +33,8 @@ export async function executeDataLineage(
     ? { type: 'flow' as const, luid: internalSource.flowLuid }
     : options.source;
   const effective = { ...options, source };
+  const wantPrep =
+    options.includePrepDetails || internalSource || !!options.observedPrepSchemas?.length;
   const isAllowed = lineageAccess(extra, overrides.boundedContext);
   // Build the empty response even for disabled/unavailable services, so it can
   // never be mistaken for a successful zero-impact result.
@@ -81,12 +83,11 @@ export async function executeDataLineage(
         mappings: { '2026.3.0': true, default: false },
       });
       await traversal.resolve();
-      const reserveDocument =
-        (options.includePrepDetails || internalSource) && supported && prepEnabled;
+      const reserveDocument = wantPrep && supported && prepEnabled;
       await traversal.expand(reserveDocument ? 1 : 0);
       const graph = traversal.result;
       if (graph.resolution !== 'resolved') return graph;
-      if (options.includePrepDetails || internalSource) {
+      if (wantPrep) {
         graph.coverage.prep = 'unavailable';
         if (!supported || !prepEnabled) {
           traversal.warn(
@@ -120,7 +121,7 @@ export async function executeDataLineage(
               callback: (api) =>
                 api.flowDocumentMethods.getFlowDocument({ siteId: api.siteId, flowId: flow.luid! }),
             });
-            addPrepTopology(traversal, flow, document, options.source);
+            addPrepTopology(traversal, flow, document, options.source, options.observedPrepSchemas);
           } catch (error) {
             extra.signal.throwIfAborted();
             // Never expose raw responses or document fragments. Generic403

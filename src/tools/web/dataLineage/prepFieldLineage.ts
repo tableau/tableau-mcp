@@ -1,6 +1,12 @@
-import { LineageEdge, LineageNode } from '../../../sdks/tableau/types/dataLineage.js';
+import {
+  LineageEdge,
+  LineageNode,
+  PrepSchemaObservation,
+} from '../../../sdks/tableau/types/dataLineage.js';
+import { sourceRowNumberName } from './prepGeneratedFields.js';
 import policies from './prepNodePolicies.json';
-import { expressionReferences } from './prepOperations.js';
+import { expressionReferences, multiRowReferences } from './prepOperations.js';
+import { prepDocumentSha256 } from './prepSchemaObservations.js';
 
 type Obj = Record<string, unknown>;
 const object = (value: unknown): Obj =>
@@ -28,9 +34,21 @@ const pointer = (path: string, key: string): string =>
 export type PrepFieldAnalysis = {
   nodes: LineageNode[];
   edges: LineageEdge[];
+  // Native identifiers are scoped to this document, never field captions alone.
+  nativeFieldIds: Map<string, Set<string>>;
   outputs: Map<string, Ports>;
-  issues: Array<{ code: string; path: string }>;
+  issues: Array<{
+    code: string;
+    path: string;
+    fieldName?: string;
+    status?: 'broken' | 'unresolved';
+  }>;
   truncated: boolean;
+  schemaRequirements?: {
+    documentSha256: string;
+    nodes: Array<{ nodeId: string; nodeType: string }>;
+  };
+  appliedSchemaObservations: number;
 };
 
 /** Static field versions over saved JSON. Port/name effects reuse the user's
@@ -40,24 +58,83 @@ export function analyzePrepFields(
   flow: unknown,
   flowLuid: string,
   maxVersions = 5000,
+  observations: PrepSchemaObservation[] = [],
 ): PrepFieldAnalysis {
   const result: PrepFieldAnalysis = {
     nodes: [],
     edges: [],
+    nativeFieldIds: new Map(),
     outputs: new Map(),
     issues: [],
     truncated: false,
+    appliedSchemaObservations: 0,
   };
   const byId = new Map<string, LineageNode>();
   const edgeIds = new Set<string>();
   let visits = 0;
-  const issue = (code: string, path: string): void => {
+  let identityCount = 0;
+  const identitiesByVersion = new Map<string, Set<string>>();
+  const registerIdentity = (version: string, identity: unknown): void => {
+    if (typeof identity !== 'string' || !identity || identity.length > 2048) return;
+    const versions = result.nativeFieldIds.get(identity) ?? new Set<string>();
+    if (versions.has(version)) return;
+    if (++identityCount > maxVersions * 8) {
+      result.truncated = true;
+      return;
+    }
+    versions.add(version);
+    result.nativeFieldIds.set(identity, versions);
+    const identities = identitiesByVersion.get(version) ?? new Set<string>();
+    identities.add(identity);
+    identitiesByVersion.set(version, identities);
+  };
+  const inheritIdentity = (version: string, parents: string[]): void => {
+    for (const parent of parents)
+      for (const identity of identitiesByVersion.get(parent) ?? [])
+        registerIdentity(version, identity);
+  };
+  const issue = (
+    code: string,
+    path: string,
+    fieldName?: string,
+    status?: 'broken' | 'unresolved',
+  ): void => {
     if (
       result.issues.length < 100 &&
-      !result.issues.some((i) => i.code === code && i.path === path)
+      !result.issues.some(
+        (i) =>
+          i.code === code && i.path === path && i.fieldName === fieldName && i.status === status,
+      )
     )
-      result.issues.push({ code, path });
+      result.issues.push({
+        code,
+        path,
+        ...(fieldName ? { fieldName } : {}),
+        ...(status ? { status } : {}),
+      });
     else if (result.issues.length >= 100) result.truncated = true;
+  };
+  try {
+    result.schemaRequirements = { documentSha256: prepDocumentSha256(flow), nodes: [] };
+  } catch {
+    issue('schema-binding-unavailable', '/flow');
+  }
+  const observed = (node: Obj, family: string, path: string): PrepSchemaObservation | undefined => {
+    const nodeId = text(node.id);
+    if (!nodeId || !['input', 'external', 'prediction'].includes(family)) return;
+    const requirements = result.schemaRequirements;
+    if (requirements && !requirements.nodes.some((row) => row.nodeId === nodeId)) {
+      if (requirements.nodes.length < 100)
+        requirements.nodes.push({ nodeId, nodeType: String(node.nodeType) });
+      else result.truncated = true;
+    }
+    const relevant = observations.filter((value) => value.nodeId === nodeId);
+    const matches = relevant.filter(
+      (value) => value.documentSha256 === requirements?.documentSha256,
+    );
+    if (matches.length === 1) return matches[0];
+    if (relevant.length)
+      issue(matches.length ? 'ambiguous-schema-observation' : 'stale-schema-observation', path);
   };
   const emit = (
     name: string,
@@ -67,6 +144,7 @@ export function analyzePrepFields(
     parents: string[],
     complete = true,
     dataType?: string,
+    nativeNodeId?: string,
   ): string | undefined => {
     const id = `prep-field:${JSON.stringify([flowLuid, path, name])}`;
     if (byId.has(id)) {
@@ -89,6 +167,11 @@ export function analyzePrepFields(
     };
     result.nodes.push(node);
     byId.set(id, node);
+    if (
+      nativeNodeId &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nativeNodeId)
+    )
+      registerIdentity(id, `${nativeNodeId}-${name}`);
     for (const from of new Set(parents)) {
       if (!byId.has(from)) {
         issue('missing-field-version', path);
@@ -125,18 +208,34 @@ export function analyzePrepFields(
     }
     return candidate;
   };
-  const apply = (node: Obj, source: State, ports: Ports, path: string, owner: string): State => {
+  const apply = (
+    node: Obj,
+    source: State,
+    ports: Ports,
+    path: string,
+    owner: string,
+    observation?: PrepSchemaObservation,
+  ): State => {
     const token = text(node.nodeType) ?? '';
     const family = (policies as Record<string, string>)[token] ?? 'opaque';
     const kind = token.split('.').pop() ?? '';
     const state = clone(source);
+    // A known field reference does not require a complete list of unrelated columns.
+    // Unresolved earlier edges still carry unknown evidence along the complete path.
+    let mappingComplete = true;
     const column = text(node.columnName);
     const requireField = (name: unknown, input = source): string[] => {
       const value = text(name),
         id = value ? input.fields.get(value) : undefined;
       if (!id) {
-        issue('unresolved-field-reference', path);
+        issue(
+          'unresolved-field-reference',
+          path,
+          value,
+          value && input.complete ? 'broken' : 'unresolved',
+        );
         state.complete = false;
+        mappingComplete = false;
       }
       return id ? [id] : [];
     };
@@ -144,12 +243,14 @@ export function analyzePrepFields(
       if (typeof expression !== 'string' || expression.length > 65536) {
         issue('unsupported-expression', path);
         state.complete = false;
+        mappingComplete = false;
         return [];
       }
       const parsed = expressionReferences(expression);
       if (!parsed.complete) {
         issue('unsupported-expression', path);
         state.complete = false;
+        mappingComplete = false;
         return [];
       }
       return parsed.names.flatMap((name) => requireField(name, input));
@@ -158,18 +259,45 @@ export function analyzePrepFields(
       name: unknown,
       parents: string[],
       operation: string,
-      complete = state.complete,
+      complete = mappingComplete,
       datatype?: string,
     ): void => {
       const value = text(name);
       if (!value) {
         issue('dynamic-field-name', path);
         state.complete = false;
+        mappingComplete = false;
         return;
       }
-      const id = emit(value, path, owner, operation, parents, complete, datatype);
-      if (id) state.fields.set(value, id);
-      else state.complete = false;
+      const id = emit(value, path, owner, operation, parents, complete, datatype, text(node.id));
+      if (id) {
+        state.fields.set(value, id);
+        const retained = [
+          'rename',
+          'bulk-rename',
+          'type-change',
+          'value-change',
+          'row-condition',
+          'join-left',
+          'join-right',
+          'union',
+        ];
+        if (retained.includes(operation)) {
+          const identityParents = ['rename', 'bulk-rename', 'join-left', 'join-right'].includes(
+            operation,
+          )
+            ? parents.slice(0, 1)
+            : operation === 'union'
+              ? parents
+              : source.fields.has(value)
+                ? [source.fields.get(value)!]
+                : [];
+          inheritIdentity(id, identityParents);
+        }
+      } else {
+        state.complete = false;
+        mappingComplete = false;
+      }
     };
     const retainWithDependencies = (deps: string[], operation: string): void => {
       for (const [name, id] of source.fields) write(name, [id, ...deps], operation);
@@ -180,6 +308,15 @@ export function analyzePrepFields(
         kind === 'DuplicateColumn' && typeof node.expression !== 'string'
           ? requireField(node.columnName)
           : references(node.expression);
+      if (kind === 'MultiRowCalc') {
+        const controls = multiRowReferences(node);
+        deps.push(...controls.names.flatMap((name) => requireField(name)));
+        if (!controls.complete) {
+          issue('unsupported-multi-row-controls', path);
+          state.complete = false;
+          mappingComplete = false;
+        }
+      }
       write(column, deps, 'calculation');
     } else if (family === 'rename') {
       const deps = requireField(column),
@@ -189,6 +326,7 @@ export function analyzePrepFields(
         issue('rename-collision', path);
         state.fields.clear();
         state.complete = false;
+        mappingComplete = false;
       } else write(target, deps, 'rename');
     } else if (family === 'bulk_rename') {
       const selection = object(node.columnsSelection),
@@ -217,6 +355,7 @@ export function analyzePrepFields(
         issue('unsupported-bulk-rename-selection', path);
         state.fields.clear();
         state.complete = false;
+        mappingComplete = false;
         return state;
       }
       for (const name of source.fields.keys()) {
@@ -257,6 +396,7 @@ export function analyzePrepFields(
         else {
           issue('unsupported-bulk-rename', path);
           state.complete = false;
+          mappingComplete = false;
         }
         if (target !== name) renames.set(name, target);
       }
@@ -265,6 +405,7 @@ export function analyzePrepFields(
         if (state.fields.has(target)) {
           issue('rename-collision', path);
           state.complete = false;
+          mappingComplete = false;
           continue;
         }
         write(target, requireField(old), 'bulk-rename');
@@ -296,6 +437,7 @@ export function analyzePrepFields(
         if (setting.specialFieldType != null) {
           issue('special-aggregate-unresolved', path);
           state.complete = false;
+          mappingComplete = false;
           continue;
         }
         write(
@@ -329,6 +471,7 @@ export function analyzePrepFields(
       ) {
         issue('ambiguous-join-suffix', path);
         state.complete = false;
+        mappingComplete = false;
         return state;
       }
       for (const [name, id] of left.fields) write(name, [id, ...keys], 'join-left');
@@ -355,6 +498,7 @@ export function analyzePrepFields(
           ) {
             issue('unresolved-union-mapping', path);
             state.complete = false;
+            mappingComplete = false;
             continue;
           }
           decoded.set(parsed.names[0], String(target));
@@ -365,6 +509,7 @@ export function analyzePrepFields(
           if (seen.has(target)) {
             issue('union-many-to-one', path);
             state.complete = false;
+            mappingComplete = false;
           }
           seen.add(target);
           grouped.set(target, [...(grouped.get(target) ?? []), id]);
@@ -379,6 +524,7 @@ export function analyzePrepFields(
         const name = text(output);
         if (!name) {
           state.complete = false;
+          mappingComplete = false;
           issue('unresolved-unpivot-output', path);
           return;
         }
@@ -428,6 +574,7 @@ export function analyzePrepFields(
           } else {
             issue('unresolved-unpivot-membership', path);
             state.complete = false;
+            mappingComplete = false;
           }
           collect(setting.unpivotColumnName, selected);
         }
@@ -456,8 +603,7 @@ export function analyzePrepFields(
       write(
         unique(text(settings.outcomeName) ?? 'Prediction', new Set(state.fields.keys())),
         deps,
-        'prediction-unverified',
-        false,
+        'prediction-input',
       );
       for (const [key, label] of [
         ['topPredictors', 'Predictor'],
@@ -467,6 +613,7 @@ export function analyzePrepFields(
         if (!Number.isInteger(count) || Number(count) < 0 || Number(count) > 3) {
           issue('unresolved-prediction-output', path);
           state.complete = false;
+          mappingComplete = false;
           continue;
         }
         for (let i = 1; i <= Number(count); i++) {
@@ -479,26 +626,66 @@ export function analyzePrepFields(
             name = `${base}-${suffix}`;
             impact = `${base} Impact-${suffix}`;
           }
-          write(name, deps, 'prediction-unverified', false);
-          write(impact, deps, 'prediction-unverified', false);
+          write(name, deps, 'prediction-input');
+          write(impact, deps, 'prediction-input');
         }
       }
-      issue('external-model-unverified', path);
-      state.complete = false;
+    } else if (family === 'external' && observation) {
+      state.fields.clear();
+      state.complete = true;
+      for (const field of observation.fields)
+        write(field.name, [], 'script-output', true, field.type);
+      result.appliedSchemaObservations++;
+      issue('external-script-dependencies-unavailable', path);
     } else if (family === 'external' || family === 'opaque') {
       state.fields.clear();
       state.complete = false;
+      mappingComplete = false;
       issue(
         family === 'external' ? 'external-script-schema-unavailable' : 'unsupported-node-type',
         path,
       );
     } else if (family === 'preserve') {
+      if (
+        [
+          'QuickCalcColumn',
+          'QuickDateCalcColumn',
+          'QuickDateNameCalcColumn',
+          'CustomFiscalYearCalcColumn',
+        ].includes(kind) &&
+        typeof node.expression === 'string'
+      ) {
+        const input = references(node.expression);
+        write(column, input, 'calculation');
+        return state;
+      }
       const deps = [
         ...(column ? requireField(column) : []),
         ...names(node.columnNames).flatMap((name) => requireField(name)),
       ];
+      if (kind === 'RangeFilter') {
+        for (const [name, ranges] of Object.entries(object(node.ranges))) {
+          deps.push(...requireField(name));
+          if (!Array.isArray(ranges)) {
+            issue('unsupported-range-selection', path);
+            state.complete = false;
+            mappingComplete = false;
+          }
+        }
+      }
+      if (!column && text(node.fieldId)) {
+        const matches = [...source.fields.values()].filter((id) =>
+          result.nativeFieldIds.get(String(node.fieldId))?.has(id),
+        );
+        if (matches.length === 1) deps.push(matches[0]);
+        else {
+          issue('unresolved-native-field-id', path);
+          state.complete = false;
+          mappingComplete = false;
+        }
+      }
       for (const key of ['filterExpression', 'expression'])
-        if (node[key] !== undefined) deps.push(...references(node[key]));
+        if (node[key] != null) deps.push(...references(node[key]));
       for (const value of array(node.sortPrimitives))
         deps.push(...references(object(value).sortExpression));
       if (kind === 'ConditionalRemap')
@@ -507,8 +694,8 @@ export function analyzePrepFields(
         for (const [name, value] of Object.entries(object(node.fields))) {
           const setting = object(value),
             input = requireField(name);
-          if (setting.calc !== undefined) input.push(...references(setting.calc));
-          write(name, input, 'type-change', state.complete, text(setting.type));
+          if (setting.calc != null) input.push(...references(setting.calc));
+          write(name, input, 'type-change', mappingComplete, text(setting.type));
         }
       } else if (
         column &&
@@ -539,12 +726,99 @@ export function analyzePrepFields(
       family = (policies as Record<string, string>)[token] ?? 'opaque';
     const ports = new Map(incoming);
     let source = ports.get('Default') ?? (ports.size === 1 ? [...ports.values()][0] : empty());
+    const observation = observed(node, family, path);
     if (family === 'input') {
+      const inputUnion = token.includes('InputUnion');
+      const generatedInputNames = new Set(
+        [node.pathNameField, node.tableNameField, node.fileCreationTimeField]
+          .map(text)
+          .filter(Boolean),
+      );
+      const bindings = new Map<string, string[]>();
+      let membersComplete = true;
+      if (inputUnion) {
+        const members = array(node.generatedInputs);
+        membersComplete = members.length > 0;
+        const outputNames = new Set(
+          (observation?.fields ?? array(node.fields))
+            .map((field) => text(object(field).name))
+            .filter(Boolean),
+        );
+        const literalReference = (value: string): string | undefined => {
+          const parsed = expressionReferences(value);
+          return parsed.complete &&
+            parsed.names.length === 1 &&
+            /^\[(?:\\.|[^\]\\])*\]$/.test(value)
+            ? parsed.names[0]
+            : undefined;
+        };
+        for (const [index, value] of members.entries()) {
+          const member = object(value),
+            input = object(member.inputNode);
+          const memberState =
+            visit(
+              input,
+              new Map(),
+              `${path}/generatedInputs/${index}/inputNode`,
+              text(input.id) ?? owner,
+              depth + 1,
+            ).get('Default') ?? empty();
+          membersComplete &&= memberState.complete;
+          const mappings = [
+            member.fieldMappings,
+            member.fieldMapping,
+            member.columnMappings,
+            member.columnMapping,
+            member.mappings,
+            input.fieldMappings,
+            input.columnMappings,
+          ];
+          const targets = new Map<string, Set<string>>();
+          for (const mapping of mappings)
+            for (const [raw, destination] of Object.entries(object(mapping))) {
+              const sourceName = memberState.fields.has(raw) ? raw : literalReference(raw);
+              const targetName = text(destination);
+              if (!sourceName || !targetName || !memberState.fields.has(sourceName)) {
+                membersComplete = false;
+                issue('unresolved-input-union-mapping', path);
+                continue;
+              }
+              const resolved = outputNames.has(targetName)
+                ? targetName
+                : (literalReference(targetName) ?? targetName);
+              const found = targets.get(sourceName) ?? new Set<string>();
+              found.add(resolved);
+              targets.set(sourceName, found);
+            }
+          const memberOutputs = new Set<string>();
+          for (const [name, id] of memberState.fields) {
+            const mapped = targets.get(name);
+            if (mapped && mapped.size !== 1) {
+              membersComplete = false;
+              issue('ambiguous-input-union-mapping', path);
+              continue;
+            }
+            const target = mapped ? [...mapped][0] : name;
+            if (outputNames.size && !outputNames.has(target)) continue;
+            if (memberOutputs.has(target)) {
+              membersComplete = false;
+              issue('input-union-many-to-one', path);
+            }
+            memberOutputs.add(target);
+            bindings.set(target, [...(bindings.get(target) ?? []), id]);
+          }
+        }
+      }
+      const savedFields = observation?.fields ?? array(node.fields);
+      const inputFields =
+        savedFields.length || !inputUnion
+          ? savedFields
+          : [...bindings.keys()].map((name) => ({ name }));
       source = {
         fields: new Map(),
-        complete: Array.isArray(node.fields) && array(node.fields).length > 0,
+        complete: !!observation || (inputFields.length > 0 && (!inputUnion || membersComplete)),
       };
-      for (const value of array(node.fields)) {
+      for (const value of inputFields) {
         const field = object(value),
           name = text(field.name);
         if (!name || source.fields.has(name)) {
@@ -552,8 +826,60 @@ export function analyzePrepFields(
           issue('ambiguous-input-field', path);
           continue;
         }
-        const id = emit(name, `${path}/fields`, owner, 'input', [], true, text(field.type));
-        if (id) source.fields.set(name, id);
+        let parents = bindings.get(name) ?? [];
+        if (inputUnion && generatedInputNames.has(name) && parents.length) {
+          membersComplete = false;
+          parents = [];
+          issue('input-union-provenance-collision', path);
+        }
+        const complete =
+          !!observation ||
+          !inputUnion ||
+          (membersComplete &&
+            (parents.length > 0 || field.isGenerated === true || generatedInputNames.has(name)));
+        if (!complete) {
+          source.complete = false;
+          issue('input-schema-partial', path);
+        }
+        const id = emit(
+          name,
+          `${path}/fields`,
+          owner,
+          inputUnion ? 'input-union' : 'input',
+          parents,
+          complete,
+          text(field.type),
+          text(node.id),
+        );
+        if (id) {
+          source.fields.set(name, id);
+          registerIdentity(id, field.fieldId);
+          if (inputUnion) inheritIdentity(id, parents);
+        }
+      }
+      if (!observation && /\.(LoadCsv|LoadExcel)$/.test(token)) {
+        const declared = inputFields.flatMap((value) => {
+          const field = object(value),
+            name = text(field.name);
+          return name ? [{ name, isGenerated: field.isGenerated }] : [];
+        });
+        const name = sourceRowNumberName(declared);
+        if (!source.fields.has(name)) {
+          const id = emit(
+            name,
+            `${path}/generatedSourceRowNumber`,
+            owner,
+            'generated-source-row-number',
+            [],
+            true,
+            'integer',
+            text(node.id),
+          );
+          if (id) source.fields.set(name, id);
+        } else if (!declared.some((field) => field.name === name && field.isGenerated === true)) {
+          issue('generated-source-row-number-collision', path);
+          source.complete = false;
+        }
       }
       const restricted = object(node.restrictedFields);
       for (const [old, value] of Object.entries(restricted)) {
@@ -562,16 +888,26 @@ export function analyzePrepFields(
         if (parent && name) {
           const id = emit(name, `${path}/restrictedFields`, owner, 'input-rename', [parent]);
           source.fields.delete(old);
-          if (id) source.fields.set(name, id);
+          if (id) {
+            source.fields.set(name, id);
+            inheritIdentity(id, [parent]);
+          }
         }
       }
       if (Array.isArray(node.selectedFields))
         source.fields = new Map(
           [...source.fields].filter(([name]) => names(node.selectedFields).includes(name)),
         );
-      if (token.includes('InputUnion') || Object.keys(object(node.userRenamedFields)).length) {
+      if (
+        !observation &&
+        ((inputUnion && !membersComplete) || Object.keys(object(node.userRenamedFields)).length)
+      ) {
         source.complete = false;
         issue('input-schema-partial', path);
+      }
+      if (observation) {
+        result.appliedSchemaObservations++;
+        if (inputUnion && !membersComplete) issue('input-union-member-lineage-unavailable', path);
       }
       ports.clear();
       ports.set('Default', source);
@@ -618,7 +954,23 @@ export function analyzePrepFields(
       result.outputs.set(owner, outputs);
       return outputs;
     }
-    let state = apply(node, source, ports, path, owner);
+    let state = apply(node, source, ports, path, owner, observation);
+    if (family === 'prediction' && observation) {
+      const observedNames = new Set(observation.fields.map((field) => field.name));
+      if (
+        observedNames.size !== state.fields.size ||
+        [...state.fields.keys()].some((name) => !observedNames.has(name))
+      ) {
+        issue('observed-prediction-schema-difference', path);
+        state.complete = false;
+      } else {
+        result.appliedSchemaObservations++;
+        for (const field of observation.fields) {
+          const version = byId.get(state.fields.get(field.name)!);
+          if (version?.documentPath === path) version.dataType = field.type;
+        }
+      }
+    }
     for (const [i, action] of array(node.actions).entries())
       state =
         visit(action, new Map([['Default', state]]), `${path}/actions/${i}`, owner, depth + 1).get(

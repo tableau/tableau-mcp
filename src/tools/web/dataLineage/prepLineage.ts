@@ -1,5 +1,9 @@
 import { DataLineageTraversal } from '../../../sdks/tableau/methods/dataLineage.js';
-import { LineageNode, LineageSource } from '../../../sdks/tableau/types/dataLineage.js';
+import {
+  LineageNode,
+  LineageSource,
+  PrepSchemaObservation,
+} from '../../../sdks/tableau/types/dataLineage.js';
 import { FlowDocument } from '../../../sdks/tableau/types/flowDocument.js';
 import { integratePrepFields } from './integratePrepFields.js';
 import { analyzePrepFields } from './prepFieldLineage.js';
@@ -12,6 +16,7 @@ export function addPrepTopology(
   flow: LineageNode,
   document: FlowDocument,
   source: LineageSource,
+  observations: PrepSchemaObservation[] = [],
 ): void {
   const graph = traversal.result;
   // Experimental API JSON must expose the supported nodes graph.
@@ -47,6 +52,7 @@ export function addPrepTopology(
     document,
     flow.luid ?? '',
     Math.min(10000, traversal.options.maxNodes * 20),
+    observations,
   );
   if (flow.luid)
     (graph.prepDetails ??= []).push({
@@ -56,6 +62,8 @@ export function addPrepTopology(
         versionCount: analysis.nodes.length,
         issues: analysis.issues,
         truncated: analysis.truncated,
+        schemaRequirements: analysis.schemaRequirements,
+        appliedSchemaObservations: analysis.appliedSchemaObservations,
       },
     });
   if (details.truncated) traversal.truncate('PREP_DETAIL_LIMIT');
@@ -120,14 +128,8 @@ export function addPrepTopology(
     if (!internalSource)
       addEdge(flow.id, step.id, 'contains-step-with-unknown-column-dependencies', 'unknown', false);
     for (const next of raw.nextNodes ?? []) {
-      if (next.namespace || next.nextNamespace) {
-        traversal.warn(
-          'PREP_NAMESPACE_UNSUPPORTED',
-          'Namespaced document links require additional schema support and were not joined.',
-          flow.id,
-        );
-        continue;
-      }
+      // Port names affect field mappings, not the existence of this explicit
+      // step-to-step link. The field analyzer independently checks each port.
       const target = next.nextNodeId ? steps.get(next.nextNodeId) : undefined;
       if (target) addEdge(step.id, target.id, 'nextNodes', 'direct');
       else
@@ -173,11 +175,6 @@ export function addPrepTopology(
     }
   }
   graph.coverage.prep = 'static-fields-with-gaps';
-  traversal.warn(
-    'PREP_CATALOG_BINDING_UNVERIFIED',
-    'Supported static field versions follow saved operation order and namespaces. Catalog field-ID bindings remain unverified; dynamic or unsupported mappings are explicit gaps. Equal names across API namespaces are never joined.',
-    flow.id,
-  );
   if (!entries.length)
     traversal.warn(
       'PREP_EMPTY_DOCUMENT',

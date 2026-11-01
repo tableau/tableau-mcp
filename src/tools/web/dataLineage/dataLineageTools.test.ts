@@ -10,6 +10,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getAnalyzeDataImpactTool } from './analyzeDataImpact.js';
 import { executeDataLineage } from './executeDataLineage.js';
 import { getGetDataLineageTool } from './getDataLineage.js';
+import { prepDocumentSha256 } from './prepSchemaObservations.js';
 
 const mocks = vi.hoisted(() => ({
   graphql: vi.fn(),
@@ -48,8 +49,12 @@ const page = (
   nodes,
   pageInfo: { hasNextPage: false, endCursor: null },
 });
-const args = (values: Record<string, unknown> = {}): LineageOptions =>
-  z.object(dataLineageParams).parse({ source: { type: 'flow', luid }, ...values });
+const args = (
+  values: Record<string, unknown> = {},
+): LineageOptions & { observedPrepSchemas: LineageOptions['observedPrepSchemas'] } => {
+  const parsed = z.object(dataLineageParams).parse({ source: { type: 'flow', luid }, ...values });
+  return { ...parsed, observedPrepSchemas: parsed.observedPrepSchemas };
+};
 const extra = (disableMetadataApiRequests = false): ReturnType<typeof getMockRequestHandlerExtra> =>
   getMockRequestHandlerExtra({
     getConfigWithOverrides: vi
@@ -94,6 +99,30 @@ describe('data lineage tools and optional document guards', () => {
     expect(mocks.document).not.toHaveBeenCalled();
     expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
     expect(mocks.useRestApi.mock.calls[0][0].jwtScopes).not.toContain('tableau:flows:download');
+  });
+  it('treats source-bound observations as an explicit document request and retains the download grant', async () => {
+    const document = { nodes: { s: { id: 's', nodeType: '.v1.LoadCsv' } } };
+    mocks.document.mockResolvedValue(document);
+    const graph = await executeDataLineage(
+      args({
+        observedPrepSchemas: [
+          {
+            documentSha256: prepDocumentSha256(document),
+            nodeId: 's',
+            fields: [{ name: 'Amount', type: 'real' }],
+          },
+        ],
+      }),
+      extra(),
+      version,
+    );
+    expect(mocks.document).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.useRestApi.mock.calls.some(([call]) =>
+        call.jwtScopes.includes('tableau:flows:download'),
+      ),
+    ).toBe(true);
+    expect(graph.prepDetails?.[0].fieldAnalysis?.appliedSchemaObservations).toBe(1);
   });
   it.each(['stdio', 'http'] as const)(
     'rejects unconfigured/remote local access on %s without Tableau calls',

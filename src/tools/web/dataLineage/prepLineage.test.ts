@@ -205,7 +205,7 @@ describe('Prep graph integration', () => {
     expect(traversal.result.sourceId).toBe(id);
   });
 
-  it('omits ambiguous IDs, namespaced links and unsupported field origins', () => {
+  it('omits ambiguous IDs and their links without mistaking them for namespace failures', () => {
     const traversal = builder();
     addPrepTopology(
       traversal,
@@ -224,9 +224,34 @@ describe('Prep graph integration', () => {
     expect(traversal.result.warnings.map((w) => w.code)).toEqual(
       expect.arrayContaining([
         'PREP_DUPLICATE_STEP',
-        'PREP_NAMESPACE_UNSUPPORTED',
+        'PREP_DANGLING_STEP',
         'PREP_SOURCE_UNRESOLVED',
       ]),
+    );
+  });
+  it('keeps explicit namespaced step links while field-port mapping remains independently analyzed', () => {
+    const traversal = builder();
+    addPrepTopology(
+      traversal,
+      flow,
+      {
+        nodes: {
+          input: {
+            id: 'input',
+            nodeType: '.v1.LoadCsv',
+            fields: [{ name: 'Amount', type: 'real' }],
+            nextNodes: [{ nextNodeId: 'output', namespace: 'Default', nextNamespace: 'Default' }],
+          },
+          output: { id: 'output', nodeType: '.v1.PublishExtract' },
+        },
+      },
+      { type: 'prep-step', flowLuid: luid, stepId: 'input' },
+    );
+    expect(
+      traversal.result.edges.some((e) => e.relationship === 'nextNodes' && e.evidence === 'direct'),
+    ).toBe(true);
+    expect(traversal.result.warnings.some((w) => w.code === 'PREP_NAMESPACE_UNSUPPORTED')).toBe(
+      false,
     );
   });
 });

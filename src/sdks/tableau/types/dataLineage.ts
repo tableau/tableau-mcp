@@ -5,6 +5,24 @@ import { luidSchema } from '../../routeSafety/ids.js';
 const metadataId = z.string().min(1).max(2048).describe('Opaque Metadata API ID, not a REST LUID.');
 const text = z.string().min(1).max(1024);
 
+export const prepSchemaObservation = z
+  .object({
+    documentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    nodeId: text,
+    fields: z
+      .array(
+        z
+          .object({
+            name: text.refine((value) => value.trim().length > 0),
+            type: z.enum(['boolean', 'date', 'datetime', 'integer', 'real', 'spatial', 'string']),
+          })
+          .strict(),
+      )
+      .max(5000),
+  })
+  .strict();
+export type PrepSchemaObservation = z.infer<typeof prepSchemaObservation>;
+
 export const lineageSourceSchema = z.union([
   z.object({
     type: z.literal('local-flow'),
@@ -81,6 +99,33 @@ export const dataLineageParams = {
     .describe(
       'Read optional sanitized Flow Document API JSON (2026.3+, endpoint availability and download permission).',
     ),
+  observedPrepSchemas: z
+    .array(prepSchemaObservation)
+    .max(100)
+    .superRefine((values, context) => {
+      const ids = new Set<string>();
+      if (values.reduce((total, value) => total + value.fields.length, 0) > 5000)
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Observed schemas exceed the 5000-field total limit.',
+        });
+      for (const value of values) {
+        const key = JSON.stringify([value.documentSha256, value.nodeId]);
+        if (
+          ids.has(key) ||
+          new Set(value.fields.map((field) => field.name)).size !== value.fields.length
+        )
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Observed node identities and field names must be unique.',
+          });
+        ids.add(key);
+      }
+    })
+    .optional()
+    .describe(
+      'Optional operator-observed input/script/model output schemas, bound to the exact documentSha256 returned in prepDetails. Observations establish schema context, not script/model execution or internal column dependencies.',
+    ),
   maxDepth: z
     .number()
     .int()
@@ -143,8 +188,10 @@ export type LineageNode = {
   dataType?: string;
   formula?: string;
   stepId?: string;
+  fieldId?: string;
   operation?: string;
   flowLuid?: string;
+  flowLuids?: string[];
   documentPath?: string;
   documentId?: string;
   table?: { name?: string; schema?: string; database?: string };
@@ -180,8 +227,23 @@ export type DataLineageResult = {
     // to catalog column IDs or other steps by name.
     fieldAnalysis?: {
       versionCount: number;
-      issues: Array<{ code: string; path: string }>;
+      issues: Array<{
+        code: string;
+        path: string;
+        fieldName?: string;
+        status?: 'broken' | 'unresolved';
+      }>;
       truncated: boolean;
+      catalogBindings?: {
+        confirmed: number;
+        unresolved: number;
+        unresolvedReasons?: Record<string, number>;
+      };
+      schemaRequirements?: {
+        documentSha256: string;
+        nodes: Array<{ nodeId: string; nodeType: string }>;
+      };
+      appliedSchemaObservations?: number;
     };
     operations: Array<{
       path: string[];

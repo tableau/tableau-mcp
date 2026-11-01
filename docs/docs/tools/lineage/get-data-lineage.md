@@ -52,6 +52,29 @@ field cannot be bound to a document field, show the processing context and the u
 separately; do not join them by a matching name. Keep `possible`/`unknown` evidence, coverage limits
 and missing permissions visible in the answer.
 
+## Saved Prep fields and observed schemas
+
+Saved input unions follow their `generatedInputs`, member actions and explicit column mappings.
+A complete current schema can resolve supported wildcard unpivot membership. Quick date calculations
+create derived fields; multi-row calculations also depend on their saved partition, order, rank and
+compute columns. Prediction edges describe the saved model input mappings, not model execution.
+
+Catalog handoffs require an exact native `fieldId`, an authorized owning Flow and, for an output,
+the exact output step. Captions and field order are never identity evidence. Inspect
+`prepDetails[].fieldAnalysis.catalogBindings` for confirmed and unresolved counts/reasons.
+
+For input or script output schemas that are absent from the document, the optional
+`observedPrepSchemas` argument accepts `{documentSha256, nodeId, fields: [{name, type}]}` records.
+Use `fieldAnalysis.schemaRequirements.documentSha256` and its node identities from a first call.
+Only current operator-observed names and physical types are accepted; changed document content,
+duplicate fields and extra properties are rejected. The limits are 100 observations and 5,000
+fields in total. Observations require the same document access as other Prep details.
+
+An observed script output is a creation boundary: downstream use can be traced, while arbitrary
+Python/R input-to-output logic still needs external dependency evidence. An output schema alone
+cannot prove that logic, and the tools execute no scripts or models. Future runtime column changes,
+missing saved members, unsupported versions and ambiguous native identifiers remain explicit.
+
 ## Content and external-asset usage
 
 External assets follow the
@@ -112,7 +135,8 @@ Metadata IDs, document step IDs and REST LUIDs are distinct namespaces. Returned
 identify nodes in this response; use `metadataId`, `luid` or `stepId` for the corresponding source.
 
 `direction` is `upstream`, `downstream` (default), or `both`. Optional Prep documents are requested
-only when `includePrepDetails=true` or a `prep-step`/`prep-field` origin needs its document.
+when `includePrepDetails=true`, a `prep-step`/`prep-field` origin needs its document, or
+`observedPrepSchemas` is supplied. The same download permission checks apply.
 
 | Limit                                                      | Default | Maximum |
 | ---------------------------------------------------------- | ------: | ------: |
@@ -224,10 +248,10 @@ aggregate, Join namespaces and suffixes, Union mappings, both Pivot directions, 
 value/type changes and explicit external/unknown boundaries. These rules analyze saved JSON; they do
 not run Prep or evaluate expressions. Unknown type versions never inherit a rule just because their
 suffix looks familiar. Dynamic schemas, unsupported expressions, ambiguous ports/names, external
-scripts and unverified model outputs remain gaps in `prepDetails.fieldAnalysis`.
+script dependencies and missing model input mappings remain gaps in `prepDetails.fieldAnalysis`.
 
 Static document-field mappings and Metadata API identities are separate evidence sources. An exact
-flow/output `stepId` can connect their content; unverified catalog output-field bindings are marked
+native `fieldId` plus owning Flow/output `stepId` can establish a column handoff; unmatched output bindings are marked
 `possible`. Equal field names across flows, branches or API namespaces are never a join key. Graph
 nodes can include context; use the explicit `impacts` list from
 [Analyze Data Impact](analyze-data-impact.md) when deciding which targets have a path from the
