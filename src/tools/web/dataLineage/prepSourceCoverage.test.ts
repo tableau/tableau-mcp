@@ -496,6 +496,83 @@ describe('native Flow fieldId handoff', () => {
     expect(bindings[1].version).toBeUndefined();
   });
 
+  it('identifies a catalog input absent from a complete saved Excel schema without inventing a version', () => {
+    const document = flow(
+      node(source, '.v1.LoadExcel', { fields: fields('2015', '2016', 'Other') }),
+      node('unpivot', '.v1.Unpivot', {
+        unpivotGroups: [
+          { expressions: [{ bindings: [{ columnName: '2014', newColumnName: 'Value' }] }] },
+        ],
+      }),
+    );
+    const a = analyzePrepFields(document, luid);
+    const catalog = {
+      id: 'missing-input',
+      kind: 'flow-input-field' as const,
+      flowLuid: luid,
+      fieldId: `${source}-${source}-2014`,
+      name: 'Different caption',
+    };
+    expect(prepCatalogBindings([catalog], luid, a)[0]).toMatchObject({
+      reason: 'native-input-field-absent-from-saved-schema',
+    });
+    expect(prepCatalogBindings([catalog], luid, a)[0].version).toBeUndefined();
+    expect(a.nodes.some((n) => n.name === '2014')).toBe(false);
+    expect(a.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'unresolved-field-reference',
+        fieldName: '2014',
+        status: 'broken',
+      }),
+    );
+    const traversal = new DataLineageTraversal(
+      z.object(dataLineageParams).parse({ source: { type: 'flow', luid }, maxNodes: 500 }),
+      { graphql: vi.fn(), isAllowed: async () => true, prepEnabled: true },
+    );
+    const flowNode = { id: 'flow', kind: 'flow' as const, luid };
+    traversal.result.nodes.push(flowNode, catalog);
+    addPrepTopology(traversal, flowNode, document, { type: 'flow', luid });
+    expect(traversal.result.prepDetails?.[0].fieldAnalysis?.catalogBindings).toEqual({
+      confirmed: 0,
+      unresolved: 1,
+      unresolvedReasons: { 'native-input-field-absent-from-saved-schema': 1 },
+    });
+    expect(
+      traversal.result.edges.some((edge) => edge.relationship === 'native-flow-field-id'),
+    ).toBe(false);
+  });
+
+  it('keeps unavailable schemas and unrelated native scopes separate from a saved-schema absence', () => {
+    const catalog = {
+      id: 'input',
+      kind: 'flow-input-field' as const,
+      flowLuid: luid,
+      fieldId: `${source}-${source}-Missing`,
+    };
+    const incomplete = analyzePrepFields(flow(node(source, '.v1.LoadExcel')), luid);
+    expect(prepCatalogBindings([catalog], luid, incomplete)[0].reason).toBe(
+      'native-field-id-not-found',
+    );
+    const complete = analyzePrepFields(
+      flow(node(source, '.v1.LoadExcel', { fields: fields('Amount') })),
+      luid,
+    );
+    expect(
+      prepCatalogBindings(
+        [{ ...catalog, fieldId: `${calculation}-${calculation}-Missing` }],
+        luid,
+        complete,
+      )[0].reason,
+    ).toBe('native-field-id-not-found');
+    expect(
+      prepCatalogBindings(
+        [{ ...catalog, fieldId: `${calculation}-${source}-Missing` }],
+        luid,
+        complete,
+      )[0].reason,
+    ).toBe('native-field-id-not-found');
+  });
+
   it('rejects name-only, wrong-output-step and foreign-flow lookalikes', () => {
     const a = analyzePrepFields(native(), luid);
     const rows = prepCatalogBindings(

@@ -34,6 +34,7 @@ export function prepCatalogBindings(
         ? (analysis.nativeFieldIds.get(nativeId) ?? new Set<string>())
         : new Set<string>();
       let candidates: string[];
+      let absentFromInputSchema = false;
       if (node.kind === 'flow-input-field') {
         candidates = [...new Set([...identified, ...scoped])].filter((id) =>
           ['input', 'input-union', 'generated-source-row-number'].includes(
@@ -64,6 +65,13 @@ export function prepCatalogBindings(
               ),
           );
           candidates = [...new Set([...candidates, ...scopedInputs])];
+          const states = [...(analysis.outputs.get(envelope[1])?.values() ?? [])];
+          const name = nativeId?.slice(envelope[1].length + 1);
+          absentFromInputSchema =
+            !candidates.length &&
+            !!name &&
+            states.length > 0 &&
+            states.every((state) => state.complete && !state.fields.has(name));
         }
       } else {
         if (!node.stepId) return { catalog: node, reason: 'missing-output-step-id' };
@@ -85,7 +93,11 @@ export function prepCatalogBindings(
         ? { catalog: node, version: candidates[0] }
         : {
             catalog: node,
-            reason: candidates.length ? 'ambiguous-native-field-id' : 'native-field-id-not-found',
+            reason: candidates.length
+              ? 'ambiguous-native-field-id'
+              : absentFromInputSchema
+                ? 'native-input-field-absent-from-saved-schema'
+                : 'native-field-id-not-found',
           };
     });
 }

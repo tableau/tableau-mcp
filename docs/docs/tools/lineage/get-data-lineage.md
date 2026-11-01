@@ -54,23 +54,23 @@ and missing permissions visible in the answer.
 
 ## Saved Prep fields and observed schemas
 
-Saved input unions follow their `generatedInputs`, member actions and explicit column mappings.
-A complete current schema can resolve supported wildcard unpivot membership. Quick date calculations
+Saved input unions follow their `generatedInputs`, member actions and explicit column mappings. A
+complete current schema can resolve supported wildcard unpivot membership. Quick date calculations
 create derived fields; multi-row calculations also depend on their saved partition, order, rank and
 compute columns. Prediction edges describe the saved model input mappings, not model execution.
 
 Catalog handoffs require an exact native `fieldId`, an authorized owning Flow and, for an output,
-the exact output step. Observed Cloud node-scoped field IDs are resolved only when the outer
-scope repeats the native origin or matches that output step; arbitrary UUID prefixes are refused.
-Captions and field order are never identity evidence. Inspect
-`prepDetails[].fieldAnalysis.catalogBindings` for confirmed and unresolved counts/reasons.
+the exact output step. Observed Cloud node-scoped field IDs are resolved only when the outer scope
+repeats the native origin or matches that output step; arbitrary UUID prefixes are refused. Captions
+and field order are never identity evidence. Inspect `prepDetails[].fieldAnalysis.catalogBindings`
+for confirmed and unresolved counts/reasons.
 
 For input or script output schemas that are absent from the document, the optional
 `observedPrepSchemas` argument accepts `{documentSha256, nodeId, fields: [{name, type}]}` records.
 Use `fieldAnalysis.schemaRequirements.documentSha256` and its node identities from a first call.
 Only current operator-observed names and physical types are accepted; changed document content,
-duplicate fields and extra properties are rejected. The limits are 100 observations and 5,000
-fields in total. Observations require the same document access as other Prep details.
+duplicate fields and extra properties are rejected. The limits are 100 observations and 5,000 fields
+in total. Observations require the same document access as other Prep details.
 
 An observed script output is a creation boundary: downstream use can be traced, while arbitrary
 Python/R input-to-output logic still needs external dependency evidence. An output schema alone
@@ -253,11 +253,17 @@ suffix looks familiar. Dynamic schemas, unsupported expressions, ambiguous ports
 script dependencies and missing model input mappings remain gaps in `prepDetails.fieldAnalysis`.
 
 Static document-field mappings and Metadata API identities are separate evidence sources. An exact
-native `fieldId` plus owning Flow/output `stepId` can establish a column handoff; unmatched output bindings are marked
-`possible`. Equal field names across flows, branches or API namespaces are never a join key. Graph
-nodes can include context; use the explicit `impacts` list from
+native `fieldId` plus owning Flow/output `stepId` can establish a column handoff; unmatched output
+bindings are marked `possible`. Equal field names across flows, branches or API namespaces are never
+a join key. Graph nodes can include context; use the explicit `impacts` list from
 [Analyze Data Impact](analyze-data-impact.md) when deciding which targets have a path from the
 proposed change.
+
+`prepDetails.fieldAnalysis.catalogBindings.unresolvedReasons` distinguishes
+`native-input-field-absent-from-saved-schema`: the catalog's exact input-node identity names a field
+absent from that node's resolved saved schema. Check saved-reference issues and reconcile the source
+schema or flow definition before completing the field journey. No missing field version is
+fabricated; unavailable schemas retain the generic unresolved-identity reason.
 
 ## Boundaries and limitations
 
