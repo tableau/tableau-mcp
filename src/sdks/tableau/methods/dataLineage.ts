@@ -100,6 +100,7 @@ export class DataLineageTraversal {
   private readonly verifiedInputs = new Map<string, LineageWireNode>();
   private readonly expanded = new Set<string>();
   private readonly edgeIds = new Set<string>();
+  private reservedMetadataRequests = 0;
   private readonly queue: Array<{ id: string; depth: number }> = [];
 
   constructor(
@@ -136,9 +137,9 @@ export class DataLineageTraversal {
     this.warn(code, 'Traversal reached a configured limit; additional dependencies may exist.');
   }
 
-  reserveRequest(): boolean {
+  reserveRequest(reservedRequests = 0): boolean {
     this.dependencies.signal?.throwIfAborted();
-    if (this.result.coverage.requests >= this.options.maxRequests) {
+    if (this.result.coverage.requests >= this.options.maxRequests - reservedRequests) {
       this.truncate('REQUEST_LIMIT');
       return false;
     }
@@ -147,7 +148,7 @@ export class DataLineageTraversal {
   }
 
   private async request(query: string): Promise<z.infer<typeof connectionSchema> | undefined> {
-    if (!this.reserveRequest()) return undefined;
+    if (!this.reserveRequest(this.reservedMetadataRequests)) return undefined;
     try {
       const envelope = z
         .object({
@@ -402,118 +403,128 @@ export class DataLineageTraversal {
     }
   }
 
-  async expand(): Promise<void> {
-    while (this.queue.length) {
-      const { id, depth } = this.queue.shift()!;
-      if (this.expanded.has(id)) continue;
-      this.expanded.add(id);
-      const entry = this.wires.get(id);
-      if (!entry) continue;
-      const selected = this.selectedRelations(entry.kind);
-      if (!selected.length) continue;
-      if (depth >= this.options.maxDepth) {
-        this.truncate('DEPTH_LIMIT');
-        continue;
-      }
-      const root = this.rootFor(entry.wire, entry.kind);
-      if (!root) continue;
-      let pending = selected.map((relation, index) => ({
-        relation,
-        alias: `r${index}`,
-        after: undefined as string | undefined,
-        cursors: new Set<string>(),
-      }));
-      while (pending.length) {
-        const response = await this.request(
-          metadataQuery(
-            root,
-            `id: ${JSON.stringify(entry.wire.id)}`,
-            `${identitySelection(entry.kind)}\n${pending.map((p) => relationSelection(p.relation, p.alias, this.options.pageSize, p.after)).join('\n')}`,
-          ),
-        );
-        if (!response) break;
-        const owner = response.nodes.find((n) => n?.id === entry.wire.id);
-        if (!owner) {
-          this.warn(
-            'ASSET_DISAPPEARED',
-            'An asset became unavailable during traversal; its relationships are unknown.',
-            id,
-          );
-          break;
+  async expand(reservedRequests = 0): Promise<void> {
+    // Keep the explicitly requested source document within the same total budget.
+    this.reservedMetadataRequests = reservedRequests;
+    try {
+      while (this.queue.length) {
+        const { id, depth } = this.queue.shift()!;
+        if (this.expanded.has(id)) continue;
+        this.expanded.add(id);
+        const entry = this.wires.get(id);
+        if (!entry) continue;
+        const selected = this.selectedRelations(entry.kind);
+        if (!selected.length) continue;
+        if (depth >= this.options.maxDepth) {
+          this.truncate('DEPTH_LIMIT');
+          continue;
         }
-        const next: typeof pending = [];
-        for (const p of pending) {
-          const raw = owner[p.alias];
-          if (raw == null) {
-            if (raw === null && !p.relation.connection) continue;
-            // A type-specific inline fragment can legitimately be absent.
-            if (!p.relation.on) {
-              this.result.coverage.metadata = 'partial';
-              this.warn('RELATION_UNAVAILABLE', 'A requested relationship was not returned.', id);
-            }
-            continue;
+        const root = this.rootFor(entry.wire, entry.kind);
+        if (!root) continue;
+        let pending = selected.map((relation, index) => ({
+          relation,
+          alias: `r${index}`,
+          after: undefined as string | undefined,
+          cursors: new Set<string>(),
+        }));
+        while (pending.length) {
+          const response = await this.request(
+            metadataQuery(
+              root,
+              `id: ${JSON.stringify(entry.wire.id)}`,
+              `${identitySelection(entry.kind)}\n${pending.map((p) => relationSelection(p.relation, p.alias, this.options.pageSize, p.after)).join('\n')}`,
+            ),
+          );
+          if (!response) break;
+          const owner = response.nodes.find((n) => n?.id === entry.wire.id);
+          if (!owner) {
+            this.warn(
+              'ASSET_DISAPPEARED',
+              'An asset became unavailable during traversal; its relationships are unknown.',
+              id,
+            );
+            break;
           }
-          const parsed = p.relation.connection
-            ? connectionSchema.safeParse(raw)
-            : z
-                .union([lineageWireNodeSchema, z.array(lineageWireNodeSchema.nullable())])
-                .safeParse(raw);
-          if (!parsed.success) {
-            this.result.coverage.metadata = 'partial';
-            this.warn('RELATION_INVALID', 'A relationship had an unsupported response shape.', id);
-            continue;
-          }
-          const connection = p.relation.connection
-            ? connectionSchema.parse(parsed.data)
-            : undefined;
-          const values =
-            connection?.nodes ?? (Array.isArray(parsed.data) ? parsed.data : [parsed.data]);
-          for (const value of values) {
-            if (!value) {
-              this.result.coverage.metadata = 'partial';
+          const next: typeof pending = [];
+          for (const p of pending) {
+            const raw = owner[p.alias];
+            if (raw == null) {
+              if (raw === null && !p.relation.connection) continue;
+              // A type-specific inline fragment can legitimately be absent.
+              if (!p.relation.on) {
+                this.result.coverage.metadata = 'partial';
+                this.warn('RELATION_UNAVAILABLE', 'A requested relationship was not returned.', id);
+              }
               continue;
             }
-            let wire = lineageWireNodeSchema.parse(value);
-            if (p.relation.permissionMode === false) {
-              // This reverse link has no permissionMode argument. Re-resolve
-              // through its discovery root; canInclude then confirms it through
-              // the owning Flow's FILTER connection before it can be exposed.
-              const targetRoot = this.rootFor(wire, p.relation.target);
-              if (!targetRoot) continue;
-              const filtered = await this.request(
-                metadataQuery(
-                  targetRoot,
-                  `id: ${JSON.stringify(wire.id)}`,
-                  identitySelection(p.relation.target),
-                ),
-              );
-              const visible = filtered?.nodes.find((n) => n?.id === wire.id);
-              if (!visible) continue;
-              wire = visible;
-            }
-            const node = await this.add(wire, p.relation.target);
-            if (!node) continue;
-            if (p.relation.direction === 'downstream') this.edge(id, node.id, p.relation);
-            else this.edge(node.id, id, p.relation);
-            if (!p.relation.terminal) this.queue.push({ id: node.id, depth: depth + 1 });
-          }
-          if (connection?.pageInfo.hasNextPage) {
-            const cursor = connection.pageInfo.endCursor;
-            if (!cursor || p.cursors.has(cursor)) {
+            const parsed = p.relation.connection
+              ? connectionSchema.safeParse(raw)
+              : z
+                  .union([lineageWireNodeSchema, z.array(lineageWireNodeSchema.nullable())])
+                  .safeParse(raw);
+            if (!parsed.success) {
               this.result.coverage.metadata = 'partial';
               this.warn(
-                'INVALID_CURSOR',
-                'Metadata pagination did not advance; additional relationships are unknown.',
+                'RELATION_INVALID',
+                'A relationship had an unsupported response shape.',
                 id,
               );
-            } else {
-              p.cursors.add(cursor);
-              next.push({ ...p, after: cursor });
+              continue;
+            }
+            const connection = p.relation.connection
+              ? connectionSchema.parse(parsed.data)
+              : undefined;
+            const values =
+              connection?.nodes ?? (Array.isArray(parsed.data) ? parsed.data : [parsed.data]);
+            for (const value of values) {
+              if (!value) {
+                this.result.coverage.metadata = 'partial';
+                continue;
+              }
+              let wire = lineageWireNodeSchema.parse(value);
+              if (p.relation.permissionMode === false) {
+                // This reverse link has no permissionMode argument. Re-resolve
+                // through its discovery root; canInclude then confirms it through
+                // the owning Flow's FILTER connection before it can be exposed.
+                const targetRoot = this.rootFor(wire, p.relation.target);
+                if (!targetRoot) continue;
+                const filtered = await this.request(
+                  metadataQuery(
+                    targetRoot,
+                    `id: ${JSON.stringify(wire.id)}`,
+                    identitySelection(p.relation.target),
+                  ),
+                );
+                const visible = filtered?.nodes.find((n) => n?.id === wire.id);
+                if (!visible) continue;
+                wire = visible;
+              }
+              const node = await this.add(wire, p.relation.target);
+              if (!node) continue;
+              if (p.relation.direction === 'downstream') this.edge(id, node.id, p.relation);
+              else this.edge(node.id, id, p.relation);
+              if (!p.relation.terminal) this.queue.push({ id: node.id, depth: depth + 1 });
+            }
+            if (connection?.pageInfo.hasNextPage) {
+              const cursor = connection.pageInfo.endCursor;
+              if (!cursor || p.cursors.has(cursor)) {
+                this.result.coverage.metadata = 'partial';
+                this.warn(
+                  'INVALID_CURSOR',
+                  'Metadata pagination did not advance; additional relationships are unknown.',
+                  id,
+                );
+              } else {
+                p.cursors.add(cursor);
+                next.push({ ...p, after: cursor });
+              }
             }
           }
+          pending = next;
         }
-        pending = next;
       }
+    } finally {
+      this.reservedMetadataRequests = 0;
     }
   }
 }

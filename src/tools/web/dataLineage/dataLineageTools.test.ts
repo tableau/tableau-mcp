@@ -124,6 +124,31 @@ describe('data lineage tools and optional document guards', () => {
     expect(mocks.document).toHaveBeenCalledWith({ siteId: 'site', flowId: luid });
     expect(mocks.useRestApi.mock.calls[1][0].jwtScopes).toEqual(DESCRIBE_FLOW_API_SCOPES);
   });
+  it('reserves one request for explicitly requested source Flow details within the total budget', async () => {
+    const graph = await executeDataLineage(
+      args({ includePrepDetails: true, maxRequests: 2 }),
+      extra(),
+      version,
+    );
+    expect(graph.resolution).toBe('resolved');
+    expect(mocks.graphql).toHaveBeenCalledTimes(1);
+    expect(mocks.document).toHaveBeenCalledTimes(1);
+    expect(graph.coverage.requests).toBe(2);
+    expect(graph.prepDetails).toHaveLength(1);
+    expect(graph.warnings.some((w) => w.code === 'REQUEST_LIMIT')).toBe(true);
+  });
+  it('does not exceed a one-request budget even when source Flow details are requested', async () => {
+    const graph = await executeDataLineage(
+      args({ includePrepDetails: true, maxRequests: 1 }),
+      extra(),
+      version,
+    );
+    expect(mocks.graphql).toHaveBeenCalledTimes(1);
+    expect(mocks.document).not.toHaveBeenCalled();
+    expect(graph.coverage.requests).toBe(1);
+    expect(graph.coverage.prep).toBe('unavailable');
+    expect(graph.warnings.some((w) => w.code === 'REQUEST_LIMIT')).toBe(true);
+  });
   it('retains catalog results without calling an unavailable older-version endpoint', async () => {
     const graph = await executeDataLineage(args({ includePrepDetails: true }), extra(), {
       value: '2026.2.0',

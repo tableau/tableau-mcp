@@ -76,16 +76,21 @@ export async function executeDataLineage(
           'Prep read tools are disabled; the graph excludes Prep assets.',
         );
       extra.signal.throwIfAborted();
+      const supported = getResultForTableauVersion({
+        productVersion,
+        mappings: { '2026.3.0': true, default: false },
+      });
       await traversal.resolve();
-      await traversal.expand();
+      const reserveDocument =
+        (options.includePrepDetails || internalSource) &&
+        source.type === 'flow' &&
+        supported &&
+        prepEnabled;
+      await traversal.expand(reserveDocument ? 1 : 0);
       const graph = traversal.result;
       if (graph.resolution !== 'resolved') return graph;
       if (options.includePrepDetails || internalSource) {
         graph.coverage.prep = 'unavailable';
-        const supported = getResultForTableauVersion({
-          productVersion,
-          mappings: { '2026.3.0': true, default: false },
-        });
         if (!supported || !prepEnabled) {
           traversal.warn(
             'PREP_DOCUMENT_UNAVAILABLE',
