@@ -1,8 +1,8 @@
 # Get Data Lineage
 
-Trace data dependencies upstream or downstream from a database column, Tableau field, data source,
-Prep flow, Prep input/output field, output step, or an internal Prep step/field. The tool is
-read-only.
+Trace data dependencies upstream or downstream from an external database/file/table, database
+column, Workbook, published or embedded data source, Tableau field, Prep flow, worksheet, dashboard,
+or an internal Prep step/field. The tool is read-only.
 
 For example:
 
@@ -24,13 +24,84 @@ For example:
 Names must match exactly. If multiple columns match, the result is `ambiguous` and provides
 candidates with their Metadata API IDs and table qualifications. It never chooses the first match.
 
+## Investigate a field from origin through processing to its users
+
+To answer "Where does this field come from, how is it processed through Prep, and which data
+sources, flows and workbooks use it?", resolve the field's exact Metadata ID from its owning data
+source, then request both directions and optional Prep details:
+
+```json
+{
+  "source": { "type": "field", "id": "opaque-metadata-field-id" },
+  "direction": "both",
+  "includePrepDetails": true,
+  "maxDepth": 12
+}
+```
+
+Follow upstream graph edges to source columns/tables/files and Prep input/output fields; follow
+downstream edges to published/embedded data sources, later flows, worksheets, dashboards and owning
+workbooks. Flow LUIDs identify the Prep context. For native processing, inspect supported
+`prep-field` versions and the matching operation `documentPath`/`path`, references, expressions and
+output names. Use `analyze-data-impact` for a proposed change and its representative downstream
+evidence paths.
+
+An operation list describes the owning Flow document, not proof that every listed operation uses the
+selected field. A confirmed field path requires supported reference/mapping edges. If a catalog
+field cannot be bound to a document field, show the processing context and the unresolved handoff
+separately; do not join them by a matching name. Keep `possible`/`unknown` evidence, coverage limits
+and missing permissions visible in the answer.
+
+## Content and external-asset usage
+
+External assets follow the
+[Tableau Catalog model](https://help.tableau.com/current/online/en-us/dm_perms_assets.htm):
+databases include files, and tables include table-like objects. Use `database` with the Metadata ID
+of a `File`/`CloudFile` for a CSV/XLSX or other indexed file asset; this does not read the file or
+its connection settings. The returned `metadataType` distinguishes its concrete type.
+
+For a Workbook's inputs and contained visualizations:
+
+```json
+{
+  "source": { "type": "workbook", "luid": "11111111-1111-4111-8111-111111111111" },
+  "direction": "both",
+  "includePrepDetails": true
+}
+```
+
+For an external table's use in Prep, data sources and dashboards:
+
+```json
+{
+  "source": { "type": "table", "id": "opaque-metadata-table-id" },
+  "direction": "downstream"
+}
+```
+
+Workbook inputs connect through embedded/published data sources, upstream Prep and external
+tables/databases. Prep input/output fields and catalog content rollups expose upstream producers and
+downstream users. Upstream and downstream walks remain separate even with `both`: an upstream shared
+data source or containing table never sends that walk into its other users or sibling columns.
+Workbook members are terminal impact targets; a column-to-Workbook containment edge cannot fan out
+to unrelated views.
+
+Content rollups remain `possible` evidence. They can identify use of an asset without proving a
+particular column mapping or reconstructing every intermediate hop. A Workbook as a whole has its
+contained sheets/dashboards as downstream targets; its upstream data sources are not downstream
+impacts.
+
 ## Origins and parameters
 
 | Source type                                                 | Required identity                                                                                |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `database`                                                  | Opaque Metadata API `id`; includes `DatabaseServer`, `File` and `CloudFile` assets               |
+| `table`                                                     | Opaque Metadata API `id`, including database tables and indexed custom SQL tables                |
+| `workbook`                                                  | Workbook REST `luid` or opaque Metadata API `id`                                                 |
+| `sheet`, `dashboard`                                        | Opaque Metadata API `id`                                                                         |
 | `column`                                                    | Opaque Metadata API `id`, or exact `name` and `table`, optionally `database` and `schema`        |
 | `field`                                                     | Opaque Metadata API `id`                                                                         |
-| `datasource`                                                | Published data source REST `luid`                                                                |
+| `datasource`                                                | Published data source REST `luid`, or published/embedded Metadata API `id`                       |
 | `flow`                                                      | Flow REST `luid`                                                                                 |
 | `flow-input-field`, `flow-output-field`, `flow-output-step` | Opaque Metadata API `id`                                                                         |
 | `prep-step`                                                 | `flowLuid` and document `stepId`                                                                 |
@@ -165,10 +236,10 @@ proposed change.
 ## Boundaries and limitations
 
 Every returned content/field owner is checked against configured resource restrictions before it can
-enter a result or path. Private parent references are projected away. External database columns have
-no supported mapping to those restrictions, so column origins/nodes are excluded whenever a bounded
-context is configured. Embedded fields require an allowed owning workbook and remain excluded under
-a data-source-ID ceiling.
+enter a result or path. Private parent references are projected away. External
+databases/files/tables/columns have no supported mapping to those restrictions, so these
+origins/nodes are excluded whenever a bounded context is configured. Embedded fields require an
+allowed owning workbook and remain excluded under a data-source-ID ceiling.
 
 The published `flowFieldInputFieldsConnection` root and reverse field-input relationship do not
 accept `permissionMode`. Such discovery results are never returned directly. Each input is

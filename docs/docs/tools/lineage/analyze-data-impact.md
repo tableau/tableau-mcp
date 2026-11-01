@@ -27,9 +27,18 @@ To analyze a field at a specific Prep step, use:
 }
 ```
 
-`change` is `delete`, `rename`, `type-change`, `calculation-change` or `step-change`. It records the
-proposed operation; the analysis does not simulate values, infer native result types or prove that a
-particular calculation will break. Traversal is always downstream.
+`change` is `delete`, `rename`, `type-change`, `calculation-change`, `step-change` or
+`content-change`. It records the proposed operation; the analysis does not simulate values, infer
+native result types or prove that a particular calculation will break. Traversal is always
+downstream.
+
+External database/file/table, Workbook and published/embedded data-source origins use the same exact
+identities as `get-data-lineage`. For example, investigate a data-source definition change with
+`{"source":{"type":"datasource","luid":"11111111-1111-4111-8111-111111111111"},"change":"content-change"}`,
+or a table removal with
+`{"source":{"type":"table","id":"opaque-metadata-table-id"},"change":"delete"}`. Workbook
+deletion/change returns its contained sheets/dashboards without labeling shared upstream data
+sources or their other users as downstream impacts.
 
 The same `local-flow` origin as [Get Data Lineage](get-data-lineage.md#local-tfl-and-tflx-files)
 supports local TFL/TFLX files, steps and output fields in self-hosted stdio with `LOCAL_FLOW_ROOTS`.

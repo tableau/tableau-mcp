@@ -13,8 +13,8 @@ export function lineageAccess(
   const workbook = async (id?: string | null): Promise<boolean> =>
     !!id && (await resourceAccessChecker.isWorkbookAllowed({ workbookId: id, extra })).allowed;
   return async (node, kind) => {
-    if (kind === 'column') {
-      // External columns have no supported project/tag/workbook scope mapping.
+    if (kind === 'column' || kind === 'table' || kind === 'database') {
+      // External catalog assets have no supported project/tag/workbook scope mapping.
       // Do not let an arbitrary external root bypass configured restrictions.
       return !bounded;
     }

@@ -30,6 +30,11 @@ export const lineageSourceSchema = z.union([
         'Optional exact local step or output-field origin; otherwise analyze the whole file.',
       ),
   }),
+  z.object({
+    type: z.literal('database'),
+    id: metadataId.describe('DatabaseServer, File or CloudFile Metadata API ID.'),
+  }),
+  z.object({ type: z.literal('table'), id: metadataId }),
   z.object({ type: z.literal('column'), id: metadataId }),
   z.object({
     type: z.literal('column'),
@@ -40,6 +45,14 @@ export const lineageSourceSchema = z.union([
   }),
   z.object({ type: z.literal('field'), id: metadataId }),
   z.object({ type: z.literal('datasource'), luid: luidSchema }),
+  z.object({
+    type: z.literal('datasource'),
+    id: metadataId.describe('Published or embedded data-source Metadata API ID.'),
+  }),
+  z.object({ type: z.literal('workbook'), luid: luidSchema }),
+  z.object({ type: z.literal('workbook'), id: metadataId }),
+  z.object({ type: z.literal('sheet'), id: metadataId }),
+  z.object({ type: z.literal('dashboard'), id: metadataId }),
   z.object({ type: z.literal('flow'), luid: luidSchema }),
   z.object({ type: z.literal('flow-input-field'), id: metadataId }),
   z.object({ type: z.literal('flow-output-field'), id: metadataId }),
@@ -55,7 +68,9 @@ export const lineageSourceSchema = z.union([
 ]);
 
 export const dataLineageParams = {
-  source: lineageSourceSchema.describe('The exact column, field, content, or native-flow origin.'),
+  source: lineageSourceSchema.describe(
+    'The exact external database/file/table, column, Tableau content/field, or native-flow origin.',
+  ),
   direction: z
     .enum(['upstream', 'downstream', 'both'])
     .default('downstream')
@@ -102,6 +117,8 @@ export const dataLineageParams = {
 export type LineageSource = z.infer<typeof lineageSourceSchema>;
 export type LineageOptions = z.infer<z.ZodObject<typeof dataLineageParams>>;
 export type LineageKind =
+  | 'database'
+  | 'table'
   | 'column'
   | 'field'
   | 'datasource'

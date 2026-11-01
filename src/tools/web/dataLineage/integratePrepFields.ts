@@ -42,24 +42,29 @@ export function integratePrepFields(
   }
   const relevant = new Set<string>();
   if (selectedId) {
-    const adjacency = new Map<string, string[]>();
-    for (const edge of analysis.edges) {
-      if (traversal.options.direction !== 'upstream')
-        adjacency.set(edge.from, [...(adjacency.get(edge.from) ?? []), edge.to]);
-      if (traversal.options.direction !== 'downstream')
-        adjacency.set(edge.to, [...(adjacency.get(edge.to) ?? []), edge.from]);
-    }
-    const queue = [selectedId];
-    while (queue.length) {
-      const id = queue.shift()!;
-      if (relevant.has(id)) continue;
-      relevant.add(id);
-      if (relevant.size > traversal.options.maxNodes) {
-        traversal.truncate('NODE_LIMIT');
-        break;
+    const walk = (upstream: boolean): void => {
+      const adjacency = new Map<string, string[]>();
+      for (const edge of analysis.edges) {
+        const from = upstream ? edge.to : edge.from;
+        const to = upstream ? edge.from : edge.to;
+        adjacency.set(from, [...(adjacency.get(from) ?? []), to]);
       }
-      queue.push(...(adjacency.get(id) ?? []));
-    }
+      const queue = [selectedId];
+      const seen = new Set<string>();
+      while (queue.length) {
+        const id = queue.shift()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        relevant.add(id);
+        if (relevant.size > traversal.options.maxNodes) {
+          traversal.truncate('NODE_LIMIT');
+          break;
+        }
+        queue.push(...(adjacency.get(id) ?? []));
+      }
+    };
+    if (traversal.options.direction !== 'upstream') walk(false);
+    if (traversal.options.direction !== 'downstream') walk(true);
   } else analysis.nodes.forEach((node) => relevant.add(node.id));
   const candidates = analysis.nodes
     .filter((node) => relevant.has(node.id))

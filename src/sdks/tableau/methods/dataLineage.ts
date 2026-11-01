@@ -26,6 +26,8 @@ export const lineageWireNodeSchema = z
     dataType: z.string().nullish(),
     formula: z.string().nullish(),
     stepId: z.string().nullish(),
+    schema: z.string().nullish(),
+    database: z.object({ name: z.string().nullish() }).nullish(),
     datasource: z
       .object({
         id: z.string(),
@@ -54,6 +56,10 @@ const connectionSchema = z.object({
 
 export function toLineageNode(wire: LineageWireNode, kind: LineageKind): LineageNode {
   const flows = Array.isArray(wire.flow) ? wire.flow : wire.flow ? [wire.flow] : [];
+  const table =
+    kind === 'table'
+      ? { name: wire.name, schema: wire.schema, database: wire.database }
+      : wire.table;
   return {
     id: `metadata:${wire.id}`,
     metadataId: wire.id,
@@ -65,12 +71,12 @@ export function toLineageNode(wire: LineageWireNode, kind: LineageKind): Lineage
     ...(wire.formula != null ? { formula: wire.formula.slice(0, 8000) } : {}),
     ...(wire.stepId ? { stepId: wire.stepId } : {}),
     ...(flows.length === 1 && flows[0]?.luid ? { flowLuid: flows[0].luid } : {}),
-    ...(wire.table
+    ...(table
       ? {
           table: {
-            name: wire.table.name ?? undefined,
-            schema: wire.table.schema ?? undefined,
-            database: wire.table.database?.name ?? undefined,
+            name: table.name ?? undefined,
+            schema: table.schema ?? undefined,
+            database: table.database?.name ?? undefined,
           },
         }
       : {}),
@@ -86,8 +92,9 @@ export type LineageDependencies = {
 
 export const lineageLimitations = [
   'Results describe indexed, permission-visible metadata, not a proof that a change is safe. Indexing delays and unsupported/custom SQL can omit dependencies.',
-  'Metadata downstream/upstream rollups are marked possible; their intermediate column or step paths are not inferred.',
+  'Metadata downstream/upstream rollups are marked possible; their intermediate column or step paths are not inferred. Both-direction requests use separate upstream/downstream walks and do not fan out through shared ancestors.',
   'Optional Prep details statically follow supported saved operations and namespaces. Catalog-field identity bindings, dynamic schemas, unsupported expressions and external/model execution remain unverified.',
+  'Prep operation lists describe the owning document. Only supported field-version dependencies prove that the selected field uses an operation; unbound catalog/document mappings remain unknown.',
   'Container membership is terminal and does not imply that every field or sheet in that container depends on the source.',
   'Detailed Prep input/output settings are scoped to non-database files and published Tableau data sources. Provider-specific database connection and database-write settings are outside this iteration; catalog database-column lineage is separate.',
 ];
@@ -101,7 +108,11 @@ export class DataLineageTraversal {
   private readonly expanded = new Set<string>();
   private readonly edgeIds = new Set<string>();
   private reservedMetadataRequests = 0;
-  private readonly queue: Array<{ id: string; depth: number }> = [];
+  private readonly queue: Array<{
+    id: string;
+    depth: number;
+    direction: 'upstream' | 'downstream';
+  }> = [];
 
   constructor(
     readonly options: LineageOptions,
@@ -289,10 +300,10 @@ export class DataLineageTraversal {
     return candidates?.[0];
   }
 
-  private selectedRelations(kind: LineageKind): Relation[] {
+  private selectedRelations(kind: LineageKind, direction: 'upstream' | 'downstream'): Relation[] {
     return (relations[kind] ?? []).filter(
       (r) =>
-        (this.options.direction === 'both' || r.direction === this.options.direction) &&
+        r.direction === direction &&
         (this.dependencies.prepEnabled || !r.target.startsWith('flow')),
     );
   }
@@ -315,7 +326,7 @@ export class DataLineageTraversal {
     for (const root of roots) {
       // A datasource LUID denotes a published datasource, not the distinct
       // unqueryable metadata ID of an embedded datasource.
-      if (source.type === 'datasource' && root !== roots[0]) continue;
+      if (source.type === 'datasource' && 'luid' in source && root !== roots[0]) continue;
       let after: string | undefined;
       const cursors = new Set<string>();
       do {
@@ -399,7 +410,11 @@ export class DataLineageTraversal {
     if (node) {
       this.result.resolution = 'resolved';
       this.result.sourceId = node.id;
-      this.queue.push({ id: node.id, depth: 0 });
+      const directions =
+        this.options.direction === 'both'
+          ? (['upstream', 'downstream'] as const)
+          : [this.options.direction];
+      for (const direction of directions) this.queue.push({ id: node.id, depth: 0, direction });
     }
   }
 
@@ -408,12 +423,13 @@ export class DataLineageTraversal {
     this.reservedMetadataRequests = reservedRequests;
     try {
       while (this.queue.length) {
-        const { id, depth } = this.queue.shift()!;
-        if (this.expanded.has(id)) continue;
-        this.expanded.add(id);
+        const { id, depth, direction } = this.queue.shift()!;
+        const expansionKey = `${id}:${direction}`;
+        if (this.expanded.has(expansionKey)) continue;
+        this.expanded.add(expansionKey);
         const entry = this.wires.get(id);
         if (!entry) continue;
-        const selected = this.selectedRelations(entry.kind);
+        const selected = this.selectedRelations(entry.kind, direction);
         if (!selected.length) continue;
         if (depth >= this.options.maxDepth) {
           this.truncate('DEPTH_LIMIT');
@@ -503,7 +519,8 @@ export class DataLineageTraversal {
               if (!node) continue;
               if (p.relation.direction === 'downstream') this.edge(id, node.id, p.relation);
               else this.edge(node.id, id, p.relation);
-              if (!p.relation.terminal) this.queue.push({ id: node.id, depth: depth + 1 });
+              if (!p.relation.terminal)
+                this.queue.push({ id: node.id, depth: depth + 1, direction });
             }
             if (connection?.pageInfo.hasNextPage) {
               const cursor = connection.pageInfo.endCursor;

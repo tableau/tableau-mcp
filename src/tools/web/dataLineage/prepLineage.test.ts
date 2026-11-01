@@ -42,9 +42,11 @@ const document: FlowDocument = {
     },
   },
 };
-function builder(): DataLineageTraversal {
+function builder(
+  direction: 'upstream' | 'downstream' | 'both' = 'downstream',
+): DataLineageTraversal {
   const traversal = new DataLineageTraversal(
-    z.object(dataLineageParams).parse({ source: { type: 'flow', luid } }),
+    z.object(dataLineageParams).parse({ source: { type: 'flow', luid }, direction }),
     { graphql: vi.fn(), isAllowed: async () => true, prepEnabled: true },
   );
   traversal.result.nodes.push(
@@ -134,6 +136,47 @@ describe('Prep graph integration', () => {
     expect(traversal.result.sourceId).toContain('prep-field:');
   });
 
+  it('keeps both-direction Prep field walks from crossing into a sibling calculation through a shared input', () => {
+    const traversal = builder('both');
+    addPrepTopology(
+      traversal,
+      flow,
+      {
+        nodes: {
+          input: {
+            id: 'input',
+            nodeType: '.v1.LoadSql',
+            fields: [{ name: 'Sales', type: 'real' }],
+            nextNodes: [{ nextNodeId: 'selected' }, { nextNodeId: 'sibling' }],
+          },
+          selected: {
+            id: 'selected',
+            nodeType: '.v1.AddColumn',
+            columnName: 'Gross',
+            expression: '[Sales] * 1.1',
+            nextNodes: [],
+          },
+          sibling: {
+            id: 'sibling',
+            nodeType: '.v1.AddColumn',
+            columnName: 'Unused',
+            expression: '[Sales] * 2',
+            nextNodes: [],
+          },
+        },
+      },
+      { type: 'prep-field', flowLuid: luid, stepId: 'selected', name: 'Gross' },
+    );
+    expect(traversal.result.resolution).toBe('resolved');
+    const fields = traversal.result.nodes.filter((n) => n.kind === 'prep-field').map((n) => n.name);
+    expect(fields).toEqual(expect.arrayContaining(['Sales', 'Gross']));
+    expect(fields).not.toContain('Unused');
+    expect(traversal.result.prepDetails?.[0].operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ expression: '[Sales] * 1.1', references: ['Sales'] }),
+      ]),
+    );
+  });
   it('does not reassign an internal source while adding details for another flow', () => {
     const traversal = builder();
     const source = { type: 'prep-step' as const, flowLuid: luid, stepId: 'start' };

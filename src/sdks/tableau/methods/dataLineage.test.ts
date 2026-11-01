@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { analyzeLineageImpact } from '../../../tools/web/dataLineage/dataImpact.js';
 import { dataLineageParams, DataLineageResult, LineageOptions } from '../types/dataLineage.js';
-import { DataLineageTraversal, LineageWireNode } from './dataLineage.js';
+import { DataLineageTraversal, LineageDependencies, LineageWireNode } from './dataLineage.js';
 import {
   metadataQuery,
   prepInputVisibilityQuery,
@@ -38,6 +38,8 @@ function graphService(
     const literal = query.match(/filter: \{ (id|luid|name): ("(?:\\.|[^"\\])*")/);
     const filter = literal ? { key: literal[1], value: JSON.parse(literal[2]) } : undefined;
     const types: Record<string, string[]> = {
+      databasesConnection: ['DatabaseServer', 'File', 'CloudFile', 'WebDataConnector', 'DataCloud'],
+      tablesConnection: ['DatabaseTable', 'CustomSQLTable'],
       columnsConnection: ['Column'],
       fieldsConnection: ['ColumnField', 'CalculatedField', 'DatasourceField'],
       flowsConnection: ['Flow'],
@@ -79,7 +81,7 @@ function graphService(
 async function traverse(
   graphql: (q: string) => Promise<unknown>,
   values: Partial<LineageOptions> = {},
-  isAllowed = async () => true,
+  isAllowed: LineageDependencies['isAllowed'] = async () => true,
 ): Promise<DataLineageResult> {
   const traversal = new DataLineageTraversal(options(values), {
     graphql,
@@ -91,7 +93,212 @@ async function traverse(
   return traversal.result;
 }
 
+function contentGraph(databaseType = 'DatabaseServer'): ReturnType<typeof graphService> {
+  const db = node('db', databaseType, { connectionString: 'PRIVATE_CONNECTION' });
+  const table = node('t', 'DatabaseTable', {
+    schema: 'public',
+    database: { name: db.name },
+    query: 'PRIVATE_QUERY',
+  });
+  const column = node('c', 'Column');
+  const flow = node('f', 'Flow', { luid: flowLuid });
+  const input = node('i', 'FlowColumnInputField', { flow });
+  const output = node('o', 'FlowFieldOutputField', { flow: [flow] });
+  const published = node('p', 'PublishedDatasource', {
+    luid: '22222222-2222-4222-8222-222222222222',
+  });
+  const field = node('field', 'ColumnField', { datasource: published });
+  const workbook = node('w', 'Workbook', { luid: '33333333-3333-4333-8333-333333333333' });
+  const embedded = node('e', 'EmbeddedDatasource', { workbook });
+  const remote = node('remote', 'DatasourceField', { datasource: embedded });
+  const sheet = node('s', 'Sheet', { workbook });
+  const dashboard = node('d', 'Dashboard', { workbook });
+  const siblingColumn = node('sibling-column', 'Column');
+  const unrelatedSheet = node('unrelated-sheet', 'Sheet');
+  return graphService(
+    [
+      db,
+      table,
+      column,
+      flow,
+      input,
+      output,
+      published,
+      field,
+      workbook,
+      embedded,
+      remote,
+      sheet,
+      dashboard,
+      siblingColumn,
+      unrelatedSheet,
+    ],
+    {
+      db: { tablesConnection: [table] },
+      t: { database: db, columnsConnection: [column, siblingColumn] },
+      c: { table, referencedByFlowColumnInputFieldConnection: [input] },
+      f: { inputFieldsConnection: [input], outputFieldsConnection: [output] },
+      i: { column, childFieldsConnection: [output] },
+      o: { parentFieldsConnection: [input], field },
+      p: {
+        fieldsConnection: [field],
+        upstreamFlowsConnection: [flow],
+        downstreamWorkbooksConnection: [workbook],
+        downstreamSheetsConnection: [sheet, unrelatedSheet],
+      },
+      field: {
+        referencedByRemoteFieldsConnection: [remote],
+        referencedByFlowFieldOutputFieldConnection: [output],
+      },
+      remote: { remoteField: field, directSheetsConnection: [sheet] },
+      e: {
+        parentPublishedDatasourcesConnection: [published],
+        upstreamDatasourcesConnection: [published],
+        fieldsConnection: [remote],
+      },
+      w: {
+        embeddedDatasourcesConnection: [embedded],
+        sheetsConnection: [sheet],
+        dashboardsConnection: [dashboard],
+      },
+      s: {
+        datasourceFieldsConnection: [remote],
+        containedInDashboardsConnection: [dashboard],
+        workbook,
+      },
+      d: { sheetsConnection: [sheet] },
+      'sibling-column': { referencedByFieldsConnection: [node('unused-field', 'ColumnField')] },
+    },
+  );
+}
+
 describe('Metadata data lineage traversal', () => {
+  it.each(['DatabaseServer', 'File', 'CloudFile'])(
+    'starts at an external %s and reaches Prep and dashboard users without connection payloads',
+    async (databaseType) => {
+      const graph = await traverse(contentGraph(databaseType), {
+        source: { type: 'database', id: 'db' },
+        maxDepth: 12,
+        maxRequests: 200,
+      });
+      expect(graph.resolution).toBe('resolved');
+      expect(graph.nodes.find((n) => n.metadataId === 'db')?.metadataType).toBe(databaseType);
+      expect(graph.nodes.some((n) => n.kind === 'flow')).toBe(true);
+      const impact = analyzeLineageImpact(graph).find((i) => i.nodeId === 'metadata:d');
+      expect(impact?.classification).toBe('indirect');
+      expect(impact?.path.nodeIds.slice(0, 3)).toEqual(['metadata:db', 'metadata:t', 'metadata:c']);
+      expect(JSON.stringify(graph)).not.toContain('PRIVATE_');
+    },
+  );
+  it('starts at a table and retains qualified metadata and an evidence path to its users', async () => {
+    const graph = await traverse(contentGraph(), {
+      source: { type: 'table', id: 't' },
+      maxDepth: 12,
+      maxRequests: 200,
+    });
+    expect(graph.nodes.find((n) => n.metadataId === 't')?.table).toEqual({
+      name: 't',
+      schema: 'public',
+      database: 'db',
+    });
+    expect(analyzeLineageImpact(graph).some((i) => i.nodeId === 'metadata:d')).toBe(true);
+  });
+  it.each([
+    { type: 'workbook', luid: '33333333-3333-4333-8333-333333333333' },
+    { type: 'datasource', luid: '22222222-2222-4222-8222-222222222222' },
+    { type: 'datasource', id: 'e' },
+    { type: 'flow', luid: flowLuid },
+    { type: 'sheet', id: 's' },
+    { type: 'dashboard', id: 'd' },
+  ] as const)(
+    'follows $type origins upstream through Prep to the external asset',
+    async (source) => {
+      const graph = await traverse(contentGraph(), {
+        source,
+        direction: 'upstream',
+        maxDepth: 12,
+        maxRequests: 200,
+      });
+      expect(graph.resolution).toBe('resolved');
+      expect(graph.nodes.map((n) => n.metadataId)).toContain('db');
+      expect(graph.nodes.map((n) => n.metadataId)).not.toContain('unrelated-sheet');
+      expect(graph.nodes.map((n) => n.metadataId)).not.toContain('sibling-column');
+    },
+  );
+  it('keeps both-direction Workbook walks from fanning out to other users of an upstream data source', async () => {
+    const graph = await traverse(contentGraph(), {
+      source: { type: 'workbook', id: 'w' },
+      direction: 'both',
+      maxDepth: 12,
+      maxRequests: 200,
+    });
+    expect(graph.nodes.map((n) => n.metadataId)).toEqual(
+      expect.arrayContaining(['db', 'f', 'p', 'e', 's', 'd']),
+    );
+    expect(graph.nodes.map((n) => n.metadataId)).not.toContain('unrelated-sheet');
+    expect(graph.nodes.map((n) => n.metadataId)).not.toContain('sibling-column');
+    expect(graph.edges.find((e) => e.relationship === 'upstreamFlowsConnection')?.evidence).toBe(
+      'possible',
+    );
+  });
+  it('does not traverse sibling columns when both directions reach a shared containing table', async () => {
+    const graph = await traverse(contentGraph(), {
+      source: { type: 'column', id: 'c' },
+      direction: 'both',
+      maxDepth: 12,
+      maxRequests: 200,
+    });
+    expect(graph.nodes.map((n) => n.metadataId)).toEqual(
+      expect.arrayContaining(['db', 't', 's', 'd']),
+    );
+    expect(graph.nodes.map((n) => n.metadataId)).not.toContain('sibling-column');
+    expect(graph.nodes.map((n) => n.metadataId)).not.toContain('unused-field');
+  });
+  it('answers a field-origin and usage investigation with upstream Prep context and downstream visualization owners', async () => {
+    const graph = await traverse(contentGraph(), {
+      source: { type: 'field', id: 'field' },
+      direction: 'both',
+      includePrepDetails: true,
+      maxDepth: 12,
+      maxRequests: 200,
+    });
+    expect(graph.sourceId).toBe('metadata:field');
+    expect(graph.nodes.map((n) => n.metadataId)).toEqual(
+      expect.arrayContaining(['db', 't', 'c', 'i', 'o', 'f', 'p', 'remote', 's', 'd', 'w']),
+    );
+    expect(graph.nodes.find((n) => n.metadataId === 'o')?.flowLuid).toBe(flowLuid);
+    expect(graph.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: 'metadata:c', to: 'metadata:i', evidence: 'direct' }),
+        expect.objectContaining({ from: 'metadata:i', to: 'metadata:o', evidence: 'direct' }),
+        expect.objectContaining({ from: 'metadata:o', to: 'metadata:field', evidence: 'direct' }),
+      ]),
+    );
+    expect(analyzeLineageImpact(graph).find((i) => i.nodeId === 'metadata:d')?.classification).toBe(
+      'indirect',
+    );
+    expect(analyzeLineageImpact(graph).map((i) => i.nodeId)).not.toContain('metadata:db');
+    expect(graph.nodes.map((n) => n.metadataId)).not.toContain('unrelated-sheet');
+  });
+  it('returns Workbook members as terminal impact targets without borrowing unrelated upstream users', async () => {
+    const graph = await traverse(contentGraph(), { source: { type: 'workbook', id: 'w' } });
+    expect(analyzeLineageImpact(graph).map((i) => [i.nodeId, i.classification])).toEqual([
+      ['metadata:s', 'direct'],
+      ['metadata:d', 'direct'],
+    ]);
+    expect(graph.nodes.map((n) => n.metadataId)).not.toContain('p');
+  });
+  it('refuses an external asset before returning its identity or paths when the boundary denies it', async () => {
+    const graph = await traverse(
+      contentGraph(),
+      { source: { type: 'database', id: 'db' } },
+      async (_node, kind) => kind !== 'database',
+    );
+    expect(graph.resolution).toBe('not-allowed');
+    expect(graph.nodes).toEqual([]);
+    expect(graph.edges).toEqual([]);
+  });
+
   it('uses the published PermissionMode enum for root, relation and visibility queries', () => {
     // Tableau's public enum is FILTER_RESULTS; FILTER is rejected by GraphQL validation.
     const queries = [

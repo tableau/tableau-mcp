@@ -230,6 +230,20 @@ describe('data lineage tools and optional document guards', () => {
     expect(graph.sourceId).toBeUndefined();
     expect(graph.resolution).toBe('unavailable');
   });
+  it('accepts Workbook content-change through the real public callback schema and keeps only downstream impact', async () => {
+    mocks.graphql.mockImplementation(async () => ({
+      data: { asset: page([{ id: 'w', __typename: 'Workbook', luid }]) },
+    }));
+    const tool = getAnalyzeDataImpactTool(new WebMcpServer(), version);
+    const result = parsed(
+      await (
+        await Provider.from(tool.callback)
+      )({ ...args({ source: { type: 'workbook', luid } }), change: 'content-change' }, extra()),
+    );
+    expect(result.resolution).toBe('resolved');
+    expect(result.direction).toBe('downstream');
+    expect(result.change).toBe('content-change');
+  });
   it('executes public callbacks through the normal result funnel and keeps impact downstream', async () => {
     const server = new WebMcpServer();
     const lineage = getGetDataLineageTool(server, version),

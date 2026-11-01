@@ -27,14 +27,42 @@ const rollup = (
   direction,
   evidence: 'possible',
   connection: true,
-  terminal: true,
+  terminal: direction === 'downstream',
 });
 
 // Only documented relationship names are interpolated. Caller text is always
 // encoded as a GraphQL string literal by JSON.stringify in the query builder.
 // https://help.tableau.com/current/api/metadata_api/en-us/reference/column.doc.html
 export const relations: Partial<Record<LineageKind, Relation[]>> = {
+  database: [
+    direct('tablesConnection', 'table', 'downstream'),
+    rollup('upstreamDatabasesConnection', 'database', 'upstream'),
+    rollup('upstreamTablesConnection', 'table', 'upstream'),
+    rollup('upstreamFlowsConnection', 'flow', 'upstream'),
+    rollup('upstreamDatasourcesConnection', 'datasource', 'upstream'),
+    rollup('downstreamTablesConnection', 'table', 'downstream'),
+    rollup('downstreamFlowsConnection', 'flow', 'downstream'),
+    rollup('downstreamDatasourcesConnection', 'datasource', 'downstream'),
+    rollup('downstreamWorkbooksConnection', 'workbook', 'downstream'),
+    rollup('downstreamSheetsConnection', 'sheet', 'downstream'),
+    rollup('downstreamDashboardsConnection', 'dashboard', 'downstream'),
+  ],
+  table: [
+    direct('database', 'database', 'upstream', { on: 'DatabaseTable', connection: false }),
+    direct('columnsConnection', 'column', 'downstream'),
+    rollup('upstreamDatabasesConnection', 'database', 'upstream'),
+    rollup('upstreamTablesConnection', 'table', 'upstream'),
+    rollup('upstreamFlowsConnection', 'flow', 'upstream'),
+    rollup('upstreamDatasourcesConnection', 'datasource', 'upstream'),
+    rollup('downstreamTablesConnection', 'table', 'downstream'),
+    rollup('downstreamFlowsConnection', 'flow', 'downstream'),
+    rollup('downstreamDatasourcesConnection', 'datasource', 'downstream'),
+    rollup('downstreamWorkbooksConnection', 'workbook', 'downstream'),
+    rollup('downstreamSheetsConnection', 'sheet', 'downstream'),
+    rollup('downstreamDashboardsConnection', 'dashboard', 'downstream'),
+  ],
   column: [
+    direct('table', 'table', 'upstream', { connection: false }),
     direct('referencedByFieldsConnection', 'field', 'downstream'),
     direct('referencedByFlowColumnInputFieldConnection', 'flow-input-field', 'downstream'),
     direct('referencedByFlowColumnOutputFieldConnection', 'flow-output-field', 'upstream'),
@@ -82,6 +110,11 @@ export const relations: Partial<Record<LineageKind, Relation[]>> = {
     rollup('downstreamDashboardsConnection', 'dashboard', 'downstream'),
   ],
   flow: [
+    rollup('upstreamTablesConnection', 'table', 'upstream'),
+    rollup('upstreamDatabasesConnection', 'database', 'upstream'),
+    rollup('upstreamDatasourcesConnection', 'datasource', 'upstream'),
+    rollup('downstreamTablesConnection', 'table', 'downstream'),
+    rollup('downstreamDatabasesConnection', 'database', 'downstream'),
     direct('inputFieldsConnection', 'flow-input-field', 'upstream'),
     direct('outputFieldsConnection', 'flow-output-field', 'downstream'),
     direct('outputStepsConnection', 'flow-output-step', 'downstream'),
@@ -98,10 +131,38 @@ export const relations: Partial<Record<LineageKind, Relation[]>> = {
   ],
   datasource: [
     direct('fieldsConnection', 'field', 'downstream'),
-    { ...rollup('upstreamFlowsConnection', 'flow', 'upstream'), on: 'PublishedDatasource' },
+    rollup('upstreamTablesConnection', 'table', 'upstream'),
+    rollup('upstreamDatabasesConnection', 'database', 'upstream'),
+    ...['PublishedDatasource', 'EmbeddedDatasource'].flatMap((on) => [
+      { ...rollup('upstreamFlowsConnection', 'flow', 'upstream'), on },
+      { ...rollup('upstreamDatasourcesConnection', 'datasource', 'upstream'), on },
+      { ...rollup('downstreamFlowsConnection', 'flow', 'downstream'), on },
+    ]),
+    {
+      ...direct('parentPublishedDatasourcesConnection', 'datasource', 'upstream'),
+      on: 'EmbeddedDatasource',
+    },
+    {
+      ...rollup('downstreamDatasourcesConnection', 'datasource', 'downstream'),
+      on: 'PublishedDatasource',
+    },
+    { ...rollup('downstreamTablesConnection', 'table', 'downstream'), on: 'PublishedDatasource' },
+    {
+      ...rollup('downstreamDatabasesConnection', 'database', 'downstream'),
+      on: 'PublishedDatasource',
+    },
     rollup('downstreamSheetsConnection', 'sheet', 'downstream'),
     rollup('downstreamDashboardsConnection', 'dashboard', 'downstream'),
-    { ...rollup('downstreamFlowsConnection', 'flow', 'downstream'), on: 'PublishedDatasource' },
+    rollup('downstreamWorkbooksConnection', 'workbook', 'downstream'),
+  ],
+  workbook: [
+    direct('embeddedDatasourcesConnection', 'datasource', 'upstream'),
+    rollup('upstreamDatasourcesConnection', 'datasource', 'upstream'),
+    rollup('upstreamTablesConnection', 'table', 'upstream'),
+    rollup('upstreamDatabasesConnection', 'database', 'upstream'),
+    rollup('upstreamFlowsConnection', 'flow', 'upstream'),
+    direct('sheetsConnection', 'sheet', 'downstream', { terminal: true }),
+    direct('dashboardsConnection', 'dashboard', 'downstream', { terminal: true }),
   ],
   sheet: [
     direct('datasourceFieldsConnection', 'field', 'upstream'),
@@ -115,6 +176,8 @@ export const relations: Partial<Record<LineageKind, Relation[]>> = {
 };
 
 export const metadataRoots: Partial<Record<LineageKind, string[]>> = {
+  database: ['databasesConnection'],
+  table: ['tablesConnection'],
   column: ['columnsConnection'],
   field: ['fieldsConnection'],
   datasource: ['publishedDatasourcesConnection', 'embeddedDatasourcesConnection'],
@@ -132,6 +195,10 @@ export function identitySelection(kind: LineageKind): string {
   const basic = '__typename id';
   const flow = 'id luid';
   switch (kind) {
+    case 'database':
+      return `${basic} name`;
+    case 'table':
+      return `${basic} name ... on DatabaseTable { schema database { name } }`;
     case 'column':
       return `${basic} name dataType: remoteType table { name ... on DatabaseTable { schema database { name } } }`;
     case 'field':
@@ -172,6 +239,7 @@ export function relationSelection(
     FlowColumnOutputField: 'FlowOutputField',
     FlowFieldOutputField: 'FlowOutputField',
     PublishedDatasource: 'Datasource',
+    EmbeddedDatasource: 'Datasource',
   };
   const wrapped = relation.on ? `... on ${relation.on} { ${value} }` : value;
   const scope = relation.on ? interfaces[relation.on] : undefined;

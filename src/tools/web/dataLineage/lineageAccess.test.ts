@@ -30,14 +30,17 @@ describe('lineage asset boundaries', () => {
     vi.clearAllMocks();
     Object.values(mocks).forEach((mock) => mock.mockResolvedValue({ allowed: true }));
   });
-  it('excludes external columns whenever any bounded context is configured', async () => {
-    const extra = getMockRequestHandlerExtra();
-    expect(await lineageAccess(extra, noBounds)(base, 'column')).toBe(true);
-    for (const key of Object.keys(noBounds))
-      expect(
-        await lineageAccess(extra, { ...noBounds, [key]: new Set(['allowed']) })(base, 'column'),
-      ).toBe(false);
-  });
+  it.each(['database', 'table', 'column'] as const)(
+    'excludes external %s assets whenever any bounded context is configured',
+    async (kind) => {
+      const extra = getMockRequestHandlerExtra();
+      expect(await lineageAccess(extra, noBounds)(base, kind)).toBe(true);
+      for (const key of Object.keys(noBounds))
+        expect(
+          await lineageAccess(extra, { ...noBounds, [key]: new Set(['allowed']) })(base, kind),
+        ).toBe(false);
+    },
+  );
   it('gates published field owners and verifies embedded ownership using its workbook', async () => {
     const extra = getMockRequestHandlerExtra(),
       access = lineageAccess(extra, { ...noBounds, projectIds: new Set(['p']) });
