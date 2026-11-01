@@ -94,6 +94,39 @@ describe('Node compact Prep authoring parity', () => {
         ),
       ).toBe(true);
   });
+  it('round-trips Cloud CSV fields:null through local prepare, preview and generation', () => {
+    const doc = document(),
+      nodes = object(object(doc.flow).nodes),
+      csv = Object.values(nodes)
+        .map(object)
+        .find((node) => node.nodeType === '.v1.LoadCsv')!;
+    expect(csv).toBeDefined();
+    csv.fields = null;
+    const entries = new Map(Object.entries(doc).map(([key, value]) => [key, jsonBytes(value)])),
+      source = writeNativeArchive(entries);
+    writeFileSync(join(workspace, 'cloud.tflx'), source);
+    const request = { workspace, jobId: randomUUID(), format: 'tflx' },
+      prepared = run({
+        ...request,
+        operation: 'prepare',
+        source: { type: 'local', path: 'cloud.tflx' },
+      }),
+      bound = { ...request, projectSha256: prepared.projectSha256 },
+      yaml = prepared.yaml!.replace('[Sales] * 1.1', '[Sales] * 1.75'),
+      candidate = preview(bound, yaml);
+    expect(candidate.valid).toBe(true);
+    const result = generate(bound, candidate, yaml),
+      generated = readNativeArchive(readFileSync(join(workspace, result.path!))),
+      flow = object(parseJson(generated.get('flow')!));
+    expect(object(object(flow.nodes)[String(csv.id)]).fields).toBe(null);
+    expect(readFileSync(join(workspace, 'cloud.tflx'))).toEqual(source);
+    expect(metadataErrors(doc)).toEqual([]);
+    for (const invalid of [true, 42, 'unknown', { Sales: 42 }, [42]]) {
+      csv.fields = invalid;
+      expect(metadataErrors(doc).length).toBeGreaterThan(0);
+      expect(csv.fields).toEqual(invalid);
+    }
+  });
   it('preserves strict models and changes only the edited field', () => {
     const original = document(),
       bytes = jsonBytes(original),
@@ -144,7 +177,9 @@ describe('Node compact Prep authoring parity', () => {
       parent = object(Object.values(nodes)[0]),
       childId = randomUUID();
     parent.loomContainer = {
-      nodes: { [childId]: { id: childId, nodeType: '.v1.AddColumn', baseType: 'transform' } },
+      nodes: {
+        [childId]: { id: childId, nodeType: '.v1.AddColumn', baseType: 'transform', fields: null },
+      },
     };
     expect(metadataErrors(doc)).toEqual([]);
     parent.namespacesToInput = { input: { nodeId: randomUUID() } };

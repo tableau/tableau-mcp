@@ -229,8 +229,25 @@ const ajv = new Ajv2020({
   messages: false,
   validateFormats: false,
 });
-const validateDocument = ajv.compile(schemaDocument);
-const validateGraph = ajv.compile({ $defs: schemaDocument.$defs, $ref: '#/$defs/flow' });
+// Cloud downloads can contain fields:null, as already allowed by the strict model.
+// Keep the reference schema/defaults unchanged and extend only runtime validation.
+const runtimeSchema = {
+  ...schemaDocument,
+  $defs: {
+    ...schemaDocument.$defs,
+    commonNode: {
+      ...schemaDocument.$defs.commonNode,
+      properties: {
+        ...schemaDocument.$defs.commonNode.properties,
+        fields: {
+          anyOf: [...schemaDocument.$defs.commonNode.properties.fields.anyOf, { type: 'null' }],
+        },
+      },
+    },
+  },
+};
+const validateDocument = ajv.compile(runtimeSchema);
+const validateGraph = ajv.compile({ $defs: runtimeSchema.$defs, $ref: '#/$defs/flow' });
 
 /** Validation uses a numeric projection; the original arbitrary integers remain untouched. */
 function schemaProjection(value: Json): unknown {

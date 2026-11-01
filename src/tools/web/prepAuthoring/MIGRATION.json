@@ -74,6 +74,14 @@
   },
   "runtime": "Existing TypeScript/Node.js stack; isolated bundled worker, no Python runtime, dependency tree, subprocess or interpreter configuration.",
   "schemaSha256": "797bdd3646435d9f0849af34108747bb2be77d5d0e97dedfc684bcfd589a58d4",
+  "validationExtensions": [
+    {
+      "schemaPath": "#/$defs/commonNode/properties/fields/anyOf",
+      "extension": "Allow null only in runtime JSON Schema validation, matching the already-nullable strict metadata model. Preserve the original schema/defaults/descriptions and the source value without coercion.",
+      "evidence": "A synthetic Flow published and downloaded from Tableau Cloud on 2026-11-01 contains fields:null on its .v1.LoadCsv input.",
+      "verification": "authoringEngine.test.ts: Cloud null-field prepare/preview/generate preservation, malformed non-null rejection and recursive graph validation"
+    }
+  ],
   "matrix": [
     {
       "pythonFile": "prep_engine/authoring.py",
