@@ -82,10 +82,7 @@ export async function executeDataLineage(
       });
       await traversal.resolve();
       const reserveDocument =
-        (options.includePrepDetails || internalSource) &&
-        source.type === 'flow' &&
-        supported &&
-        prepEnabled;
+        (options.includePrepDetails || internalSource) && supported && prepEnabled;
       await traversal.expand(reserveDocument ? 1 : 0);
       const graph = traversal.result;
       if (graph.resolution !== 'resolved') return graph;

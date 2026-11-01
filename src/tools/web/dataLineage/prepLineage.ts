@@ -41,7 +41,7 @@ export function addPrepTopology(
   const entries = Object.entries(document.nodes ?? {});
   const details = extractPrepOperations(
     document.nodes ?? {},
-    Math.max(1, traversal.options.maxNodes - graph.nodes.length),
+    Math.min(500, traversal.options.maxNodes * 5),
   );
   const analysis = analyzePrepFields(
     document,

@@ -137,6 +137,33 @@ describe('data lineage tools and optional document guards', () => {
     expect(graph.prepDetails).toHaveLength(1);
     expect(graph.warnings.some((w) => w.code === 'REQUEST_LIMIT')).toBe(true);
   });
+  it('retains a document request when a selected field discovers its Prep producer', async () => {
+    const field = { id: 'field', __typename: 'ColumnField' };
+    const output = { id: 'output', __typename: 'FlowFieldOutputField', flow: [{ id: 'f', luid }] };
+    mocks.graphql.mockImplementation(async (query: string) => {
+      const owner: Record<string, unknown> = { ...field };
+      for (const [, alias, relation] of query.matchAll(/(r\d+): (\w+)/g)) {
+        owner[alias] = relation.endsWith('Connection')
+          ? page(relation === 'referencedByFlowFieldOutputFieldConnection' ? [output] : [])
+          : null;
+      }
+      return { data: { asset: page([owner]) } };
+    });
+    const graph = await executeDataLineage(
+      args({
+        source: { type: 'field', id: 'field' },
+        direction: 'upstream',
+        includePrepDetails: true,
+        maxRequests: 3,
+      }),
+      extra(),
+      version,
+    );
+    expect(mocks.graphql).toHaveBeenCalledTimes(2);
+    expect(mocks.document).toHaveBeenCalledWith({ siteId: 'site', flowId: luid });
+    expect(graph.coverage.requests).toBe(3);
+    expect(graph.prepDetails).toHaveLength(1);
+  });
   it('does not exceed a one-request budget even when source Flow details are requested', async () => {
     const graph = await executeDataLineage(
       args({ includePrepDetails: true, maxRequests: 1 }),

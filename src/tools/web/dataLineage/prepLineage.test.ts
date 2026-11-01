@@ -177,6 +177,20 @@ describe('Prep graph integration', () => {
       ]),
     );
   });
+  it('keeps bounded processing context available when catalog nodes fill the graph budget', () => {
+    const traversal = new DataLineageTraversal(
+      z.object(dataLineageParams).parse({ source: { type: 'flow', luid }, maxNodes: 1 }),
+      { graphql: vi.fn(), isAllowed: async () => true, prepEnabled: true },
+    );
+    traversal.result.nodes.push(flow);
+    traversal.result.sourceId = flow.id;
+    addPrepTopology(traversal, flow, document, { type: 'flow', luid });
+    expect(traversal.result.nodes).toHaveLength(1);
+    expect(traversal.result.prepDetails?.[0].operations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ expression: '[Sales] * 1.1' })]),
+    );
+    expect(traversal.result.coverage.truncated).toBe(true);
+  });
   it('does not reassign an internal source while adding details for another flow', () => {
     const traversal = builder();
     const source = { type: 'prep-step' as const, flowLuid: luid, stepId: 'start' };
