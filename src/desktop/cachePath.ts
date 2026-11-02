@@ -86,10 +86,13 @@ export type ContainedCacheWriteResult =
       error?: unknown;
     };
 
+// macOS reports the on-disk spelling only through the native binding.
+const realpath = process.platform === 'darwin' ? realpathSync.native : realpathSync;
+
 const DEFAULT_CONTAINED_CACHE_READ_OPERATIONS: ContainedCacheReadOperations = {
   open: openSync,
   fstat: fstatSync,
-  realpath: realpathSync,
+  realpath,
   stat: statSync,
   read: (fd) => readFileSync(fd),
   close: closeSync,
@@ -99,7 +102,7 @@ const DEFAULT_CONTAINED_CACHE_WRITE_OPERATIONS: ContainedCacheWriteOperations = 
   noFollowFlag: typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0,
   open: openSync,
   fstat: fstatSync,
-  realpath: realpathSync,
+  realpath,
   stat: statSync,
   truncate: ftruncateSync,
   write: (fd, text) => writeFileSync(fd, text, 'utf-8'),
@@ -130,6 +133,19 @@ export function isWithinCacheDir(
 
 function isSamePath(a: string, b: string, pathApi: Pick<typeof path, 'relative'> = path): boolean {
   return pathApi.relative(a, b) === '';
+}
+
+// Lexical pre-checks only: realpath comparisons must stay byte-exact (HFS+ keeps U+212B and U+00C5 distinct).
+function nfcOnDarwin(value: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === 'darwin' ? value.normalize('NFC') : value;
+}
+
+export function isLexicallyWithinCacheDir(
+  absolutePath: string,
+  cacheDir: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return isWithinCacheDir(nfcOnDarwin(absolutePath, platform), nfcOnDarwin(cacheDir, platform));
 }
 
 function hasStableFileIdentity(stats: Stats): boolean {
@@ -175,7 +191,7 @@ export function readContainedCacheTextFile(
 ): ContainedCacheReadResult {
   const cacheDir = getCacheDir();
   const absolutePath = resolve(path);
-  if (!isWithinCacheDir(absolutePath, cacheDir)) {
+  if (!isLexicallyWithinCacheDir(absolutePath, cacheDir)) {
     return { ok: false, issue: 'outside-cache' };
   }
 
@@ -260,7 +276,7 @@ export function writeContainedCacheTextFile(
 ): ContainedCacheWriteResult {
   const cacheDir = getCacheDir();
   const absolutePath = resolve(path);
-  if (!isWithinCacheDir(absolutePath, cacheDir)) {
+  if (!isLexicallyWithinCacheDir(absolutePath, cacheDir)) {
     return { ok: false, issue: 'outside-cache' };
   }
 
@@ -282,7 +298,7 @@ export function writeContainedCacheTextFile(
 
       // DesktopCache emits direct children. Limiting creation to that shape avoids
       // claiming nested parent traversal is race-safe without an openat-style API.
-      if (!isSamePath(dirname(absolutePath), cacheDir)) {
+      if (!isSamePath(nfcOnDarwin(dirname(absolutePath)), nfcOnDarwin(cacheDir))) {
         return { ok: false, issue: 'unsupported-new-path' };
       }
       let realParent: string;
@@ -396,7 +412,7 @@ function writeVerificationFailure(error: unknown): ContainedCacheWriteResult {
  */
 export function resolveCacheFileArg(argName: string, raw: string): Result<string, McpToolError> {
   const absolutePath = resolve(raw.trim());
-  return isWithinCacheDir(absolutePath, getCacheDir())
+  return isLexicallyWithinCacheDir(absolutePath, getCacheDir())
     ? new Ok(absolutePath)
     : new Err(new CacheFileOutsideCacheError(argName));
 }
@@ -414,12 +430,12 @@ export function checkCacheFileArg(
   if (resolved.isErr()) return resolved;
   try {
     const link = lstatSync(resolved.value);
-    const real = realpathSync(resolved.value);
+    const real = realpath(resolved.value);
     if (
       link.isSymbolicLink() ||
       !link.isFile() ||
       link.nlink > 1 ||
-      !isWithinCacheDir(real, realpathSync(getCacheDir()))
+      !isWithinCacheDir(real, realpath(getCacheDir()))
     ) {
       return new Err(new CacheFileOutsideCacheError(argName));
     }
@@ -437,7 +453,7 @@ function resolvesOutsideCache(absolutePath: string): boolean {
   let ancestor = dirname(absolutePath);
   for (;;) {
     try {
-      return !isWithinCacheDir(realpathSync(ancestor), realpathSync(getCacheDir()));
+      return !isWithinCacheDir(realpath(ancestor), realpath(getCacheDir()));
     } catch (error) {
       if (errnoCode(error) === 'ENOENT') {
         try {
