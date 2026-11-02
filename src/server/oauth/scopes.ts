@@ -10,6 +10,10 @@ import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
 import { isFlowReadToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
 import { getFeatureGate } from '../../features/init.js';
+import {
+  isKnowledgeToolsEnabled,
+  isKnowledgeWriteToolsEnabled,
+} from '../../features/knowledgeTools.js';
 import { getTableauServerInfo } from '../../getTableauServerInfo.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import { isDataAppVersionSupported } from '../../tools/web/scaffoldDataApp/dataAppVersion.js';
@@ -561,8 +565,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     (await featureGate.isFeatureEnabled('datasource-authoring')) && authoringAllowedForClient;
   const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
-  const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
-  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
+  const knowledgeToolsEnabled = await isKnowledgeToolsEnabled(config);
+  const knowledgeWriteToolsEnabled = await isKnowledgeWriteToolsEnabled(config);
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
   const adminToolsEnabled = await isAdminToolsEnabled(config);
 

@@ -8,8 +8,8 @@ Inspects graph availability, existing semantic context, health, and improvement 
 changing the Tableau Knowledge graph. This read-only tool is available on Tableau+ sites.
 
 :::warning[Disabled by Default]
-This tool requires the `knowledge-tools` feature flag, which defaults to `false` in `features.json`.
-See [Feature Flags](../../developers/feature-flags.md).
+Set [`KNOWLEDGE_TOOLS_ENABLED=true`](../../configuration/mcp-config/env-vars.md#knowledge_tools_enabled)
+to enable this tool. It then appears only on sites where Tableau Knowledge is available.
 :::
 
 ## Required permissions
