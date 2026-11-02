@@ -1,5 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'fs';
+import {
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -84,6 +92,12 @@ describe('cached XML callback containment', () => {
       const external = join(outsideDir, 'external.xml');
       const original = '<workbook><outside/></workbook>';
       writeFileSync(external, original);
+      // Without O_NOFOLLOW (Windows) open follows the link, so containment refuses it instead.
+      const reason =
+        linkKind === 'final' && typeof constants.O_NOFOLLOW === 'number'
+          ? 'symlink'
+          : 'outside-cache';
+      const reasonLine = `\nReason: ${reason}`;
       let candidate: string;
       if (linkKind === 'final') {
         candidate = join(state.cacheDir, 'linked.xml');
@@ -96,12 +110,12 @@ describe('cached XML callback containment', () => {
       const readResult = await invokeRead(candidate);
       expect(readResult.isError).toBe(true);
       expect(text(readResult)).toContain('Security error');
-      expect(text(readResult)).toContain('\nReason: ');
+      expect(text(readResult)).toContain(reasonLine);
 
       const writeResult = await invokeWrite(candidate, '<workbook><escaped/></workbook>');
       expect(writeResult.isError).toBe(true);
       expect(text(writeResult)).toContain('Security error');
-      expect(text(writeResult)).toContain('\nReason: ');
+      expect(text(writeResult)).toContain(reasonLine);
 
       const spliceResult = await invokeWrite(
         candidate,
@@ -110,7 +124,7 @@ describe('cached XML callback containment', () => {
       );
       expect(spliceResult.isError).toBe(true);
       expect(text(spliceResult)).toContain('Security error');
-      expect(text(spliceResult)).toContain('\nReason: ');
+      expect(text(spliceResult)).toContain(reasonLine);
       expect(readFileSync(external, 'utf-8')).toBe(original);
     },
   );

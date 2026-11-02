@@ -31,6 +31,8 @@ import {
 // Without O_NOFOLLOW (Windows) open follows the link, so containment refuses it instead.
 const finalSymlinkReason = typeof constants.O_NOFOLLOW === 'number' ? 'symlink' : 'outside-cache';
 
+const errno = (code: string): Error => Object.assign(new Error(code), { code });
+
 describe('readContainedCacheTextFile', () => {
   const temporaryPaths: string[] = [];
 
@@ -191,6 +193,25 @@ describe('readContainedCacheTextFile', () => {
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['ENOENT', 'ENOTDIR', 'ELOOP'])(
+    'reports changed-during-check without reading when verification throws %s after open',
+    (code) => {
+      const file = join(cacheDirectory(`verify-${code}`), 'datasource.xml');
+      writeFileSync(file, '<datasource/>');
+      const read = vi.fn((fd: number) => readFileSync(fd));
+      const close = vi.fn((fd: number) => closeSync(fd));
+      const stat = vi.fn(() => {
+        throw errno(code);
+      });
+
+      expect(
+        readContainedCacheTextFile(file, defaultOperations({ stat, read, close })),
+      ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'changed-during-check' });
+      expect(read).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('rejects a candidate whose real path changes across the current-file stat', () => {
     const directory = cacheDirectory('realpath-change');
@@ -445,6 +466,53 @@ describe('writeContainedCacheTextFile', () => {
     expect(write).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
     expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+  });
+
+  it.each(['ENOENT', 'ENOTDIR', 'ELOOP'])(
+    'reports changed-during-check without writing when verification throws %s after open',
+    (code) => {
+      const file = join(cacheDirectory(`verify-${code}`), 'worksheet.xml');
+      writeFileSync(file, '<before/>');
+      const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+      const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+      const close = vi.fn((fd: number) => closeSync(fd));
+      const stat = vi.fn(() => {
+        throw errno(code);
+      });
+
+      expect(
+        writeContainedCacheTextFile(
+          file,
+          '<after/>',
+          defaultOperations({ stat, truncate, write, close }),
+        ),
+      ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'changed-during-check' });
+      expect(truncate).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+    },
+  );
+
+  it('reports changed-during-check without writing when the create races an existing file', () => {
+    const file = join(getCacheDir(), `contained-cache-race-${process.pid}-${Date.now()}.xml`);
+    const open = vi
+      .fn<ContainedCacheWriteOperations['open']>()
+      .mockImplementationOnce(() => {
+        throw errno('ENOENT');
+      })
+      .mockImplementationOnce(() => {
+        throw errno('EEXIST');
+      });
+    const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+    const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+
+    expect(
+      writeContainedCacheTextFile(file, '<after/>', defaultOperations({ open, truncate, write })),
+    ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'changed-during-check' });
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(truncate).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
   it('rejects a final symlink before truncation when no no-follow flag is available', () => {
