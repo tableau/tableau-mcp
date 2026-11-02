@@ -1,5 +1,4 @@
-import type { WebToolGroupName } from './toolName.js';
-import { webToolGroupNames, webToolGroups } from './toolName.js';
+import { type WebToolGroupName, webToolGroupNames, webToolGroups } from './toolName.js';
 
 /**
  * Plain-language name for each tool group, shown to the user when tools are omitted for missing

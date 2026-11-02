@@ -202,7 +202,7 @@ describe('step-up challenge preserves held scopes and names the missing ones (G4
     return { req, res, next };
   }
 
-  it('includes the token\'s existing scopes in the step-up challenge', async () => {
+  it("includes the token's existing scopes in the step-up challenge", async () => {
     const { res } = await driveStepUp();
     const header = res.headers['WWW-Authenticate'] as string;
     const scopeList = /scope="([^"]*)"/.exec(header)![1].split(' ');
@@ -237,7 +237,7 @@ describe('scope-gap log level and telemetry (G5)', () => {
     vi.unstubAllEnvs();
   });
 
-  const scopeLogCalls = () =>
+  const scopeLogCalls = (): unknown[][] =>
     vi
       .mocked(loggerModule.log)
       .mock.calls.filter(([a]) => (a as any).message?.includes('Insufficient scopes'));
@@ -811,7 +811,7 @@ describe('subset-mode regression guards (G6)', () => {
     },
   };
   const toolsListBody = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
-  const callBody = (name: string) => ({
+  const callBody = (name: string): Record<string, unknown> => ({
     jsonrpc: '2.0',
     id: 1,
     method: 'tools/call',
@@ -830,7 +830,9 @@ describe('subset-mode regression guards (G6)', () => {
     const supported = await getSupportedMcpScopes(clientId);
     // Proves there ARE newer/other scopes the old grant does not hold — the regression this guards is
     // the gate demanding the full supported set (so a new scope would retroactively break N-1).
-    expect(supported.length).toBeGreaterThan(getRequiredMcpScopesForTool('list-datasources').length);
+    expect(supported.length).toBeGreaterThan(
+      getRequiredMcpScopesForTool('list-datasources').length,
+    );
 
     const init = await drive(grant, initializeBody);
     expect(init.next).toHaveBeenCalledOnce();

@@ -4,7 +4,9 @@ import { featurePhrasesForTools } from './featurePhrases.js';
 
 describe('featurePhrasesForTools', () => {
   it('maps a tool to its group phrase', () => {
-    expect(featurePhrasesForTools(['publish-workbook'])).toEqual(['publishing workbooks and data sources']);
+    expect(featurePhrasesForTools(['publish-workbook'])).toEqual([
+      'publishing workbooks and data sources',
+    ]);
   });
   it('de-duplicates tools that share a group', () => {
     expect(featurePhrasesForTools(['publish-workbook', 'publish-datasource'])).toEqual([
