@@ -1671,6 +1671,9 @@ describe('server', () => {
       expect(getInstructions(server)).toContain(
         'Tableau Knowledge tools were omitted because they could not be confirmed as available',
       );
+      expect(getInstructions(server)).toContain(
+        'could not be confirmed as available. The site may not have Tableau Knowledge',
+      );
       const warnings = getWarningLogs();
       expect(warnings).toHaveLength(1);
       expect(warnings[0].message).toContain('RequiresKnowledge');
@@ -1696,7 +1699,7 @@ describe('server', () => {
         'Tableau Knowledge tools were omitted from this session because their availability could not be confirmed',
       );
       expect(getInstructions(server)).not.toContain(
-        'could not be confirmed as available. If the user asks for Knowledge context',
+        'could not be confirmed as available. The site may not have Tableau Knowledge',
       );
     });
 
