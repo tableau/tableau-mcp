@@ -144,9 +144,6 @@ export class WebTool<
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
   requiredMcpScopes: ReadonlyArray<McpScope>;
-  // API scopes the server needs to *probe* this tool's registration conditions (not to run the tool).
-  // Kept separate from requiredApiScopes so registration can omit a tool whose token lacks a probe
-  // scope — rather than running the probe, which 4xxs and gets mislabeled as the feature being absent.
   requiredConditionApiScopes: ReadonlyArray<TableauApiScope>;
   minRequiredRole: SiteRole;
   registrationConditions: ReadonlyArray<RegistrationCondition>;

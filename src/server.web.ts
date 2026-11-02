@@ -33,6 +33,7 @@ import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './se
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
+import { featurePhrasesForTools } from './tools/web/featurePhrases.js';
 import {
   checkRegistrationConditions,
   getIndeterminateConditionWarning,
@@ -40,7 +41,6 @@ import {
   RegistrationCondition,
   RegistrationContext,
 } from './tools/web/registrationConditions.js';
-import { featurePhrasesForTools } from './tools/web/featurePhrases.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import {
