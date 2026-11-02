@@ -35,10 +35,9 @@ export class FileLogger {
   }
 
   async log(entry: LogEntry): Promise<void> {
-    // UTC, so names match the UTC timestamp in the name even in half-hour time zones.
     // Create a new log file each hour e.g. 2025-10-15T21-00-00-000Z.log
     const timestamp = new Date().toISOString();
-    const filename = `${this._fileNamePrefix}${new Date(new Date().setUTCMinutes(0, 0, 0)).toISOString().replace(/[:.]/g, '-')}.log`;
+    const filename = `${this._fileNamePrefix}${new Date(new Date().setMinutes(0, 0, 0)).toISOString().replace(/[:.]/g, '-')}.log`;
     await this.appendJsonLine(filename, { timestamp, ...entry });
   }
 
@@ -72,24 +71,37 @@ export class FileLogger {
       `^${escapedPrefix}(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2})-(\\d{2})-00-000Z\\.log$`,
     );
     const cutoff = now.getTime() - maxAgeDays * 24 * 60 * 60 * 1000;
-    const currentHourStart = new Date(now.getTime()).setUTCMinutes(0, 0, 0);
+    // Same local rounding as log(), so the file being written now is never pruned (half-hour zones).
+    const currentFileStart = new Date(now.getTime()).setMinutes(0, 0, 0);
 
+    const failures: Array<{ name: string; code: string }> = [];
     await Promise.all(
       names.map(async (name) => {
         const match = hourFile.exec(name);
         if (!match) return;
 
         const [year, month, day, hour, minute] = match.slice(1).map(Number);
-        const fileHour = Date.UTC(year, month - 1, day, hour, minute);
-        if (fileHour >= currentHourStart || fileHour >= cutoff) return;
+        const fileStart = Date.UTC(year, month - 1, day, hour, minute);
+        if (fileStart >= currentFileStart || fileStart >= cutoff) return;
 
         try {
           await unlink(join(this._logDirectory, name));
-        } catch {
+        } catch (error) {
           // Concurrent desktop processes race on the same files; a lost race is fine.
+          const code = (error as NodeJS.ErrnoException | undefined)?.code;
+          if (code !== 'ENOENT') {
+            failures.push({ name, code: code ?? getExceptionMessage(error) });
+          }
         }
       }),
     );
+
+    if (failures.length > 0) {
+      const [first] = failures;
+      process.stderr.write(
+        `Failed to delete ${failures.length} old log file(s) in ${this._logDirectory}; first: ${first.name} (${first.code})\n`,
+      );
+    }
   }
 
   async appendJsonLine(filename: string, entry: Record<string, unknown>): Promise<void> {

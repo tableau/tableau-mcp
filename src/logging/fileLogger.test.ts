@@ -1,11 +1,21 @@
+import { unlink } from 'node:fs/promises';
+
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { z } from 'zod';
 
 import { FileLogger } from './fileLogger.js';
 import type { LogLevel } from './types.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, unlink: vi.fn(actual.unlink) };
+});
+
+const getRealUnlink = async (): Promise<typeof unlink> =>
+  (await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')).unlink;
 
 const logLineSchema = z.object({
   timestamp: z.coerce.date(),
@@ -196,19 +206,28 @@ describe('FileLogger hourly file name', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('names the file by the UTC hour even in a half-hour time zone', async () => {
+  const logAt = (iso: string, fileNamePrefix?: string): Promise<void> => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-06-20T05:15:00.000Z'));
-
-    await withTimeZone('Asia/Kolkata', () =>
-      new FileLogger({ logDirectory: dir, fileNamePrefix: 'desktop-mcp-' }).log({
+    vi.setSystemTime(new Date(iso));
+    return withTimeZone('Asia/Kolkata', () =>
+      new FileLogger({ logDirectory: dir, fileNamePrefix }).log({
         message: 'm',
         level: 'info',
         logger: 'test-logger',
       }),
     );
+  };
 
-    expect(readdirSync(dir)).toEqual(['desktop-mcp-2026-06-20T05-00-00-000Z.log']);
+  it('keeps the unprefixed web file name unchanged: local hour rounding in a half-hour zone', async () => {
+    await logAt('2026-06-20T05:15:00.000Z');
+
+    expect(readdirSync(dir)).toEqual(['2026-06-20T04-30-00-000Z.log']);
+  });
+
+  it('gives the desktop-prefixed logger the same rounding', async () => {
+    await logAt('2026-06-20T05:15:00.000Z', 'desktop-mcp-');
+
+    expect(readdirSync(dir)).toEqual(['desktop-mcp-2026-06-20T04-30-00-000Z.log']);
   });
 });
 
@@ -286,16 +305,34 @@ describe('FileLogger.pruneOldLogs', () => {
     expect(readdirSync(dir)).toEqual([recent]);
   });
 
-  it('never deletes the current hour file even with a tiny window', async () => {
-    const current = hourName('desktop-mcp-', now);
-    seed([current]);
+  it('never deletes the file being written now, even in a half-hour zone with a tiny window', async () => {
+    // At 05:15Z in IST the logger writes the 04:30Z file.
+    const current = 'desktop-mcp-2026-06-20T04-30-00-000Z.log';
+    const older = 'desktop-mcp-2026-06-20T03-30-00-000Z.log';
+    seed([current, older]);
 
-    await new FileLogger({ logDirectory: dir, fileNamePrefix: 'desktop-mcp-' }).pruneOldLogs({
-      maxAgeDays: 0.0001,
-      now,
-    });
+    await withTimeZone('Asia/Kolkata', () =>
+      new FileLogger({ logDirectory: dir, fileNamePrefix: 'desktop-mcp-' }).pruneOldLogs({
+        maxAgeDays: 1 / 1440,
+        now: new Date('2026-06-20T05:15:00.000Z'),
+      }),
+    );
 
     expect(readdirSync(dir)).toEqual([current]);
+  });
+
+  it('keeps a file that starts exactly at the cutoff and deletes one an hour older', async () => {
+    // Equal is kept: only files strictly older than the window are deleted.
+    const exact = 'desktop-mcp-2026-06-06T10-00-00-000Z.log';
+    const hourOlder = 'desktop-mcp-2026-06-06T09-00-00-000Z.log';
+    seed([exact, hourOlder]);
+
+    await new FileLogger({ logDirectory: dir, fileNamePrefix: 'desktop-mcp-' }).pruneOldLogs({
+      maxAgeDays: 14,
+      now: new Date('2026-06-20T10:00:00.000Z'),
+    });
+
+    expect(readdirSync(dir)).toEqual([exact]);
   });
 
   it.each([0, -1, NaN, Infinity])('deletes nothing when maxAgeDays is %s', async (maxAgeDays) => {
@@ -327,5 +364,63 @@ describe('FileLogger.pruneOldLogs', () => {
     await expect(fileLogger.pruneOldLogs({ maxAgeDays: 14, now })).resolves.toBeUndefined();
     expect(stderr).toHaveBeenCalledTimes(1);
     stderr.mockRestore();
+  });
+
+  describe('unlink failures', () => {
+    const ancient = (n: number): string => `desktop-mcp-2020-01-0${n}T00-00-00-000Z.log`;
+    let stderr: MockInstance<typeof process.stderr.write>;
+
+    beforeEach(() => {
+      stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      vi.mocked(unlink).mockClear();
+    });
+
+    afterEach(async () => {
+      stderr.mockRestore();
+      vi.mocked(unlink).mockImplementation(await getRealUnlink());
+    });
+
+    const failWith = async (codes: Record<string, string>): Promise<void> => {
+      const realUnlink = await getRealUnlink();
+      vi.mocked(unlink).mockImplementation(async (path) => {
+        const name = Object.keys(codes).find((n) => String(path).endsWith(n));
+        if (name) {
+          throw Object.assign(new Error(`${codes[name]}: ${name}`), { code: codes[name] });
+        }
+        return realUnlink(path);
+      });
+    };
+
+    it('keeps going and reports one stderr line when a delete fails with a real error', async () => {
+      seed([ancient(1), ancient(2), ancient(3)]);
+      await failWith({ [ancient(2)]: 'EPERM', [ancient(3)]: 'ENOENT' });
+
+      await expect(
+        new FileLogger({ logDirectory: dir, fileNamePrefix: 'desktop-mcp-' }).pruneOldLogs({
+          maxAgeDays: 14,
+          now,
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(unlink).toHaveBeenCalledTimes(3);
+      // The ENOENT and EPERM files are still on disk because the mock threw before deleting.
+      expect(readdirSync(dir).sort()).toEqual([ancient(2), ancient(3)]);
+      expect(stderr).toHaveBeenCalledTimes(1);
+      expect(String(stderr.mock.calls[0][0])).toContain('EPERM');
+      expect(String(stderr.mock.calls[0][0])).toContain(ancient(2));
+    });
+
+    it('stays silent when the only failures are ENOENT', async () => {
+      seed([ancient(1), ancient(2)]);
+      await failWith({ [ancient(1)]: 'ENOENT' });
+
+      await new FileLogger({ logDirectory: dir, fileNamePrefix: 'desktop-mcp-' }).pruneOldLogs({
+        maxAgeDays: 14,
+        now,
+      });
+
+      expect(unlink).toHaveBeenCalledTimes(2);
+      expect(stderr).not.toHaveBeenCalled();
+    });
   });
 });
