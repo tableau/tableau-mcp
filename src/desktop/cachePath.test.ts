@@ -25,13 +25,15 @@ import {
   getCacheDir,
   isWithinCacheDir,
   readContainedCacheTextFile,
+  unsafeFileReasonLine,
   writeContainedCacheTextFile,
 } from './cachePath.js';
 
 // Without O_NOFOLLOW (Windows) open follows the link, so containment refuses it instead.
 const finalSymlinkReason = typeof constants.O_NOFOLLOW === 'number' ? 'symlink' : 'outside-cache';
 
-const errno = (code: string): Error => Object.assign(new Error(code), { code });
+const errno = (code: string): Error =>
+  Object.assign(new Error(`${code}: realpath '/outside/secret'`), { code });
 
 describe('readContainedCacheTextFile', () => {
   const temporaryPaths: string[] = [];
@@ -125,11 +127,9 @@ describe('readContainedCacheTextFile', () => {
     writeFileSync(outsideFile, '<outside-secret/>');
     symlinkSync(outsideFile, candidate, 'file');
 
-    expect(readContainedCacheTextFile(candidate)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-      reason: finalSymlinkReason,
-    });
+    const result = readContainedCacheTextFile(candidate);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file', reason: finalSymlinkReason });
+    expect(unsafeFileReasonLine(result)).toBe(`\nReason: ${finalSymlinkReason}`);
   });
 
   it('rejects an intermediate-directory symlink that escapes the cache', () => {
@@ -185,11 +185,9 @@ describe('readContainedCacheTextFile', () => {
       close,
     });
 
-    expect(readContainedCacheTextFile(file, operations)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-      reason: 'changed-during-check',
-    });
+    const result = readContainedCacheTextFile(file, operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (identity-changed)');
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -205,9 +203,9 @@ describe('readContainedCacheTextFile', () => {
         throw errno(code);
       });
 
-      expect(
-        readContainedCacheTextFile(file, defaultOperations({ stat, read, close })),
-      ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'changed-during-check' });
+      const result = readContainedCacheTextFile(file, defaultOperations({ stat, read, close }));
+      expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+      expect(unsafeFileReasonLine(result)).toBe(`\nReason: changed-during-check (${code})`);
       expect(read).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalledTimes(1);
     },
@@ -232,11 +230,24 @@ describe('readContainedCacheTextFile', () => {
       close,
     });
 
-    expect(readContainedCacheTextFile(file, operations)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-      reason: 'changed-during-check',
-    });
+    const result = readContainedCacheTextFile(file, operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (path-changed)');
+    expect(read).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports type-changed when the path stops being a regular file but resolves the same', () => {
+    const directory = cacheDirectory('type-change');
+    const file = join(directory, 'datasource.xml');
+    writeFileSync(file, '<datasource/>');
+    const read = vi.fn((fd: number) => readFileSync(fd));
+    const close = vi.fn((fd: number) => closeSync(fd));
+    const operations = defaultOperations({ stat: () => statSync(directory), read, close });
+
+    const result = readContainedCacheTextFile(file, operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (type-changed)');
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -457,14 +468,39 @@ describe('writeContainedCacheTextFile', () => {
       close,
     });
 
-    expect(writeContainedCacheTextFile(file, '<after/>', operations)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-      reason: 'changed-during-check',
-    });
+    const result = writeContainedCacheTextFile(file, '<after/>', operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (identity-changed)');
     expect(truncate).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
+    expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+  });
+
+  it('rejects a candidate whose real path changes across the current-file stat before writing', () => {
+    const directory = cacheDirectory('realpath-change');
+    const file = join(directory, 'worksheet.xml');
+    const replacement = join(directory, 'replacement.xml');
+    writeFileSync(file, '<before/>');
+    writeFileSync(replacement, '<replacement/>');
+    const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+    const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+    let candidateRealpathCalls = 0;
+    const operations = defaultOperations({
+      realpath: (path) => {
+        if (path === getCacheDir()) return realpathSync(path);
+        candidateRealpathCalls += 1;
+        return candidateRealpathCalls === 1 ? realpathSync(file) : realpathSync(replacement);
+      },
+      truncate,
+      write,
+    });
+
+    const result = writeContainedCacheTextFile(file, '<after/>', operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (path-changed)');
+    expect(truncate).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
     expect(readFileSync(file, 'utf-8')).toBe('<before/>');
   });
 
@@ -480,13 +516,13 @@ describe('writeContainedCacheTextFile', () => {
         throw errno(code);
       });
 
-      expect(
-        writeContainedCacheTextFile(
-          file,
-          '<after/>',
-          defaultOperations({ stat, truncate, write, close }),
-        ),
-      ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'changed-during-check' });
+      const result = writeContainedCacheTextFile(
+        file,
+        '<after/>',
+        defaultOperations({ stat, truncate, write, close }),
+      );
+      expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+      expect(unsafeFileReasonLine(result)).toBe(`\nReason: changed-during-check (${code})`);
       expect(truncate).not.toHaveBeenCalled();
       expect(write).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalledTimes(1);
@@ -507,9 +543,13 @@ describe('writeContainedCacheTextFile', () => {
     const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
     const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
 
-    expect(
-      writeContainedCacheTextFile(file, '<after/>', defaultOperations({ open, truncate, write })),
-    ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'changed-during-check' });
+    const result = writeContainedCacheTextFile(
+      file,
+      '<after/>',
+      defaultOperations({ open, truncate, write }),
+    );
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (EEXIST)');
     expect(open).toHaveBeenCalledTimes(2);
     expect(truncate).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
