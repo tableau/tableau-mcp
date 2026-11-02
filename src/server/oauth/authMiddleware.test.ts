@@ -7,8 +7,11 @@ import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
 import { AccessTokenValidator, ExternalAccessTokenValidator } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
 import {
+  getRequiredApiScopesForTool,
+  getRequiredMcpScopesForTool,
   getSupportedMcpScopes,
   getSupportedScopes,
+  MCP_SITE_SETTINGS_READ_SCOPE,
   PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
@@ -755,5 +758,129 @@ describe('strict vs. subset scope matching', () => {
     expect(next).toHaveBeenCalledOnce();
     expect(req.auth).toEqual(authInfo);
     expect(res.statusCode).toBeUndefined();
+  });
+});
+
+// G6 regression guards: behavior shipped in Tasks 2-4. All tokens carry the mandatory site-settings
+// scope (Global Constraint 2). Non-strict (subset) mode; ADVERTISE_API_SCOPES=true (embedded-authz
+// default, the mode whose gate filters write tools on API scopes). The existing strict-mode 403
+// tests above are NOT converted (Global Constraint 1).
+describe('subset-mode regression guards (G6)', () => {
+  const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
+  const clientId = 'test-client';
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false'); // enforceScopes on
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+    // strict left off (env unset) → subset mode.
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  async function drive(
+    scopes: string[],
+    body: unknown,
+  ): Promise<{ req: AuthenticatedRequest; res: any; next: ReturnType<typeof vi.fn> }> {
+    const authInfo = { scopes, clientId };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body,
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+    await middleware(req, res, next);
+    return { req, res, next };
+  }
+
+  const initializeBody = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test-client', version: '1.0.0' },
+    },
+  };
+  const toolsListBody = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+  const callBody = (name: string) => ({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name, arguments: {} },
+  });
+
+  it('release N-1: a narrow older grant still initializes and still calls its tool when newer scopes exist', async () => {
+    // "Release N-1" grant: exactly what list-datasources required before any later scope was added,
+    // plus the mandatory scope. The server's full supported scope set is strictly larger — it carries
+    // scopes for tools this token never granted, standing in for scopes introduced in later releases.
+    const toolScopes = [
+      ...getRequiredMcpScopesForTool('list-datasources'),
+      ...getRequiredApiScopesForTool('list-datasources'),
+    ];
+    const grant = [...toolScopes, MANDATORY_SCOPE];
+    const supported = await getSupportedMcpScopes(clientId);
+    // Proves there ARE newer/other scopes the old grant does not hold — the regression this guards is
+    // the gate demanding the full supported set (so a new scope would retroactively break N-1).
+    expect(supported.length).toBeGreaterThan(getRequiredMcpScopesForTool('list-datasources').length);
+
+    const init = await drive(grant, initializeBody);
+    expect(init.next).toHaveBeenCalledOnce();
+    expect(init.res.statusCode).toBeUndefined();
+
+    const call = await drive(grant, callBody('list-datasources'));
+    expect(call.next).toHaveBeenCalledOnce();
+    expect(call.res.statusCode).toBeUndefined();
+  });
+
+  it('read-only token: initialize succeeds and a read tool is callable', async () => {
+    const readGrant = [
+      ...getRequiredMcpScopesForTool('download-workbook'),
+      ...getRequiredApiScopesForTool('download-workbook'),
+      MANDATORY_SCOPE,
+    ];
+
+    const init = await drive(readGrant, initializeBody);
+    expect(init.next).toHaveBeenCalledOnce();
+    expect(init.res.statusCode).toBeUndefined();
+
+    const list = await drive(readGrant, toolsListBody);
+    expect(list.next).toHaveBeenCalledOnce();
+    expect(list.res.statusCode).toBeUndefined();
+
+    const read = await drive(readGrant, callBody('download-workbook'));
+    expect(read.next).toHaveBeenCalledOnce();
+    expect(read.res.statusCode).toBeUndefined();
+  });
+
+  it('read-only token: a write tool returns the step-up 403 naming the missing scope and preserving held scopes', async () => {
+    const readGrant = [
+      ...getRequiredMcpScopesForTool('download-workbook'),
+      ...getRequiredApiScopesForTool('download-workbook'),
+      MANDATORY_SCOPE,
+    ];
+    // publish-workbook (a write tool) requires scopes the read-only grant does not hold.
+    const writeScope = getRequiredMcpScopesForTool('publish-workbook')[0];
+    expect(readGrant).not.toContain(writeScope);
+
+    const { res, next } = await drive(readGrant, callBody('publish-workbook'));
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe('insufficient_scope');
+    expect(res.body.error_description).toContain(writeScope); // names the missing scope
+    expect(res.body.error_description).toContain('403'); // Task-3 guidance
+    const header = res.headers['WWW-Authenticate'] as string;
+    const scopeList = /scope="([^"]*)"/.exec(header)![1].split(' ');
+    expect(scopeList).toContain(writeScope); // required-but-missing
+    expect(scopeList).toContain(MCP_SITE_SETTINGS_READ_SCOPE); // a held scope, preserved
   });
 });

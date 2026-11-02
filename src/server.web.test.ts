@@ -607,6 +607,23 @@ describe('server', () => {
       expect(getInstructions(server)).not.toContain("doesn't include access for");
     });
 
+    it('read-only grant registers the read tool and omits the write tool (G6, ADVERTISE_API_SCOPES=true)', async () => {
+      // Regression guard: a read-only token lists read tools but not write tools. download-workbook is
+      // read; publish-workbook is write. Grant covers the reader (incl. its API scopes) + mandatory,
+      // but not the writer's scopes — so the writer is omitted at registration.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'download-workbook,publish-workbook');
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('download-workbook'),
+        'tableau:mcp_site_settings:read',
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).toContain('download-workbook');
+      expect(registered).not.toContain('publish-workbook');
+      expect(getInstructions(server)).toContain("doesn't include access for");
+    });
+
     // createMockConditionalTool declares RequiresPulse, whose probe scope is
     // tableau:insight_definitions_metrics:read (its requiredConditionApiScopes). Its MCP/API scopes
     // are empty, so only the condition-scope clause can omit it.
