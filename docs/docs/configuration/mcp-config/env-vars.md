@@ -613,6 +613,52 @@ called again with that token, after the user approves the preview.
 
 <hr />
 
+## `KNOWLEDGE_TOOLS_ENABLED`
+
+Controls the read-only Tableau Knowledge tools. They are disabled by default.
+
+- Default: unset, which leaves the read-only Knowledge tools disabled
+- Set to `true` to enable them. Any other value is treated as unset
+- Set to `false` to disable them
+- When `true`, the server checks whether Tableau Knowledge is available on the site when it
+  registers tools. The tools appear only on sites where it is. If the site rejects the check (for
+  example, the request isn't authorized), the tools are left out as unavailable. If the check fails
+  with a temporary error, they are left out with a warning that the error is likely transient
+- When enabled, registers:
+  - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
+  - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)
+- When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is
+  neither advertised nor accepted
+- The mutating Knowledge tool is controlled by
+  [`KNOWLEDGE_WRITE_TOOLS_ENABLED`](#knowledge_write_tools_enabled), and also needs this setting on
+
+<hr />
+
+## `KNOWLEDGE_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** Tableau Knowledge tool. It is disabled by default. Changes are
+shared with everyone and every agent that uses the Knowledge graph.
+
+- Default: unset, which leaves the mutating Knowledge tool disabled
+- Set to `true` to enable it. Any other value is treated as unset
+- Set to `false` to disable it
+- Unlike the flow settings, this one does not stand alone: the tool is registered only when the
+  read-only Knowledge tools are also enabled (see
+  [`KNOWLEDGE_TOOLS_ENABLED`](#knowledge_tools_enabled))
+- When enabled, registers:
+  - [`manage-knowledge-context`](../../tools/knowledge/manage-knowledge-context.md)
+- When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is neither
+  advertised nor accepted, and the `tableau:knowledge:write` REST API scope is not advertised
+- The tool requires the Creator site role or higher
+
+| `KNOWLEDGE_TOOLS_ENABLED` | `KNOWLEDGE_WRITE_TOOLS_ENABLED` | Registered Knowledge tools |
+| --- | --- | --- |
+| `true` | `true` | read-only and mutating Knowledge tools |
+| `true` | unset or `false` | read-only Knowledge tools |
+| unset or `false` | any value | none |
+
+<hr />
+
 ## `ADMIN_TOOLS_ENABLED`
 
 Enables admin-only tools that require site administrator permissions.

@@ -15,6 +15,9 @@ const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
 let flowReadExpected: boolean;
 let flowWriteExpected: boolean;
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
+const knowledgeWriteToolsEnabled = Boolean(features['knowledge-write-tools']);
+let knowledgeReadExpected: boolean;
+let knowledgeWriteExpected: boolean;
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
@@ -25,6 +28,9 @@ describe('server', () => {
     const config = new Config();
     flowReadExpected = config.flowReadToolsEnabled ?? flowReadToolsEnabled;
     flowWriteExpected = config.flowWriteToolsEnabled ?? flowWriteToolsEnabled;
+    knowledgeReadExpected = config.knowledgeToolsEnabled ?? knowledgeToolsEnabled;
+    knowledgeWriteExpected =
+      knowledgeReadExpected && (config.knowledgeWriteToolsEnabled ?? knowledgeWriteToolsEnabled);
   });
   afterAll(resetEnv);
 
@@ -84,7 +90,7 @@ describe('server', () => {
         'request-datasource-upload',
         'publish-datasource',
       ];
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      // Knowledge tools follow KNOWLEDGE_TOOLS_ENABLED / KNOWLEDGE_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
         'inspect-knowledge-context',
@@ -121,9 +127,11 @@ describe('server', () => {
         );
       }
 
-      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
-      if (!knowledgeToolsEnabled) {
+      if (!knowledgeReadExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
+      }
+      if (!knowledgeWriteExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'manage-knowledge-context');
       }
 
       // Filter out data-app tools if they are not enabled (data-apps feature flag)
@@ -282,7 +290,7 @@ describe('server', () => {
         'request-datasource-upload',
         'publish-datasource',
       ];
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      // Knowledge tools follow KNOWLEDGE_TOOLS_ENABLED / KNOWLEDGE_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
         'inspect-knowledge-context',
@@ -323,10 +331,14 @@ describe('server', () => {
         );
       }
 
-      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
-      if (!knowledgeToolsEnabled) {
+      if (!knowledgeReadExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !knowledgeTools.includes(name),
+        );
+      }
+      if (!knowledgeWriteExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => name !== 'manage-knowledge-context',
         );
       }
 
