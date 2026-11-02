@@ -10,6 +10,7 @@ import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
 import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -240,9 +241,9 @@ export const getPublishWorkbookTool = (
                 });
               } catch (error) {
                 const mapped =
-                  personalSpaceTarget !== undefined
+                  (personalSpaceTarget !== undefined
                     ? mapPersonalSpaceSiteDisabledError(error, 'publish')
-                    : null;
+                    : null) ?? mapPublishWorkbookError(error);
                 if (mapped) {
                   return mapped.toErr();
                 }
@@ -438,6 +439,51 @@ function assertMinimumRestApiVersionSupported(): void {
       `publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
     );
   }
+}
+
+// Guidance per documented Publish Workbook error code. Some codes cover several conditions, so
+// Tableau's own summary/detail is always appended to tell them apart.
+// https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
+const publishErrorGuidance: Record<string, string> = {
+  '400000': 'The publish request was malformed or did not include the uploaded workbook.',
+  '400008': 'The publish request contained an invalid true/false value.',
+  '400011': 'Tableau could not publish the workbook. Check that the workbook file is valid.',
+  '400020': 'The workbook file name must end in .twb or .twbx.',
+  '400035': 'The uploaded workbook is missing or is not a .twb or .twbx file.',
+  '403007':
+    'Tableau refused the publish. You may lack publish permission on the project, a workbook with this name may already exist (set overwrite to true to replace it), or a data source the workbook uses could not be reached.',
+  '403008': 'The site does not have enough storage for this workbook.',
+  '403130':
+    'A workbook with this name already exists. Set overwrite to true to replace it, or choose a different name.',
+  '403131': 'Another publish of this workbook is already in progress. Wait and retry.',
+  '403132':
+    'Tableau could not connect to a data source the workbook uses. Check its connection credentials and that it is reachable from Tableau.',
+  '404005': 'The project was not found. Use list-projects to find a valid projectId.',
+  '404006':
+    'overwrite was true but no workbook with this name exists. Retry with overwrite set to false.',
+  '404015': 'The upload session was not found or has expired. Retry publish-workbook.',
+};
+
+// Axios's own message ("Request failed with status code 400") drops Tableau's reason, which the
+// model needs to correct the publish. 5xx and body-less errors keep the generic path.
+function mapPublishWorkbookError(error: unknown): McpToolError | null {
+  const parsed = parseTableauApiError(error);
+  if (!parsed || parsed.status < 400 || parsed.status >= 500) {
+    return null;
+  }
+
+  const guidance =
+    (parsed.code && publishErrorGuidance[parsed.code]) || 'Tableau rejected the workbook publish.';
+  const reason = [parsed.summary, parsed.detail].filter(Boolean).join(': ');
+  const tableauError = reason
+    ? ` Tableau error${parsed.code ? ` ${parsed.code}` : ''}: ${reason}`
+    : '';
+
+  return new McpToolError({
+    type: 'publish-rejected',
+    message: sanitizeFindingText(`${guidance}${tableauError}`, 2_000),
+    statusCode: parsed.status,
+  });
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {
