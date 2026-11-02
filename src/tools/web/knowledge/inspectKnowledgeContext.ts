@@ -2,8 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/init.js';
+import { isKnowledgeToolsEnabled } from '../../../features/knowledgeTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { severitySchema } from '../../../sdks/tableau/types/knowledge.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -107,12 +108,11 @@ export function validateInspectArgs(args: InspectArgs): string | null {
 export const getInspectKnowledgeContextTool = (
   server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const tool = new WebTool({
     server,
     name: 'inspect-knowledge-context',
-    disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('knowledge-tools')),
-    ),
+    disabled: new Provider(async () => !(await isKnowledgeToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     registrationConditions: ['RequiresKnowledge'],
     description: `

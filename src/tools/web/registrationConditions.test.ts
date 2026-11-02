@@ -491,11 +491,20 @@ describe('checkRegistrationConditions', () => {
 });
 
 describe('getUnmetConditionInstructions', () => {
-  it('explains that Knowledge requires Tableau+', async () => {
+  it('explains that Knowledge is unavailable without blaming a missing Tableau+ entitlement', async () => {
     const message = getUnmetConditionInstructions('RequiresKnowledge');
 
     expect(message).toContain('Tableau Knowledge');
-    expect(message).toContain('Tableau+');
+    expect(message).toContain(
+      'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as available.',
+    );
+    expect(message).toContain('The site may not have Tableau Knowledge, or the check was denied.');
+    expect(message).toContain(
+      'explain that Tableau Knowledge is not available in this session and suggest they contact ' +
+        'their Tableau administrator.',
+    );
+    // A 401/403 probe on an entitled site lands here too, so the note must not assert a missing entitlement.
+    expect(message).not.toContain('Tableau+');
   });
 
   it('explains that Pulse is not available and points at Cloud setup guidance', async () => {
