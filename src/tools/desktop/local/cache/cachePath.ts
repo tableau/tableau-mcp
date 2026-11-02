@@ -5,5 +5,6 @@ export {
   isLexicallyWithinCacheDir,
   isWithinCacheDir,
   readContainedCacheTextFile,
+  unsafeFileReasonLine,
   writeContainedCacheTextFile,
 } from '../../../../desktop/cachePath.js';

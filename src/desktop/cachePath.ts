@@ -45,11 +45,28 @@ export const CONTAINED_CACHE_READ_ISSUE = {
   readError: 'read-error',
 } as const;
 
+type UnsafeFileReason =
+  | 'symlink'
+  | 'not-regular-file'
+  | 'hard-linked'
+  | 'outside-cache'
+  | 'changed-during-check';
+
+type OtherIssue<T> = Exclude<T[keyof T], 'unsafe-file'>;
+
+type UnsafeFileResult = {
+  ok: false;
+  issue: 'unsafe-file';
+  reason: UnsafeFileReason;
+  error?: unknown;
+};
+
 export type ContainedCacheReadResult =
   | { ok: true; path: string; text: string }
+  | UnsafeFileResult
   | {
       ok: false;
-      issue: (typeof CONTAINED_CACHE_READ_ISSUE)[keyof typeof CONTAINED_CACHE_READ_ISSUE];
+      issue: OtherIssue<typeof CONTAINED_CACHE_READ_ISSUE>;
       error?: unknown;
     };
 
@@ -62,9 +79,10 @@ export const CONTAINED_CACHE_WRITE_ISSUE = {
 
 export type ContainedCacheWriteResult =
   | { ok: true; path: string }
+  | UnsafeFileResult
   | {
       ok: false;
-      issue: (typeof CONTAINED_CACHE_WRITE_ISSUE)[keyof typeof CONTAINED_CACHE_WRITE_ISSUE];
+      issue: OtherIssue<typeof CONTAINED_CACHE_WRITE_ISSUE>;
       error?: unknown;
     };
 
@@ -150,7 +168,7 @@ function openFailure(error: unknown): ContainedCacheReadResult {
     return { ok: false, issue: 'missing', error };
   }
   if (code === 'ELOOP') {
-    return { ok: false, issue: 'unsafe-file', error };
+    return { ok: false, issue: 'unsafe-file', reason: 'symlink', error };
   }
   return { ok: false, issue: 'read-error', error };
 }
@@ -158,7 +176,7 @@ function openFailure(error: unknown): ContainedCacheReadResult {
 function verificationFailure(error: unknown): ContainedCacheReadResult {
   const code = errnoCode(error);
   if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP') {
-    return { ok: false, issue: 'unsafe-file', error };
+    return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check', error };
   }
   return { ok: false, issue: 'read-error', error };
 }
@@ -199,9 +217,6 @@ export function readContainedCacheTextFile(
     } catch (error) {
       return { ok: false, issue: 'read-error', error };
     }
-    if (!opened.isFile() || opened.nlink > 1) {
-      return { ok: false, issue: 'unsafe-file' };
-    }
 
     let currentPathBefore: string;
     let current: Stats;
@@ -209,7 +224,12 @@ export function readContainedCacheTextFile(
     try {
       currentPathBefore = operations.realpath(absolutePath);
       if (!isWithinCacheDir(currentPathBefore, realCacheDir)) {
-        return { ok: false, issue: 'unsafe-file' };
+        return { ok: false, issue: 'unsafe-file', reason: 'outside-cache' };
+      }
+      // Containment first, so an outside file reached through a directory symlink reports outside-cache.
+      if (!opened.isFile() || opened.nlink > 1) {
+        const reason = opened.isFile() ? 'hard-linked' : 'not-regular-file';
+        return { ok: false, issue: 'unsafe-file', reason };
       }
       current = operations.stat(currentPathBefore);
       currentPathAfter = operations.realpath(absolutePath);
@@ -222,14 +242,14 @@ export function readContainedCacheTextFile(
       !isWithinCacheDir(currentPathAfter, realCacheDir) ||
       !current.isFile()
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
     if (
       hasStableFileIdentity(opened) &&
       hasStableFileIdentity(current) &&
       !hasMatchingFileIdentity(opened, current)
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
 
     try {
@@ -288,7 +308,7 @@ export function writeContainedCacheTextFile(
         return { ok: false, issue: 'write-error', error: parentError };
       }
       if (!isSamePath(realParent, realCacheDir)) {
-        return { ok: false, issue: 'unsafe-file' };
+        return { ok: false, issue: 'unsafe-file', reason: 'outside-cache' };
       }
       try {
         fd = operations.open(
@@ -311,9 +331,6 @@ export function writeContainedCacheTextFile(
     } catch (error) {
       return { ok: false, issue: 'write-error', error };
     }
-    if (!opened.isFile() || opened.nlink > 1) {
-      return { ok: false, issue: 'unsafe-file' };
-    }
 
     let currentPathBefore: string;
     let current: Stats;
@@ -321,7 +338,12 @@ export function writeContainedCacheTextFile(
     try {
       currentPathBefore = operations.realpath(absolutePath);
       if (!isWithinCacheDir(currentPathBefore, realCacheDir)) {
-        return { ok: false, issue: 'unsafe-file' };
+        return { ok: false, issue: 'unsafe-file', reason: 'outside-cache' };
+      }
+      // Containment first, so an outside file reached through a directory symlink reports outside-cache.
+      if (!opened.isFile() || opened.nlink > 1) {
+        const reason = opened.isFile() ? 'hard-linked' : 'not-regular-file';
+        return { ok: false, issue: 'unsafe-file', reason };
       }
       current = operations.stat(currentPathBefore);
       currentPathAfter = operations.realpath(absolutePath);
@@ -334,14 +356,14 @@ export function writeContainedCacheTextFile(
       !isWithinCacheDir(currentPathAfter, realCacheDir) ||
       !current.isFile()
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
     if (
       hasStableFileIdentity(opened) &&
       hasStableFileIdentity(current) &&
       !hasMatchingFileIdentity(opened, current)
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
 
     try {
@@ -365,7 +387,13 @@ export function writeContainedCacheTextFile(
 function writeOpenFailure(error: unknown): ContainedCacheWriteResult {
   const code = errnoCode(error);
   if (code === 'ELOOP' || code === 'EEXIST' || code === 'ENOTDIR') {
-    return { ok: false, issue: 'unsafe-file', error };
+    const reason =
+      code === 'ELOOP'
+        ? 'symlink'
+        : code === 'EEXIST'
+          ? 'changed-during-check'
+          : 'not-regular-file';
+    return { ok: false, issue: 'unsafe-file', reason, error };
   }
   return { ok: false, issue: 'write-error', error };
 }
@@ -373,7 +401,7 @@ function writeOpenFailure(error: unknown): ContainedCacheWriteResult {
 function writeVerificationFailure(error: unknown): ContainedCacheWriteResult {
   const code = errnoCode(error);
   if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP') {
-    return { ok: false, issue: 'unsafe-file', error };
+    return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check', error };
   }
   return { ok: false, issue: 'write-error', error };
 }
@@ -477,6 +505,12 @@ export function readCacheFileArg(
 }
 
 /** Contained write for paths the server minted itself; throws so existing cache-write handlers keep working. */
+export function unsafeFileReasonLine(
+  result: ContainedCacheReadResult | ContainedCacheWriteResult,
+): string {
+  return !result.ok && result.issue === 'unsafe-file' ? `\nReason: ${result.reason}` : '';
+}
+
 export function writeCacheTextFile(path: string, text: string): void {
   const written = writeContainedCacheTextFile(path, text);
   if (written.ok) return;
@@ -487,7 +521,7 @@ export function writeCacheTextFile(path: string, text: string): void {
     );
   }
   throw new Error(
-    `refused to write ${path}: it must be a regular file inside the Desktop cache directory`,
+    `refused to write ${path}: it must be a regular file inside the Desktop cache directory${unsafeFileReasonLine(written)}`,
   );
 }
 
