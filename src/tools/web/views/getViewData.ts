@@ -44,8 +44,8 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
     minRequiredRole: SiteRole.VIEWER,
     description: [
       "Retrieves data for the specified view in a Tableau workbook, including the user's filters.",
-      "On Tableau REST API versions below 3.30, returns CSV data for the dashboard's first view.",
-      'On version 3.30 or later, returns parsed data for the sheets included in the server response.',
+      "By default, returns CSV data for the dashboard's first view.",
+      'When the server is configured to return all sheet data, returns parsed data for the sheets included in the server response instead.',
       'Requires the view LUID from the content URL (not the published view id).',
       'For custom views, use the tool to get custom view data by custom view id instead.',
     ].join(' '),
