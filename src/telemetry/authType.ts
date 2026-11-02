@@ -2,7 +2,7 @@ import { Config } from '../config.js';
 import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
 /**
- * Derives the auth mode label for the product telemetry `tool_call` and `tableau_mcp_event` events.
+ * Derives the auth mode label for product telemetry events.
  */
 export function getAuthTypeForTelemetry(
   config: Config,
