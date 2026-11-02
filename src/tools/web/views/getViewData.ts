@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
@@ -70,7 +71,12 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          if (RestApi.versionIsAtLeast('3.30')) {
+          // allData is disabled on some Server 2026.3 sites (403075), so the REST API version alone
+          // isn't a reliable signal. Fall back to the legacy /data endpoint unless the flag is on.
+          if (
+            RestApi.versionIsAtLeast('3.30') &&
+            (await getFeatureGate().isFeatureEnabled('view-all-data'))
+          ) {
             const response = await useRestApi({
               ...extra,
               jwtScopes: getViewDataTool.requiredApiScopes,
