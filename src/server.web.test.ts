@@ -1667,7 +1667,9 @@ describe('server', () => {
   });
 
   it('should register as standard tool for a known-incompatible client (claude.ai) despite UI support', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) => name === 'mcp-apps');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'mcp-apps',
+    );
 
     // Flag on + UI-capable, but clientId resolves to 'Claude' via getClientDisplayName → plain tool.
     const server = getServer({
@@ -1729,7 +1731,9 @@ describe('server', () => {
   });
 
   it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) => name === 'mcp-apps');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'mcp-apps',
+    );
 
     // UI-capable but claude.ai → app path is blocked; hideWhenUnsupported means no plain fallback either.
     const server = getServer({
