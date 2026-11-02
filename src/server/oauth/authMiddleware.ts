@@ -4,6 +4,8 @@ import { NextFunction, RequestHandler, Response } from 'express';
 import { getConfig } from '../../config.js';
 import { isStrictScopeMatchEnabled } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
+import { sanitizeClientIdForTelemetry } from '../../telemetry/clientDisplayName.js';
+import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import {
   OAUTH_AUTH_CHALLENGE_GUIDANCE,
   OAUTH_INSUFFICIENT_SCOPE_GUIDANCE,
@@ -156,11 +158,31 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const missingScopes = [...missingMcpScopes, ...missingApiScopes, ...missingMandatory];
 
       if (missingScopes.length > 0) {
+        // A tools/call that is under-scoped is an error (the client asked to run a specific tool it
+        // cannot); a startup request (initialize / tools/list) that comes in under-scoped is routine
+        // under subset mode, so log it at info to avoid alarming operators on every connect.
+        const toolName = isInitializeRequest(req.body)
+          ? undefined
+          : getToolNameFromRequestBody(req.body);
+        const isToolCall = toolName !== undefined;
         log({
-          message: `Insufficient scopes: missing [${missingScopes.join(', ')}]`,
-          level: 'error',
+          message: isToolCall
+            ? `Insufficient scopes for tool ${toolName}: missing [${missingScopes.join(', ')}]`
+            : `Insufficient scopes: missing [${missingScopes.join(', ')}]`,
+          level: isToolCall ? 'error' : 'info',
           logger: 'oauth',
         });
+        try {
+          getProductTelemetry().send('tableau_mcp_event', {
+            event_type: 'oauth_scope_gap',
+            oauth_client_id: sanitizeClientIdForTelemetry(authInfo.clientId),
+            missing_scope_count: missingScopes.length,
+            missing_scopes: missingScopes.join(' '),
+            is_tool_call: isToolCall,
+          });
+        } catch {
+          // Telemetry is best-effort; never let it affect the auth response.
+        }
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
         const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
