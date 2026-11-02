@@ -68,6 +68,8 @@ A comma-separated list of loggers to enable.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
+  The Desktop server starts every name with `desktop-mcp-`, e.g.
+  `desktop-mcp-2025-10-15T22-00-00-000Z.log`.
 - Each line in the log file is a JSON object with a timestamp and additional properties:
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
@@ -91,7 +93,8 @@ The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_logge
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
 - The server will attempt to create the directory if it does not exist.
-- There is no cleanup of old log files. The server will continue to create log files indefinitely.
+- The web server never deletes old log files.
+- The Desktop server deletes its own `desktop-mcp-*.log` files older than 14 days when it starts.
 
 <hr />
 

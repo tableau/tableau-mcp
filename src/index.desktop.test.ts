@@ -9,6 +9,7 @@ const startupState = vi.hoisted(() => ({
   expressStarted: false,
   desktopConnected: false,
   shutdownHandlers: new Map<string, () => Promise<void>>(),
+  pruneOldLogs: vi.fn(async () => undefined),
 }));
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
@@ -59,7 +60,9 @@ vi.mock('./getTableauServerInfo.js', () => ({
 }));
 
 vi.mock('./logging/fileLogger.js', () => ({
-  FileLogger: vi.fn(),
+  FileLogger: vi.fn(function () {
+    return { pruneOldLogs: startupState.pruneOldLogs };
+  }),
   setFileLogger: vi.fn(),
 }));
 
@@ -121,6 +124,7 @@ import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { FileLogger } from './logging/fileLogger.js';
 import { startExpressServer } from './server/express.js';
 import { connectSessionStore, initializeSessionStore } from './sessionStore/init.js';
 
@@ -205,5 +209,52 @@ describe('desktop binary startup', () => {
     expect(startExpressServer).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
+  });
+
+  it('prunes Desktop logs older than 14 days at startup when the file logger is enabled', async () => {
+    startupState.profile = 'desktop';
+    vi.mocked(getDesktopConfig).mockReturnValueOnce({
+      defaultNotificationLevel: 'info',
+      loggers: new Set(['fileLogger']),
+      fileLoggerDirectory: '/tmp',
+    } as ReturnType<typeof getDesktopConfig>);
+
+    await import('./index.desktop.js');
+    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+
+    expect(FileLogger).toHaveBeenCalledWith({
+      logDirectory: '/tmp',
+      fileNamePrefix: 'desktop-mcp-',
+    });
+    expect(startupState.pruneOldLogs).toHaveBeenCalledExactlyOnceWith({ maxAgeDays: 14 });
+  });
+
+  it('does not prune when the file logger is disabled for Desktop', async () => {
+    startupState.profile = 'desktop';
+
+    await import('./index.desktop.js');
+    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+
+    expect(startupState.pruneOldLogs).not.toHaveBeenCalled();
+  });
+
+  it('does not prune Web logs', async () => {
+    vi.mocked(getConfig).mockReturnValueOnce({
+      transport: 'http',
+      server: 'https://tableau.example.com',
+      oauth: { enabled: true },
+      defaultNotificationLevel: 'info',
+      loggers: new Set(['fileLogger']),
+      fileLoggerDirectory: '/tmp',
+      disableSessionManagement: false,
+      disableLogMasking: false,
+      breakGlassDisableGlobally: false,
+    } as unknown as ReturnType<typeof getConfig>);
+
+    await import('./index.desktop.js');
+    await vi.waitFor(() => expect(startupState.expressStarted).toBe(true));
+
+    expect(FileLogger).toHaveBeenCalledWith({ logDirectory: '/tmp' });
+    expect(startupState.pruneOldLogs).not.toHaveBeenCalled();
   });
 });
