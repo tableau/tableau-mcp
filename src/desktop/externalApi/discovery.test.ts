@@ -1,6 +1,7 @@
 import { homedir } from 'os';
 import { basename, join } from 'path';
 
+import { log } from '../../logging/logger.js';
 import { discoverInstances, getExternalApiDiscoveryDirs } from './discovery.js';
 
 vi.mock('os', () => ({
@@ -172,6 +173,128 @@ describe('discoverInstances', () => {
     });
 
     expect(instances).toEqual([]);
+  });
+});
+
+describe('discoverInstances scan logging', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('logs one summary per scan no matter how many stale files exist', () => {
+    const names = Array.from({ length: 50 }, (_, i) => `${1000 + i}.json`);
+    names.push('live.json');
+    const instances = discoverInstances({
+      discoveryDir: '/discovery',
+      readDir: () => names,
+      readFile: (path) =>
+        basename(path) === 'live.json'
+          ? validFile({ pid: 999, instanceId: 'live-1' })
+          : validFile({ pid: 1, instanceId: 'dead' }),
+      isPidAlive: (pid) => pid === 999,
+    });
+
+    expect(instances).toHaveLength(1);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith({
+      message: 'External API discovery scan',
+      level: 'debug',
+      logger: 'ExternalApiDiscovery',
+      data: {
+        dirs: [{ dir: '/discovery', files: 51 }],
+        live: [{ pid: 999, instanceId: 'live-1', startedAt: '2026-07-07T10:00:00Z' }],
+        deadPidCount: 50,
+        newestDead: { pid: 1, instanceId: 'dead', startedAt: '2026-07-07T10:00:00Z' },
+        invalidCount: 0,
+      },
+    });
+  });
+
+  it('reports an unreadable dir inside dirs instead of logging it separately', () => {
+    discoverInstances({
+      discoveryDir: '/nope',
+      readDir: () => {
+        throw Object.assign(new Error('no such dir'), { code: 'ENOENT' });
+      },
+    });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(log).mock.calls[0][0].data).toEqual({
+      dirs: [{ dir: '/nope', error: 'ENOENT' }],
+      live: [],
+      deadPidCount: 0,
+      invalidCount: 0,
+    });
+  });
+
+  it('counts invalid JSON and schema failures', () => {
+    const files: Record<string, string> = {
+      'broken.json': 'not json',
+      'v2.json': validFile({ schemaVersion: 2 }),
+      'ok.json': validFile(),
+    };
+    discoverInstances({
+      discoveryDir: '/discovery',
+      readDir: () => Object.keys(files),
+      readFile: (path) => files[basename(path)],
+      isPidAlive: () => true,
+    });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(log).mock.calls[0][0].data).toMatchObject({
+      invalidCount: 2,
+      deadPidCount: 0,
+    });
+  });
+
+  it('reports only the dead entry with the latest startedAt', () => {
+    const files: Record<string, string> = {
+      'a.json': validFile({ pid: 1, instanceId: 'a', startedAt: '2026-07-07T09:00:00Z' }),
+      'b.json': validFile({ pid: 2, instanceId: 'b', startedAt: '2026-07-07T12:00:00Z' }),
+      'c.json': validFile({ pid: 3, instanceId: 'c', startedAt: '2026-07-07T11:00:00Z' }),
+      'd.json': validFile({ pid: 4, instanceId: 'd', startedAt: undefined }),
+    };
+    discoverInstances({
+      discoveryDir: '/discovery',
+      readDir: () => Object.keys(files),
+      readFile: (path) => files[basename(path)],
+      isPidAlive: () => false,
+    });
+
+    expect(vi.mocked(log).mock.calls[0][0].data).toMatchObject({
+      deadPidCount: 4,
+      newestDead: { pid: 2, instanceId: 'b', startedAt: '2026-07-07T12:00:00Z' },
+    });
+  });
+
+  it('survives a readDir that throws a non-Error value', () => {
+    discoverInstances({
+      discoveryDir: '/weird',
+      readDir: () => {
+        throw undefined;
+      },
+    });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(log).mock.calls[0][0].data).toMatchObject({
+      dirs: [{ dir: '/weird', error: 'undefined' }],
+    });
+  });
+
+  it('still logs once when the directory has no json files', () => {
+    const instances = discoverInstances({
+      discoveryDir: '/discovery',
+      readDir: () => ['notes.txt'],
+    });
+
+    expect(instances).toEqual([]);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(log).mock.calls[0][0].data).toEqual({
+      dirs: [{ dir: '/discovery', files: 0 }],
+      live: [],
+      deadPidCount: 0,
+      invalidCount: 0,
+    });
   });
 });
 
