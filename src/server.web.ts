@@ -40,6 +40,7 @@ import {
   RegistrationCondition,
   RegistrationContext,
 } from './tools/web/registrationConditions.js';
+import { featurePhrasesForTools } from './tools/web/featurePhrases.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import {
@@ -148,13 +149,15 @@ const siteRoleUnavailableWarning = (retryAdvice: string): string =>
   'role could not be determined after multiple attempts. This is likely a transient error rather ' +
   `than a permissions problem. ${retryAdvice}`;
 
-// Appended to the initialize instructions when the caller's OAuth token was not granted the scopes
-// some tools require, so those tools were omitted. Unlike a transient failure, reconnecting with the
-// same token will not help — the user must re-authorize and request the broader scopes.
-const MISSING_SCOPES_NOTE =
-  'Some tools were omitted from this session because your access token was not granted the scopes ' +
-  'they require. To enable them, re-authorize and request the additional scopes listed under ' +
-  'scopes_supported in the authorization server metadata.';
+// Appended to the initialize instructions when the caller's OAuth token lacks the scopes some tools
+// require, so those tools were omitted. Neutral by design: a stale connection should reconnect, but a
+// deliberately-limited one is working as intended — so the copy names the affected features as a fact
+// and offers reconnect without demanding it. Feature phrases, never scope strings, keep it user-facing.
+const buildMissingScopesNote = (omittedToolNames: string[]): string =>
+  "This Tableau connection doesn't include access for: " +
+  `${featurePhrasesForTools(omittedToolNames).join(', ')}. ` +
+  'If you expected them, reconnect Tableau to grant access. ' +
+  'If your organization limits Tableau access, no action is needed.';
 
 /**
  * Base `initialize` instructions for the web server. Admin guidance is not included here: it depends
@@ -582,9 +585,12 @@ export class WebMcpServer extends Server {
           "the caller's access token lacks their required scopes: " +
           `${toolsOmittedForMissingScopes.join(', ')}.`,
       });
-      // A note, not a warning: a reconnect with the same token will not help — re-authorizing with
-      // broader scopes will. Deliberate omissions stay out of transientlyOmittedToolNames.
-      notes.push({ message: MISSING_SCOPES_NOTE, toolNames: toolsOmittedForMissingScopes });
+      // A note, not a warning: the connection simply lacks these scopes — reconnect to grant them, or
+      // leave it if the limit is deliberate. Scope omissions stay out of transientlyOmittedToolNames.
+      notes.push({
+        message: buildMissingScopesNote(toolsOmittedForMissingScopes),
+        toolNames: toolsOmittedForMissingScopes,
+      });
     }
 
     if (toolsOmittedForRoleFetchFailure.length > 0) {

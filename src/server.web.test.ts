@@ -526,7 +526,7 @@ describe('server', () => {
     it('omits nothing and adds no missing-scopes note under strict scope match with a full grant', async () => {
       // Strict ON guarantees a full grant upstream (the gate rejects anything short), so discovery
       // omits nothing. server.web.ts has no strict branch — this pins that a full grant produces an
-      // empty omission set and no MISSING_SCOPES_NOTE, regardless of the strict toggle.
+      // empty omission set and no missing-scopes note, regardless of the strict toggle.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
@@ -540,7 +540,7 @@ describe('server', () => {
       const registered = registeredNames(server);
       expect(registered).toContain('list-datasources');
       expect(registered).toContain('query-datasource');
-      expect(getInstructions(server)).not.toContain('was not granted the scopes');
+      expect(getInstructions(server)).not.toContain("doesn't include access for");
     });
 
     it('omits unusable tools and adds the missing-scopes note under non-strict with a subset grant', async () => {
@@ -554,7 +554,7 @@ describe('server', () => {
       const registered = registeredNames(server);
       expect(registered).toContain('list-datasources');
       expect(registered).not.toContain('query-datasource');
-      expect(getInstructions(server)).toContain('was not granted the scopes');
+      expect(getInstructions(server)).toContain("doesn't include access for");
     });
 
     it('still enforces MCP scopes but not API scopes when API scopes are not advertised', async () => {
@@ -578,8 +578,33 @@ describe('server', () => {
       const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
       sdkServer._instructions = constructorOptions?.instructions;
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
-      expect(sdkServer._instructions).toContain('was not granted the scopes');
-      expect(sdkServer._instructions).toContain('re-authorize');
+      expect(sdkServer._instructions).toContain("doesn't include access for");
+      expect(sdkServer._instructions).toContain('reconnect Tableau');
+    });
+
+    it('names omitted features neutrally in the initialize instructions', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      // Subset grant covers list-datasources but not query-datasource (its extra viz_data_service:read
+      // scope) — both are in the "datasource" group, so the note names that group's feature phrase.
+      await server.registerTools(bearerAuth, allScopes('list-datasources'));
+      const instructions = getInstructions(server);
+      expect(instructions).toContain("doesn't include access for");
+      expect(instructions).toContain('querying data sources');
+      // Neutral: no imperative that misfires for a deliberately-limited connection.
+      expect(instructions).not.toContain('you must');
+      // Internal plumbing must never leak into user copy.
+      expect(instructions).not.toMatch(/tableau:mcp:/);
+    });
+
+    it('adds no scope-omission note when nothing is omitted for scopes', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('list-datasources'),
+        ...allScopes('query-datasource'),
+      ]);
+      expect(getInstructions(server)).not.toContain("doesn't include access for");
     });
 
     // createMockConditionalTool declares RequiresPulse, whose probe scope is
@@ -602,7 +627,7 @@ describe('server', () => {
 
       expect(registeredNames(server)).not.toContain('mock-conditional-tool');
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-      expect(getInstructions(server)).toContain('was not granted the scopes');
+      expect(getInstructions(server)).toContain("doesn't include access for");
     });
 
     it('does not hold the caller to probe scopes when registration conditions are not enforced', async () => {
