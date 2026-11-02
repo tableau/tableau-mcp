@@ -7,8 +7,7 @@ on:
 
 jobs:
   build:
-    # Pinned: Playwright has no Chromium build for Ubuntu 26.04 (ubuntu-latest) yet.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
