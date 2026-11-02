@@ -58,6 +58,7 @@ type UnsafeFileResult = {
   ok: false;
   issue: 'unsafe-file';
   reason: UnsafeFileReason;
+  detail?: 'path-changed' | 'type-changed' | 'identity-changed';
   error?: unknown;
 };
 
@@ -242,14 +243,20 @@ export function readContainedCacheTextFile(
       !isWithinCacheDir(currentPathAfter, realCacheDir) ||
       !current.isFile()
     ) {
-      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
+      const detail = currentPathAfter === currentPathBefore ? 'type-changed' : 'path-changed';
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check', detail };
     }
     if (
       hasStableFileIdentity(opened) &&
       hasStableFileIdentity(current) &&
       !hasMatchingFileIdentity(opened, current)
     ) {
-      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
+      return {
+        ok: false,
+        issue: 'unsafe-file',
+        reason: 'changed-during-check',
+        detail: 'identity-changed',
+      };
     }
 
     try {
@@ -356,14 +363,20 @@ export function writeContainedCacheTextFile(
       !isWithinCacheDir(currentPathAfter, realCacheDir) ||
       !current.isFile()
     ) {
-      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
+      const detail = currentPathAfter === currentPathBefore ? 'type-changed' : 'path-changed';
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check', detail };
     }
     if (
       hasStableFileIdentity(opened) &&
       hasStableFileIdentity(current) &&
       !hasMatchingFileIdentity(opened, current)
     ) {
-      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
+      return {
+        ok: false,
+        issue: 'unsafe-file',
+        reason: 'changed-during-check',
+        detail: 'identity-changed',
+      };
     }
 
     try {
@@ -504,13 +517,19 @@ export function readCacheFileArg(
   }
 }
 
-/** Contained write for paths the server minted itself; throws so existing cache-write handlers keep working. */
+// Only the errno code is printed: Node's error.message carries path text.
 export function unsafeFileReasonLine(
   result: ContainedCacheReadResult | ContainedCacheWriteResult,
 ): string {
-  return !result.ok && result.issue === 'unsafe-file' ? `\nReason: ${result.reason}` : '';
+  if (result.ok || result.issue !== 'unsafe-file') return '';
+  const detail =
+    result.reason === 'changed-during-check'
+      ? (result.detail ?? errnoCode(result.error))
+      : undefined;
+  return `\nReason: ${result.reason}${detail ? ` (${detail})` : ''}`;
 }
 
+/** Contained write for paths the server minted itself; throws so existing cache-write handlers keep working. */
 export function writeCacheTextFile(path: string, text: string): void {
   const written = writeContainedCacheTextFile(path, text);
   if (written.ok) return;
