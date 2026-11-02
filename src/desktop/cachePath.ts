@@ -45,11 +45,28 @@ export const CONTAINED_CACHE_READ_ISSUE = {
   readError: 'read-error',
 } as const;
 
+type UnsafeFileReason =
+  | 'symlink'
+  | 'not-regular-file'
+  | 'hard-linked'
+  | 'outside-cache'
+  | 'changed-during-check';
+
+type OtherIssue<T> = Exclude<T[keyof T], 'unsafe-file'>;
+
+type UnsafeFileResult = {
+  ok: false;
+  issue: 'unsafe-file';
+  reason: UnsafeFileReason;
+  error?: unknown;
+};
+
 export type ContainedCacheReadResult =
   | { ok: true; path: string; text: string }
+  | UnsafeFileResult
   | {
       ok: false;
-      issue: (typeof CONTAINED_CACHE_READ_ISSUE)[keyof typeof CONTAINED_CACHE_READ_ISSUE];
+      issue: OtherIssue<typeof CONTAINED_CACHE_READ_ISSUE>;
       error?: unknown;
     };
 
@@ -62,16 +79,20 @@ export const CONTAINED_CACHE_WRITE_ISSUE = {
 
 export type ContainedCacheWriteResult =
   | { ok: true; path: string }
+  | UnsafeFileResult
   | {
       ok: false;
-      issue: (typeof CONTAINED_CACHE_WRITE_ISSUE)[keyof typeof CONTAINED_CACHE_WRITE_ISSUE];
+      issue: OtherIssue<typeof CONTAINED_CACHE_WRITE_ISSUE>;
       error?: unknown;
     };
+
+// macOS reports the on-disk spelling only through the native binding.
+const realpath = process.platform === 'darwin' ? realpathSync.native : realpathSync;
 
 const DEFAULT_CONTAINED_CACHE_READ_OPERATIONS: ContainedCacheReadOperations = {
   open: openSync,
   fstat: fstatSync,
-  realpath: realpathSync,
+  realpath,
   stat: statSync,
   read: (fd) => readFileSync(fd),
   close: closeSync,
@@ -81,7 +102,7 @@ const DEFAULT_CONTAINED_CACHE_WRITE_OPERATIONS: ContainedCacheWriteOperations = 
   noFollowFlag: typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0,
   open: openSync,
   fstat: fstatSync,
-  realpath: realpathSync,
+  realpath,
   stat: statSync,
   truncate: ftruncateSync,
   write: (fd, text) => writeFileSync(fd, text, 'utf-8'),
@@ -114,6 +135,19 @@ function isSamePath(a: string, b: string, pathApi: Pick<typeof path, 'relative'>
   return pathApi.relative(a, b) === '';
 }
 
+// Lexical pre-checks only: realpath comparisons must stay byte-exact (HFS+ keeps U+212B and U+00C5 distinct).
+function nfcOnDarwin(value: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === 'darwin' ? value.normalize('NFC') : value;
+}
+
+export function isLexicallyWithinCacheDir(
+  absolutePath: string,
+  cacheDir: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return isWithinCacheDir(nfcOnDarwin(absolutePath, platform), nfcOnDarwin(cacheDir, platform));
+}
+
 function hasStableFileIdentity(stats: Stats): boolean {
   return stats.ino !== 0;
 }
@@ -134,7 +168,7 @@ function openFailure(error: unknown): ContainedCacheReadResult {
     return { ok: false, issue: 'missing', error };
   }
   if (code === 'ELOOP') {
-    return { ok: false, issue: 'unsafe-file', error };
+    return { ok: false, issue: 'unsafe-file', reason: 'symlink', error };
   }
   return { ok: false, issue: 'read-error', error };
 }
@@ -142,7 +176,7 @@ function openFailure(error: unknown): ContainedCacheReadResult {
 function verificationFailure(error: unknown): ContainedCacheReadResult {
   const code = errnoCode(error);
   if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP') {
-    return { ok: false, issue: 'unsafe-file', error };
+    return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check', error };
   }
   return { ok: false, issue: 'read-error', error };
 }
@@ -157,7 +191,7 @@ export function readContainedCacheTextFile(
 ): ContainedCacheReadResult {
   const cacheDir = getCacheDir();
   const absolutePath = resolve(path);
-  if (!isWithinCacheDir(absolutePath, cacheDir)) {
+  if (!isLexicallyWithinCacheDir(absolutePath, cacheDir)) {
     return { ok: false, issue: 'outside-cache' };
   }
 
@@ -183,9 +217,6 @@ export function readContainedCacheTextFile(
     } catch (error) {
       return { ok: false, issue: 'read-error', error };
     }
-    if (!opened.isFile() || opened.nlink > 1) {
-      return { ok: false, issue: 'unsafe-file' };
-    }
 
     let currentPathBefore: string;
     let current: Stats;
@@ -193,7 +224,12 @@ export function readContainedCacheTextFile(
     try {
       currentPathBefore = operations.realpath(absolutePath);
       if (!isWithinCacheDir(currentPathBefore, realCacheDir)) {
-        return { ok: false, issue: 'unsafe-file' };
+        return { ok: false, issue: 'unsafe-file', reason: 'outside-cache' };
+      }
+      // Containment first, so an outside file reached through a directory symlink reports outside-cache.
+      if (!opened.isFile() || opened.nlink > 1) {
+        const reason = opened.isFile() ? 'hard-linked' : 'not-regular-file';
+        return { ok: false, issue: 'unsafe-file', reason };
       }
       current = operations.stat(currentPathBefore);
       currentPathAfter = operations.realpath(absolutePath);
@@ -206,14 +242,14 @@ export function readContainedCacheTextFile(
       !isWithinCacheDir(currentPathAfter, realCacheDir) ||
       !current.isFile()
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
     if (
       hasStableFileIdentity(opened) &&
       hasStableFileIdentity(current) &&
       !hasMatchingFileIdentity(opened, current)
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
 
     try {
@@ -240,7 +276,7 @@ export function writeContainedCacheTextFile(
 ): ContainedCacheWriteResult {
   const cacheDir = getCacheDir();
   const absolutePath = resolve(path);
-  if (!isWithinCacheDir(absolutePath, cacheDir)) {
+  if (!isLexicallyWithinCacheDir(absolutePath, cacheDir)) {
     return { ok: false, issue: 'outside-cache' };
   }
 
@@ -262,7 +298,7 @@ export function writeContainedCacheTextFile(
 
       // DesktopCache emits direct children. Limiting creation to that shape avoids
       // claiming nested parent traversal is race-safe without an openat-style API.
-      if (!isSamePath(dirname(absolutePath), cacheDir)) {
+      if (!isSamePath(nfcOnDarwin(dirname(absolutePath)), nfcOnDarwin(cacheDir))) {
         return { ok: false, issue: 'unsupported-new-path' };
       }
       let realParent: string;
@@ -272,7 +308,7 @@ export function writeContainedCacheTextFile(
         return { ok: false, issue: 'write-error', error: parentError };
       }
       if (!isSamePath(realParent, realCacheDir)) {
-        return { ok: false, issue: 'unsafe-file' };
+        return { ok: false, issue: 'unsafe-file', reason: 'outside-cache' };
       }
       try {
         fd = operations.open(
@@ -295,9 +331,6 @@ export function writeContainedCacheTextFile(
     } catch (error) {
       return { ok: false, issue: 'write-error', error };
     }
-    if (!opened.isFile() || opened.nlink > 1) {
-      return { ok: false, issue: 'unsafe-file' };
-    }
 
     let currentPathBefore: string;
     let current: Stats;
@@ -305,7 +338,12 @@ export function writeContainedCacheTextFile(
     try {
       currentPathBefore = operations.realpath(absolutePath);
       if (!isWithinCacheDir(currentPathBefore, realCacheDir)) {
-        return { ok: false, issue: 'unsafe-file' };
+        return { ok: false, issue: 'unsafe-file', reason: 'outside-cache' };
+      }
+      // Containment first, so an outside file reached through a directory symlink reports outside-cache.
+      if (!opened.isFile() || opened.nlink > 1) {
+        const reason = opened.isFile() ? 'hard-linked' : 'not-regular-file';
+        return { ok: false, issue: 'unsafe-file', reason };
       }
       current = operations.stat(currentPathBefore);
       currentPathAfter = operations.realpath(absolutePath);
@@ -318,14 +356,14 @@ export function writeContainedCacheTextFile(
       !isWithinCacheDir(currentPathAfter, realCacheDir) ||
       !current.isFile()
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
     if (
       hasStableFileIdentity(opened) &&
       hasStableFileIdentity(current) &&
       !hasMatchingFileIdentity(opened, current)
     ) {
-      return { ok: false, issue: 'unsafe-file' };
+      return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check' };
     }
 
     try {
@@ -349,7 +387,13 @@ export function writeContainedCacheTextFile(
 function writeOpenFailure(error: unknown): ContainedCacheWriteResult {
   const code = errnoCode(error);
   if (code === 'ELOOP' || code === 'EEXIST' || code === 'ENOTDIR') {
-    return { ok: false, issue: 'unsafe-file', error };
+    const reason =
+      code === 'ELOOP'
+        ? 'symlink'
+        : code === 'EEXIST'
+          ? 'changed-during-check'
+          : 'not-regular-file';
+    return { ok: false, issue: 'unsafe-file', reason, error };
   }
   return { ok: false, issue: 'write-error', error };
 }
@@ -357,7 +401,7 @@ function writeOpenFailure(error: unknown): ContainedCacheWriteResult {
 function writeVerificationFailure(error: unknown): ContainedCacheWriteResult {
   const code = errnoCode(error);
   if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP') {
-    return { ok: false, issue: 'unsafe-file', error };
+    return { ok: false, issue: 'unsafe-file', reason: 'changed-during-check', error };
   }
   return { ok: false, issue: 'write-error', error };
 }
@@ -368,7 +412,7 @@ function writeVerificationFailure(error: unknown): ContainedCacheWriteResult {
  */
 export function resolveCacheFileArg(argName: string, raw: string): Result<string, McpToolError> {
   const absolutePath = resolve(raw.trim());
-  return isWithinCacheDir(absolutePath, getCacheDir())
+  return isLexicallyWithinCacheDir(absolutePath, getCacheDir())
     ? new Ok(absolutePath)
     : new Err(new CacheFileOutsideCacheError(argName));
 }
@@ -386,12 +430,12 @@ export function checkCacheFileArg(
   if (resolved.isErr()) return resolved;
   try {
     const link = lstatSync(resolved.value);
-    const real = realpathSync(resolved.value);
+    const real = realpath(resolved.value);
     if (
       link.isSymbolicLink() ||
       !link.isFile() ||
       link.nlink > 1 ||
-      !isWithinCacheDir(real, realpathSync(getCacheDir()))
+      !isWithinCacheDir(real, realpath(getCacheDir()))
     ) {
       return new Err(new CacheFileOutsideCacheError(argName));
     }
@@ -409,7 +453,7 @@ function resolvesOutsideCache(absolutePath: string): boolean {
   let ancestor = dirname(absolutePath);
   for (;;) {
     try {
-      return !isWithinCacheDir(realpathSync(ancestor), realpathSync(getCacheDir()));
+      return !isWithinCacheDir(realpath(ancestor), realpath(getCacheDir()));
     } catch (error) {
       if (errnoCode(error) === 'ENOENT') {
         try {
@@ -461,6 +505,12 @@ export function readCacheFileArg(
 }
 
 /** Contained write for paths the server minted itself; throws so existing cache-write handlers keep working. */
+export function unsafeFileReasonLine(
+  result: ContainedCacheReadResult | ContainedCacheWriteResult,
+): string {
+  return !result.ok && result.issue === 'unsafe-file' ? `\nReason: ${result.reason}` : '';
+}
+
 export function writeCacheTextFile(path: string, text: string): void {
   const written = writeContainedCacheTextFile(path, text);
   if (written.ok) return;
@@ -471,7 +521,7 @@ export function writeCacheTextFile(path: string, text: string): void {
     );
   }
   throw new Error(
-    `refused to write ${path}: it must be a regular file inside the Desktop cache directory`,
+    `refused to write ${path}: it must be a regular file inside the Desktop cache directory${unsafeFileReasonLine(written)}`,
   );
 }
 
