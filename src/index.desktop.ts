@@ -16,6 +16,8 @@ import { resolveTransportProfile } from './transportProfile.js';
 
 const serverVersion = pkg.version;
 
+const DESKTOP_LOG_RETENTION_DAYS = 14;
+
 // The shipped tableau-mcp-desktop binary now serves BOTH profiles from one artifact,
 // selected purely by TRANSPORT — so tab-agent-south can spawn the web/insights profile
 // from the very same installed binary it launches for desktop authoring, without a
@@ -37,12 +39,12 @@ async function startDesktopProfile(): Promise<void> {
     ? config.defaultNotificationLevel
     : 'debug';
   if (config.loggers.has('fileLogger')) {
-    setFileLogger(
-      new FileLogger({
-        logDirectory: config.fileLoggerDirectory,
-        fileNamePrefix: 'desktop-mcp-',
-      }),
-    );
+    const fileLogger = new FileLogger({
+      logDirectory: config.fileLoggerDirectory,
+      fileNamePrefix: 'desktop-mcp-',
+    });
+    setFileLogger(fileLogger);
+    void fileLogger.pruneOldLogs({ maxAgeDays: DESKTOP_LOG_RETENTION_DAYS });
   }
 
   const server = new DesktopMcpServer();
