@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { datappNameSchema } from '../../../../dataApps/dataAppName.js';
@@ -106,7 +107,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     title: 'Scaffold a Desktop data app',
     description:
-      'Prepares a data app package and worksheetFile for open sheet. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename. Returns packageId, sourceDir, worksheetFile, datasourceId, worksheetId, worksheetName.',
+      "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as <simple-id>. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename. Returns packageId, sourceDir, worksheetFile, datasourceId, worksheetId, worksheetName (live sheet name).",
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -151,11 +152,26 @@ export const getScaffoldDataAppTool = (
           const listed = await runExternalApiTool({
             session,
             extra,
-            callback: async (_executor, _signal, call) =>
-              await call(
+            callback: async (_executor, _signal, call) => {
+              const datasources = await call(
                 'workbook datasources',
                 async (executor, signal) => await executor.listWorkbookDatasources(signal),
-              ),
+              );
+              if (datasources.isErr()) {
+                return datasources;
+              }
+              const worksheets = await call(
+                'workbook worksheets',
+                async (executor, signal) => await executor.listWorksheets(signal),
+              );
+              if (worksheets.isErr()) {
+                return worksheets;
+              }
+              return new Ok({
+                datasources: datasources.value.datasources ?? [],
+                worksheets: worksheets.value.worksheets ?? [],
+              });
+            },
           });
           if (listed.isErr()) {
             return listed;
@@ -171,7 +187,8 @@ export const getScaffoldDataAppTool = (
             datappName,
             worksheetId,
             datasourceId,
-            datasources: listed.value.datasources ?? [],
+            datasources: listed.value.datasources,
+            worksheets: listed.value.worksheets,
           });
         },
       });

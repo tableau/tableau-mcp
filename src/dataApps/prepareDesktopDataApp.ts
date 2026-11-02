@@ -17,6 +17,8 @@ import {
 
 export type LiveDatasource = { id?: string; name?: string; caption?: string };
 
+export type LiveWorksheet = { id?: string; name?: string };
+
 export type PreparedDesktopDataApp = {
   packageId: string;
   sourceDir: string;
@@ -29,6 +31,11 @@ export type PreparedDesktopDataApp = {
 type BoundDatasource = {
   extensionsDatasourceId: string;
   caption: string;
+};
+
+type BoundWorksheet = {
+  id: string;
+  name: string;
 };
 
 function boundDatasource(
@@ -52,6 +59,26 @@ function boundDatasource(
     extensionsDatasourceId: matches[0].name,
     caption: matches[0].caption,
   });
+}
+
+function boundWorksheet(
+  worksheetId: string,
+  worksheets: LiveWorksheet[],
+): Result<BoundWorksheet, McpToolError> {
+  const matches = worksheets.filter((worksheet) => worksheet.id === worksheetId);
+  if (matches.length !== 1 || !matches[0].name) {
+    const available = worksheets
+      .filter((worksheet) => worksheet.id && worksheet.name)
+      .map((worksheet) => `${worksheet.id} (${worksheet.name})`);
+    return new McpToolError({
+      type: 'worksheet-not-selected',
+      message:
+        `Select one open worksheet by its External API id. Requested "${worksheetId}". ` +
+        `Available: ${available.length ? available.join(', ') : '(none)'}.`,
+      statusCode: 400,
+    }).toErr();
+  }
+  return new Ok({ id: matches[0].id!, name: matches[0].name });
 }
 
 function worksheetXml(args: {
@@ -89,6 +116,7 @@ export async function prepareDesktopDataApp(args: {
   worksheetId: string;
   datasourceId: string;
   datasources: LiveDatasource[];
+  worksheets: LiveWorksheet[];
 }): Promise<Result<PreparedDesktopDataApp, McpToolError>> {
   if (!isAbsolute(args.workspaceRoot)) {
     return new McpToolError({
@@ -97,6 +125,11 @@ export async function prepareDesktopDataApp(args: {
         'Set TABLEAU_DATA_APP_WORKSPACE_DIR to an absolute directory before scaffolding a Desktop data app.',
       statusCode: 400,
     }).toErr();
+  }
+
+  const selectedWorksheet = boundWorksheet(args.worksheetId, args.worksheets);
+  if (selectedWorksheet.isErr()) {
+    return selectedWorksheet;
   }
 
   const selected = boundDatasource(args.datasourceId, args.datasources);
@@ -147,8 +180,8 @@ export async function prepareDesktopDataApp(args: {
   });
 
   const xml = worksheetXml({
-    worksheetName: identity.displayName,
-    worksheetId: args.worksheetId,
+    worksheetName: selectedWorksheet.value.name,
+    worksheetId: selectedWorksheet.value.id,
     packageId,
     version: identity.version,
     sourceDir,
@@ -163,7 +196,7 @@ export async function prepareDesktopDataApp(args: {
     sourceDir,
     worksheetFile: args.worksheetFile,
     datasourceId: selected.value.extensionsDatasourceId,
-    worksheetId: args.worksheetId,
-    worksheetName: identity.displayName,
+    worksheetId: selectedWorksheet.value.id,
+    worksheetName: selectedWorksheet.value.name,
   });
 }

@@ -1,7 +1,10 @@
-import { mkdtemp, readFile, rm } from 'fs/promises';
+import { access, mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Ok } from 'ts-results-es';
 
+import { makeExecutorMock } from '../desktop/externalApi/executor.mock.js';
+import { tryApplyViaPerSheetRoute } from '../desktop/wrappers/perSheetDocumentApply.js';
 import { resolveTemplatePackageDir } from '../tools/desktop/authoring/dataApps/scaffoldDataApp.js';
 import { prepareDesktopDataApp } from './prepareDesktopDataApp.js';
 
@@ -10,6 +13,14 @@ const datasources = [
   { id: '%E5%A3%B2%E4%B8%8A', name: '売上', caption: '売上' },
   { id: '100%25', name: '100%', caption: 'One Hundred Percent' },
 ];
+
+const worksheets = [
+  { id: '{SHEET-GUID-1}', name: 'Sheet 1' },
+  { id: '{SHEET-GUID-A}', name: 'Sheet A' },
+  { id: '{SHEET-GUID-B}', name: 'Sheet B' },
+];
+
+const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 
 describe('prepareDesktopDataApp', () => {
   let workspace: string;
@@ -36,14 +47,17 @@ describe('prepareDesktopDataApp', () => {
       worksheetId: '{SHEET-GUID-1}',
       datasourceId: '100%25',
       datasources,
+      worksheets,
     });
     expect(result.isOk()).toBe(true);
     if (result.isErr()) return;
     expect(result.value.datasourceId).toBe('100%');
     expect(result.value.worksheetId).toBe('{SHEET-GUID-1}');
+    expect(result.value.worksheetName).toBe('Sheet 1');
     expect(result.value.packageId).toMatch(/^com\.tableau\.mcp\.sales-demo\.[0-9a-f]+$/);
     expect(result.value.sourceDir.startsWith(workspace)).toBe(true);
     const xml = await readFile(result.value.worksheetFile, 'utf8');
+    expect(xml).toContain("name='Sheet 1'");
     expect(xml).toContain("caption='One Hundred Percent'");
     expect(xml).toContain("name='100%'");
     expect(xml).toContain('tableauunzippedpackagesrc:///');
@@ -52,6 +66,83 @@ describe('prepareDesktopDataApp', () => {
     const appJs = await readFile(join(result.value.sourceDir, 'content', 'src', 'app.js'), 'utf8');
     expect(appJs).toContain('var BOUND_DATASOURCE_ID = "100%";');
     expect(appJs).toContain('AUTHOR YOUR APP HERE');
+    const manifest = await readFile(join(result.value.sourceDir, 'manifest.json'), 'utf8');
+    expect(manifest).toContain('Sales Demo');
+  });
+
+  it('writes the live sheet name so apply-worksheet does not hit name-differs', async () => {
+    const template = (await resolveTemplatePackageDir())!;
+    const result = await prepareDesktopDataApp({
+      workspaceRoot: workspace,
+      worksheetFile: join(cache, 'sheet.xml'),
+      templatePackageDir: template,
+      datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-1}',
+      datasourceId: 'Sales%20West',
+      datasources,
+      worksheets,
+    });
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+
+    expect(result.value.worksheetName).toBe('Sheet 1');
+    const xml = await readFile(result.value.worksheetFile, 'utf8');
+    expect(xml).toMatch(/^<worksheet name='Sheet 1'>/);
+    expect(xml).not.toContain("name='Sales Demo'");
+
+    const apply = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const liveXml =
+      "<worksheet name='Sheet 1'><table><view><datasources /></view><rows /><cols /></table>" +
+      "<simple-id uuid='{SHEET-GUID-1}' /></worksheet>";
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: '{SHEET-GUID-1}', name: 'Sheet 1' }] })),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+      listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [] })),
+      applyWorksheetDocument: apply,
+    });
+
+    const applied = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: '{SHEET-GUID-1}',
+      fragmentXml: xml,
+      focus: NO_FOCUS,
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(applied.isOk()).toBe(true);
+    if (applied.isOk()) {
+      expect(applied.value).toMatchObject({
+        status: 'applied',
+        id: '{SHEET-GUID-1}',
+        name: 'Sheet 1',
+      });
+    }
+    expect(apply).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unknown worksheet id before writing files', async () => {
+    const template = (await resolveTemplatePackageDir())!;
+    const worksheetFile = join(cache, 'missing-sheet.xml');
+    const result = await prepareDesktopDataApp({
+      workspaceRoot: workspace,
+      worksheetFile,
+      templatePackageDir: template,
+      datappName: 'Sales Demo',
+      worksheetId: '{MISSING}',
+      datasourceId: 'Sales%20West',
+      datasources,
+      worksheets,
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('{MISSING}');
+    expect(result.error.message).toContain('Available:');
+    await expect(access(worksheetFile)).rejects.toThrow();
   });
 
   it('rejects a datasource that has no caption', async () => {
@@ -64,6 +155,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetId: '{SHEET-GUID-1}',
       datasourceId: 'Sales%20West',
       datasources: [{ id: 'Sales%20West', name: 'Sales West' }],
+      worksheets,
     });
     expect(result.isErr()).toBe(true);
     if (result.isOk()) return;
@@ -80,6 +172,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetId: '{SHEET-GUID-A}',
       datasourceId: 'Sales%20West',
       datasources,
+      worksheets,
     });
     const second = await prepareDesktopDataApp({
       workspaceRoot: workspace,
@@ -89,12 +182,15 @@ describe('prepareDesktopDataApp', () => {
       worksheetId: '{SHEET-GUID-B}',
       datasourceId: '%E5%A3%B2%E4%B8%8A',
       datasources,
+      worksheets,
     });
     expect(first.isOk() && second.isOk()).toBe(true);
     if (first.isErr() || second.isErr()) return;
     expect(first.value.sourceDir).not.toBe(second.value.sourceDir);
     expect(first.value.packageId).not.toBe(second.value.packageId);
     expect(second.value.datasourceId).toBe('売上');
+    expect(first.value.worksheetName).toBe('Sheet A');
+    expect(second.value.worksheetName).toBe('Sheet B');
   });
 
   it('rejects a relative workspace and an unknown datasource', async () => {
@@ -107,6 +203,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetId: '{SHEET-GUID-1}',
       datasourceId: 'Sales%20West',
       datasources,
+      worksheets,
     });
     expect(relative.isErr()).toBe(true);
     const missing = await prepareDesktopDataApp({
@@ -117,6 +214,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetId: '{SHEET-GUID-1}',
       datasourceId: 'not-a-source',
       datasources,
+      worksheets,
     });
     expect(missing.isErr()).toBe(true);
     if (missing.isOk()) return;
