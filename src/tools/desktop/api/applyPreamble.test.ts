@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
+import { linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -164,6 +164,14 @@ describe('runApplyPreamble secure contained cache read', () => {
       resolvedSession: '7',
       sourceHash: undefined,
     });
+  });
+
+  it('names the failed check when a cache file is unsafe', () => {
+    const directory = cacheDirectory('reason');
+    writeFileSync(join(directory, 'a.xml'), '<datasource/>');
+    linkSync(join(directory, 'a.xml'), join(directory, 'b.xml'));
+
+    expect(run(join(directory, 'b.xml')).unwrapErr().message).toContain('\nReason: hard-linked');
   });
 
   it('refuses a fingerprint mismatch from safely read sidecar text', () => {
