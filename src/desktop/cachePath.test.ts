@@ -3,6 +3,7 @@ import {
   constants,
   fstatSync,
   ftruncateSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -24,8 +25,15 @@ import {
   getCacheDir,
   isWithinCacheDir,
   readContainedCacheTextFile,
+  unsafeFileReasonLine,
   writeContainedCacheTextFile,
 } from './cachePath.js';
+
+// Without O_NOFOLLOW (Windows) open follows the link, so containment refuses it instead.
+const finalSymlinkReason = typeof constants.O_NOFOLLOW === 'number' ? 'symlink' : 'outside-cache';
+
+const errno = (code: string): Error =>
+  Object.assign(new Error(`${code}: realpath '/outside/secret'`), { code });
 
 describe('readContainedCacheTextFile', () => {
   const temporaryPaths: string[] = [];
@@ -119,10 +127,9 @@ describe('readContainedCacheTextFile', () => {
     writeFileSync(outsideFile, '<outside-secret/>');
     symlinkSync(outsideFile, candidate, 'file');
 
-    expect(readContainedCacheTextFile(candidate)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-    });
+    const result = readContainedCacheTextFile(candidate);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file', reason: finalSymlinkReason });
+    expect(unsafeFileReasonLine(result)).toBe(`\nReason: ${finalSymlinkReason}`);
   });
 
   it('rejects an intermediate-directory symlink that escapes the cache', () => {
@@ -135,6 +142,7 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(join(directory, 'linked', 'datasource.xml'))).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'outside-cache',
     });
   });
 
@@ -159,6 +167,7 @@ describe('readContainedCacheTextFile', () => {
       expect(readContainedCacheTextFile(candidate, operations)).toMatchObject({
         ok: false,
         issue: 'unsafe-file',
+        reason: linkKind === 'final' ? finalSymlinkReason : 'outside-cache',
       });
       expect(read).not.toHaveBeenCalled();
     },
@@ -176,13 +185,31 @@ describe('readContainedCacheTextFile', () => {
       close,
     });
 
-    expect(readContainedCacheTextFile(file, operations)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-    });
+    const result = readContainedCacheTextFile(file, operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (identity-changed)');
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['ENOENT', 'ENOTDIR', 'ELOOP'])(
+    'reports changed-during-check without reading when verification throws %s after open',
+    (code) => {
+      const file = join(cacheDirectory(`verify-${code}`), 'datasource.xml');
+      writeFileSync(file, '<datasource/>');
+      const read = vi.fn((fd: number) => readFileSync(fd));
+      const close = vi.fn((fd: number) => closeSync(fd));
+      const stat = vi.fn(() => {
+        throw errno(code);
+      });
+
+      const result = readContainedCacheTextFile(file, defaultOperations({ stat, read, close }));
+      expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+      expect(unsafeFileReasonLine(result)).toBe(`\nReason: changed-during-check (${code})`);
+      expect(read).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('rejects a candidate whose real path changes across the current-file stat', () => {
     const directory = cacheDirectory('realpath-change');
@@ -203,10 +230,24 @@ describe('readContainedCacheTextFile', () => {
       close,
     });
 
-    expect(readContainedCacheTextFile(file, operations)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-    });
+    const result = readContainedCacheTextFile(file, operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (path-changed)');
+    expect(read).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports type-changed when the path stops being a regular file but resolves the same', () => {
+    const directory = cacheDirectory('type-change');
+    const file = join(directory, 'datasource.xml');
+    writeFileSync(file, '<datasource/>');
+    const read = vi.fn((fd: number) => readFileSync(fd));
+    const close = vi.fn((fd: number) => closeSync(fd));
+    const operations = defaultOperations({ stat: () => statSync(directory), read, close });
+
+    const result = readContainedCacheTextFile(file, operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (type-changed)');
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -260,6 +301,24 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(nonFile)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'not-regular-file',
+    });
+  });
+
+  it('reports hard-linked inside the cache but outside-cache for a hard link behind a directory symlink', () => {
+    const directory = cacheDirectory('hard-link');
+    const outside = outsideDirectory('hard-link');
+    writeFileSync(join(directory, 'a.xml'), '<a/>');
+    linkSync(join(directory, 'a.xml'), join(directory, 'b.xml'));
+    writeFileSync(join(outside, 'a.xml'), '<a/>');
+    linkSync(join(outside, 'a.xml'), join(outside, 'b.xml'));
+    symlinkSync(outside, join(directory, 'linked'), directoryLinkType());
+
+    expect(readContainedCacheTextFile(join(directory, 'b.xml'))).toMatchObject({
+      reason: 'hard-linked',
+    });
+    expect(readContainedCacheTextFile(join(directory, 'linked', 'b.xml'))).toMatchObject({
+      reason: 'outside-cache',
     });
   });
 });
@@ -380,6 +439,7 @@ describe('writeContainedCacheTextFile', () => {
     expect(writeContainedCacheTextFile(finalLink, '<escaped/>')).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: finalSymlinkReason,
     });
 
     const linkedDirectory = join(directory, 'linked');
@@ -389,6 +449,7 @@ describe('writeContainedCacheTextFile', () => {
     ).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'outside-cache',
     });
     expect(readFileSync(external, 'utf-8')).toBe('<outside/>');
   });
@@ -407,14 +468,91 @@ describe('writeContainedCacheTextFile', () => {
       close,
     });
 
-    expect(writeContainedCacheTextFile(file, '<after/>', operations)).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
-    });
+    const result = writeContainedCacheTextFile(file, '<after/>', operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (identity-changed)');
     expect(truncate).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
     expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+  });
+
+  it('rejects a candidate whose real path changes across the current-file stat before writing', () => {
+    const directory = cacheDirectory('realpath-change');
+    const file = join(directory, 'worksheet.xml');
+    const replacement = join(directory, 'replacement.xml');
+    writeFileSync(file, '<before/>');
+    writeFileSync(replacement, '<replacement/>');
+    const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+    const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+    let candidateRealpathCalls = 0;
+    const operations = defaultOperations({
+      realpath: (path) => {
+        if (path === getCacheDir()) return realpathSync(path);
+        candidateRealpathCalls += 1;
+        return candidateRealpathCalls === 1 ? realpathSync(file) : realpathSync(replacement);
+      },
+      truncate,
+      write,
+    });
+
+    const result = writeContainedCacheTextFile(file, '<after/>', operations);
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (path-changed)');
+    expect(truncate).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+  });
+
+  it.each(['ENOENT', 'ENOTDIR', 'ELOOP'])(
+    'reports changed-during-check without writing when verification throws %s after open',
+    (code) => {
+      const file = join(cacheDirectory(`verify-${code}`), 'worksheet.xml');
+      writeFileSync(file, '<before/>');
+      const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+      const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+      const close = vi.fn((fd: number) => closeSync(fd));
+      const stat = vi.fn(() => {
+        throw errno(code);
+      });
+
+      const result = writeContainedCacheTextFile(
+        file,
+        '<after/>',
+        defaultOperations({ stat, truncate, write, close }),
+      );
+      expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+      expect(unsafeFileReasonLine(result)).toBe(`\nReason: changed-during-check (${code})`);
+      expect(truncate).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+    },
+  );
+
+  it('reports changed-during-check without writing when the create races an existing file', () => {
+    const file = join(getCacheDir(), `contained-cache-race-${process.pid}-${Date.now()}.xml`);
+    const open = vi
+      .fn<ContainedCacheWriteOperations['open']>()
+      .mockImplementationOnce(() => {
+        throw errno('ENOENT');
+      })
+      .mockImplementationOnce(() => {
+        throw errno('EEXIST');
+      });
+    const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+    const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+
+    const result = writeContainedCacheTextFile(
+      file,
+      '<after/>',
+      defaultOperations({ open, truncate, write }),
+    );
+    expect(result).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(unsafeFileReasonLine(result)).toBe('\nReason: changed-during-check (EEXIST)');
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(truncate).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
   it('rejects a final symlink before truncation when no no-follow flag is available', () => {
@@ -433,7 +571,7 @@ describe('writeContainedCacheTextFile', () => {
         '<escaped/>',
         defaultOperations({ noFollowFlag: 0, truncate, write }),
       ),
-    ).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'outside-cache' });
     expect(truncate).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
     expect(readFileSync(external, 'utf-8')).toBe('<outside/>');
@@ -461,6 +599,38 @@ describe('writeContainedCacheTextFile', () => {
     expect(replaced).toBe(true);
     expect(readFileSync(file, 'utf-8')).toBe('<replacement/>');
     expect(readFileSync(openedFile, 'utf-8')).toBe('<after/>');
+  });
+
+  it('reports hard-linked, or outside-cache behind a directory symlink, without writing', () => {
+    const directory = cacheDirectory('write-hard-link');
+    const outside = outsideDirectory('write-hard-link');
+    writeFileSync(join(directory, 'a.xml'), '<a/>');
+    linkSync(join(directory, 'a.xml'), join(directory, 'b.xml'));
+    writeFileSync(join(outside, 'a.xml'), '<a/>');
+    linkSync(join(outside, 'a.xml'), join(outside, 'b.xml'));
+    symlinkSync(outside, join(directory, 'linked'), directoryLinkType());
+
+    expect(writeContainedCacheTextFile(join(directory, 'b.xml'), '<x/>')).toMatchObject({
+      reason: 'hard-linked',
+    });
+    expect(writeContainedCacheTextFile(join(directory, 'linked', 'b.xml'), '<x/>')).toMatchObject({
+      reason: 'outside-cache',
+    });
+    for (const file of [join(directory, 'a.xml'), join(outside, 'a.xml')]) {
+      expect(readFileSync(file, 'utf-8')).toBe('<a/>');
+    }
+  });
+
+  it('reports not-regular-file when a path component is a file', () => {
+    const directory = cacheDirectory('enotdir');
+    writeFileSync(join(directory, 'a.xml'), '<a/>');
+
+    // Windows reports ENOENT, not ENOTDIR, for a path through a file.
+    expect(writeContainedCacheTextFile(join(directory, 'a.xml', 'b.xml'), '<x/>')).toMatchObject(
+      process.platform === 'win32'
+        ? { issue: 'unsupported-new-path' }
+        : { issue: 'unsafe-file', reason: 'not-regular-file' },
+    );
   });
 });
 

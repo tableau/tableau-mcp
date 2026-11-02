@@ -341,7 +341,9 @@ export class WebMcpServer extends Server {
     mcpAppsEnabled: boolean,
   ): Promise<boolean> => {
     const config = getConfig();
-    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
+    const isKnownIncompatibleClient =
+      getClientDisplayName(this.clientId) === 'Claude' &&
+      !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
       args: typeof tool.paramsSchema,
@@ -489,7 +491,12 @@ export class WebMcpServer extends Server {
           continue;
         }
       }
-      if (enforceRegistrationConditions && tool.registrationConditions.length > 0) {
+      // KNOWLEDGE_TOOLS_ENABLED=true must still hide Knowledge tools on sites without Knowledge.
+      const checkConditions =
+        enforceRegistrationConditions ||
+        (config.knowledgeToolsEnabled === true &&
+          tool.registrationConditions.includes('RequiresKnowledge'));
+      if (checkConditions && tool.registrationConditions.length > 0) {
         const conditionCheckResult = await checkRegistrationConditions(
           tool.registrationConditions,
           registrationContext,
