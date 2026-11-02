@@ -2,8 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/init.js';
+import { isKnowledgeToolsEnabled } from '../../../features/knowledgeTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { assertSafePathSegment } from '../../../sdks/routeSafety/core.js';
 import {
@@ -190,12 +191,11 @@ type QueryWarning = {
 export const getQueryKnowledgeContextTool = (
   server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const tool = new WebTool({
     server,
     name: 'query-knowledge-context',
-    disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('knowledge-tools')),
-    ),
+    disabled: new Provider(async () => !(await isKnowledgeToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     registrationConditions: ['RequiresKnowledge'],
     description: `
