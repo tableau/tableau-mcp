@@ -8,7 +8,6 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import { _setSeaApiForTest } from '../../../utils/sea.js';
 import { exportedForTesting as s3ForTesting } from '../s3Client.js';
 import { createDataAppWorkspace, exportedForTesting } from './dataAppWorkspaceStore.js';
-import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 
 const mocks = vi.hoisted(() => ({
   hideDiskZip: false,
@@ -70,7 +69,6 @@ async function create(): ReturnType<typeof createDataAppWorkspace> {
     datappName: 'Sales Demo',
     productVersion: { value: '2026.3.2', build: '20263.26.1027.1340' },
     allowedOrigins: [],
-    wiring: buildDatasourceWiringInfo({ serverUrl: 'https://my-tableau-server.com', siteName: '' }),
     config: getConfig(),
   });
 }
