@@ -902,6 +902,52 @@ describe('scopes', () => {
     ]);
   });
 
+  describe('knowledgeToolsEnabled / knowledgeWriteToolsEnabled gating', () => {
+    it.each(
+      [undefined, false, true].flatMap((readEnv) =>
+        [false, true].flatMap((readFlag) =>
+          [undefined, false, true].flatMap((writeEnv) =>
+            [false, true].map((writeFlag) => ({ readEnv, readFlag, writeEnv, writeFlag })),
+          ),
+        ),
+      ),
+    )(
+      'advertises matching Knowledge scopes for read env=$readEnv, read FF=$readFlag, write env=$writeEnv, write FF=$writeFlag',
+      async ({ readEnv, readFlag, writeEnv, writeFlag }) => {
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          knowledgeToolsEnabled: readEnv,
+          knowledgeWriteToolsEnabled: writeEnv,
+        } as ReturnType<typeof configModule.getConfig>);
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) =>
+            (featureName === 'knowledge-tools' && readFlag) ||
+            (featureName === 'knowledge-write-tools' && writeFlag),
+        );
+
+        const mcp = await getSupportedMcpScopes();
+        const api = await getSupportedApiScopes();
+        const readEnabled = readEnv ?? readFlag;
+        const writeEnabled = readEnabled && (writeEnv ?? writeFlag);
+        expect(mcp.includes('tableau:mcp:knowledge:read')).toBe(readEnabled);
+        expect(mcp.includes('tableau:mcp:knowledge:write')).toBe(writeEnabled);
+        expect(api.includes('tableau:knowledge:read')).toBe(readEnabled);
+        expect(api.includes('tableau:knowledge:write')).toBe(writeEnabled);
+      },
+    );
+
+    it('treats the Knowledge write scope as invalid when knowledgeWriteToolsEnabled is false', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        knowledgeWriteToolsEnabled: false,
+      } as ReturnType<typeof configModule.getConfig>);
+
+      expect(await isValidScope('tableau:mcp:knowledge:write')).toBe(false);
+      expect(await isValidScope('tableau:mcp:knowledge:read')).toBe(true);
+    });
+  });
+
   describe('flowReadToolsEnabled gating', () => {
     it.each(
       [undefined, false, true].flatMap((readEnv) =>

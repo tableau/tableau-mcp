@@ -1247,6 +1247,8 @@ describe('server', () => {
       [],
     ],
   ] as const)('%s', async (_, siteRole, knowledgeAvailable, expectedTools) => {
+    vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
+    vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) =>
         name === 'knowledge-tools' ||
@@ -1281,6 +1283,8 @@ describe('server', () => {
   });
 
   it('omits Knowledge tools when the knowledge-tools feature flag is off', async () => {
+    vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
+    vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) => enforceRoleRequirements(name) || enforceRegistrationConditions(name),
     );
@@ -1300,6 +1304,8 @@ describe('server', () => {
   });
 
   it('registers only Knowledge read tools when the write flag is off', async () => {
+    vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
+    vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) =>
         name === 'knowledge-tools' ||
@@ -1554,6 +1560,181 @@ describe('server', () => {
       expect.any(Function),
     );
     expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  describe('Knowledge environment overrides', () => {
+    const knowledgeToolNames = [
+      'query-knowledge-context',
+      'inspect-knowledge-context',
+      'manage-knowledge-context',
+    ];
+
+    const knowledgeFlag =
+      (readFlag: boolean, writeFlag: boolean, enforceConditions = false) =>
+      (name: string) =>
+        (name === 'knowledge-tools' && readFlag) ||
+        (name === 'knowledge-write-tools' && writeFlag) ||
+        (name === 'enforce-registration-conditions' && enforceConditions);
+
+    async function registerKnowledgeTools(): Promise<{
+      server: WebMcpServer;
+      registered: string[];
+    }> {
+      const server = getServer();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        getQueryKnowledgeContextTool(server),
+        getInspectKnowledgeContextTool(server),
+        getManageKnowledgeContextTool(server),
+      ]);
+      await server.registerTools();
+      const registered: string[] = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      return { server, registered };
+    }
+
+    it.each(
+      [undefined, false, true].flatMap((readEnv) =>
+        [false, true].flatMap((readFlag) =>
+          [undefined, false, true].flatMap((writeEnv) =>
+            [false, true].map((writeFlag) => ({ readEnv, readFlag, writeEnv, writeFlag })),
+          ),
+        ),
+      ),
+    )(
+      'registers Knowledge tools for read env=$readEnv, read FF=$readFlag, write env=$writeEnv, write FF=$writeFlag',
+      async ({ readEnv, readFlag, writeEnv, writeFlag }) => {
+        vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', readEnv?.toString());
+        vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', writeEnv?.toString());
+        mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+          knowledgeFlag(readFlag, writeFlag),
+        );
+
+        const { registered } = await registerKnowledgeTools();
+
+        const readEnabled = readEnv ?? readFlag;
+        const writeEnabled = readEnabled && (writeEnv ?? writeFlag);
+        expect(registered.includes('query-knowledge-context')).toBe(readEnabled);
+        expect(registered.includes('inspect-knowledge-context')).toBe(readEnabled);
+        expect(registered.includes('manage-knowledge-context')).toBe(writeEnabled);
+      },
+    );
+
+    it('registers read tools when KNOWLEDGE_TOOLS_ENABLED=true and the flag is off', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+
+      const { registered } = await registerKnowledgeTools();
+
+      expect(registered).toEqual(['query-knowledge-context', 'inspect-knowledge-context']);
+    });
+
+    it('registers no Knowledge tools when KNOWLEDGE_TOOLS_ENABLED=false even with both flags on', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'false');
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(true, true));
+
+      const { registered } = await registerKnowledgeTools();
+
+      expect(registered).toEqual([]);
+    });
+
+    it('checks Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=true even with enforce-registration-conditions off', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+      const { registered } = await registerKnowledgeTools();
+
+      expect(mocks.mockCheckRegistrationConditions).toHaveBeenCalledTimes(3);
+      for (const call of mocks.mockCheckRegistrationConditions.mock.calls) {
+        expect(call[0]).toEqual(['RequiresKnowledge']);
+      }
+      expect(registered).toEqual(knowledgeToolNames);
+      expect(getWarningLogs()).toHaveLength(0);
+    });
+
+    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true and the site lacks Knowledge', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresKnowledge',
+      });
+
+      const { server, registered } = await registerKnowledgeTools();
+
+      expect(registered).toEqual([]);
+      expect(getInstructions(server)).toContain(
+        'Tableau Knowledge tools were omitted because they could not be confirmed as available',
+      );
+      const warnings = getWarningLogs();
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0].message).toContain('RequiresKnowledge');
+      for (const toolName of knowledgeToolNames) {
+        expect(warnings[0].message).toContain(toolName);
+      }
+    });
+
+    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true and the probe fails transiently', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresKnowledge',
+        indeterminate: true,
+      });
+
+      const { server, registered } = await registerKnowledgeTools();
+
+      expect(registered).toEqual([]);
+      expect(getInstructions(server)).toContain(
+        'Tableau Knowledge tools were omitted from this session because their availability could not be confirmed',
+      );
+      expect(getInstructions(server)).not.toContain(
+        'could not be confirmed as available. If the user asks for Knowledge context',
+      );
+    });
+
+    it('does not check Knowledge availability when KNOWLEDGE_TOOLS_ENABLED is unset and enforce-registration-conditions is off', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(true, true));
+
+      const { registered } = await registerKnowledgeTools();
+
+      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+      expect(registered).toEqual(knowledgeToolNames);
+    });
+
+    it('does not check Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=false', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'false');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(true, true));
+
+      await registerKnowledgeTools();
+
+      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+    });
+
+    it('does not check other registration conditions when only KNOWLEDGE_TOOLS_ENABLED=true', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+      const server = getServer();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+      await server.registerTools();
+
+      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+        'mock-conditional-tool',
+        expect.anything(),
+        expect.any(Function),
+      );
+    });
   });
 
   it('does not check conditions or warn when enforce-registration-conditions is off', async () => {
