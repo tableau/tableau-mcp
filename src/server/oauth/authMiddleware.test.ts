@@ -153,6 +153,64 @@ describe('scaffold-data-app required API scope', () => {
   });
 });
 
+describe('step-up challenge preserves held scopes and names the missing ones (G4)', () => {
+  // scaffold-data-app requires tableau:packages:read. The token holds an UNRELATED scope
+  // (tableau:mcp:datasource:read) plus the mandatory site-settings scope, but not packages:read —
+  // so the 403 step-up fires with only the per-tool scope as the variable.
+  const REQUIRED_SCOPE = 'tableau:packages:read';
+  const EXISTING_HELD_SCOPE = 'tableau:mcp:datasource:read';
+  const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
+  const NEVER_SCOPE = 'tableau:mcp:some-scope-never-granted-nor-required';
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  async function driveStepUp(): Promise<any> {
+    const authInfo = { scopes: [EXISTING_HELD_SCOPE, MANDATORY_SCOPE], clientId: 'test-client' };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'scaffold-data-app', arguments: { datappName: 'Sales Demo' } },
+      },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+    await middleware(req, res, next);
+    return { req, res, next };
+  }
+
+  it('includes the token\'s existing scopes in the step-up challenge', async () => {
+    const { res } = await driveStepUp();
+    const header = res.headers['WWW-Authenticate'] as string;
+    const scopeList = /scope="([^"]*)"/.exec(header)![1].split(' ');
+    expect(scopeList).toContain(REQUIRED_SCOPE); // required, was missing
+    expect(scopeList).toContain(EXISTING_HELD_SCOPE); // preserved
+    expect(scopeList).not.toContain(NEVER_SCOPE); // nothing invented
+  });
+
+  it('names the missing scopes and includes 403 guidance in the body', async () => {
+    const { res } = await driveStepUp();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe('insufficient_scope');
+    expect(res.body.error_description).toContain(REQUIRED_SCOPE);
+    expect(res.body.error_description).toContain('403'); // from OAUTH_INSUFFICIENT_SCOPE_GUIDANCE
+  });
+});
+
 describe('initialize with optional post-publish permission disclosure', () => {
   // Demanding the full supported API set at initialize is strict-mode behavior; under subset mode
   // initialize demands no full set. This test pins the strict-mode contract (full set enforced,

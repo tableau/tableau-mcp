@@ -4,7 +4,10 @@ import { NextFunction, RequestHandler, Response } from 'express';
 import { getConfig } from '../../config.js';
 import { isStrictScopeMatchEnabled } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
-import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
+import {
+  OAUTH_AUTH_CHALLENGE_GUIDANCE,
+  OAUTH_INSUFFICIENT_SCOPE_GUIDANCE,
+} from '../../utils/authErrorMessage.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -162,15 +165,21 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         const baseUrl = new URL(resourceUri).origin;
         const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
         // Dedupe so the mandatory scope is not listed twice when advertiseApiScopes is on and it is
-        // already part of the advertised API set.
+        // already part of the advertised API set. The token's existing scopes are unioned in last so a
+        // re-auth keeps what it already holds instead of narrowing to only the newly-required scopes.
         const requiredScopesForChallenge = [
           ...new Set([
             ...requiredMcpScopes,
             ...(shouldCheckApiScopes ? requiredApiScopes : []),
             ...missingMandatory,
+            ...authInfo.scopes,
           ]),
         ];
         const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
+        // Name the specific missing scopes and append the shared 403 guidance so the failure is not
+        // misread as a missing feature. The challenge header keeps a static error_description (it is a
+        // header value); the richer text goes in the response body.
+        const errorDescription = `Missing required scopes: ${formatScopes(missingScopes)}. ${OAUTH_INSUFFICIENT_SCOPE_GUIDANCE}`;
         const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${resourceMetadataUrl}", ${scopeParam}`;
 
         if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
@@ -181,8 +190,9 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
             'WWW-Authenticate': wwwAuthenticate,
           });
           res.write('event: error\n');
+          // JSON.stringify so the interpolated scope list is escaped safely in the SSE data frame.
           res.write(
-            'data: {"error": "insufficient_scope", "error_description": "Missing required scopes"}\n\n',
+            `data: ${JSON.stringify({ error: 'insufficient_scope', error_description: errorDescription })}\n\n`,
           );
           res.end();
           return;
@@ -190,7 +200,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
         res.status(403).header('WWW-Authenticate', wwwAuthenticate).json({
           error: 'insufficient_scope',
-          error_description: 'Missing required scopes',
+          error_description: errorDescription,
         });
         return;
       }
