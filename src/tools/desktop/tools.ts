@@ -26,6 +26,7 @@ import { getGetSheetInfoTool } from './api/getSheetInfo.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
 import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
 import { getSummaryDataTool } from './api/getSummaryData.js';
+import { getWorkbookExtensionsTool } from './api/getWorkbookExtensions.js';
 import { getWorkbookInventoryTool } from './api/getWorkbookInventory.js';
 import { getGetWorkbookXmlTool } from './api/getWorkbookXml.js';
 import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
@@ -112,6 +113,7 @@ export const desktopToolFactories = [
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
+  getWorkbookExtensionsTool,
   getShowMeOptionsTool,
   getListDashboardsTool,
   getListStoryboardsTool,

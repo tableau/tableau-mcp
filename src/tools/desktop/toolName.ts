@@ -29,6 +29,7 @@ export const desktopToolNames = [
   'refresh-storyboard-auto-updates',
   'refresh-dashboard-auto-updates',
   'reload-extensions',
+  'get-workbook-extensions',
   'resume-auto-updates',
   'refine-worksheet',
   'get-dashboard-xml',
