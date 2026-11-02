@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 import { log } from '../../logging/logger.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { discoveryFileSchema, ExternalApiInstance } from './types.js';
 
 /**
@@ -71,22 +72,51 @@ export function discoverInstances(deps: DiscoverInstancesDeps = {}): Array<Exter
   const readFile = deps.readFile ?? ((p: string): string => readFileSync(p, 'utf-8'));
   const isPidAlive = deps.isPidAlive ?? defaultIsPidAlive;
 
+  const dirReports: Array<{ dir: string; files: number } | { dir: string; error: string }> = [];
+  const live: Array<{ pid: number; instanceId: string; startedAt?: string }> = [];
+  let deadPidCount = 0;
+  let newestDead: { pid: number; instanceId: string; startedAt?: string; ms: number } | undefined;
+  let invalidCount = 0;
+
+  // One summary per scan: Desktop leaves stale <pid>.json files behind, so per-file logs flood the log.
+  const logScan = (): void =>
+    log({
+      message: 'External API discovery scan',
+      level: 'debug',
+      logger: 'ExternalApiDiscovery',
+      data: {
+        dirs: dirReports,
+        live,
+        deadPidCount,
+        newestDead: newestDead && {
+          pid: newestDead.pid,
+          instanceId: newestDead.instanceId,
+          startedAt: newestDead.startedAt,
+        },
+        invalidCount,
+      },
+    });
+
   const candidates: Array<{ dir: string; name: string }> = [];
   for (const dir of dirs) {
     try {
+      let files = 0;
       for (const name of readDir(dir)) {
-        if (name.endsWith('.json')) candidates.push({ dir, name });
+        if (name.endsWith('.json')) {
+          candidates.push({ dir, name });
+          files++;
+        }
       }
+      dirReports.push({ dir, files });
     } catch (error) {
-      log({
-        message: 'External API discovery directory not readable',
-        level: 'debug',
-        logger: 'ExternalApiDiscovery',
-        data: { dir, error },
+      dirReports.push({
+        dir,
+        error: (error as NodeJS.ErrnoException | undefined)?.code ?? getExceptionMessage(error),
       });
     }
   }
   if (candidates.length === 0) {
+    logScan();
     return [];
   }
 
@@ -98,25 +128,30 @@ export function discoverInstances(deps: DiscoverInstancesDeps = {}): Array<Exter
     try {
       raw = JSON.parse(readFile(fullPath));
     } catch {
+      invalidCount++;
       continue;
     }
 
     const parsed = discoveryFileSchema.safeParse(raw);
     if (!parsed.success) {
+      invalidCount++;
       continue;
     }
 
     const file = parsed.data;
     if (!isPidAlive(file.pid)) {
-      log({
-        message: 'Skipping External API discovery entry with dead pid',
-        level: 'debug',
-        logger: 'ExternalApiDiscovery',
-        data: { pid: file.pid, instanceId: file.instanceId },
-      });
+      deadPidCount++;
+      const ms = file.startedAt ? Date.parse(file.startedAt) : NaN;
+      if (
+        !newestDead ||
+        (!Number.isNaN(ms) && (Number.isNaN(newestDead.ms) || ms > newestDead.ms))
+      ) {
+        newestDead = { pid: file.pid, instanceId: file.instanceId, startedAt: file.startedAt, ms };
+      }
       continue;
     }
 
+    live.push({ pid: file.pid, instanceId: file.instanceId, startedAt: file.startedAt });
     const startedAtMs = file.startedAt ? Date.parse(file.startedAt) : NaN;
     scored.push({
       instance: {
@@ -129,6 +164,8 @@ export function discoverInstances(deps: DiscoverInstancesDeps = {}): Array<Exter
       sortKey: Number.isNaN(startedAtMs) ? -Infinity : startedAtMs,
     });
   }
+
+  logScan();
 
   scored.sort((a, b) => b.sortKey - a.sortKey);
   return scored.map((entry) => entry.instance);
