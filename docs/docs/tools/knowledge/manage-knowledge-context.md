@@ -6,8 +6,10 @@ sidebar_position: 3
 
 Creates, updates, and deletes customer-governed semantic context. It is available on Tableau+ sites.
 
-Knowledge write access is disabled by default. Your MCP deployment must enable it before this tool
-is available. Read access alone does not enable writes.
+Knowledge write access is disabled by default. Set
+[`KNOWLEDGE_WRITE_TOOLS_ENABLED=true`](../../configuration/mcp-config/env-vars.md#knowledge_write_tools_enabled)
+and [`KNOWLEDGE_TOOLS_ENABLED=true`](../../configuration/mcp-config/env-vars.md#knowledge_tools_enabled)
+to enable this tool. Read access alone does not enable writes.
 
 ## Required permissions
 
