@@ -55,8 +55,11 @@ import {
   datasourceItemSchema,
   DatasourceList,
   datasourceListSchema,
+  DatasourceLogicalTableDataQuery,
   datasourceRefreshDataRoute,
   datasourceRefreshExtractRoute,
+  DataTable,
+  dataTableSchema,
   DesktopState,
   desktopStateSchema,
   DialogList,
@@ -99,8 +102,7 @@ import {
   type StoryboardRefreshOutcome,
   storyboardRefreshOutcomeSchema,
   storyboardRoute,
-  SummaryData,
-  summaryDataSchema,
+  ValidateCalculatedFieldRequest,
   ValidateCalculatedFieldResponse,
   validateCalculatedFieldResponseSchema,
   ValidationResult,
@@ -108,7 +110,10 @@ import {
   WindowInfo,
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
+  workbookDatasourceLogicalTableDataRoute,
+  workbookDatasourceLogicalTablesRoute,
   workbookDatasourceRoute,
+  workbookDatasourceValidateCalculatedFieldRoute,
   WorkbookDiagnostics,
   workbookDiagnosticsSchema,
   WorkbookExtensionList,
@@ -139,7 +144,6 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
-  worksheetValidateCalculatedFieldRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -644,12 +648,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     query: WorksheetSummaryDataQuery,
     signal: AbortSignal,
-  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+  ): Promise<Result<DataTable, ExecuteCommandError>> {
     let pendingResponses = 0;
     return this.readExternalApi(async (http) => {
       const route = worksheetSummaryDataRoute(worksheetId, query);
       while (true) {
-        const result = await http.getJson(route, summaryDataSchema, signal);
+        const result = await http.getJson(route, dataTableSchema, signal);
         if (result.isOk() || result.error.type !== 'operation-pending') return result;
         pendingResponses += 1;
         if (pendingResponses === SUMMARY_DATA_PENDING_MAX_RESPONSES) {
@@ -694,11 +698,39 @@ export class ExternalApiToolExecutor {
     logicalTableId: string,
     query: WorksheetUnderlyingDataQuery,
     signal: AbortSignal,
-  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+  ): Promise<Result<DataTable, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(
         worksheetLogicalTableDataRoute(worksheetId, logicalTableId, query),
-        summaryDataSchema,
+        dataTableSchema,
+        signal,
+      ),
+    );
+  }
+
+  async listDatasourceLogicalTables(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<LogicalTableList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        workbookDatasourceLogicalTablesRoute(datasourceId),
+        logicalTableListSchema,
+        signal,
+      ),
+    );
+  }
+
+  async getDatasourceLogicalTableData(
+    datasourceId: string,
+    logicalTableId: string,
+    query: DatasourceLogicalTableDataQuery,
+    signal: AbortSignal,
+  ): Promise<Result<DataTable, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        workbookDatasourceLogicalTableDataRoute(datasourceId, logicalTableId, query),
+        dataTableSchema,
         signal,
       ),
     );
@@ -781,15 +813,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async validateWorksheetCalculatedField(
-    worksheetId: string,
-    formula: string,
+  async validateDatasourceCalculatedField(
+    datasourceId: string,
+    request: ValidateCalculatedFieldRequest,
     signal: AbortSignal,
   ): Promise<Result<ValidateCalculatedFieldResponse, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.postJsonForBody(
-        worksheetValidateCalculatedFieldRoute(worksheetId),
-        { formula },
+        workbookDatasourceValidateCalculatedFieldRoute(datasourceId),
+        request,
         validateCalculatedFieldResponseSchema,
         signal,
       ),
