@@ -28,6 +28,8 @@ const screenshotCommandResultSchema = z
       .string()
       .min(1)
       .refine((value) => value.trim().length > 0 && isAbsolute(value)),
+    // Desktop 0.2.27+ also reports filePaths; the legacy path ignores it and scans tempFilePath.
+    filePaths: z.array(z.string()).optional(),
   })
   .strict();
 

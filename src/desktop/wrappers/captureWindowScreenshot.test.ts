@@ -176,9 +176,31 @@ describe('captureWindowScreenshot', () => {
     expect(call.schema?.safeParse({ TempFilePath: directory }).success).toBe(false);
     expect(call.schema?.safeParse({ filePath: directory }).success).toBe(false);
     expect(call.schema?.safeParse({ tempFilePath: directory, extra: true }).success).toBe(false);
+    expect(
+      call.schema?.safeParse({
+        tempFilePath: directory,
+        filePaths: [join(directory, 'ScreenShot_0.png')],
+      }).success,
+    ).toBe(true);
+    expect(call.schema?.safeParse({ tempFilePath: directory, filePaths: 'x' }).success).toBe(false);
     expect(call.schema?.safeParse({ tempFilePath: 'relative' }).success).toBe(false);
     expect(call.schema?.safeParse({ tempFilePath: ` ${directory} ` }).success).toBe(false);
     expect(() => lstatSync(directory)).toThrow();
+  });
+
+  it('accepts a legacy command result that also reports filePaths', async () => {
+    const directory = commandDirectory();
+    const expected = png(1200, 800);
+    const file = join(directory, 'ScreenShot_0.png');
+    writeFileSync(file, expected);
+    const executor = executorReturning({ tempFilePath: directory, filePaths: [file] });
+
+    const result = await captureWindowScreenshot({ executor, signal });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.bytes.equals(expected)).toBe(true);
+    }
   });
 
   it('returns the executor command error unchanged without reading the filesystem', async () => {
