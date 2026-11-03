@@ -1,24 +1,18 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
-import {
-  ExecuteCommandArgs,
-  ExternalApiToolExecutor,
-} from '../../../../desktop/externalApi/executorTypes.js';
+import { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import invalidValidatorEnvelope from './__fixtures__/calc-validation-invalid.json';
-import validValidatorEnvelope from './__fixtures__/calc-validation-valid.json';
 import { getAuthorCalcTool } from './authorCalc.js';
 import {
   authorCalculationsInWorkbook,
   authorCalculationsWithValidation,
-  calcErrorMessages,
   type CalcSpec,
   layerCalculationsByDependency,
   prepareCalculationsInWorkbook,
@@ -386,21 +380,18 @@ describe('authorCalcTool', () => {
       const calcXml =
         `<column caption='${encodedCaption}' datatype='${datatype}' name='[Calculation_1700000000000]' role='${role}' type='${role === 'measure' ? 'quantitative' : 'nominal'}'>` +
         `<calculation class='tableau' formula='${formula.replaceAll("'", '&apos;')}' /></column>`;
-      const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
-        args: { caption, formula, role, datatype },
-        initialXml: japaneseXml,
-        readbackXml: withColumn(japaneseXml, calcXml),
-      });
+      const { result, applyWorkbookDocument, validateDatasourceCalculatedField } =
+        await getToolResult({
+          args: { caption, formula, role, datatype },
+          initialXml: japaneseXml,
+          readbackXml: withColumn(japaneseXml, calcXml),
+        });
 
       expect(result.isError).toBe(false);
-      expect(executeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: 'get-calc-details-pres-model-for-formula',
-          args: {
-            'calculation-formula': formula,
-            'calculation-caption': caption,
-          },
-        }),
+      expect(validateDatasourceCalculatedField).toHaveBeenCalledWith(
+        'federated.10nnk8d1vgmw8q17yu76u06pnbcj',
+        { formula, caption },
+        expect.anything(),
       );
       const appliedXml = appliedDocumentXml(applyWorkbookDocument);
       expect(appliedXml).toContain(`caption='${caption}'`);
@@ -597,9 +588,6 @@ describe('authorCalcTool', () => {
       start: vi.fn(),
       stop: vi.fn(),
       isAvailable: vi.fn(() => true),
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null })),
       getWorkbookDocument: vi.fn().mockResolvedValue(
         new Ok({
           xml: readbackXml,
@@ -644,11 +632,6 @@ describe('authorCalcTool', () => {
         start: vi.fn(),
         stop: vi.fn(),
         isAvailable: vi.fn(() => true),
-        executeCommand: vi
-          .fn()
-          .mockResolvedValue(
-            new Ok({ command_id: 'command-1', status: 'completed', result: null }),
-          ),
         getWorkbookDocument: vi.fn().mockResolvedValue(
           new Ok({
             xml: BASE_XML,
@@ -695,22 +678,14 @@ async function getToolResult({
 }): Promise<{
   result: CallToolResult;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
-  executeCommand: ReturnType<typeof vi.fn>;
+  validateDatasourceCalculatedField: ReturnType<typeof vi.fn>;
 }> {
   const documents = [initialXml, initialXml, readbackXml ?? withColumn(initialXml, '')];
   let readCount = 0;
-  // The validate command must return a well-formed (empty errorMsgs) envelope: validateCalcFormula now
-  // fails CLOSED on a missing errorMsgs field, so a blanket `result: null` would abort every calc.
-  const executeCommand = vi.fn(async ({ command }: ExecuteCommandArgs) => {
-    if (command === 'get-calc-details-pres-model-for-formula') {
-      return new Ok({
-        command_id: 'validate-1',
-        status: 'completed',
-        result: { userCalculationDetails: { errorMsgs: [], errorInds: [] } },
-      });
-    }
-    return new Ok({ command_id: 'command-1', status: 'completed', result: null });
-  });
+  const listWorkbookDatasources = vi.fn(async () => new Ok(datasourceList(initialXml)));
+  const validateDatasourceCalculatedField = vi.fn(
+    async () => new Ok({ isValid: true, errors: [] }),
+  );
   const getWorkbookDocument = vi.fn(async () => {
     return new Ok({
       xml: documents[Math.min(readCount++, documents.length - 1)],
@@ -725,7 +700,8 @@ async function getToolResult({
   const extra = {
     ...getMockRequestHandlerExtra(),
     getExecutor: vi.fn().mockResolvedValue({
-      executeCommand,
+      listWorkbookDatasources,
+      validateDatasourceCalculatedField,
       getWorkbookDocument,
       applyWorkbookDocument,
     }),
@@ -744,7 +720,12 @@ async function getToolResult({
     extra,
   );
 
-  return { result, applyWorkbookDocument, executeCommand };
+  return { result, applyWorkbookDocument, validateDatasourceCalculatedField };
+}
+
+function datasourceList(xml: string): { datasources: Array<{ id: string; name: string }> } {
+  const names = [...xml.matchAll(/<datasource\b[^>]*\bname='([^']*)'/g)].map((match) => match[1]);
+  return { datasources: names.map((name) => ({ id: name, name })) };
 }
 
 describe('resolveCaptionReferencesForTest bracket escaping', () => {
@@ -1053,16 +1034,24 @@ describe('authorCalculationsWithValidation', () => {
     "<column caption='Margin' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'>" +
     "<calculation class='tableau' formula='[Sales] * 0.2' /></column>";
 
-  // Validate returns the caller's envelope; every other command (set-active-datasource) succeeds.
+  const INVALID_MESSAGES = [
+    'Cannot mix aggregate and non-aggregate arguments with this function.',
+    'Cannot mix aggregate and non-aggregate arguments with this function.',
+    "Cannot mix aggregate and non-aggregate comparisons or results in 'IF' expressions",
+    'Cannot mix aggregate and non-aggregate arguments with this function.',
+    'Cannot mix aggregate and non-aggregate arguments with this function.',
+    "Cannot mix aggregate and non-aggregate comparisons or results in 'IF' expressions",
+  ];
+  const invalidResponse = new Ok({
+    isValid: false,
+    errors: INVALID_MESSAGES.map((message, index) => ({ position: index, length: 1, message })),
+  });
+
   // These cases all resolve to a pre-apply verdict, so no getWorkbookDocument/apply mock is needed.
   function validationExecutor(validateResult: unknown): ExternalApiToolExecutor {
     return makeExecutorMock({
-      executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) => {
-        if (command === 'get-calc-details-pres-model-for-formula') {
-          return validateResult;
-        }
-        return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
-      }),
+      listWorkbookDatasources: vi.fn().mockResolvedValue(new Ok(datasourceList(BASE_XML))),
+      validateDatasourceCalculatedField: vi.fn().mockResolvedValue(validateResult),
     });
   }
 
@@ -1073,7 +1062,7 @@ describe('authorCalculationsWithValidation', () => {
     datatype: 'real',
   });
 
-  it('reuses an identical existing calc and authors nothing (no activation, no validate)', async () => {
+  it('reuses an identical existing calc and authors nothing (no API call)', async () => {
     const executor = validationExecutor(undefined);
     const result = await authorCalculationsWithValidation({
       workbookXml: withColumn(BASE_XML, existingMargin),
@@ -1092,10 +1081,11 @@ describe('authorCalculationsWithValidation', () => {
         datasource: 'Superstore',
       },
     ]);
-    expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
+    expect(vi.mocked(executor.listWorkbookDatasources)).not.toHaveBeenCalled();
+    expect(vi.mocked(executor.validateDatasourceCalculatedField)).not.toHaveBeenCalled();
   });
 
-  it('rejects a caption collision when the existing formula differs, before any command', async () => {
+  it('rejects a caption collision when the existing formula differs, before any API call', async () => {
     const executor = validationExecutor(undefined);
     const result = await authorCalculationsWithValidation({
       workbookXml: withColumn(BASE_XML, existingMargin),
@@ -1107,7 +1097,8 @@ describe('authorCalculationsWithValidation', () => {
     expect(result.isErr()).toBe(true);
     if (result.isOk()) throw new Error('expected caption collision');
     expect(result.error.message).toContain('caption collision');
-    expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
+    expect(vi.mocked(executor.listWorkbookDatasources)).not.toHaveBeenCalled();
+    expect(vi.mocked(executor.validateDatasourceCalculatedField)).not.toHaveBeenCalled();
   });
 
   it('does not settle validated calc readback from a different datasource', async () => {
@@ -1138,15 +1129,12 @@ describe('authorCalculationsWithValidation', () => {
           }),
         );
       const executor = makeExecutorMock({
-        executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) =>
-          command === 'get-calc-details-pres-model-for-formula'
-            ? new Ok({
-                command_id: 'validate-1',
-                status: 'completed',
-                result: validValidatorEnvelope.result,
-              })
-            : new Ok({ command_id: 'activate-1', status: 'completed', result: null }),
-        ),
+        listWorkbookDatasources: vi
+          .fn()
+          .mockResolvedValue(new Ok(datasourceList(MODERN_CAPTIONED_DATASOURCE_XML))),
+        validateDatasourceCalculatedField: vi
+          .fn()
+          .mockResolvedValue(new Ok({ isValid: true, errors: [] })),
         getWorkbookDocument,
         applyWorkbookDocument: vi.fn().mockResolvedValue(
           new Ok({
@@ -1177,11 +1165,10 @@ describe('authorCalculationsWithValidation', () => {
     }
   });
 
-  it('aborts the batch when the validate command cannot complete (infra failure, not a verdict)', async () => {
+  it('aborts the batch when the validate route fails (infra failure, not a verdict)', async () => {
     const executor = validationExecutor(
-      new Ok({
-        command_id: 'validate-1',
-        status: 'failed',
+      new Err({
+        type: 'command-failed',
         error: {
           code: 'awaiting-user',
           message: 'Tableau Desktop is showing a dialog',
@@ -1199,18 +1186,12 @@ describe('authorCalculationsWithValidation', () => {
     expect(result.isErr()).toBe(true);
     if (result.isOk()) throw new Error('expected an infra abort');
     expect(result.error.type).toBe('desktop-command-execution-error');
-    expect(result.error.message).toContain('formula validation did not complete (status: failed)');
+    expect(result.error.message).toContain('Tableau Desktop is showing a dialog');
     expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
   });
 
-  it('reports invalid-formula from the captured validator payload without authoring', async () => {
-    const executor = validationExecutor(
-      new Ok({
-        command_id: 'validate-1',
-        status: 'completed',
-        result: invalidValidatorEnvelope.result,
-      }),
-    );
+  it('reports invalid-formula from the validator errors without authoring', async () => {
+    const executor = validationExecutor(invalidResponse);
     const result = await authorCalculationsWithValidation({
       workbookXml: BASE_XML,
       calcs: [spec('depend', '[Sales] + 1')],
@@ -1233,13 +1214,7 @@ describe('authorCalculationsWithValidation', () => {
   });
 
   it('cascades a failed calc to an in-batch dependent (never validates the dependent)', async () => {
-    const executor = validationExecutor(
-      new Ok({
-        command_id: 'validate-1',
-        status: 'completed',
-        result: invalidValidatorEnvelope.result,
-      }),
-    );
+    const executor = validationExecutor(invalidResponse);
     const result = await authorCalculationsWithValidation({
       workbookXml: BASE_XML,
       calcs: [spec('Base', '[Sales] + 1'), spec('Derived', '[Base] + 1')],
@@ -1255,37 +1230,93 @@ describe('authorCalculationsWithValidation', () => {
     expect(derived.failure).toBe('dependency-failed');
     expect(derived.message).toContain('depends on "Base"');
     // The dependent is short-circuited before its own validate call: Base is the only validation.
-    expect(
-      vi
-        .mocked(executor.executeCommand)
-        .mock.calls.filter(([arg]) => arg.command === 'get-calc-details-pres-model-for-formula'),
-    ).toHaveLength(1);
+    expect(vi.mocked(executor.validateDatasourceCalculatedField)).toHaveBeenCalledOnce();
   });
-});
 
-describe('calcErrorMessages (captured validator payloads)', () => {
-  it('extracts every errorMsg from the real invalid-formula envelope', () => {
-    const errors = calcErrorMessages(invalidValidatorEnvelope.result as Record<string, unknown>);
-    expect(errors).toHaveLength(6);
-    expect(errors).toContain(
-      'Cannot mix aggregate and non-aggregate arguments with this function.',
+  it('validates against the datasource id matching the internal datasource name', async () => {
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi.fn().mockResolvedValue(
+        new Ok({
+          datasources: [
+            { id: 'ds-other', name: 'Other', caption: 'Superstore' },
+            { id: 'ds-superstore', name: 'Superstore' },
+          ],
+        }),
+      ),
+      validateDatasourceCalculatedField: vi.fn().mockResolvedValue(invalidResponse),
+    });
+    await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('New Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(vi.mocked(executor.validateDatasourceCalculatedField)).toHaveBeenCalledWith(
+      'ds-superstore',
+      { formula: '[Sales] + 1', caption: 'New Calc' },
+      expect.anything(),
     );
   });
 
-  it('returns an empty list for the real valid-formula envelope', () => {
-    expect(calcErrorMessages(validValidatorEnvelope.result as Record<string, unknown>)).toEqual([]);
+  it('aborts before validate or apply when no workbook datasource matches the target', async () => {
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi
+        .fn()
+        .mockResolvedValue(new Ok({ datasources: [{ id: 'ds-other', name: 'Other' }] })),
+    });
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('New Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected an unresolved datasource id to abort');
+    expect(result.error.type).toBe('args-validation');
+    expect(result.error.message).toContain(
+      'Datasource "Superstore" has no id in Tableau Desktop\'s datasource list.',
+    );
+    expect(vi.mocked(executor.validateDatasourceCalculatedField)).not.toHaveBeenCalled();
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
   });
 
-  it('returns undefined when no errorMsgs key exists so the caller fails closed', () => {
-    expect(
-      calcErrorMessages({ userCalculationDetails: { calculationCaption: 'x' } }),
-    ).toBeUndefined();
+  it('aborts before validate or apply when the datasource list cannot be read', async () => {
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi
+        .fn()
+        .mockResolvedValue(new Err({ type: 'command-timed-out', error: 'timed out' })),
+    });
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('New Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected a datasource read failure to abort');
+    expect(result.error.type).toBe('desktop-command-execution-error');
+    expect(vi.mocked(executor.validateDatasourceCalculatedField)).not.toHaveBeenCalled();
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
   });
 
-  it('descends arrays to find an errorMsgs array nested under one', () => {
-    expect(
-      calcErrorMessages({ items: [{ userCalculationDetails: { errorMsgs: ['boom'] } }] }),
-    ).toEqual(['boom']);
+  it('reports invalid-formula when the route marks the formula invalid without errors', async () => {
+    const executor = validationExecutor(new Ok({ isValid: false, errors: [] }));
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('New Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error('an invalid formula is a per-calc verdict');
+    const [outcome] = result.value;
+    invariant(outcome.status === 'failed');
+    expect(outcome.failure).toBe('invalid-formula');
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
   });
 });
 
@@ -1303,10 +1334,8 @@ describe('authorCalcTool parameter references by caption or internal name', () =
   const calcColumn = (caption: string, formula: string): string =>
     `<column caption='${caption}' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='${formula}' /></column>`;
 
-  const validatedFormulas = (executeCommand: ReturnType<typeof vi.fn>): unknown[] =>
-    executeCommand.mock.calls
-      .filter(([arg]) => arg.command === 'get-calc-details-pres-model-for-formula')
-      .map(([arg]) => JSON.stringify(arg.args));
+  const validatedFormulas = (validate: ReturnType<typeof vi.fn>): string[] =>
+    validate.mock.calls.map(([, request]) => request.formula);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1320,15 +1349,16 @@ describe('authorCalcTool parameter references by caption or internal name', () =
     'resolves a parameter referenced by %s to [Parameters].[Parameter 1]',
     async (_label, formula) => {
       const stored = '[Sales] - [Parameters].[Parameter 1]';
-      const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
-        args: { caption: 'Gap', formula },
-        initialXml: PARAMETER_XML,
-        readbackXml: withColumn(PARAMETER_XML, calcColumn('Gap', stored)),
-      });
+      const { result, applyWorkbookDocument, validateDatasourceCalculatedField } =
+        await getToolResult({
+          args: { caption: 'Gap', formula },
+          initialXml: PARAMETER_XML,
+          readbackXml: withColumn(PARAMETER_XML, calcColumn('Gap', stored)),
+        });
 
       expect(result.isError).toBe(false);
       expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
-      const validated = validatedFormulas(executeCommand);
+      const validated = validatedFormulas(validateDatasourceCalculatedField);
       expect(validated).toHaveLength(1);
       expect(validated[0]).toContain('[Parameters].[Parameter 1]');
       expect(validated[0]).not.toContain('[Target Sales]');
@@ -1434,16 +1464,17 @@ describe('authorCalcTool parameter references by caption or internal name', () =
       ),
       "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
     );
-    const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
-      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
-      initialXml: xml,
-    });
+    const { result, applyWorkbookDocument, validateDatasourceCalculatedField } =
+      await getToolResult({
+        args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+        initialXml: xml,
+      });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('is ambiguous');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
-    expect(validatedFormulas(executeCommand)).toHaveLength(0);
+    expect(validatedFormulas(validateDatasourceCalculatedField)).toHaveLength(0);
   });
 
   it('keeps plural-only field ambiguity an error even when a parameter has the exact caption', async () => {
@@ -1735,16 +1766,17 @@ describe('authorCalcTool parameter references by caption or internal name', () =
         PARAMETER_XML,
         calcColumn('Gap', '[Sales] - [Parameters].[Parameter 1]'),
       );
-      const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
-        args: { caption: 'Gap', formula: `[Sales] - ${reference}` },
-        initialXml: xml,
-      });
+      const { result, applyWorkbookDocument, validateDatasourceCalculatedField } =
+        await getToolResult({
+          args: { caption: 'Gap', formula: `[Sales] - ${reference}` },
+          initialXml: xml,
+        });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(JSON.parse(result.content[0].text).calcName).toBe('[Calculation_1700000000000]');
       expect(applyWorkbookDocument).not.toHaveBeenCalled();
-      expect(validatedFormulas(executeCommand)).toHaveLength(0);
+      expect(validatedFormulas(validateDatasourceCalculatedField)).toHaveLength(0);
     },
   );
 
