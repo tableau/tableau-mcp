@@ -24,7 +24,7 @@ export const getDatasourceInfoTool = (
     minApiVersion: '0.2.10',
     title,
     description:
-      'Read metadata for one datasource in the open workbook by internal name or by the percent-encoded id from list-workbook-datasources. A caption does not match.',
+      'Read metadata for one datasource in the open workbook by id, internal name, or caption from list-workbook-datasources.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
