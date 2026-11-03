@@ -7,8 +7,6 @@ import {
   isStrictScopeMatchEnabled,
 } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
-import { sanitizeClientIdForTelemetry } from '../../telemetry/clientDisplayName.js';
-import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import {
   OAUTH_AUTH_CHALLENGE_GUIDANCE,
   OAUTH_INSUFFICIENT_SCOPE_GUIDANCE,
@@ -172,17 +170,6 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
           level: isToolCall ? 'error' : 'info',
           logger: 'oauth',
         });
-        try {
-          getProductTelemetry().send('tableau_mcp_event', {
-            event_type: 'oauth_scope_gap',
-            oauth_client_id: sanitizeClientIdForTelemetry(authInfo.clientId),
-            missing_scope_count: missingScopes.length,
-            missing_scopes: missingScopes.join(' '),
-            is_tool_call: isToolCall,
-          });
-        } catch {
-          // Telemetry is best-effort; never let it affect the auth response.
-        }
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
         const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;

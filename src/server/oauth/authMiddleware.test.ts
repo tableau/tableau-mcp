@@ -18,15 +18,10 @@ import { AuthenticatedRequest } from './types.js';
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn().mockResolvedValue(false),
-  telemetrySend: vi.fn(),
 }));
 
 vi.mock('../../features/init.js', () => ({
   getFeatureGate: () => ({ isFeatureEnabled: mocks.isFeatureEnabled }),
-}));
-
-vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
-  getProductTelemetry: () => ({ send: mocks.telemetrySend }),
 }));
 
 // Minimal Express response double capturing status / headers / json body.
@@ -61,7 +56,6 @@ function makeValidator(result: Ok<any> | Err<string>): AccessTokenValidator {
 
 beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
-  mocks.telemetrySend.mockReset();
 });
 
 describe('authMiddleware auth-error wording (W-23757363)', () => {
@@ -222,10 +216,9 @@ describe('step-up challenge preserves held scopes and names the missing ones (G4
   });
 });
 
-describe('scope-gap log level and telemetry (G5)', () => {
+describe('scope-gap log level (G5)', () => {
   const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
   const TOOL_NAME = 'scaffold-data-app';
-  const REQUIRED_TOOL_SCOPE = 'tableau:packages:read';
 
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -303,39 +296,6 @@ describe('scope-gap log level and telemetry (G5)', () => {
     const scopeLog = scopeLogCalls()[0];
     expect((scopeLog[0] as any).level).toBe('error');
     expect((scopeLog[0] as any).message).toContain(TOOL_NAME);
-  });
-
-  it('emits a scope-gap telemetry event with sanitized client id, count, joined scopes, and is_tool_call; no user data', async () => {
-    await driveToolCall();
-    expect(mocks.telemetrySend).toHaveBeenCalledWith(
-      'tableau_mcp_event',
-      expect.objectContaining({
-        event_type: 'oauth_scope_gap',
-        missing_scope_count: expect.any(Number),
-        missing_scopes: expect.any(String),
-        is_tool_call: expect.any(Boolean),
-      }),
-    );
-    const props = mocks.telemetrySend.mock.calls[0][1] as Record<string, unknown>;
-    expect(typeof props.oauth_client_id).toBe('string'); // sanitized
-    expect(props.is_tool_call).toBe(true);
-    expect(props.missing_scopes).toContain(REQUIRED_TOOL_SCOPE);
-    expect(
-      Object.values(props).every((v) => ['string', 'number', 'boolean'].includes(typeof v)),
-    ).toBe(true);
-    // No user identifiers in the payload.
-    expect(props).not.toHaveProperty('siteId');
-    expect(props).not.toHaveProperty('userId');
-  });
-
-  it('still returns the 403 when telemetry send throws', async () => {
-    mocks.telemetrySend.mockImplementation(() => {
-      throw new Error('telemetry down');
-    });
-    const { res, next } = await driveToolCall();
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(403); // response unaffected
-    expect(res.body.error).toBe('insufficient_scope');
   });
 });
 
