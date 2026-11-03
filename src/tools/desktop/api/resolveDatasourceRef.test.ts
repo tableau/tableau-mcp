@@ -79,6 +79,61 @@ describe('resolveDatasourceRef', () => {
     });
   });
 
+  it('resolves a unique caption when the internal name differs', async () => {
+    const { extra } = harnessFor([
+      { id: 'federated.0abc', name: 'federated.0abc', caption: 'Sample - Superstore' },
+      { id: 'federated.1def', name: 'federated.1def', caption: 'Quota Targets' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Sample - Superstore',
+      extra,
+    });
+
+    expect(result.unwrap()).toEqual({
+      id: 'federated.0abc',
+      name: 'federated.0abc',
+      caption: 'Sample - Superstore',
+      resolvedSession: 'resolved-999',
+    });
+  });
+
+  it('prefers an internal name over another datasource caption', async () => {
+    const { extra } = harnessFor([
+      { id: 'by-caption-id', name: 'federated.0abc', caption: 'Sales' },
+      { id: 'by-name-id', name: 'Sales', caption: 'Sales Extract' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Sales',
+      extra,
+    });
+
+    expect(result.unwrap()).toMatchObject({ id: 'by-name-id', name: 'Sales' });
+  });
+
+  it('rejects a caption shared by two datasources and lists their ids', async () => {
+    const { executor, extra } = harnessFor([
+      { id: 'federated.0abc', name: 'federated.0abc', caption: 'Orders' },
+      { id: 'federated.1def', name: 'federated.1def', caption: 'Orders' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Orders',
+      extra,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(result.unwrapErr()).toMatchObject({ type: 'args-validation' });
+    expect(result.unwrapErr().message).toContain('matched multiple datasources by caption');
+    expect(result.unwrapErr().message).toContain('federated.0abc (federated.0abc)');
+    expect(result.unwrapErr().message).toContain('federated.1def (federated.1def)');
+    expectNoGranularCall(executor);
+  });
+
   it('returns the existing ambiguity error and makes no granular datasource call', async () => {
     const { executor, extra } = harnessFor([
       { id: 'first-id', name: 'Duplicate' },
