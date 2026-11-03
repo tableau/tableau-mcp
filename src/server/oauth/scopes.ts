@@ -26,6 +26,7 @@ import type { WebToolName } from '../../tools/web/toolName.js';
  * when authenticating with the MCP server.
  */
 export type McpScope =
+  | 'tableau:mcp:lineage:read'
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:datasource:create'
@@ -97,6 +98,7 @@ export type TableauApiScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
+  'tableau:mcp:lineage:read',
   'tableau:mcp:datasource:read',
   'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
@@ -183,6 +185,19 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:mcp_site_settings:read',
 ];
 
+// Static maximum for catalog lineage and its resource checks. Flow-document
+// downloads request DESCRIBE_FLOW_API_SCOPES only when the caller opts in.
+export const DATA_LINEAGE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:content:read',
+  'tableau:flows:read',
+  'tableau:mcp_site_settings:read',
+];
+
+export const PULSE_LINEAGE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:insight_definitions_metrics:read',
+  'tableau:insight_metrics:read',
+];
+
 /**
  * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
  * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
@@ -229,6 +244,14 @@ const toolScopeMap: Record<
     conditionApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
+  'get-data-lineage': {
+    mcp: ['tableau:mcp:lineage:read'],
+    api: new Set(DATA_LINEAGE_API_SCOPES),
+  },
+  'analyze-data-impact': {
+    mcp: ['tableau:mcp:lineage:read'],
+    api: new Set(DATA_LINEAGE_API_SCOPES),
+  },
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -669,6 +692,7 @@ export async function getSupportedApiScopes(
 ): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
+  const lineagePrepEnabled = await isFlowReadToolsEnabled(getConfig());
   const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
     'enforce-registration-conditions',
   );
@@ -677,9 +701,28 @@ export async function getSupportedApiScopes(
     scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
   }
 
+  if (
+    includeOptionalScopes &&
+    (enabledTools.has('get-data-lineage') || enabledTools.has('analyze-data-impact')) &&
+    lineagePrepEnabled
+  ) {
+    scopes.add('tableau:flows:download');
+  }
+  if (
+    includeOptionalScopes &&
+    (enabledTools.has('get-data-lineage') || enabledTools.has('analyze-data-impact'))
+  )
+    for (const scope of PULSE_LINEAGE_API_SCOPES) scopes.add(scope);
+
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
       for (const scope of scopeConfig.api) {
+        if (
+          (toolName === 'get-data-lineage' || toolName === 'analyze-data-impact') &&
+          scope === 'tableau:flows:read' &&
+          !lineagePrepEnabled
+        )
+          continue;
         scopes.add(scope);
       }
       // adding api scopes needed to check the registration conditions required by this tool

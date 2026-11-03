@@ -456,6 +456,27 @@ describe('scopes', () => {
   });
 
   describe('getSupportedApiScopes', () => {
+    it.each([false, true])(
+      'keeps catalog lineage scoped when Prep reads are enabled=%s',
+      async (enabled) => {
+        mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as ReturnType<
+          typeof configModule.getConfig
+        >);
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (flag) => flag === 'flow-read-tools' && enabled,
+        );
+        expect(await getSupportedMcpScopes()).toContain('tableau:mcp:lineage:read');
+        const advertised = await getSupportedApiScopes();
+        expect(advertised).toContain('tableau:content:read');
+        expect(advertised.includes('tableau:flows:read')).toBe(enabled);
+        expect(advertised.includes('tableau:flows:download')).toBe(enabled);
+        for (const tool of ['get-data-lineage', 'analyze-data-impact'] as const) {
+          expect(getRequiredScopesForTool(tool)).toEqual(['tableau:mcp:lineage:read']);
+          expect(getRequiredApiScopesForTool(tool)).not.toContain('tableau:flows:download');
+        }
+      },
+    );
+
     it.each([
       { enabled: false, clientId: claudeClientId, expected: true },
       { enabled: true, clientId: claudeClientId, expected: true },

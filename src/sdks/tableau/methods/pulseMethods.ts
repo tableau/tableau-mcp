@@ -10,6 +10,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { formatPulseInsightsApiError } from '../../../errors/pulseInsightsApiError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -26,6 +27,7 @@ import {
   PulseMetricDefinitionView,
   PulseMetricSubscription,
 } from '../types/pulse.js';
+import { PulseLineageRequest } from '../types/pulseLineage.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -39,6 +41,47 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, pulseApis, { axiosConfig }), creds);
   }
+
+  /** Read only bounded raw configuration for lineage. The general Pulse DTOs
+   * intentionally omit some nested selectors/number-valued filters; this path
+   * preserves them in memory for an allowlisted lineage projection. */
+  readPulseLineage = async (
+    request: PulseLineageRequest,
+    signal?: AbortSignal,
+  ): Promise<PulseResult<unknown>> => {
+    signal?.throwIfAborted();
+    const segments =
+      request.kind === 'metric'
+        ? ['metrics', assertLuid('metricId', request.id)]
+        : request.kind === 'metrics'
+          ? ['definitions', assertLuid('definitionId', request.definitionId), 'metrics']
+          : request.id
+            ? ['definitions', assertLuid('definitionId', request.id)]
+            : ['definitions'];
+    const params: Record<string, string | number> = {};
+    if (request.kind !== 'metric') {
+      if (request.pageSize !== undefined) {
+        params.page_size = z.number().int().min(1).max(100).parse(request.pageSize);
+      }
+      if (request.after !== undefined)
+        params.page_token = z.string().min(1).max(4096).parse(request.after);
+      if (request.kind === 'definitions') params.view = 'DEFINITION_VIEW_BASIC';
+    }
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.axios.get<unknown>(
+        buildRestPath('pulse', ...segments),
+        {
+          ...this.authHeader,
+          params,
+          signal,
+          maxRedirects: 0,
+          maxContentLength: 2 * 1024 * 1024,
+          maxBodyLength: 2 * 1024 * 1024,
+        },
+      );
+      return response.data;
+    });
+  };
 
   /**
    * Returns the Pulse feature entitlements for the caller's site, used to decide whether Pulse

@@ -2,6 +2,8 @@ import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getAnalyzeDataImpactTool } from './dataLineage/analyzeDataImpact.js';
+import { getGetDataLineageTool } from './dataLineage/getDataLineage.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getPublishDatasourceTool } from './datasources/publishDatasource.js';
 import { getRequestDatasourceUploadTool } from './datasources/requestDatasourceUpload.js';
@@ -55,6 +57,8 @@ import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
 export const webToolFactories = [
+  getGetDataLineageTool,
+  getAnalyzeDataImpactTool,
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,

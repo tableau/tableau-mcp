@@ -1,0 +1,83 @@
+# Analyze Data Impact
+
+Find downstream dependency exposure before changing a column, calculation, Prep step/field or flow.
+This tool shares the identities, API requirements and limits of
+[Get Data Lineage](get-data-lineage.md). It never applies the change or runs a flow.
+
+```json
+{
+  "source": { "type": "column", "table": "orders", "name": "sales_amount" },
+  "change": "delete",
+  "includePrepDetails": true,
+  "maxDepth": 8
+}
+```
+
+To analyze a field at a specific Prep step, use:
+
+```json
+{
+  "source": {
+    "type": "prep-field",
+    "flowLuid": "11111111-1111-4111-8111-111111111111",
+    "stepId": "the-document-step-id",
+    "name": "Gross Sales"
+  },
+  "change": "calculation-change"
+}
+```
+
+`change` is `delete`, `rename`, `type-change`, `calculation-change`, `step-change` or
+`content-change`. It records the proposed operation; the analysis does not simulate values, infer
+native result types or prove that a particular calculation will break. Traversal is always
+downstream.
+
+External database/file/table, Workbook and published/embedded data-source origins use the same exact
+identities as `get-data-lineage`. For example, investigate a data-source definition change with
+`{"source":{"type":"datasource","luid":"11111111-1111-4111-8111-111111111111"},"change":"content-change"}`,
+or a table removal with
+`{"source":{"type":"table","id":"opaque-metadata-table-id"},"change":"delete"}`. Workbook
+deletion/change returns its contained sheets/dashboards without labeling shared upstream data
+sources or their other users as downstream impacts.
+
+The same `local-flow` origin as [Get Data Lineage](get-data-lineage.md#local-tfl-and-tflx-files)
+supports local TFL/TFLX files, steps and output fields in self-hosted stdio with `LOCAL_FLOW_ROOTS`.
+Local impact is limited to saved internal dependencies; it never guesses a published flow or
+dashboard from names or embedded identifiers. Whole-file membership remains `unknown`; select an
+exact field for supported column mappings, or an exact step for topology.
+
+On Tableau Cloud, add `includePulseDetails: true` to include dependent Pulse definitions/metrics
+from expandable published field/data-source contexts, including supported Prep output handoffs.
+Exact datasource-qualified selectors establish field references; allowed breakdown dimensions
+remain `possible`. Pulse definition/metric sources are also accepted. Inspect `pulseDetails` and
+`coverage.pulse`: a failed or partial Pulse listing never establishes zero impact. Local files
+cannot establish published Pulse identity by name. See [Pulse lineage](get-data-lineage.md#tableau-pulse)
+for read scopes and configuration/permission limits.
+
+The response includes the lineage graph plus an `impacts` list. Each entry identifies a target and
+one strongest known path (`nodeIds` and `edgeIds`), then prefers a shorter path of the same
+certainty:
+
+| Classification | Meaning                                                                          |
+| -------------- | -------------------------------------------------------------------------------- |
+| `direct`       | One authoritative reference or supported static field mapping                    |
+| `indirect`     | A chain of confirmed reference/mapping edges                                     |
+| `possible`     | A transitive catalog rollup or unverified cross-API field binding is on the path |
+| `unknown`      | An unresolved static mapping or unsupported dependency prevents a confirmed path |
+
+A transitive API result remains `possible` even when represented by one graph edge. Terminal
+container membership cannot propagate to unrelated fields or sheets. A known output-step membership
+can be direct while the route through its unverified catalog output fields remains possible.
+
+Attached Python/R scripts can expose literal output schemas and explicit selected-function input
+references. Their output fields are creation boundaries, and paths crossing those script edges stay
+`possible` because the code is not executed. Unrelated provided inputs do not become impacts merely
+because the script receives them. Prediction edges follow saved model input mappings and native
+output-schema rules, without claiming model-internal causality or execution. Inspect
+`prepDetails[].externalSteps` for settings, input roles, output fields/types and dependency status.
+
+Read `resolution`, `coverage`, `warnings`, `limitations` and any Prep field-analysis gaps before
+answering. Permission-filtered assets are omitted from nodes and paths. A failed optional document
+request does not discard usable catalog lineage. Missing metadata and bounded/partial results must
+never be described as proof of zero impact. The response contains a representative evidence path per
+target, not every possible path or an estimate of business severity.
