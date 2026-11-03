@@ -99,6 +99,25 @@ describe('validate-calculated-field tool', () => {
     }
   });
 
+  it('qualifies a bare fieldName with the datasource internal name', async () => {
+    const harness = await startHarness();
+    try {
+      await harness.callTool({
+        datasourceName: 'Sample - Superstore',
+        formula: '[Sales] * 2',
+        fieldName: 'Calc_1',
+      });
+
+      const post = harness.server.requests.find((request) => request.method === 'POST');
+      expect(JSON.parse(post?.body ?? '')).toEqual({
+        formula: '[Sales] * 2',
+        fieldName: '[Sample - Superstore].[Calc_1]',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('returns validation errors as a successful result', async () => {
     const harness = await startHarness();
     try {

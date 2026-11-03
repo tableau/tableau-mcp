@@ -2,10 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { DATASOURCE_CALC_VALIDATION_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
+import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { isDatasourceQualified } from './qualifyColumnField.js';
 import { resolveDatasourceRef } from './resolveDatasourceRef.js';
 
 const title = 'Validate Calculated Field';
@@ -24,7 +26,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Existing calculated field being edited, as [datasource].[field]. Omit for a new field.',
+      'Internal name of the existing calculated field being edited (e.g. Calculation_123), or [datasource].[field] using internal names for both. Omit for a new field.',
     ),
 };
 
@@ -57,13 +59,26 @@ export const getValidateCalculatedFieldTool = (
           if (resolved.isErr()) {
             return resolved;
           }
-          const datasourceId = resolved.value.id;
+          const {
+            id: datasourceId,
+            name: internalName,
+            caption: datasourceCaption,
+          } = resolved.value;
 
           return await runExternalApiReadTool({
             session: resolved.value.resolvedSession,
             extra,
-            callback: async (_executor, _signal, read) =>
-              await read(
+            callback: async (activeExecutor, _signal, read) => {
+              const field = fieldName?.trim();
+              const qualifiedFieldName =
+                field === undefined || isDatasourceQualified(field)
+                  ? field
+                  : qualifyDatasourceColumn(
+                      activeExecutor.desktopApiVersion,
+                      { internalName, caption: datasourceCaption },
+                      field,
+                    );
+              return await read(
                 'calculated field validation',
                 async (executor, signal) =>
                   await executor.validateDatasourceCalculatedField(
@@ -71,11 +86,14 @@ export const getValidateCalculatedFieldTool = (
                     {
                       formula,
                       ...(caption !== undefined ? { caption } : {}),
-                      ...(fieldName !== undefined ? { fieldName } : {}),
+                      ...(qualifiedFieldName !== undefined
+                        ? { fieldName: qualifiedFieldName }
+                        : {}),
                     },
                     signal,
                   ),
-              ),
+              );
+            },
           });
         },
       });
