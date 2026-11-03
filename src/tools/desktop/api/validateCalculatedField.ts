@@ -26,7 +26,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Internal name of the existing calculated field being edited (e.g. Calculation_123), or [datasource].[field] using internal names for both. Omit for a new field.',
+      'Internal name of the calc being edited, e.g. Calculation_123. Omit for a new field.',
     ),
 };
 
