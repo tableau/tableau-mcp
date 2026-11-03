@@ -298,9 +298,7 @@ describe('authorization code flow', () => {
     beforeEach(() => {
       // enforceScopes on; the suite default is OAUTH_DISABLE_SCOPES=true (enforcement off).
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
-      // Advertise API scopes so the embedded mint is satisfiable: under enforce + site-settings + non-strict
-      // the mint requires the mandatory API scope, and Config refuses to start unless it is advertised
-      // (see the startup-refusal test below). This matches every documented embedded-authz deployment.
+      // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       mocks.strictFlag.value = false;
     });
@@ -310,14 +308,15 @@ describe('authorization code flow', () => {
       mocks.strictFlag.value = false;
     });
 
-    it('refuses to start when the mandatory scope is required but API scopes are not advertised', () => {
-      // enforce on + site-settings on (default) + strict off + advertise off ⇒ the mint can never
-      // issue a token, so Config throws at construction rather than starting an unusable server.
+    it('redirects (does not reject) when API scopes are not advertised, even for the same subset', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
+      const { app } = await startServer();
 
-      expect(() => getConfig()).toThrow(
-        'ADVERTISE_API_SCOPES must be "true" when the embedded authz server enforces scopes with MCP site settings enabled and ENFORCE_STRICT_SCOPE_MATCH is not "true"',
-      );
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
+
+      expect(response.status).toBe(302);
     });
 
     it('rejects /authorize when the requested scopes omit the mandatory scope, site settings on, strict off', async () => {

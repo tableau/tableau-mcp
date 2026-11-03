@@ -2,7 +2,10 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
-import { isStrictScopeMatchEnabled } from '../../features/strictScopeMatch.js';
+import {
+  isSiteSettingsScopeRequired,
+  isStrictScopeMatchEnabled,
+} from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import { sanitizeClientIdForTelemetry } from '../../telemetry/clientDisplayName.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
@@ -145,13 +148,10 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const missingApiScopes = shouldCheckApiScopes
         ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
         : [];
-      // The mandatory site-settings scope is a Tableau API scope, but its requirement does NOT ride
-      // on the advertiseApiScopes-gated API path: under subset mode (non-strict) with site settings
-      // enabled, every grant must carry it regardless of whether API scopes are advertised, or a
-      // subset token missing it would be wrongly accepted when advertiseApiScopes is off.
+      // Checked on every request, including initialize: registration reads the site's settings for
+      // every session, and a token without the scope would read them as empty.
       const missingMandatory =
-        !strict &&
-        config.enableMcpSiteSettings &&
+        (await isSiteSettingsScopeRequired(config)) &&
         !authInfo.scopes.includes(MCP_SITE_SETTINGS_READ_SCOPE)
           ? [MCP_SITE_SETTINGS_READ_SCOPE]
           : [];

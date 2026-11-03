@@ -172,9 +172,7 @@ describe('client credentials grant type', () => {
     beforeEach(() => {
       // enforceScopes on; the suite default is OAUTH_DISABLE_SCOPES=true (enforcement off).
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
-      // Advertise API scopes so the embedded mint is satisfiable: under enforce + site-settings + non-strict
-      // the mint requires the mandatory API scope, and Config refuses to start unless it is advertised
-      // (see the startup-refusal test below). This matches every documented embedded-authz deployment.
+      // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       mocks.strictFlag.value = false;
     });
@@ -184,14 +182,19 @@ describe('client credentials grant type', () => {
       mocks.strictFlag.value = false;
     });
 
-    it('refuses to start when the mandatory scope is required but API scopes are not advertised', () => {
-      // enforce on + site-settings on (default) + strict off + advertise off ⇒ the mint can never
-      // issue a token, so Config throws at construction rather than starting an unusable server.
+    it('mints the token when API scopes are not advertised, even for a subset omitting the mandatory scope', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
+      const { app } = await startServer();
 
-      expect(() => getConfig()).toThrow(
-        'ADVERTISE_API_SCOPES must be "true" when the embedded authz server enforces scopes with MCP site settings enabled and ENFORCE_STRICT_SCOPE_MATCH is not "true"',
-      );
+      const response = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+        scope: SUBSET_SCOPE,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.access_token).toEqual(expect.any(String));
     });
 
     it('rejects a client_credentials grant that omits the mandatory scope when site settings are on and strict is off', async () => {

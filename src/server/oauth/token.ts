@@ -5,7 +5,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
-import { isStrictScopeMatchEnabled } from '../../features/strictScopeMatch.js';
+import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
@@ -170,14 +170,10 @@ export function token(
                   })
                 : [];
 
-          // Mandatory site-settings scope under subset (non-strict) matching: this branch
-          // re-validates requested scopes, so a client_credentials grant that omits
-          // tableau:mcp_site_settings:read while MCP site settings are enabled must be refused here.
-          // Mirrors the connection gate (authMiddleware) and the auth-code guard (authorize.ts).
+          // This branch re-validates requested scopes, so refuse here a grant the connection gate
+          // (authMiddleware) would reject. Mirrors the auth-code guard (authorize.ts).
           if (
-            enforceScopes &&
-            !(await isStrictScopeMatchEnabled(config)) &&
-            config.enableMcpSiteSettings &&
+            (await isSiteSettingsScopeRequired(config)) &&
             !scopesToGrant.includes(MCP_SITE_SETTINGS_READ_SCOPE)
           ) {
             res.status(400).json({

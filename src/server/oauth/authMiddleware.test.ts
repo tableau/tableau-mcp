@@ -686,24 +686,32 @@ describe('strict vs. subset scope matching', () => {
     expect(res.statusCode).toBeUndefined();
   });
 
-  it.each([
-    ['advertiseApiScopes off', 'false'],
-    ['advertiseApiScopes on', 'true'],
-  ])(
-    'rejects a subset token missing the mandatory scope when site settings are enabled (%s)',
-    async (_label, advertise) => {
-      vi.stubEnv('ADVERTISE_API_SCOPES', advertise);
-      // strict off; site settings on by default; token omits the mandatory scope.
-      const { req, res, next, middleware } = initializeReq(await mcpSubset());
+  it('rejects a subset token missing the mandatory scope when API scopes are advertised', async () => {
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    // strict off; site settings on by default; token omits the mandatory scope.
+    const { req, res, next, middleware } = initializeReq(await mcpSubset());
 
-      await middleware(req, res, next);
+    await middleware(req, res, next);
 
-      expect(next).not.toHaveBeenCalled();
-      expect(res.statusCode).toBe(403);
-      expect(res.body.error).toBe('insufficient_scope');
-      expect(res.headers['WWW-Authenticate']).toContain(MANDATORY_SCOPE);
-    },
-  );
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe('insufficient_scope');
+    expect(res.headers['WWW-Authenticate']).toContain(MANDATORY_SCOPE);
+  });
+
+  // Clients of a deployment that doesn't advertise API scopes were never offered the scope, and a
+  // refresh keeps the original grant, so requiring it here would reject every existing token.
+  it('accepts a token without the mandatory scope when API scopes are not advertised', async () => {
+    const { req, res, next, authInfo, middleware } = initializeReq(
+      await getSupportedMcpScopes(clientId),
+    );
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(req.auth).toEqual(authInfo);
+    expect(res.statusCode).toBeUndefined();
+  });
 
   it('accepts a subset token without the mandatory scope when site settings are disabled', async () => {
     vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
@@ -720,6 +728,7 @@ describe('strict vs. subset scope matching', () => {
     // A tools/list body is not a CallToolRequest, so no tool name is resolved.
     // Under non-strict this must relax to the mandatory scope only — a token with just the
     // mandatory scope (no MCP scopes at all) is accepted, proving the full set is not demanded.
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     const scopes = [MANDATORY_SCOPE];
     const authInfo = { scopes, clientId };
     const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
@@ -739,6 +748,7 @@ describe('strict vs. subset scope matching', () => {
   });
 
   it('rejects a non-tool request missing the mandatory scope under non-strict when site settings are enabled', async () => {
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     const scopes: string[] = []; // neither mandatory nor any MCP scope
     const authInfo = { scopes, clientId };
     const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
