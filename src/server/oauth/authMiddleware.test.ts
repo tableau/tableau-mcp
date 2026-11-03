@@ -606,9 +606,12 @@ describe('strict vs. subset scope matching', () => {
     mocks.isFeatureEnabled.mockResolvedValue(false);
   });
 
-  // Strict mode requires BOTH the env var and the feature flag. Turn both on.
-  function enableStrict(): void {
-    vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+  // Either the env var or the feature flag alone turns strict mode on.
+  function enableStrict(via: 'env' | 'flag'): void {
+    if (via === 'env') {
+      vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+      return;
+    }
     mocks.isFeatureEnabled.mockImplementation(
       async (flag: string) => flag === 'enforce-strict-scope-match',
     );
@@ -649,16 +652,25 @@ describe('strict vs. subset scope matching', () => {
     return { req, res, next, authInfo, middleware };
   }
 
-  it('rejects a subset token at initialize when strict scope match is enabled', async () => {
-    enableStrict();
-    const { req, res, next, middleware } = initializeReq([...(await mcpSubset()), MANDATORY_SCOPE]);
+  it.each([
+    ['the env var alone', 'env'],
+    ['the feature flag alone', 'flag'],
+  ] as const)(
+    'rejects a subset token at initialize when strict scope match is enabled by %s',
+    async (_label, via) => {
+      enableStrict(via);
+      const { req, res, next, middleware } = initializeReq([
+        ...(await mcpSubset()),
+        MANDATORY_SCOPE,
+      ]);
 
-    await middleware(req, res, next);
+      await middleware(req, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(403);
-    expect(res.body.error).toBe('insufficient_scope');
-  });
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('insufficient_scope');
+    },
+  );
 
   it('accepts a subset token at initialize when strict scope match is disabled', async () => {
     // strict off (env unset); site settings on by default, so include the mandatory scope.
@@ -747,7 +759,7 @@ describe('strict vs. subset scope matching', () => {
 
   it('does not enforce scopes at all when enforceScopes is off even if strict is configured', async () => {
     vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true'); // enforceScopes off
-    enableStrict(); // strict configured, but must be inert while enforcement is off
+    enableStrict('env'); // strict configured, but must be inert while enforcement is off
     const scopes: string[] = []; // empty grant
     const authInfo = { scopes, clientId };
     const middleware = authMiddleware(makeValidator(new Ok(authInfo)));

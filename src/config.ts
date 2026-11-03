@@ -508,9 +508,9 @@ export class Config extends BaseConfig {
         // tableau:mcp_site_settings:read API scope on every grant. That scope is only in the
         // supported set when API scopes are advertised, so with ADVERTISE_API_SCOPES off a client
         // can neither omit it (rejected as missing) nor request it (rejected as unsupported) — the
-        // mint cannot issue any token. Only the env half of strict is read here (the feature flag
-        // resolves asynchronously at request time); with it off, strict can never engage, so the
-        // combination is statically unsatisfiable. Refuse to start rather than silently never mint.
+        // mint cannot issue any token. Only the env var is checked: the feature flag can also turn
+        // strict on, but it is read per request and can change at runtime, so only the env var
+        // guarantees strict from startup. Refuse to start rather than silently never mint.
         if (
           this.oauth.enforceScopes &&
           !this.oauth.strictScopeMatch &&

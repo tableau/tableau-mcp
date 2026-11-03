@@ -1,3 +1,4 @@
+import features from '../../features.json';
 import { isStrictScopeMatchEnabled } from './strictScopeMatch.js';
 
 const mocks = vi.hoisted(() => ({
@@ -15,8 +16,8 @@ describe('isStrictScopeMatchEnabled', () => {
 
   it.each([
     [true, true, true],
-    [true, false, false],
-    [false, true, false],
+    [true, false, true],
+    [false, true, true],
     [false, false, false],
   ])(
     'ENFORCE_STRICT_SCOPE_MATCH=%s, enforce-strict-scope-match flag=%s → %s',
@@ -29,11 +30,16 @@ describe('isStrictScopeMatchEnabled', () => {
     },
   );
 
-  it('does not consult the feature gate when ENFORCE_STRICT_SCOPE_MATCH is off (short-circuit)', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+  it('does not consult the feature gate when ENFORCE_STRICT_SCOPE_MATCH is on (short-circuit)', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
-    await isStrictScopeMatchEnabled({ oauth: { strictScopeMatch: false } } as never);
+    await isStrictScopeMatchEnabled({ oauth: { strictScopeMatch: true } } as never);
 
     expect(mocks.mockIsFeatureEnabled).not.toHaveBeenCalled();
+  });
+
+  it('ships with the enforce-strict-scope-match flag off', () => {
+    // Either input alone turns strict on, so shipping the flag on would make strict the default.
+    expect(features['enforce-strict-scope-match']).toBe(false);
   });
 });

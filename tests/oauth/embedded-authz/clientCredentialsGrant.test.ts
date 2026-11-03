@@ -209,7 +209,7 @@ describe('client credentials grant type', () => {
       expect(response.body.error_description).toContain(MANDATORY_SCOPE);
     });
 
-    it('mints the token when strict scope match is on (env var + flag), even for the same subset', async () => {
+    it('mints the token when strict scope match is on, even for the same subset', async () => {
       vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
       mocks.strictFlag.value = true;
       const { app } = await startServer();
