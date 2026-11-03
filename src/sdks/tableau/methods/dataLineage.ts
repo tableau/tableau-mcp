@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { luidSchema } from '../../routeSafety/ids.js';
 import {
   DataLineageResult,
   LineageKind,
@@ -115,7 +116,9 @@ export class DataLineageTraversal {
   private readonly verifiedInputs = new Map<string, LineageWireNode>();
   private readonly expanded = new Set<string>();
   private readonly edgeIds = new Set<string>();
+  private readonly pulseFields = new Map<string, Promise<LineageWireNode | undefined>>();
   private reservedMetadataRequests = 0;
+  private lastRequestComplete = false;
   private readonly queue: Array<{
     id: string;
     depth: number;
@@ -167,6 +170,7 @@ export class DataLineageTraversal {
   }
 
   private async request(query: string): Promise<z.infer<typeof connectionSchema> | undefined> {
+    this.lastRequestComplete = false;
     if (!this.reserveRequest(this.reservedMetadataRequests)) return undefined;
     try {
       const envelope = z
@@ -175,6 +179,7 @@ export class DataLineageTraversal {
           errors: z.array(z.unknown()).optional(),
         })
         .parse(await this.dependencies.graphql(query));
+      this.lastRequestComplete = !envelope.errors?.length && !!envelope.data?.asset;
       if (envelope.errors?.length || !envelope.data?.asset) {
         this.result.coverage.metadata = 'partial';
         this.warn(
@@ -277,6 +282,113 @@ export class DataLineageTraversal {
     return node;
   }
 
+  /** Request-private owner context; never copied wholesale to the public graph. */
+  pulseContexts(): Array<{ nodeId: string; datasourceLuid: string; kind: 'field' | 'datasource' }> {
+    return [...this.wires.entries()].flatMap(([nodeId, entry]) => {
+      const owner =
+        entry.kind === 'field'
+          ? entry.wire.datasource
+          : entry.kind === 'datasource'
+            ? entry.wire
+            : undefined;
+      return owner?.__typename === 'PublishedDatasource' && owner.luid
+        ? [{ nodeId, datasourceLuid: owner.luid, kind: entry.kind as 'field' | 'datasource' }]
+        : [];
+    });
+  }
+
+  /** Resolve a Pulse selector only inside its explicit published datasource.
+   * Uniqueness needs a complete permission-visible filtered candidate set, not
+   * the subset of fields already reached by the original graph walk. */
+  lookupPulseField(datasourceLuid: string, selector: string): Promise<LineageWireNode | undefined> {
+    const key = JSON.stringify([datasourceLuid, selector]);
+    if (!this.pulseFields.has(key))
+      this.pulseFields.set(key, this.findPulseField(datasourceLuid, selector));
+    return this.pulseFields.get(key)!;
+  }
+
+  private async findPulseField(
+    datasourceLuid: string,
+    selector: string,
+  ): Promise<LineageWireNode | undefined> {
+    if (!luidSchema.safeParse(datasourceLuid).success || !selector || selector.length > 1024)
+      return undefined;
+    if (this.result.coverage.metadata === 'not-requested') {
+      this.result.coverage.metadata = 'indexed-visible-subgraph';
+      this.result.coverage.permissionMode = 'FILTER';
+    }
+    const matches = new Map<string, LineageWireNode>();
+    let after: string | undefined;
+    const cursors = new Set<string>();
+    for (;;) {
+      const response = await this.request(
+        metadataQuery(
+          'publishedDatasourcesConnection',
+          `luid: ${JSON.stringify(datasourceLuid)}`,
+          `${identitySelection('datasource')} pulseFields: fieldsConnection(filter: { name: ${JSON.stringify(selector)} }, first: 2, permissionMode: FILTER_RESULTS${after ? `, after: ${JSON.stringify(after)}` : ''}) { nodes { ${identitySelection('field')} } pageInfo { hasNextPage endCursor } }`,
+          2,
+        ),
+      );
+      if (
+        !response ||
+        !this.lastRequestComplete ||
+        response.pageInfo.hasNextPage ||
+        response.nodes.length !== 1
+      )
+        return undefined;
+      const owner = response.nodes[0];
+      if (
+        !owner ||
+        owner.__typename !== 'PublishedDatasource' ||
+        owner.luid !== datasourceLuid ||
+        !(await this.canInclude(owner, 'datasource'))
+      )
+        return undefined;
+      const fields = connectionSchema.safeParse(owner.pulseFields);
+      if (!fields.success) return undefined;
+      for (const field of fields.data.nodes) {
+        if (
+          !field ||
+          field.name !== selector ||
+          field.datasource?.id !== owner.id ||
+          field.datasource.__typename !== 'PublishedDatasource' ||
+          field.datasource.luid !== datasourceLuid ||
+          !(await this.canInclude(field, 'field'))
+        )
+          return undefined;
+        matches.set(field.id, field);
+      }
+      if (matches.size > 1) {
+        this.warn(
+          'PULSE_FIELD_AMBIGUOUS',
+          'A Pulse selector does not identify one visible field in its published datasource.',
+        );
+        return undefined;
+      }
+      if (!fields.data.pageInfo.hasNextPage) break;
+      const next = fields.data.pageInfo.endCursor;
+      if (!next || cursors.has(next)) {
+        this.warn('PULSE_FIELD_CURSOR_INVALID', 'Pulse field identity lookup did not complete.');
+        return undefined;
+      }
+      cursors.add(next);
+      after = next;
+    }
+    return matches.size === 1 ? [...matches.values()][0] : undefined;
+  }
+
+  /** A permitted Pulse origin can seed catalog upstream walks at the already
+   * consumed reference depth, while preserving the same budgets and guards. */
+  async seedPulseField(wire: LineageWireNode, depth: number): Promise<LineageNode | undefined> {
+    if (depth > this.options.maxDepth) {
+      this.truncate('DEPTH_LIMIT');
+      return undefined;
+    }
+    const node = await this.add(wire, 'field');
+    if (node) this.queue.push({ id: node.id, depth, direction: 'upstream' });
+    return node;
+  }
+
   private edge(from: string, to: string, relation: Relation): void {
     const id = JSON.stringify([from, to, relation.field]);
     if (!this.edgeIds.has(id)) {
@@ -319,7 +431,13 @@ export class DataLineageTraversal {
   /** Resolve names across every candidate page; never choose the first match. */
   async resolve(): Promise<void> {
     const source = this.options.source;
-    if (source.type === 'prep-step' || source.type === 'prep-field' || source.type === 'local-flow')
+    if (
+      source.type === 'prep-step' ||
+      source.type === 'prep-field' ||
+      source.type === 'local-flow' ||
+      source.type === 'pulse-definition' ||
+      source.type === 'pulse-metric'
+    )
       return;
     const roots = metadataRoots[source.type] ?? [];
     const filter =

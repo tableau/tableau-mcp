@@ -13,6 +13,7 @@ import { executeDataLineage } from './executeDataLineage.js';
 const {
   source,
   includePrepDetails,
+  includePulseDetails,
   observedPrepSchemas,
   maxDepth,
   maxNodes,
@@ -23,6 +24,7 @@ const {
 const paramsSchema = {
   source,
   includePrepDetails,
+  includePulseDetails,
   observedPrepSchemas,
   maxDepth,
   maxNodes,
@@ -52,7 +54,7 @@ export const getAnalyzeDataImpactTool = (
     name: 'analyze-data-impact',
     minRequiredRole: SiteRole.EXPLORER,
     description:
-      'Analyze downstream dependency exposure for a proposed external database/file/table, workbook, data-source, column, calculation, Prep field, step or flow change. Returns the lineage graph and one strongest known evidence path per affected target, classified direct, indirect, possible or unknown. A single transitive rollup remains possible, never direct. Unknown Prep column mappings remain unknown across subsequent steps/outputs. Change labels record intent; this does not execute changes, simulate data values or determine whether a formula will fail. Read resolution, coverage, warnings and limitations before answering. An empty result never establishes that deleting or changing the source is safe.',
+      'Analyze downstream dependency exposure for a proposed external database/file/table, workbook, data-source, column, calculation, Prep field, step, flow or Pulse definition/metric change. Returns the lineage graph and one strongest known evidence path per affected target, classified direct, indirect, possible or unknown. A single transitive rollup remains possible, never direct. Unknown Prep column mappings remain unknown across subsequent steps/outputs. Change labels record intent; this does not execute changes, simulate data values or determine whether a formula will fail. Read resolution, coverage, warnings and limitations before answering. An empty result never establishes that deleting or changing the source is safe.',
     paramsSchema,
     annotations: {
       title: 'Analyze Data Impact',

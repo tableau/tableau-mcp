@@ -10,7 +10,11 @@ import {
 import { DataLineageResult, LineageOptions } from '../../../sdks/tableau/types/dataLineage.js';
 import { PrepScriptContext } from '../../../sdks/tableau/types/prepScript.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
-import { DATA_LINEAGE_API_SCOPES, DESCRIBE_FLOW_API_SCOPES } from '../../../server/oauth/scopes.js';
+import {
+  DATA_LINEAGE_API_SCOPES,
+  DESCRIBE_FLOW_API_SCOPES,
+  PULSE_LINEAGE_API_SCOPES,
+} from '../../../server/oauth/scopes.js';
 import { isAxiosError } from '../../../utils/axios.js';
 import { getHttpStatus } from '../../../utils/getHttpStatus.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
@@ -19,6 +23,7 @@ import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { lineageAccess } from './lineageAccess.js';
 import { executeLocalDataLineage } from './localDataLineage.js';
 import { addPrepTopology } from './prepLineage.js';
+import { PulseLineageCollector } from './pulseLineage.js';
 
 /** Share one Metadata session, but mint download scopes only for an explicitly
  * requested optional document. Metadata-only calls need no download grant. */
@@ -27,8 +32,18 @@ export async function executeDataLineage(
   extra: TableauWebRequestHandlerExtra,
   productVersion: ProductVersion,
 ): Promise<DataLineageResult> {
-  if (options.source.type === 'local-flow')
-    return executeLocalDataLineage(options, getConfig(), extra.signal);
+  if (options.source.type === 'local-flow') {
+    const result = await executeLocalDataLineage(options, getConfig(), extra.signal);
+    if (options.includePulseDetails) {
+      result.coverage.pulse = 'not-requested';
+      result.warnings.push({
+        code: 'PULSE_LOCAL_UNBOUND',
+        message:
+          'Local files do not establish a published datasource/Pulse identity. Select a verified published origin for Pulse usage.',
+      });
+    }
+    return result;
+  }
   const overrides = await extra.getConfigWithOverrides();
   const prepEnabled = await isFlowReadToolsEnabled(getConfig());
   const internalSource =
@@ -39,6 +54,8 @@ export async function executeDataLineage(
     ? { type: 'flow' as const, luid: internalSource.flowLuid }
     : options.source;
   const effective = { ...options, source };
+  const pulseSource = source.type === 'pulse-definition' || source.type === 'pulse-metric';
+  const wantPulse = !!options.includePulseDetails || pulseSource;
   const wantPrep =
     options.includePrepDetails || internalSource || !!options.observedPrepSchemas?.length;
   const isAllowed = lineageAccess(extra, overrides.boundedContext);
@@ -49,7 +66,7 @@ export async function executeDataLineage(
     isAllowed,
     prepEnabled,
   });
-  if (overrides.disableMetadataApiRequests) {
+  if (overrides.disableMetadataApiRequests && !pulseSource) {
     unavailable.result.resolution = 'unavailable';
     unavailable.result.coverage.metadata = 'unavailable';
     unavailable.warn(
@@ -68,9 +85,10 @@ export async function executeDataLineage(
   }
   return await useRestApi({
     ...extra,
-    jwtScopes: DATA_LINEAGE_API_SCOPES.filter(
-      (scope) => prepEnabled || scope !== 'tableau:flows:read',
-    ),
+    jwtScopes: (overrides.disableMetadataApiRequests
+      ? PULSE_LINEAGE_API_SCOPES
+      : DATA_LINEAGE_API_SCOPES
+    ).filter((scope) => prepEnabled || scope !== 'tableau:flows:read'),
     callback: async (restApi) => {
       const traversal = new DataLineageTraversal(effective, {
         graphql: (query) => restApi.metadataMethods.graphql(query),
@@ -78,6 +96,42 @@ export async function executeDataLineage(
         prepEnabled,
         signal: extra.signal,
       });
+      const withPulse = async (
+        callback: (collector: PulseLineageCollector) => Promise<void>,
+      ): Promise<void> => {
+        try {
+          await useRestApi({
+            ...extra,
+            jwtScopes: PULSE_LINEAGE_API_SCOPES,
+            callback: async (api) => {
+              const collector = new PulseLineageCollector(traversal, {
+                read: async (request) => {
+                  const result = await api.pulseMethods.readPulseLineage(request, extra.signal);
+                  if (result.isErr()) throw new Error('Pulse metadata unavailable.');
+                  return result.value;
+                },
+                metadataEnabled: !overrides.disableMetadataApiRequests,
+                isDatasourceAllowed: async (datasourceLuid) =>
+                  (await resourceAccessChecker.isDatasourceAllowed({ datasourceLuid, extra }))
+                    .allowed,
+                signal: extra.signal,
+              });
+              await callback(collector);
+            },
+          });
+        } catch {
+          extra.signal.throwIfAborted();
+          traversal.result.coverage.pulse = 'unavailable';
+          traversal.warn(
+            'PULSE_UNAVAILABLE',
+            'Pulse metadata could not be read with the current service/permission/scope; existing catalog lineage is retained.',
+          );
+          if (pulseSource) {
+            traversal.result.resolution = 'unavailable';
+            traversal.result.sourceId = undefined;
+          }
+        }
+      };
       if (!prepEnabled)
         traversal.warn(
           'PREP_DISABLED',
@@ -88,7 +142,14 @@ export async function executeDataLineage(
         productVersion,
         mappings: { '2026.3.0': true, default: false },
       });
-      await traversal.resolve();
+      if (pulseSource) {
+        if (overrides.disableMetadataApiRequests)
+          traversal.warn(
+            'METADATA_DISABLED',
+            'Catalog field bindings are unavailable; Pulse configuration alone does not prove upstream field dependencies.',
+          );
+        await withPulse((collector) => collector.resolveSource());
+      } else await traversal.resolve();
       const reserveDocument = wantPrep && supported && prepEnabled;
       await traversal.expand(reserveDocument ? 1 : 0);
       const graph = traversal.result;
@@ -104,6 +165,7 @@ export async function executeDataLineage(
             graph.resolution = 'unavailable';
             graph.sourceId = undefined;
           }
+          if (wantPulse && !pulseSource) await withPulse((collector) => collector.enrich());
           return graph;
         }
         const flows = graph.nodes.filter((n) => n.kind === 'flow' && n.luid);
@@ -197,6 +259,7 @@ export async function executeDataLineage(
           graph.sourceId = undefined;
         }
       }
+      if (wantPulse && !pulseSource) await withPulse((collector) => collector.enrich());
       return graph;
     },
   });

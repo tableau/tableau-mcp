@@ -46,6 +46,14 @@ Local impact is limited to saved internal dependencies; it never guesses a publi
 dashboard from names or embedded identifiers. Whole-file membership remains `unknown`; select an
 exact field for supported column mappings, or an exact step for topology.
 
+On Tableau Cloud, add `includePulseDetails: true` to include dependent Pulse definitions/metrics
+from expandable published field/data-source contexts, including supported Prep output handoffs.
+Exact datasource-qualified selectors establish field references; allowed breakdown dimensions
+remain `possible`. Pulse definition/metric sources are also accepted. Inspect `pulseDetails` and
+`coverage.pulse`: a failed or partial Pulse listing never establishes zero impact. Local files
+cannot establish published Pulse identity by name. See [Pulse lineage](get-data-lineage.md#tableau-pulse)
+for read scopes and configuration/permission limits.
+
 The response includes the lineage graph plus an `impacts` list. Each entry identifies a target and
 one strongest known path (`nodeIds` and `edgeIds`), then prefers a shorter path of the same
 certainty:

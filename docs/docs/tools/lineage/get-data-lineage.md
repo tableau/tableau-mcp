@@ -2,7 +2,7 @@
 
 Trace data dependencies upstream or downstream from an external database/file/table, database
 column, Workbook, published or embedded data source, Tableau field, Prep flow, worksheet, dashboard,
-or an internal Prep step/field. The tool is read-only.
+an internal Prep step/field, or a Tableau Pulse definition/metric. The tool is read-only.
 
 For example:
 
@@ -35,6 +35,7 @@ source, then request both directions and optional Prep details:
   "source": { "type": "field", "id": "opaque-metadata-field-id" },
   "direction": "both",
   "includePrepDetails": true,
+  "includePulseDetails": true,
   "maxDepth": 12
 }
 ```
@@ -51,6 +52,33 @@ selected field. A confirmed field path requires supported reference/mapping edge
 field cannot be bound to a document field, show the processing context and the unresolved handoff
 separately; do not join them by a matching name. Keep `possible`/`unknown` evidence, coverage limits
 and missing permissions visible in the answer.
+
+## Tableau Pulse
+
+On Tableau Cloud, select an exact `{"type":"pulse-definition","luid":"..."}` or
+`{"type":"pulse-metric","luid":"..."}` source to trace its upstream fields and catalog/Prep
+dependencies. Pulse origins automatically request Pulse metadata. For other published origins,
+`includePulseDetails: true` adds downstream Pulse users to the existing field/data-source graph;
+the default is false. A `both` walk never fans out through a shared upstream data source to sibling
+metrics. Local TFL/TFLX files stay offline and require a verified published origin to trace Pulse.
+
+`pulseDetails[].uses` retains literal measure, time, filter, row-identifier/name and nested goal
+selectors, their datasource LUID, saved scalar filter values, roles and native JSON pointers. Exact
+field links require a complete, unique Metadata API field-name match inside that authorized
+published datasource. Names are not matched globally, normalized or inferred from visualization
+state. A metric can inherit its missing datasource scope only from its fetched exact definition.
+Allowed breakdown dimensions remain `possible`; opaque visualization specifications and unresolved
+selectors are explicit gaps. Detail status distinguishes resolved, unresolved and unrequested
+context. Inspect `coverage.pulse` and warnings before interpreting an empty result.
+
+The collector uses read-only Pulse definition/metric GET endpoints plus Metadata API
+`fieldsConnection` with `FILTER_RESULTS`. It requests
+`tableau:insight_definitions_metrics:read` and `tableau:insight_metrics:read` only for Pulse-enabled
+lineage calls; existing catalog-only calls retain their grants. Pagination, cancellation and the
+existing request/node/edge/depth limits apply. Missing services, scopes or permissions preserve
+usable catalog evidence with explicit partial/unavailable status. No insights, row queries,
+subscriptions or writes are requested. Saved filter values are authorized configuration and may
+still be sensitive; no live values are stored in verification evidence.
 
 ## Saved Prep fields and observed schemas
 

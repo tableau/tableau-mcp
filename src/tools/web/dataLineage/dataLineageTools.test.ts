@@ -4,7 +4,7 @@ import { z } from 'zod';
 import * as config from '../../../config.js';
 import { parseFlowPackage } from '../../../sdks/tableau/methods/flowPackage.js';
 import scriptFixtures from '../../../sdks/tableau/methods/prepScriptAnalysis.test.fixtures.json';
-import { dataLineageParams, LineageOptions } from '../../../sdks/tableau/types/dataLineage.js';
+import { dataLineageParams } from '../../../sdks/tableau/types/dataLineage.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { DATA_LINEAGE_API_SCOPES, DESCRIBE_FLOW_API_SCOPES } from '../../../server/oauth/scopes.js';
 import { Provider } from '../../../utils/provider.js';
@@ -54,9 +54,16 @@ const page = (
 });
 const args = (
   values: Record<string, unknown> = {},
-): LineageOptions & { observedPrepSchemas: LineageOptions['observedPrepSchemas'] } => {
+): z.output<z.ZodObject<typeof dataLineageParams>> & {
+  includePulseDetails: boolean | undefined;
+  observedPrepSchemas: z.output<z.ZodObject<typeof dataLineageParams>>['observedPrepSchemas'];
+} => {
   const parsed = z.object(dataLineageParams).parse({ source: { type: 'flow', luid }, ...values });
-  return { ...parsed, observedPrepSchemas: parsed.observedPrepSchemas };
+  return {
+    ...parsed,
+    includePulseDetails: parsed.includePulseDetails,
+    observedPrepSchemas: parsed.observedPrepSchemas,
+  };
 };
 const extra = (disableMetadataApiRequests = false): ReturnType<typeof getMockRequestHandlerExtra> =>
   getMockRequestHandlerExtra({

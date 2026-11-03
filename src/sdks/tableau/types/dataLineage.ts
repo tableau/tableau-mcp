@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { luidSchema } from '../../routeSafety/ids.js';
 import { PrepExternalStep } from './prepScript.js';
+import { PulseFieldUse } from './pulseLineage.js';
 
 const metadataId = z.string().min(1).max(2048).describe('Opaque Metadata API ID, not a REST LUID.');
 const text = z.string().min(1).max(1024);
@@ -25,6 +26,8 @@ export const prepSchemaObservation = z
 export type PrepSchemaObservation = z.infer<typeof prepSchemaObservation>;
 
 export const lineageSourceSchema = z.union([
+  z.object({ type: z.literal('pulse-definition'), luid: luidSchema }),
+  z.object({ type: z.literal('pulse-metric'), luid: luidSchema }),
   z.object({
     type: z.literal('local-flow'),
     path: z
@@ -88,7 +91,7 @@ export const lineageSourceSchema = z.union([
 
 export const dataLineageParams = {
   source: lineageSourceSchema.describe(
-    'The exact external database/file/table, column, Tableau content/field, or native-flow origin.',
+    'The exact external asset, Tableau content/field, native-flow origin, or Pulse definition/metric LUID.',
   ),
   direction: z
     .enum(['upstream', 'downstream', 'both'])
@@ -99,6 +102,12 @@ export const dataLineageParams = {
     .default(false)
     .describe(
       'Read optional sanitized Flow Document API JSON (2026.3+, endpoint availability and download permission).',
+    ),
+  includePulseDetails: z
+    .boolean()
+    .optional()
+    .describe(
+      'Include Pulse definition/metric field uses via read-only Pulse REST; automatic for Pulse origins.',
     ),
   observedPrepSchemas: z
     .array(prepSchemaObservation)
@@ -156,13 +165,21 @@ export const dataLineageParams = {
     .min(1)
     .max(200)
     .default(40)
-    .describe('Maximum Metadata and flow-download requests combined.'),
-  pageSize: z.number().int().min(1).max(100).default(25).describe('Metadata connection page size.'),
+    .describe('Maximum Metadata, Pulse and flow-download requests combined.'),
+  pageSize: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25)
+    .describe('Metadata/Pulse connection page size.'),
 };
 
 export type LineageSource = z.infer<typeof lineageSourceSchema>;
 export type LineageOptions = z.infer<z.ZodObject<typeof dataLineageParams>>;
 export type LineageKind =
+  | 'pulse-definition'
+  | 'pulse-metric'
   | 'database'
   | 'table'
   | 'column'
@@ -199,6 +216,7 @@ export type LineageNode = {
   documentPath?: string;
   documentId?: string;
   table?: { name?: string; schema?: string; database?: string };
+  pulse?: { datasourceLuid?: string; definitionLuid?: string };
 };
 
 export type LineageEdge = {
@@ -207,7 +225,8 @@ export type LineageEdge = {
   to: string;
   relationship: string;
   evidence: EvidenceLevel;
-  provenance: 'metadata-api' | 'flow-document' | 'local-flow-file';
+  provenance: 'metadata-api' | 'flow-document' | 'local-flow-file' | 'pulse-rest';
+  documentPath?: string;
   // Container membership is terminal: expanding it would attribute every
   // unrelated field/sheet in the same container to the original column.
   propagates: boolean;
@@ -223,6 +242,15 @@ export type DataLineageResult = {
   nodes: LineageNode[];
   edges: LineageEdge[];
   warnings: LineageWarning[];
+  pulseDetails?: Array<{
+    ownerId: string;
+    uses: Array<
+      PulseFieldUse & {
+        fieldId?: string;
+        status: 'resolved' | 'unresolved' | 'not-requested';
+      }
+    >;
+  }>;
   prepDetails?: Array<{
     flowLuid?: string;
     documentId?: string;
@@ -273,6 +301,7 @@ export type DataLineageResult = {
     }>;
   }>;
   coverage: {
+    pulse?: 'not-requested' | 'visible-subgraph' | 'partial' | 'unavailable';
     metadata: 'indexed-visible-subgraph' | 'partial' | 'unavailable' | 'not-requested';
     prep: 'not-requested' | 'static-fields-with-gaps' | 'unavailable';
     truncated: boolean;

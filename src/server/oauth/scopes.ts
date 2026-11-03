@@ -189,6 +189,11 @@ export const DATA_LINEAGE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:mcp_site_settings:read',
 ];
 
+export const PULSE_LINEAGE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:insight_definitions_metrics:read',
+  'tableau:insight_metrics:read',
+];
+
 /**
  * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
  * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
@@ -699,6 +704,11 @@ export async function getSupportedApiScopes(
   ) {
     scopes.add('tableau:flows:download');
   }
+  if (
+    includeOptionalScopes &&
+    (enabledTools.has('get-data-lineage') || enabledTools.has('analyze-data-impact'))
+  )
+    for (const scope of PULSE_LINEAGE_API_SCOPES) scopes.add(scope);
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
