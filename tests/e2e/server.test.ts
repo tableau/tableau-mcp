@@ -44,7 +44,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -180,7 +180,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     // The substrings here are kept in lockstep with the unit test in src/server.web.test.ts.
@@ -213,7 +213,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -244,7 +244,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
