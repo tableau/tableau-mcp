@@ -6,7 +6,6 @@ import { lookup } from 'mime-types';
 import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../logging/logger.js';
-import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { decodeCursor, encodeCursor } from './cursor.js';
 import {
   type SkillEntry as SkillData,
@@ -124,71 +123,6 @@ function makeRegistry(sortedEntries: SkillData[], fileEntries: SkillFile[]): Ski
   };
 }
 
-// Node filesystem error codes that mean one skill is unreadable, not that the code is broken.
-const SKIPPABLE_FS_ERROR_CODES = new Set([
-  'EACCES',
-  'EPERM',
-  'ENOENT',
-  'ENOTDIR',
-  'EISDIR',
-  'ELOOP',
-  'ENAMETOOLONG',
-  'EMFILE',
-  'ENFILE',
-  'EIO',
-]);
-
-function isSkippableFsError(error: unknown): boolean {
-  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
-  return typeof code === 'string' && SKIPPABLE_FS_ERROR_CODES.has(code);
-}
-
-/**
- * Enumerate and read every file of one skill. A filesystem failure skips the whole skill
- * (returns undefined) so a half-read entry or orphan file registration is never published.
- * Non-filesystem errors are rethrown.
- */
-function collectSkillFiles(
-  name: string,
-  skillPath: string,
-): { resources: SkillResource[]; files: SkillFile[] } | undefined {
-  const resources: SkillResource[] = [];
-  const files: SkillFile[] = [];
-
-  let absPaths: string[];
-  try {
-    absPaths = walkFiles(skillPath).sort();
-  } catch (error) {
-    return skipOrThrow(name, error);
-  }
-
-  for (const absPath of absPaths) {
-    let bytes: Buffer;
-    try {
-      bytes = readFileSync(absPath);
-    } catch (error) {
-      return skipOrThrow(name, error);
-    }
-    const relPath = relative(skillPath, absPath).split(sep).join('/');
-    const uri = `skill://${name}/${relPath}`;
-    resources.push({ uri, digest: sha256(bytes), size: bytes.byteLength });
-    files.push({ uri, path: absPath, mimeType: mimeTypeFor(absPath) });
-  }
-  return { resources, files };
-}
-
-function skipOrThrow(name: string, error: unknown): undefined {
-  if (!isSkippableFsError(error)) {
-    throw error;
-  }
-  log({
-    level: 'warning',
-    message: `Skill "${name}" could not be read; skipping. ${getExceptionMessage(error)}`,
-    logger: LOGGER,
-  });
-  return undefined;
-}
-
 /**
  * Build a skill registry by traversing through src/skills/mockSkills.
  * Every file in the directory (including `SKILL.md`) becomes a resource with a SHA-256 digest
@@ -247,17 +181,20 @@ export function buildSkillRegistry(skillsDir: string = getSkillsDir()): SkillReg
       continue;
     }
 
-    const collected = collectSkillFiles(name, skillPath);
-    if (!collected) {
-      continue;
+    const skillResources: SkillResource[] = [];
+    for (const absPath of walkFiles(skillPath).sort()) {
+      const relPath = relative(skillPath, absPath).split(sep).join('/');
+      const uri = `skill://${name}/${relPath}`;
+      const bytes = readFileSync(absPath);
+      skillResources.push({ uri, digest: sha256(bytes), size: bytes.byteLength });
+      files.push({ uri, path: absPath, mimeType: mimeTypeFor(absPath) });
     }
 
-    // Publish a skill's resources and file registrations together, only once all reads succeeded
-    files.push(...collected.files);
+    // Add information from a single skill into the list of skillData
     skillData.push({
       uri: `skill://${name}/${SKILL_MANIFEST}`,
       frontmatter: frontmatter.data,
-      resources: collected.resources,
+      resources: skillResources,
     });
   }
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -8,17 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../logging/logger.js', () => ({
   log: vi.fn(),
 }));
-
-// Spies that default to the real implementation so tests can inject portable IO failures
-// instead of relying on chmod, which is unreliable when CI runs as a privileged user.
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    readdirSync: vi.fn(actual.readdirSync),
-    readFileSync: vi.fn(actual.readFileSync),
-  };
-});
 
 import { log } from '../logging/logger.js';
 import { InvalidSkillsCursorError } from './cursor.js';
@@ -106,13 +95,10 @@ describe('registry', () => {
       ...extraFiles,
     });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     skillsDir = mkdtempSync(join(tmpdir(), 'skills-registry-'));
     vi.clearAllMocks();
     resetSkillRegistry();
-    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
-    vi.mocked(readdirSync).mockImplementation(actualFs.readdirSync);
-    vi.mocked(readFileSync).mockImplementation(actualFs.readFileSync);
   });
 
   afterEach(() => {
@@ -397,99 +383,6 @@ describe('registry', () => {
       expect(() => buildSkillRegistry(skillsDir).list('invalid!')).toThrow(
         InvalidSkillsCursorError,
       );
-    });
-  });
-
-  describe('filesystem failures', () => {
-    const eacces = (): Error =>
-      Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
-
-    // Make `fn` throw for paths matching `shouldFail`, delegating to the real implementation otherwise.
-    const failWhen = (
-      fn: typeof readdirSync | typeof readFileSync,
-      shouldFail: (path: string) => boolean,
-      makeError: () => Error = eacces,
-    ): void => {
-      const real = vi.mocked(fn).getMockImplementation() as (...args: unknown[]) => unknown;
-      vi.mocked(fn as (...args: unknown[]) => unknown).mockImplementation((path, ...rest) => {
-        if (shouldFail(String(path))) {
-          throw makeError();
-        }
-        return real(path, ...rest);
-      });
-    };
-
-    it('skips a skill whose directory cannot be enumerated and keeps the rest', () => {
-      writeTestSkill('good-skill');
-      writeTestSkill('bad-skill');
-      failWhen(readdirSync, (path) => path.endsWith('bad-skill'));
-
-      const registry = buildSkillRegistry(skillsDir);
-
-      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://good-skill/SKILL.md']);
-      expect(registry.files().every((f) => f.uri.startsWith('skill://good-skill/'))).toBe(true);
-      expect(mockLogs('warning').some((e) => e.message.includes('"bad-skill"'))).toBe(true);
-    });
-
-    it('skips the whole skill, with no orphan files, when a later file read fails', () => {
-      writeTestSkill('good-skill');
-      writeTestSkill('bad-skill');
-      failWhen(readFileSync, (path) =>
-        path.endsWith(join('bad-skill', 'skill-expertise', 'list-workbooks.md')),
-      );
-
-      const registry = buildSkillRegistry(skillsDir);
-
-      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://good-skill/SKILL.md']);
-      expect(registry.get('skill://bad-skill/SKILL.md')).toBeUndefined();
-      const fileUris = registry.files().map((f) => f.uri);
-      expect(fileUris).toHaveLength(3);
-      expect(fileUris.every((uri) => uri.startsWith('skill://good-skill/'))).toBe(true);
-    });
-
-    it.each([
-      ['EIO', () => Object.assign(new Error('EIO: i/o error'), { code: 'EIO' })],
-      ['ENOENT', () => Object.assign(new Error('ENOENT: gone'), { code: 'ENOENT' })],
-    ])('skips the skill for a %s read error', (_code, makeError) => {
-      writeTestSkill('good-skill');
-      writeTestSkill('bad-skill');
-      failWhen(readFileSync, (path) => path.endsWith(join('bad-skill', 'README.md')), makeError);
-
-      const registry = buildSkillRegistry(skillsDir);
-
-      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://good-skill/SKILL.md']);
-    });
-
-    it('propagates a non-filesystem error from directory enumeration', () => {
-      writeTestSkill('bad-skill');
-      failWhen(
-        readdirSync,
-        (path) => path.endsWith('bad-skill'),
-        () => new TypeError('unexpected'),
-      );
-
-      expect(() => buildSkillRegistry(skillsDir)).toThrow(TypeError);
-    });
-
-    it('propagates a non-filesystem error from a file read', () => {
-      writeTestSkill('bad-skill');
-      failWhen(
-        readFileSync,
-        (path) => path.endsWith('README.md'),
-        () => new Error('not an fs error'),
-      );
-
-      expect(() => buildSkillRegistry(skillsDir)).toThrow('not an fs error');
-    });
-
-    it('returns an empty registry when every skill fails to read', () => {
-      writeTestSkill('only-skill');
-      failWhen(readFileSync, (path) => path.endsWith('README.md'));
-
-      const registry = buildSkillRegistry(skillsDir);
-
-      expect(registry.list()).toEqual({ skills: [] });
-      expect(registry.files()).toEqual([]);
     });
   });
 
