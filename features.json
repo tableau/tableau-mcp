@@ -17,5 +17,5 @@
   "authoring-with-slack": false,
   "activity-log": false,
   "admin-tools": false,
-  "enforce-strict-scope-match": true
+  "disable-strict-scope-match": false
 }
