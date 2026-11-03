@@ -23,7 +23,7 @@ export type PreparedDesktopDataApp = {
   packageId: string;
   sourceDir: string;
   worksheetFile: string;
-  datasourceId: string;
+  extensionsDatasourceId: string;
   worksheetId: string;
   worksheetName: string;
 };
@@ -195,7 +195,7 @@ export async function prepareDesktopDataApp(args: {
     packageId,
     sourceDir,
     worksheetFile: args.worksheetFile,
-    datasourceId: selected.value.extensionsDatasourceId,
+    extensionsDatasourceId: selected.value.extensionsDatasourceId,
     worksheetId: selectedWorksheet.value.id,
     worksheetName: selectedWorksheet.value.name,
   });

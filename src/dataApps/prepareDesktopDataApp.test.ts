@@ -51,7 +51,7 @@ describe('prepareDesktopDataApp', () => {
     });
     expect(result.isOk()).toBe(true);
     if (result.isErr()) return;
-    expect(result.value.datasourceId).toBe('100%');
+    expect(result.value.extensionsDatasourceId).toBe('100%');
     expect(result.value.worksheetId).toBe('{SHEET-GUID-1}');
     expect(result.value.worksheetName).toBe('Sheet 1');
     expect(result.value.packageId).toMatch(/^com\.tableau\.mcp\.sales-demo\.[0-9a-f]+$/);
@@ -188,7 +188,7 @@ describe('prepareDesktopDataApp', () => {
     if (first.isErr() || second.isErr()) return;
     expect(first.value.sourceDir).not.toBe(second.value.sourceDir);
     expect(first.value.packageId).not.toBe(second.value.packageId);
-    expect(second.value.datasourceId).toBe('売上');
+    expect(second.value.extensionsDatasourceId).toBe('売上');
     expect(first.value.worksheetName).toBe('Sheet A');
     expect(second.value.worksheetName).toBe('Sheet B');
   });

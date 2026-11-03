@@ -1,4 +1,4 @@
-import { readFile } from 'fs/promises';
+import { readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -85,6 +85,19 @@ describe('resolveTemplatePackageDir', () => {
     expect(packageDir).toBeTruthy();
     expect(packageDir!.startsWith(tmpdir())).toBe(true);
     const manifest = await readFile(join(packageDir!, 'manifest.json'), 'utf8');
+    expect(manifest).toContain('TODO-MANIFEST-ID');
+  });
+
+  it('re-extracts when a cached package directory is gone', async () => {
+    const first = await resolveTemplatePackageDir();
+    expect(first).toBeTruthy();
+    await rm(first!, { recursive: true, force: true });
+
+    const second = await resolveTemplatePackageDir();
+
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+    const manifest = await readFile(join(second!, 'manifest.json'), 'utf8');
     expect(manifest).toContain('TODO-MANIFEST-ID');
   });
 });

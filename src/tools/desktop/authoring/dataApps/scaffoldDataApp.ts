@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
+import { access, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
@@ -56,7 +56,12 @@ function explodedTemplatePackageDir(): string | undefined {
 async function packageDirFromZip(zipPath: string): Promise<string | undefined> {
   const cached = extractedPackages.get(zipPath);
   if (cached) {
-    return cached;
+    try {
+      await access(join(cached, 'manifest.json'));
+      return cached;
+    } catch {
+      extractedPackages.delete(zipPath);
+    }
   }
   const root = await mkdtemp(join(tmpdir(), 'tableau-mcp-data-app-template-'));
   try {
@@ -107,7 +112,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     title: 'Scaffold a Desktop data app',
     description:
-      "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as <simple-id>. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename. Returns packageId, sourceDir, worksheetFile, datasourceId, worksheetId, worksheetName (live sheet name).",
+      "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as <simple-id>. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.",
     paramsSchema,
     annotations: {
       readOnlyHint: false,
