@@ -1,8 +1,8 @@
 import { Ok, Result } from 'ts-results-es';
 
-import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { DatasourceItem } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 
 export type ResolvedDatasourceRef = {
@@ -59,22 +59,34 @@ function resolveDatasource(
   requested: string,
   candidates: ListedDatasource[],
 ): Result<ListedDatasource, ArgsValidationError> {
-  const resolved = resolveItemByNameOrId('Datasource', requested, candidates);
   const trimmed = requested.trim();
-  if (resolved.isOk() || candidates.some((datasource) => datasource.name === trimmed)) {
-    return resolved;
+  const idMatch = candidates.find((datasource) => datasource.id === trimmed);
+  if (idMatch) {
+    return new Ok(idMatch);
   }
 
-  const captionMatches = candidates.filter((datasource) => datasource.caption === trimmed);
-  if (captionMatches.length === 1) {
-    return new Ok(captionMatches[0]);
+  const lookups = [...new Set([trimmed, decodeXmlEntities(trimmed)])];
+  for (const key of ['name', 'caption'] as const) {
+    for (const value of lookups) {
+      const matches = candidates.filter((datasource) => datasource[key] === value);
+      if (matches.length === 1) {
+        return new Ok(matches[0]);
+      }
+      if (matches.length > 1) {
+        return new ArgsValidationError(
+          `Datasource "${requested}" matched multiple datasources. Specify one id: ${formatDatasources(matches)}`,
+        ).toErr();
+      }
+    }
   }
-  if (captionMatches.length > 1) {
-    return new ArgsValidationError(
-      `Datasource "${requested}" matched multiple datasources by caption. Specify one id: ${captionMatches
-        .map((datasource) => `${datasource.name} (${datasource.id})`)
-        .join(', ')}`,
-    ).toErr();
-  }
-  return resolved;
+
+  return new ArgsValidationError(
+    `Datasource "${requested}" was not found. Available datasources: ${formatDatasources(candidates)}`,
+  ).toErr();
+}
+
+function formatDatasources(datasources: ListedDatasource[]): string {
+  return datasources
+    .map((datasource) => `${datasource.caption ?? datasource.name} (${datasource.id})`)
+    .join(', ');
 }
