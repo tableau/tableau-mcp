@@ -286,6 +286,17 @@ const toolScopeMap: Record<
     mcpAnyOf: ['tableau:mcp:workbook:create', 'tableau:mcp:datasource:create'],
     api: new Set([]),
   },
+  // PROTOTYPE upload picker: same authorization as request-upload.
+  'pick-upload-file': {
+    mcp: [],
+    mcpAnyOf: ['tableau:mcp:workbook:create', 'tableau:mcp:datasource:create'],
+    api: new Set([]),
+  },
+  'get-upload-url': {
+    mcp: [],
+    mcpAnyOf: ['tableau:mcp:workbook:create', 'tableau:mcp:datasource:create'],
+    api: new Set([]),
+  },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
@@ -586,6 +597,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-embed-token');
     enabledTools.delete('record-event');
     enabledTools.delete('render-interactive-viz');
+    enabledTools.delete('pick-upload-file');
+    enabledTools.delete('get-upload-url');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
   }

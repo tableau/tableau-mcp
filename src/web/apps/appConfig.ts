@@ -5,12 +5,14 @@ import { WebToolName } from '../../tools/web/toolName.js';
  * `src/scripts/build.ts`, bundled by functionality:
  * - `embed-viz`: embeds a Tableau viz (get-view / get-workbook).
  * - `hitl-confirm`: the MCP-Apps HITL confirm panel for delete/update preview tools.
+ * - `upload-picker`: PROTOTYPE local-file picker that PUTs to a presigned upload URL.
  */
-export type AppBundle = 'embed-viz' | 'hitl-confirm';
+export type AppBundle = 'embed-viz' | 'hitl-confirm' | 'upload-picker';
 
 const BUNDLE_HTML: Record<AppBundle, string> = {
   'embed-viz': 'mcp-app.html',
   'hitl-confirm': 'hitl-confirm.html',
+  'upload-picker': 'upload-picker.html',
 };
 
 /**

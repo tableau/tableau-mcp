@@ -63,6 +63,13 @@ export interface BlobStorageProvider {
   }): Promise<{ uploadUrl: string; requiredHeaders: Record<string, string>; expiresAt?: string }>;
 
   /**
+   * Optional (PROTOTYPE). Origins (e.g. `https://my-bucket.s3.us-west-2.amazonaws.com`) that
+   * {@link getPresignedUploadUrl} URLs point at, so a browser upload UI can declare them in its CSP.
+   * When absent, the server derives the origin from a probe presigned URL.
+   */
+  getUploadOrigins?(): Promise<string[]>;
+
+  /**
    * Download a previously stored blob as a stream of byte pieces, so large blobs (e.g. multi-GB
    * workbooks) are never held in memory whole. The exception is a staged `.twb`, which the server
    * reads into memory (up to 64 MB) to validate it.

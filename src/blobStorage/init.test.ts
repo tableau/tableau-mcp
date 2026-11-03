@@ -8,6 +8,7 @@ vi.mock('../config.js', () => ({
 import { getConfig } from '../config.js';
 import {
   getBlobStorageProvider,
+  getBlobUploadOrigins,
   initializeBlobStorageProvider,
   isBlobStorageEnabled,
   resetBlobStorageProvider,
@@ -50,6 +51,17 @@ describe('BlobStorage', () => {
       expect(provider).toBeDefined();
       expect(isBlobStorageEnabled()).toBe(true);
       expect(getBlobStorageProvider()).toBe(provider);
+    });
+
+    it('should derive upload origins from the provider hook, else a probe presigned URL', async () => {
+      expect(await getBlobUploadOrigins()).toEqual([]);
+
+      mockCustomConfig(join(__dirname, '__fixtures__', 'validProvider.js'));
+      const provider = initializeBlobStorageProvider()!;
+      expect(await getBlobUploadOrigins()).toEqual(['https://example.com']);
+
+      provider.getUploadOrigins = async () => ['https://bucket.s3.us-west-2.amazonaws.com'];
+      expect(await getBlobUploadOrigins()).toEqual(['https://bucket.s3.us-west-2.amazonaws.com']);
     });
 
     it('should throw when the custom provider module is not found', () => {

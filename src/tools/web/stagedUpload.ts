@@ -52,10 +52,13 @@ export async function requestStagedUpload({
   fileName,
   clientId,
   tenant,
+  uploadId = randomUUID(),
 }: {
   fileName: string;
   clientId?: string;
   tenant: TenantLuids;
+  // The upload picker mints the id before the user picks a file, so it can tell the model up front.
+  uploadId?: string;
 }): Promise<{
   uploadId: string;
   uploadUrl: string;
@@ -75,7 +78,6 @@ export async function requestStagedUpload({
     );
   }
 
-  const uploadId = randomUUID();
   const { uploadUrl, requiredHeaders, expiresAt } =
     await getBlobStorageProvider().getPresignedUploadUrl({
       key: buildStagedUploadKey(consumer, tenant, uploadId, fileType),

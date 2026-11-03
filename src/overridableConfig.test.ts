@@ -91,6 +91,8 @@ describe('OverridableConfig', () => {
       const config = new OverridableConfig({});
       expect(config.includeTools).toEqual([
         'request-upload',
+        'pick-upload-file',
+        'get-upload-url',
         'publish-workbook',
         'publish-datasource',
       ]);

@@ -859,6 +859,26 @@ describe('server', () => {
     expect(result.contents[0].text).toBe('<html>embedded app</html>');
   });
 
+  it("adds an app's extra connect domains to connectDomains only", async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    const server = getServer();
+    const appTool = createMockAppTool();
+    invariant(appTool.app);
+    appTool.app.extraConnectDomains = async () => ['https://bucket.s3.amazonaws.com'];
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([appTool]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    mocks.mockReadFile.mockResolvedValueOnce('<html></html>');
+    const { csp } = (await readCallback()).contents[0]._meta.ui;
+
+    expect(csp.connectDomains).toContain('https://bucket.s3.amazonaws.com');
+    expect(csp.connectDomains).toContain('https://*.tableau.com');
+    expect(csp.resourceDomains).not.toContain('https://bucket.s3.amazonaws.com');
+    expect(csp.frameDomains).not.toContain('https://bucket.s3.amazonaws.com');
+  });
+
   it('fails closed when a SEA app resource is missing instead of falling back to disk', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
     mocks.mockRunningAsSea.mockReturnValue(true);
