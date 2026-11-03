@@ -540,7 +540,7 @@ describe('server', () => {
       const registered = registeredNames(server);
       expect(registered).toContain('list-datasources');
       expect(registered).toContain('query-datasource');
-      expect(getInstructions(server)).not.toContain("doesn't include access for");
+      expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
     });
 
     it('omits unusable tools and adds the missing-scopes note under non-strict with a subset grant', async () => {
@@ -554,7 +554,7 @@ describe('server', () => {
       const registered = registeredNames(server);
       expect(registered).toContain('list-datasources');
       expect(registered).not.toContain('query-datasource');
-      expect(getInstructions(server)).toContain("doesn't include access for");
+      expect(getInstructions(server)).toContain("doesn't include access to these tools");
     });
 
     it('still enforces MCP scopes but not API scopes when API scopes are not advertised', async () => {
@@ -578,19 +578,19 @@ describe('server', () => {
       const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
       sdkServer._instructions = constructorOptions?.instructions;
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
-      expect(sdkServer._instructions).toContain("doesn't include access for");
+      expect(sdkServer._instructions).toContain("doesn't include access to these tools");
       expect(sdkServer._instructions).toContain('reconnect Tableau');
     });
 
-    it('names omitted features neutrally in the initialize instructions', async () => {
+    it('names omitted tools neutrally in the initialize instructions', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'list-datasources,query-datasource');
       const server = getServer();
       // Subset grant covers list-datasources but not query-datasource (its extra viz_data_service:read
-      // scope) — both are in the "datasource" group, so the note names that group's feature phrase.
+      // scope), so only query-datasource is named.
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
       const instructions = getInstructions(server);
-      expect(instructions).toContain("doesn't include access for");
-      expect(instructions).toContain('querying data sources');
+      expect(instructions).toContain("doesn't include access to these tools: query-datasource.");
       // Neutral: no imperative that misfires for a deliberately-limited connection.
       expect(instructions).not.toContain('you must');
       // Internal plumbing must never leak into user copy.
@@ -604,7 +604,7 @@ describe('server', () => {
         ...allScopes('list-datasources'),
         ...allScopes('query-datasource'),
       ]);
-      expect(getInstructions(server)).not.toContain("doesn't include access for");
+      expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
     });
 
     it('read-only grant registers the read tool and omits the write tool (G6, ADVERTISE_API_SCOPES=true)', async () => {
@@ -621,7 +621,7 @@ describe('server', () => {
       const registered = registeredNames(server);
       expect(registered).toContain('download-workbook');
       expect(registered).not.toContain('publish-workbook');
-      expect(getInstructions(server)).toContain("doesn't include access for");
+      expect(getInstructions(server)).toContain("doesn't include access to these tools");
     });
 
     // createMockConditionalTool declares RequiresPulse, whose probe scope is
@@ -644,7 +644,7 @@ describe('server', () => {
 
       expect(registeredNames(server)).not.toContain('mock-conditional-tool');
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-      expect(getInstructions(server)).toContain("doesn't include access for");
+      expect(getInstructions(server)).toContain("doesn't include access to these tools");
     });
 
     it('does not hold the caller to probe scopes when registration conditions are not enforced', async () => {

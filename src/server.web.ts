@@ -33,7 +33,6 @@ import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './se
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
-import { featurePhrasesForTools } from './tools/web/featurePhrases.js';
 import {
   checkRegistrationConditions,
   getIndeterminateConditionWarning,
@@ -151,11 +150,11 @@ const siteRoleUnavailableWarning = (retryAdvice: string): string =>
 
 // Appended to the initialize instructions when the caller's OAuth token lacks the scopes some tools
 // require, so those tools were omitted. Neutral by design: a stale connection should reconnect, but a
-// deliberately-limited one is working as intended — so the copy names the affected features as a fact
-// and offers reconnect without demanding it. Feature phrases, never scope strings, keep it user-facing.
+// deliberately-limited one is working as intended — so the copy names the omitted tools as a fact and
+// offers reconnect without demanding it. Tool names, never scope strings, keep it user-facing.
 const buildMissingScopesNote = (omittedToolNames: string[]): string =>
-  "This Tableau connection doesn't include access for: " +
-  `${featurePhrasesForTools(omittedToolNames).join(', ')}. ` +
+  "This Tableau connection doesn't include access to these tools: " +
+  `${omittedToolNames.join(', ')}. ` +
   'If you expected them, reconnect Tableau to grant access. ' +
   'If your organization limits Tableau access, no action is needed.';
 
