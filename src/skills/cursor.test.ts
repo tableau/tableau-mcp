@@ -36,6 +36,15 @@ describe('skills cursor', () => {
     expect(decodeCursor(encode(`${total - 1}`), total)).toBe(total - 1);
   });
 
+  it.each([
+    ['invalid character', `${encode('30')}!`],
+    ['whitespace', ` ${encode('30')}`],
+  ])('rejects a %s even when the decoder ignores it', (_label, cursor) => {
+    expect(Buffer.from(cursor, 'base64url').toString('utf8')).toBe('30');
+
+    expect(() => decodeCursor(cursor, total)).toThrow(InvalidSkillsCursorError);
+  });
+
   it('rejects a non-canonical encoding of a valid offset', () => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     const cursor = encodeCursor(30);

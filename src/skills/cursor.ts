@@ -18,11 +18,7 @@ export function encodeCursor(offset: number): string {
 
 // Strict: only a canonical encoding of an offset that points at a remaining entry is accepted.
 export function decodeCursor(cursor: string, total: number): number {
-  if (
-    cursor.length === 0 ||
-    cursor.length > MAX_CURSOR_LENGTH ||
-    !/^[A-Za-z0-9_-]+$/.test(cursor)
-  ) {
+  if (cursor.length === 0 || cursor.length > MAX_CURSOR_LENGTH) {
     throw new InvalidSkillsCursorError();
   }
 
