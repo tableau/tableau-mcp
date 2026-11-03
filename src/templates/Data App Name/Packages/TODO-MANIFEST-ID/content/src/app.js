@@ -3,6 +3,10 @@
 
   var root = document.getElementById('app');
 
+  // Desktop scaffolding replaces this with the Extensions API DataSource.id.
+  // An empty value falls back to the first datasource (web scaffold never substitutes).
+  var BOUND_DATASOURCE_ID = '';
+
   // queryAsync/readMetadataAsync return the standard VizQL Data Service shape: { data: [...] }.
   function extractData(result) {
     return result && Array.isArray(result.data) ? result.data : [];
@@ -24,8 +28,24 @@
     return Promise.resolve([]);
   }
 
-  function pickDataSource(list) {
-    return (list && list.length) ? list[0] : null;
+  function findDataSource(list) {
+    if (!BOUND_DATASOURCE_ID) {
+      return (list && list.length) ? list[0] : null;
+    }
+    var found = null;
+    (list || []).forEach(function (ds) {
+      if (ds && ds.id === BOUND_DATASOURCE_ID) {
+        found = ds;
+      }
+    });
+    if (!found) {
+      var ids = (list || []).map(function (ds) { return ds && ds.id; }).filter(Boolean);
+      throw new Error(
+        'Datasource "' + BOUND_DATASOURCE_ID + '" is not in this workbook. Available: ' +
+        (ids.length ? ids.join(', ') : '(none)')
+      );
+    }
+    return found;
   }
 
   function renderError(msg) {
@@ -41,7 +61,7 @@
   function renderStarter(ds, fields) {
     root.textContent = '';
     var h = document.createElement('h1');
-    h.textContent = ds.name;
+    h.textContent = ds.name || ds.id;
     root.appendChild(h);
     var note = document.createElement('p');
     note.textContent = 'Live datasource connected. ' + fields.length +
@@ -61,11 +81,14 @@
       renderError('Extensions API not loaded');
       return;
     }
+    if (!root) {
+      return;
+    }
     var ds;
     tableau.extensions.initializeAsync().then(function () {
       return getDataSources();
     }).then(function (list) {
-      ds = pickDataSource(list);
+      ds = findDataSource(list);
       if (!ds) { renderError('no data source found in the workbook'); return; }
 
       // read-metadata -> the fields VDS knows about for this datasource.
