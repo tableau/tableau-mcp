@@ -14,6 +14,16 @@ the query and visualization into, and a JSON `manifest.json` (see
 This tool only **scaffolds and names** the app — it does not wire a datasource, author query
 logic, build, publish, or embed data. Those remain separate steps.
 
+On the **Desktop** and **combined** servers the same tool name registers a different
+implementation. Pass `session`, `datappName`, `worksheetId` (External API worksheet id), and
+`datasourceId` (External API datasource id). Set
+[`TABLEAU_DATA_APP_WORKSPACE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_data_app_workspace_dir)
+to an absolute workspace root first. A successful result includes `packageId`, `sourceDir`,
+`worksheetFile`, `extensionsDatasourceId` (Extensions API id stamped into the starter
+`BOUND_DATASOURCE_ID`), `worksheetId`, and `worksheetName` (live sheet name). Apply the fragment
+with `apply-worksheet`, passing `worksheetId` as `worksheetName`. The rest of this page documents
+the web contract.
+
 :::warning[Disabled by Default]
 This tool is gated behind the `data-apps` feature flag, which defaults to `false` in
 `features.json`. It is unavailable unless an administrator enables `data-apps`. See
@@ -69,6 +79,7 @@ The extension package ships a JSON manifest at `Packages/<package id>/manifest.j
 {
   "id": "com.tableau.mcp.sales-demo",
   "version": "1.0.0",
+  "manifestVersion": "0.1",
   "name": "Sales Demo",
   "author": "Tableau MCP",
   "requestedOrigins": ""

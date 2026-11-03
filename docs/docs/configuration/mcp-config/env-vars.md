@@ -520,6 +520,14 @@ set).
 
 <hr />
 
+## `TABLEAU_DATA_APP_WORKSPACE_DIR`
+
+Desktop only. Absolute directory where `scaffold-data-app` writes durable data-app package trees.
+Relative or unset values are ignored; the tool then fails with an actionable error instead of
+writing relative to the process working directory.
+
+<hr />
+
 ## `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID`
 
 Desktop only. Set by the launcher (Tableau Desktop and its agent), not by hand. They are sent as

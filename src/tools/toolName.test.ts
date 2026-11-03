@@ -3,6 +3,9 @@ import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './desktop/tools.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
+/** Names both variants register, each with its own implementation. */
+const crossVariantToolNames = new Set<string>(['scaffold-data-app']);
+
 describe('ToolName', () => {
   it('recognizes capture-window-screenshot as a Desktop tool name', () => {
     expect(isDesktopToolName('capture-window-screenshot')).toBe(true);
@@ -42,12 +45,8 @@ describe('ToolName', () => {
           continue;
         }
 
-        for (const toolName of toolNamesA) {
-          expect(
-            isToolNameB(toolName),
-            `Tool "${toolName}" from the "${variantA}" variant is already a tool in the "${variantB}" variant`,
-          ).toBe(false);
-        }
+        const overlap = new Set(toolNamesA.filter((toolName) => isToolNameB(toolName)));
+        expect(overlap).toEqual(crossVariantToolNames);
       }
     }
   });
