@@ -10,7 +10,7 @@ describe('TEST-PULSEPAGE-SDK: Pulse metrics pagination through the REST SDK', ()
       data: { metrics: [metric], next_page_token: 'next/+&=', total_available: '77', offset: '10' },
       status: 200,
       statusText: 'OK',
-      headers: {},
+      headers: { 'content-type': 'application/json' },
       config,
     }));
     const methods = new PulseMethods(
@@ -53,7 +53,7 @@ describe('TEST-PULSEPAGE-SDK: Pulse metrics pagination through the REST SDK', ()
           data: { metrics: [], total_available: 0, next_page_token: token },
           status: 200,
           statusText: 'OK',
-          headers: {},
+          headers: { 'content-type': 'application/json' },
           config,
         }),
       },

@@ -151,7 +151,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
       return {
         pagination: {
           next_page_token: response.next_page_token,
-          total_available: Number(response.total_available),
+          total_available: response.total_available,
         },
         metrics: response.metrics ?? [],
       };
