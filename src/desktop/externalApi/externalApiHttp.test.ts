@@ -9,6 +9,7 @@ import {
   dashboardListSchema,
   dashboardRoute,
   datasourceListSchema,
+  dataTableSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   InvokeDialogActionRequest,
@@ -21,7 +22,6 @@ import {
   storyboardItemSchema,
   storyboardListSchema,
   storyboardRoute,
-  summaryDataSchema,
   validationResultSchema,
   workbookInventorySchema,
   worksheetDocumentRoute,
@@ -639,7 +639,7 @@ describe('ExternalApiHttp', () => {
       columnsToIncludeByFieldName: ['Sales', 'Profit'],
     });
 
-    const result = await http.getJson(route, summaryDataSchema, new AbortController().signal);
+    const result = await http.getJson(route, dataTableSchema, new AbortController().signal);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
@@ -772,7 +772,7 @@ describe('ExternalApiHttp', () => {
       columnsToIncludeByFieldName: ['Region, State', 'Sales'],
     });
 
-    const result = await http.getJson(route, summaryDataSchema, new AbortController().signal);
+    const result = await http.getJson(route, dataTableSchema, new AbortController().signal);
 
     expect(result.isOk()).toBe(true);
     const query = new URL(route, 'http://localhost').searchParams;
@@ -866,7 +866,7 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toEqual({ isValid: true, validationIssues: [] });
+    expect(result.unwrap()).toEqual({ isValid: true, issues: [] });
 
     const last = server.requests.at(-1);
     expect(last?.method).toBe('POST');

@@ -3,7 +3,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
-import { SummaryData, WorksheetItem } from '../../../desktop/externalApi/types.js';
+import { DataTable, WorksheetItem } from '../../../desktop/externalApi/types.js';
 import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
 
 export type SummaryDataRead = <T>(
@@ -85,7 +85,7 @@ export async function fetchWorksheetSummaryData({
 
   // No columnsToIncludeByFieldName: it matches only a column-instance name, not a plain field
   // name, so it would silently no-op. Columns are projected from the returned data below instead.
-  const querySummary = async (): Promise<Result<SummaryData, McpToolError>> =>
+  const querySummary = async (): Promise<Result<DataTable, McpToolError>> =>
     await read(
       'summary-data',
       async (activeExecutor, activeSignal) =>

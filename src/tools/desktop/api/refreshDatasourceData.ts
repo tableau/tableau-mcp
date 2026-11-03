@@ -30,8 +30,8 @@ export const getRefreshDatasourceDataTool = (
     description:
       'Refresh the live data for a datasource in the open workbook, reading it again from its source ' +
       '(the toolbar Refresh Data Source). Use refresh-datasource-extract for an extract. A credential prompt ' +
-      'keeps the operation running until answered in Desktop. A connection failure or a refresh cancelled in ' +
-      'Desktop still ends as a success.',
+      'keeps the operation running until answered in Desktop. A connection failure ends as FAILED and a ' +
+      'declined or cancelled refresh as CANCELLED.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
