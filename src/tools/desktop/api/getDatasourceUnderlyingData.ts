@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { DatasourceLogicalTableDataQuery } from '../../../desktop/externalApi/types.js';
+import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactNameParam, sessionParam } from '../params.js';
@@ -58,12 +59,12 @@ export const getDatasourceUnderlyingDataTool = (
           if (resolved.isErr()) {
             return resolved;
           }
-          const { id: datasourceId, name: internalName } = resolved.value;
+          const { id: datasourceId, name: internalName, caption } = resolved.value;
 
           return await runExternalApiReadTool({
             session: resolved.value.resolvedSession,
             extra,
-            callback: async (_executor, _signal, read) => {
+            callback: async (activeExecutor, _signal, read) => {
               const tablesResult = await read(
                 'datasource logical tables',
                 async (executor, signal) =>
@@ -86,9 +87,16 @@ export const getDatasourceUnderlyingDataTool = (
                 maxRows: Math.min(maxRows ?? DEFAULT_MAX_ROWS, MAX_ROWS_CAP),
                 ...(columns && columns.length > 0
                   ? {
-                      columnsToIncludeByFieldName: columns.map((column) =>
-                        qualifyColumn(internalName, column.trim()),
-                      ),
+                      columnsToIncludeByFieldName: columns.map((raw) => {
+                        const column = raw.trim();
+                        return isDatasourceQualified(column)
+                          ? column
+                          : qualifyDatasourceColumn(
+                              activeExecutor.desktopApiVersion,
+                              { internalName, caption },
+                              column,
+                            );
+                      }),
                     }
                   : {}),
               };
@@ -112,11 +120,3 @@ export const getDatasourceUnderlyingDataTool = (
 
   return getDatasourceUnderlyingData;
 };
-
-function qualifyColumn(datasourceInternalName: string, column: string): string {
-  if (isDatasourceQualified(column)) {
-    return column;
-  }
-  const bare = column.startsWith('[') && column.endsWith(']') ? column.slice(1, -1) : column;
-  return `[${datasourceInternalName}].[${bare}]`;
-}

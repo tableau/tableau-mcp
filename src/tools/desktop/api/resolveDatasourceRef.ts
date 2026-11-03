@@ -7,6 +7,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 export type ResolvedDatasourceRef = {
   id: string;
   name: string;
+  caption: string;
   resolvedSession: string;
 };
 
@@ -44,6 +45,7 @@ export async function resolveDatasourceRef({
       return new Ok({
         id: resolved.value.id,
         name: resolved.value.name,
+        caption: resolved.value.caption ?? resolved.value.name,
         resolvedSession,
       });
     },

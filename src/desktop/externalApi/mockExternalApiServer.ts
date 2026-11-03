@@ -632,13 +632,18 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const findWorkbookDatasource = (encodedId: string): DatasourceItem | undefined => {
+      const datasourceId = decodeURIComponent(encodedId);
+      return workbookDatasources.find(
+        (candidate) =>
+          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
+      );
+    };
+
     const datasourceDocumentMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)\/document$/);
     if (datasourceDocumentMatch) {
       const datasourceId = decodeURIComponent(datasourceDocumentMatch[1]);
-      const known = workbookDatasources.some(
-        (datasource) =>
-          datasource.id !== undefined && decodeURIComponent(datasource.id) === datasourceId,
-      );
+      const known = findWorkbookDatasource(datasourceDocumentMatch[1]) !== undefined;
       if (method === 'GET') {
         if (!known) {
           sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
@@ -660,14 +665,6 @@ export async function startMockExternalApiServer(
         return;
       }
     }
-
-    const findWorkbookDatasource = (encodedId: string): DatasourceItem | undefined => {
-      const datasourceId = decodeURIComponent(encodedId);
-      return workbookDatasources.find(
-        (candidate) =>
-          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
-      );
-    };
 
     const datasourceLogicalTablesMatch = path.match(
       /^\/v0\/workbook\/datasources\/([^/]+)\/logicalTables$/,
@@ -765,13 +762,14 @@ export async function startMockExternalApiServer(
 
     const datasourceMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)$/);
     if (method === 'GET' && datasourceMatch) {
-      const datasourceId = decodeURIComponent(datasourceMatch[1]);
-      const datasource = workbookDatasources.find(
-        (candidate) =>
-          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
-      );
+      const datasource = findWorkbookDatasource(datasourceMatch[1]);
       if (!datasource) {
-        sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceMatch[1])}`,
+        );
         return;
       }
       sendJson(res, 200, datasource);

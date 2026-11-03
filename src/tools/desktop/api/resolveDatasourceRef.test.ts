@@ -30,6 +30,7 @@ describe('resolveDatasourceRef', () => {
     expect(result.unwrap()).toEqual({
       id: 'shared-value',
       name: 'Resolved by id',
+      caption: 'Resolved by id',
       resolvedSession: 'resolved-999',
     });
     expect(sessionResolution.resolveSession).toHaveBeenCalledWith('requested-session');
@@ -53,6 +54,7 @@ describe('resolveDatasourceRef', () => {
     expect(result.unwrap()).toEqual({
       id: 'profit-id',
       name: 'Profit',
+      caption: 'Profit',
       resolvedSession: 'resolved-999',
     });
   });
@@ -72,6 +74,7 @@ describe('resolveDatasourceRef', () => {
     expect(result.unwrap()).toEqual({
       id: 'sales-profit-id',
       name: 'Sales & Profit',
+      caption: 'Sales & Profit',
       resolvedSession: 'resolved-999',
     });
   });
