@@ -30,7 +30,7 @@ describe('getDatasourceInfoTool', () => {
     expect(tool.minApiVersion).toBe('0.2.10');
     expect(tool.title).toBe('Get Datasource Info');
     expect(tool.description).toContain('internal name');
-    expect(tool.description).toContain('percent-encoded id from list-workbook-datasources');
+    expect(tool.description).toContain('by id, internal name, or caption');
     expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       datasourceName: expect.any(Object),

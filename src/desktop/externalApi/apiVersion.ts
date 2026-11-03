@@ -4,6 +4,9 @@ export const START_PAGE_MIN_API_VERSION: ApiVersionFloor = '0.2.11';
 export const WORKBOOK_DIAGNOSTICS_MIN_API_VERSION: ApiVersionFloor = '0.2.16';
 export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.17';
 export const DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION: ApiVersionFloor = '0.2.22';
+export const APP_SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.28';
+export const DATASOURCE_CALC_VALIDATION_MIN_API_VERSION: ApiVersionFloor = '0.2.30';
+export const DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION: ApiVersionFloor = '0.2.31';
 
 export function supportsDashboardVisualRegistration(apiVersion: string | undefined): boolean {
   return (

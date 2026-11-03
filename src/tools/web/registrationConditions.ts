@@ -176,10 +176,12 @@ function unmet(
  * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
+  // Kept generic: the probe cannot tell a site without Knowledge from a denied check.
   RequiresKnowledge:
     'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as ' +
-    'available. If the user asks for Knowledge context, explain that the feature requires ' +
-    'Tableau+ and suggest they contact their Tableau administrator.',
+    'available. The site may not have Tableau Knowledge, or the check was denied. If the user ' +
+    'asks for Knowledge context, explain that Tableau Knowledge is not available in this session ' +
+    'and suggest they contact their Tableau administrator.',
   // Kept generic: Pulse can be unavailable for several reasons (Tableau Server, site setting
   // off, or a user-level preference), and the probe cannot distinguish them cleanly enough to
   // name a single cause here.

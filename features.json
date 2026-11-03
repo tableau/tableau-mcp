@@ -1,5 +1,6 @@
 {
   "mcp-apps": false,
+  "mcp-apps-for-claude": false,
   "enforce-role-requirements": false,
   "enforce-registration-conditions": false,
   "datasource-authoring": false,
@@ -11,6 +12,7 @@
   "view-data-file-mode": false,
   "workbook-file-mode": true,
   "data-apps": false,
+  "view-all-data": false,
   "skills-over-mcp": false,
   "authoring-with-slack": false,
   "activity-log": false,

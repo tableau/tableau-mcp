@@ -33,6 +33,7 @@ export function makeExecutorMock(
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
       .mockResolvedValue(Ok({ dialogs: [] })),
+    captureAppScreenshot: vi.fn(),
     getDesktopState: vi.fn<ExternalApiToolExecutor['getDesktopState']>().mockResolvedValue(
       Ok({
         state: 'IDLE',
@@ -46,6 +47,7 @@ export function makeExecutorMock(
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
       .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
     getWorkbook: vi.fn(),
+    listWorkbookExtensions: vi.fn(),
     listWorksheets: vi.fn(),
     listDashboards: vi.fn(),
     listStoryboards: vi.fn(),
@@ -65,6 +67,8 @@ export function makeExecutorMock(
     getWorksheetSummaryData: vi.fn(),
     listWorksheetLogicalTables: vi.fn(),
     getWorksheetUnderlyingData: vi.fn(),
+    listDatasourceLogicalTables: vi.fn(),
+    getDatasourceLogicalTableData: vi.fn(),
     setStartPageVisibility: vi
       .fn<ExternalApiToolExecutor['setStartPageVisibility']>()
       .mockResolvedValue(Ok({ isStartPageVisible: false })),
@@ -72,7 +76,7 @@ export function makeExecutorMock(
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
-    validateWorksheetCalculatedField: vi.fn(),
+    validateDatasourceCalculatedField: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyDatasourceDocument: vi.fn(),

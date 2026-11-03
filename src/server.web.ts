@@ -366,7 +366,9 @@ export class WebMcpServer extends Server {
     mcpAppsEnabled: boolean,
   ): Promise<boolean> => {
     const config = getConfig();
-    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
+    const isKnownIncompatibleClient =
+      getClientDisplayName(this.clientId) === 'Claude' &&
+      !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
       args: typeof tool.paramsSchema,
@@ -529,6 +531,8 @@ export class WebMcpServer extends Server {
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
+      // Combined registers Desktop's scaffold-data-app on this same server. Standalone web keeps its own.
+      if (!this.ownsMcpServer && tool.name === 'scaffold-data-app') continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {
@@ -555,7 +559,12 @@ export class WebMcpServer extends Server {
         toolsOmittedForMissingScopes.push(tool.name);
         continue;
       }
-      if (enforceRegistrationConditions && tool.registrationConditions.length > 0) {
+      // KNOWLEDGE_TOOLS_ENABLED=true must still hide Knowledge tools on sites without Knowledge.
+      const checkConditions =
+        enforceRegistrationConditions ||
+        (config.knowledgeToolsEnabled === true &&
+          tool.registrationConditions.includes('RequiresKnowledge'));
+      if (checkConditions && tool.registrationConditions.length > 0) {
         const conditionCheckResult = await checkRegistrationConditions(
           tool.registrationConditions,
           registrationContext,

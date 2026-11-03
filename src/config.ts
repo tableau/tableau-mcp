@@ -103,6 +103,8 @@ export class Config extends BaseConfig {
   pendingDeletionMaxAgeDays: number;
   flowReadToolsEnabled: boolean | undefined;
   flowWriteToolsEnabled: boolean | undefined;
+  knowledgeToolsEnabled: boolean | undefined;
+  knowledgeWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
   bucketS3: {
@@ -183,6 +185,8 @@ export class Config extends BaseConfig {
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
       FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
+      KNOWLEDGE_TOOLS_ENABLED: knowledgeToolsEnabled,
+      KNOWLEDGE_WRITE_TOOLS_ENABLED: knowledgeWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       MCP_S3_BUCKET: bucketS3Bucket,
@@ -409,6 +413,8 @@ export class Config extends BaseConfig {
     );
     this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
     this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
+    this.knowledgeToolsEnabled = parseOptionalBoolean(knowledgeToolsEnabled);
+    this.knowledgeWriteToolsEnabled = parseOptionalBoolean(knowledgeWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.

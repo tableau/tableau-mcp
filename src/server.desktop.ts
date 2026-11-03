@@ -146,6 +146,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'refresh-storyboard-auto-updates',
     'refresh-dashboard-auto-updates',
     'reload-extensions',
+    'get-workbook-extensions',
+    'scaffold-data-app',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
     'undo-workbook',
@@ -170,6 +172,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
+    'list-datasource-logical-tables',
+    'get-datasource-underlying-data',
     'capture-window-screenshot',
     'get-workbook-inventory',
     'list-workbook-datasources',

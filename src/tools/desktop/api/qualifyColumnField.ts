@@ -88,6 +88,6 @@ function findWorksheetNode(parsed: Record<string, unknown>): Record<string, unkn
   return candidate;
 }
 
-function isDatasourceQualified(value: string): boolean {
+export function isDatasourceQualified(value: string): boolean {
   return /^\[[^\]]+\]\.\[.+\]$/.test(value);
 }

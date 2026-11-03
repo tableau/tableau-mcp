@@ -366,6 +366,36 @@ describe('Config', () => {
     },
   );
 
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the knowledge read environment override only when KNOWLEDGE_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', value);
+
+      expect(new Config().knowledgeToolsEnabled).toBe(expected);
+    },
+  );
+
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the knowledge write environment override only when KNOWLEDGE_WRITE_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', value);
+
+      expect(new Config().knowledgeWriteToolsEnabled).toBe(expected);
+    },
+  );
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

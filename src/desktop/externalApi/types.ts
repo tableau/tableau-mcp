@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.25), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.31), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -17,6 +17,7 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appScreenshot: '/v0/app/screenshot',
   appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
@@ -31,10 +32,16 @@ export const EXTERNAL_API_ROUTES = {
   workbookDatasources: '/v0/workbook/datasources',
   workbookDatasource: '/v0/workbook/datasources/{id}',
   workbookDatasourceDocument: '/v0/workbook/datasources/{id}/document',
+  workbookDatasourceLogicalTables: '/v0/workbook/datasources/{id}/logicalTables',
+  workbookDatasourceLogicalTableData:
+    '/v0/workbook/datasources/{id}/logicalTables/{logicalTableId}/data',
+  workbookDatasourceValidateCalculatedField:
+    '/v0/workbook/datasources/{id}:validateCalculatedField',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
   workbookStoryboardsNew: '/v0/workbook/storyboards:new',
+  workbookExtensions: '/v0/workbook/extensions',
   workbookWorksheets: '/v0/workbook/worksheets',
   workbookWorksheetsNew: '/v0/workbook/worksheets:new',
   workbookUndo: '/v0/workbook:undo',
@@ -73,7 +80,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
-  worksheetValidateCalculatedField: '/v0/workbook/worksheets/{id}:validateCalculatedField',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
@@ -109,6 +115,12 @@ export type ShowMeOptionsQuery = {
    * preserves Desktop's ambient selection; an explicit empty array clears it.
    */
   fieldsSelectedInSchemaViewer?: Array<string>;
+};
+
+/** Query accepted by {@link workbookDatasourceLogicalTableDataRoute}. */
+export type DatasourceLogicalTableDataQuery = {
+  maxRows?: number;
+  columnsToIncludeByFieldName?: Array<string>;
 };
 
 /** Query accepted by {@link worksheetLogicalTableDataRoute}. */
@@ -316,6 +328,38 @@ export function workbookDatasourceDocumentRoute(datasourceId: string): string {
   );
 }
 
+export function workbookDatasourceValidateCalculatedFieldRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField.replace('{id}', () =>
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceLogicalTablesRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables.replace('{id}', () =>
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceLogicalTableDataRoute(
+  datasourceId: string,
+  logicalTableId: string,
+  query: DatasourceLogicalTableDataQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.maxRows !== undefined) {
+    search.set('maxRows', String(query.maxRows));
+  }
+  for (const column of query.columnsToIncludeByFieldName ?? []) {
+    search.append('columnsToIncludeByFieldName', column);
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  const route = EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData
+    .replace('{id}', () => canonicalDatasourceSegment(datasourceId))
+    .replace('{logicalTableId}', () => seg(logicalTableId));
+  return `${route}${suffix}`;
+}
+
 export function worksheetSummaryDataRoute(
   worksheetId: string,
   query: WorksheetSummaryDataQuery,
@@ -404,10 +448,6 @@ export function worksheetReloadExtensionRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:reloadExtension`;
 }
 
-export function worksheetValidateCalculatedFieldRoute(worksheetId: string): string {
-  return `${worksheetRoute(worksheetId)}:validateCalculatedField`;
-}
-
 export function worksheetRefreshNowRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
@@ -479,6 +519,10 @@ function imageQuerySuffix(query: ImageExportQuery): string {
     parts.push(`mimeType=${encodeURIComponent(query.mimeType)}`);
   }
   return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+export function appScreenshotRoute(outputPath: string): string {
+  return `${EXTERNAL_API_ROUTES.appScreenshot}?outputPath=${encodeURIComponent(outputPath)}`;
 }
 
 export function worksheetImageRoute(worksheetId: string, query: ImageExportQuery): string {
@@ -797,6 +841,7 @@ export const operationEnvelopeSchema = z
     diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -810,6 +855,7 @@ export const operationListSchema = z
     operations: z.array(operationEnvelopeSchema),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
   })
   .passthrough();
 export type OperationList = z.infer<typeof operationListSchema>;
@@ -976,8 +1022,40 @@ export const datasourceListSchema = z
   .passthrough();
 export type DatasourceList = z.infer<typeof datasourceListSchema>;
 
-/** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
-export const summaryDataSchema = z
+export const workbookExtensionSheetSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['worksheet', 'dashboard']),
+  })
+  .passthrough();
+
+export const workbookExtensionKeySchema = z
+  .object({
+    id: z.string(),
+    version: z.string(),
+    url: z.string(),
+  })
+  .passthrough();
+
+export const workbookExtensionSchema = z
+  .object({
+    instanceId: z.string(),
+    sheet: workbookExtensionSheetSchema,
+    extension: workbookExtensionKeySchema,
+    packagePath: z.string().nullable(),
+  })
+  .passthrough();
+
+/** Extensions placed in the open workbook, from `GET /v0/workbook/extensions`. */
+export const workbookExtensionListSchema = z
+  .object({
+    extensions: z.array(workbookExtensionSchema),
+  })
+  .passthrough();
+export type WorkbookExtensionList = z.infer<typeof workbookExtensionListSchema>;
+
+/** Tabular data returned by the summary-data and logical-table data reads. */
+export const dataTableSchema = z
   .object({
     columns: z
       .array(
@@ -992,9 +1070,9 @@ export const summaryDataSchema = z
     rows: z.array(z.array(z.unknown())).optional(),
   })
   .passthrough();
-export type SummaryData = z.infer<typeof summaryDataSchema>;
+export type DataTable = z.infer<typeof dataTableSchema>;
 
-/** One logical table available for a worksheet's underlying data. */
+/** One logical table of a worksheet or datasource. */
 export const logicalTableItemSchema = z
   .object({
     id: z.string().optional(),
@@ -1003,7 +1081,7 @@ export const logicalTableItemSchema = z
   .passthrough();
 export type LogicalTableItem = z.infer<typeof logicalTableItemSchema>;
 
-/** Logical table list returned by `GET /v0/workbook/worksheets/{id}/logicalTables`. */
+/** Logical table list returned by the worksheet and datasource `logicalTables` reads. */
 export const logicalTableListSchema = z
   .object({
     tables: z.array(logicalTableItemSchema).optional(),
@@ -1011,11 +1089,23 @@ export const logicalTableListSchema = z
   .passthrough();
 export type LogicalTableList = z.infer<typeof logicalTableListSchema>;
 
+/** One issue found while validating a workbook document. */
+export const workbookValidationIssueSchema = z
+  .object({
+    severity: z.string(),
+    message: z.string(),
+    element: z.string().optional(),
+    line: z.number().int().optional(),
+    column: z.number().int().optional(),
+  })
+  .passthrough();
+export type WorkbookValidationIssue = z.infer<typeof workbookValidationIssueSchema>;
+
 /** Validation result returned by `POST /v0/workbook/document:validate`. */
 export const validationResultSchema = z
   .object({
     isValid: z.boolean(),
-    validationIssues: z.array(z.string()).optional(),
+    issues: z.array(workbookValidationIssueSchema).optional(),
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
@@ -1103,10 +1193,17 @@ export const appInfoSchema = z
     isStartPageVisible: z.boolean().optional(),
     isDataSourcePageActive: z.boolean().optional(),
     isPresentationMode: z.boolean().optional(),
-    isFocusMode: z.boolean().optional(),
+    isCanvasMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
+
+export const appScreenshotSchema = z
+  .object({
+    filePaths: z.array(z.string()),
+  })
+  .passthrough();
+export type AppScreenshot = z.infer<typeof appScreenshotSchema>;
 
 /** Desired and resulting Start Page visibility for `POST /v0/app:toggleStartPage`. */
 export const startPageVisibilitySchema = z
@@ -1124,10 +1221,19 @@ export const capabilityMatrixSchema = z
   .passthrough();
 export type CapabilityMatrix = z.infer<typeof capabilityMatrixSchema>;
 
-/** Result of `POST /v0/workbook/worksheets/{id}:validateCalculatedField`. */
+/** Body of `POST /v0/workbook/datasources/{id}:validateCalculatedField`. */
+export type ValidateCalculatedFieldRequest = {
+  formula: string;
+  caption?: string;
+  fieldName?: string;
+};
+
+/** Result of `POST /v0/workbook/datasources/{id}:validateCalculatedField`. */
 export const validateCalculatedFieldResponseSchema = z
   .object({
     isValid: z.boolean(),
+    dataType: z.string().optional(),
+    isAggregate: z.boolean().optional(),
     errors: z.array(
       z
         .object({
