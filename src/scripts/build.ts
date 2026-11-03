@@ -7,7 +7,7 @@ import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
-import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from './buildTemplateZip.js';
+import { buildTemplateZip, copyFileAtomically, TEMPLATE_ZIP_FILENAME } from './buildTemplateZip.js';
 import { findDesktopSources } from './desktopSources.js';
 import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers.js';
 import { isVariant, variants } from './variants.js';
@@ -146,7 +146,7 @@ const checkNoDesktopSources = variant === 'default';
   console.log('🏗️ Building scaffold-data-app template zip...');
   await buildTemplateZip();
   await mkdir(resolve(process.cwd(), 'build', 'templates'), { recursive: true });
-  await copyFile(
+  await copyFileAtomically(
     resolve(process.cwd(), 'src/templates', TEMPLATE_ZIP_FILENAME),
     resolve(process.cwd(), 'build', 'templates', TEMPLATE_ZIP_FILENAME),
   );
