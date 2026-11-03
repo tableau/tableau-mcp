@@ -125,17 +125,36 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    * Required scopes: `tableau:insight_definitions_metrics:read`
    *
    * @param pulseMetricDefinitionID - The ID of the Pulse Metric Definition to list metrics for.
+   * @param pageToken - Continuation token from the previous response; omit for the first page.
+   * @param pageSize - Number of metrics to request per page.
+   * @param excludeMetricsWithoutFollowers - Omit to preserve the REST default.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_ListMetrics
    */
   listPulseMetricsFromMetricDefinitionId = async (
     pulseMetricDefinitionID: string,
-  ): Promise<PulseResult<PulseMetric[]>> => {
+    pageToken?: string,
+    pageSize?: number,
+    excludeMetricsWithoutFollowers?: boolean,
+    signal?: AbortSignal,
+  ): Promise<PulseResult<{ pagination: PulsePagination; metrics: PulseMetric[] }>> => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.listPulseMetricsFromMetricDefinitionId({
         params: { pulseMetricDefinitionID },
+        queries: {
+          page_token: pageToken,
+          page_size: pageSize,
+          exclude_metrics_without_followers: excludeMetricsWithoutFollowers,
+        },
+        signal,
         ...this.authHeader,
       });
-      return response.metrics ?? [];
+      return {
+        pagination: {
+          next_page_token: response.next_page_token,
+          total_available: Number(response.total_available),
+        },
+        metrics: response.metrics ?? [],
+      };
     });
   };
 
