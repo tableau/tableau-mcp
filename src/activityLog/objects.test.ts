@@ -56,6 +56,8 @@ describe('getActivityLogObject', () => {
     ['describe-flow', { flowId: LUID }, { type: 'flow', luid: LUID }],
     ['run-flow-task', { taskId: LUID }, { type: 'flow-task', luid: LUID }],
     ['cancel-flow-run', { flowRunId: LUID }, { type: 'flow-run', luid: LUID }],
+    ['suspend-subscription', { subscriptionId: LUID }, { type: 'subscription', luid: LUID }],
+    ['resume-subscription', { subscriptionId: LUID }, { type: 'subscription', luid: LUID }],
     ['update-user', { userId: LUID }, { type: 'user', luid: LUID }],
     [
       'update-cloud-extract-refresh-task',
