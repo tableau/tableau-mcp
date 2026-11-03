@@ -1,8 +1,8 @@
 {
   "mcp-apps": false,
   "mcp-apps-for-claude": false,
-  "enforce-role-requirements": false,
-  "enforce-registration-conditions": false,
+  "enforce-role-requirements": true,
+  "enforce-registration-conditions": true,
   "datasource-authoring": false,
   "flow-read-tools": true,
   "flow-write-tools": true,
