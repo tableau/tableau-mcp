@@ -632,13 +632,18 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const findWorkbookDatasource = (encodedId: string): DatasourceItem | undefined => {
+      const datasourceId = decodeURIComponent(encodedId);
+      return workbookDatasources.find(
+        (candidate) =>
+          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
+      );
+    };
+
     const datasourceDocumentMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)\/document$/);
     if (datasourceDocumentMatch) {
       const datasourceId = decodeURIComponent(datasourceDocumentMatch[1]);
-      const known = workbookDatasources.some(
-        (datasource) =>
-          datasource.id !== undefined && decodeURIComponent(datasource.id) === datasourceId,
-      );
+      const known = findWorkbookDatasource(datasourceDocumentMatch[1]) !== undefined;
       if (method === 'GET') {
         if (!known) {
           sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
@@ -661,15 +666,110 @@ export async function startMockExternalApiServer(
       }
     }
 
+    const datasourceLogicalTablesMatch = path.match(
+      /^\/v0\/workbook\/datasources\/([^/]+)\/logicalTables$/,
+    );
+    if (method === 'GET' && datasourceLogicalTablesMatch) {
+      if (!findWorkbookDatasource(datasourceLogicalTablesMatch[1])) {
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceLogicalTablesMatch[1])}`,
+        );
+        return;
+      }
+      sendJson(res, 200, { tables: DEFAULT_LOGICAL_TABLES });
+      return;
+    }
+
+    const datasourceLogicalTableDataMatch = path.match(
+      /^\/v0\/workbook\/datasources\/([^/]+)\/logicalTables\/([^/]+)\/data$/,
+    );
+    if (method === 'GET' && datasourceLogicalTableDataMatch) {
+      if (!findWorkbookDatasource(datasourceLogicalTableDataMatch[1])) {
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceLogicalTableDataMatch[1])}`,
+        );
+        return;
+      }
+      const logicalTableId = decodeURIComponent(datasourceLogicalTableDataMatch[2]);
+      if (!DEFAULT_LOGICAL_TABLES.some((table) => table.id === logicalTableId)) {
+        sendProblem(
+          res,
+          404,
+          'logical-table-not-found',
+          `Logical table not found: ${logicalTableId}`,
+        );
+        return;
+      }
+      sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
+    const datasourceValidateCalculatedFieldMatch = path.match(
+      /^\/v0\/workbook\/datasources\/([^/]+):validateCalculatedField$/,
+    );
+    if (method === 'POST' && datasourceValidateCalculatedFieldMatch) {
+      if (!findWorkbookDatasource(datasourceValidateCalculatedFieldMatch[1])) {
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceValidateCalculatedFieldMatch[1])}`,
+        );
+        return;
+      }
+      let parsed: { formula?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.formula !== 'string' || parsed.formula.length === 0) {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'validateCalculatedField requires a non-empty string `formula`.',
+        );
+        return;
+      }
+      const isBalanced = parsed.formula.split('(').length === parsed.formula.split(')').length;
+      sendJson(
+        res,
+        200,
+        isBalanced
+          ? {
+              isValid: true,
+              errors: [],
+              dataType: 'real',
+              isAggregate: /^\s*SUM\(/i.test(parsed.formula),
+            }
+          : {
+              isValid: false,
+              errors: [
+                { position: parsed.formula.length, length: 0, message: 'Unbalanced parentheses.' },
+              ],
+            },
+      );
+      return;
+    }
+
     const datasourceMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)$/);
     if (method === 'GET' && datasourceMatch) {
-      const datasourceId = decodeURIComponent(datasourceMatch[1]);
-      const datasource = workbookDatasources.find(
-        (candidate) =>
-          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
-      );
+      const datasource = findWorkbookDatasource(datasourceMatch[1]);
       if (!datasource) {
-        sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceMatch[1])}`,
+        );
         return;
       }
       sendJson(res, 200, datasource);
@@ -962,7 +1062,7 @@ export async function startMockExternalApiServer(
         sendProblem(res, 400, 'invalid-request-body', 'Empty workbook document body.');
         return;
       }
-      sendJson(res, 200, { isValid: true, validationIssues: [] });
+      sendJson(res, 200, { isValid: true, issues: [] });
       return;
     }
 
@@ -1218,41 +1318,6 @@ export async function startMockExternalApiServer(
       return;
     }
 
-    const validateCalculatedFieldMatch = path.match(
-      /^\/v0\/workbook\/worksheets\/([^/]+):validateCalculatedField$/,
-    );
-    if (method === 'POST' && validateCalculatedFieldMatch) {
-      const worksheetId = decodeURIComponent(validateCalculatedFieldMatch[1]);
-      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
-        return;
-      }
-      let parsed: { formula?: unknown };
-      try {
-        parsed = JSON.parse(body);
-      } catch {
-        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
-        return;
-      }
-      if (typeof parsed.formula !== 'string') {
-        sendProblem(
-          res,
-          400,
-          'invalid-request-body',
-          'validateCalculatedField requires a string `formula`.',
-        );
-        return;
-      }
-      const isBalanced = parsed.formula.split('(').length === parsed.formula.split(')').length;
-      sendJson(res, 200, {
-        isValid: isBalanced,
-        errors: isBalanced
-          ? []
-          : [{ position: parsed.formula.length, length: 0, message: 'Unbalanced parentheses.' }],
-      });
-      return;
-    }
-
     const storyboardRefreshNowMatch = path.match(
       /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
     );
@@ -1467,7 +1532,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.28' },
+        info: { title: 'Tableau External Client API', version: '0.2.31' },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },

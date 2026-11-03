@@ -17,7 +17,11 @@ import {
   MockOverride,
   startMockExternalApiServer,
 } from './mockExternalApiServer.js';
-import { ExternalApiInstance, InvokeDialogActionRequest } from './types.js';
+import {
+  ExternalApiInstance,
+  InvokeDialogActionRequest,
+  workbookDatasourceLogicalTableDataRoute,
+} from './types.js';
 
 vi.mock('../../logging/logger.js');
 
@@ -2091,34 +2095,56 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
-  describe('worksheet calculated-field validation', () => {
-    it('posts only the formula and returns the validation outcome', async () => {
+  describe('datasource calculated-field validation', () => {
+    it('posts the formula and returns the validation outcome', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales])',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales])' },
         signal,
       );
 
-      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+      expect(result.unwrap()).toEqual({
+        isValid: true,
+        errors: [],
+        dataType: 'real',
+        isAggregate: true,
+      });
       const posted = server.requests.at(-1);
       expect(posted).toMatchObject({
         method: 'POST',
-        path: '/v0/workbook/worksheets/sheet-sales:validateCalculatedField',
+        path: '/v0/workbook/datasources/wb-ds-superstore:validateCalculatedField',
         contentType: 'application/json',
       });
       expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'SUM([Sales])' });
+    });
+
+    it('sends the caption and edited field name when given', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1', caption: 'Margin', fieldName: '[wb-ds-superstore].[Calculation_1]' },
+        signal,
+      );
+
+      expect(JSON.parse(server.requests.at(-1)?.body ?? '{}')).toEqual({
+        formula: '1',
+        caption: 'Margin',
+        fieldName: '[wb-ds-superstore].[Calculation_1]',
+      });
     });
 
     it('reports formula errors with their position', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales]',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales]' },
         signal,
       );
 
@@ -2128,18 +2154,22 @@ describe('ExternalApiToolExecutor', () => {
       });
     });
 
-    it('maps an unknown worksheet to a command failure', async () => {
+    it('maps an unknown datasource to a command failure', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('missing', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'missing',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr().type).toBe('command-failed');
     });
 
     it('polls a 202 to the validation result', async () => {
-      server.setOverride('POST /v0/workbook/worksheets/sheet-sales:validateCalculatedField', {
+      server.setOverride('POST /v0/workbook/datasources/wb-ds-superstore:validateCalculatedField', {
         status: 202,
         contentType: 'application/json',
         headers: { location: '/v0/operations/op-validate', 'retry-after': '0' },
@@ -2159,9 +2189,80 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('sheet-sales', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+    });
+  });
+
+  describe('datasource logical tables', () => {
+    it('lists the logical tables of a datasource', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listDatasourceLogicalTables('wb-ds-superstore', signal);
+
+      expect(result.unwrap().tables).toEqual([
+        { id: 'lt-orders', caption: 'Orders' },
+        { id: 'lt-returns', caption: 'Returns' },
+      ]);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/datasources/wb-ds-superstore/logicalTables',
+      });
+    });
+
+    it('reads one logical table with maxRows and repeated column filters', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceLogicalTableData(
+        'wb-ds-superstore',
+        'lt-orders',
+        {
+          maxRows: 5,
+          columnsToIncludeByFieldName: ['[ds].[Region]', '[ds].[A, B]'],
+        },
+        signal,
+      );
+
+      expect(result.unwrap().columns?.map((column) => column.name)).toEqual([
+        'Region',
+        'Sales',
+        'Profit',
+      ]);
+      const request = server.requests.at(-1);
+      expect(request?.path).toBe(
+        '/v0/workbook/datasources/wb-ds-superstore/logicalTables/lt-orders/data',
+      );
+      expect(request?.searchParams).toMatchObject({ maxRows: '5' });
+      expect(
+        workbookDatasourceLogicalTableDataRoute('wb-ds-superstore', 'lt-orders', {
+          maxRows: 5,
+          columnsToIncludeByFieldName: ['[ds].[Region]', '[ds].[A, B]'],
+        }),
+      ).toBe(
+        '/v0/workbook/datasources/wb-ds-superstore/logicalTables/lt-orders/data?maxRows=5&columnsToIncludeByFieldName=%5Bds%5D.%5BRegion%5D&columnsToIncludeByFieldName=%5Bds%5D.%5BA%2C+B%5D',
+      );
+    });
+
+    it('maps an unknown logical table to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceLogicalTableData(
+        'wb-ds-superstore',
+        'missing',
+        {},
+        signal,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
     });
   });
 

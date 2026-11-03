@@ -18,6 +18,7 @@ import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
+import { getDatasourceUnderlyingDataTool } from './api/getDatasourceUnderlyingData.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
@@ -33,6 +34,7 @@ import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData
 import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
+import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListOperationsTool } from './api/listOperations.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
@@ -162,6 +164,8 @@ export const desktopToolFactories = [
   getSummaryDataTool,
   getListWorksheetLogicalTablesTool,
   getWorksheetUnderlyingDataTool,
+  getListDatasourceLogicalTablesTool,
+  getDatasourceUnderlyingDataTool,
   getCaptureWindowScreenshotTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
