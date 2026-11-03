@@ -149,7 +149,9 @@ describe('queryKnowledgeContextTool', () => {
 
     await getResult({ intent: 'sources' });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
-      expect.objectContaining({ jwtScopes: ['tableau:knowledge:read'] }),
+      expect.objectContaining({
+        jwtScopes: ['tableau:knowledge:read', 'tableau:mcp_site_settings:read'],
+      }),
     );
   });
 

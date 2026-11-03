@@ -166,6 +166,7 @@ describe('scopes', () => {
       expect(getRequiredApiScopesForTool('publish-datasource')).toEqual([
         'tableau:datasources:create',
         'tableau:file_uploads:create',
+        'tableau:mcp_site_settings:read',
       ]);
     });
 
@@ -808,6 +809,7 @@ describe('scopes', () => {
         'tableau:workbooks:create',
         'tableau:file_uploads:create',
         'tableau:projects:read',
+        'tableau:mcp_site_settings:read',
       ]);
     });
 
@@ -905,6 +907,7 @@ describe('scopes', () => {
   it('should separate Knowledge inspection and management API scopes', () => {
     expect(getRequiredApiScopesForTool('inspect-knowledge-context')).toEqual([
       'tableau:knowledge:read',
+      'tableau:mcp_site_settings:read',
     ]);
     expect(getRequiredApiScopesForTool('manage-knowledge-context')).toEqual([
       'tableau:knowledge:write',

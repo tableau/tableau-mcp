@@ -122,7 +122,7 @@ describe('inspectKnowledgeContextTool', () => {
     await getResult({ action: 'status' });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({
-        jwtScopes: ['tableau:knowledge:read'],
+        jwtScopes: ['tableau:knowledge:read', 'tableau:mcp_site_settings:read'],
       }),
     );
   });

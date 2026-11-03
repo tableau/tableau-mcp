@@ -203,6 +203,7 @@ export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
   'tableau:projects:read',
+  'tableau:mcp_site_settings:read',
 ];
 
 export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
@@ -241,7 +242,7 @@ const toolScopeMap: Record<
   },
   'list-extract-refresh-tasks': {
     mcp: ['tableau:mcp:tasks:read'],
-    api: new Set(['tableau:tasks:read', 'tableau:users:read']),
+    api: new Set(['tableau:tasks:read', 'tableau:users:read', 'tableau:mcp_site_settings:read']),
   },
   'update-cloud-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:write'],
@@ -261,12 +262,12 @@ const toolScopeMap: Record<
   },
   'query-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:read'],
-    api: new Set(['tableau:knowledge:read']),
+    api: new Set(['tableau:knowledge:read', 'tableau:mcp_site_settings:read']),
     conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   'inspect-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:read'],
-    api: new Set(['tableau:knowledge:read']),
+    api: new Set(['tableau:knowledge:read', 'tableau:mcp_site_settings:read']),
     conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   // The duplicate check on create and the existence check on delete read before writing.
@@ -277,7 +278,7 @@ const toolScopeMap: Record<
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
-    api: new Set(['tableau:users:read']),
+    api: new Set(['tableau:users:read', 'tableau:mcp_site_settings:read']),
   },
   'update-user': {
     mcp: ['tableau:mcp:users:write'],
@@ -302,7 +303,11 @@ const toolScopeMap: Record<
   },
   'publish-datasource': {
     mcp: ['tableau:mcp:datasource:create'],
-    api: new Set(['tableau:datasources:create', 'tableau:file_uploads:create']),
+    api: new Set([
+      'tableau:datasources:create',
+      'tableau:file_uploads:create',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
