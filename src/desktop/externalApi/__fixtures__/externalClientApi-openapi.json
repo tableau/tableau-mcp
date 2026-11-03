@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.28",
+    "version": "0.2.31",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -340,7 +340,7 @@
     "/v0/app:openFile": {
       "post": {
         "summary": "Open a file",
-        "description": "Opens a local file by path. A .twb/.twbx opens as a workbook; a datasource file (Excel, text, spatial, extract, .tds, and the like) attaches to the open workbook, creating one if none is open. filePath must name an existing file: a missing file is rejected with 404 file-not-found and an extension Tableau cannot open with 400 unsupported-file-type, both before anything is dispatched. The extension is checked first: a missing file with an unsupported extension gets 400. A SUCCEEDED operation means the open command ran, not that the file finished loading; the product may show a dialog (for example a login or upgrade prompt), so check GET /v0/app/dialogs if the file does not appear. Opening a workbook while the open workbook is empty and unsaved replaces it in this window, and GET /v0/workbook then reports the opened workbook. Re-opening the file that is already open reloads it in place, prompting first to save unsaved changes. Opening any other workbook while one is open launches it in a NEW Desktop window, and this API session stays bound to the workbook it started with -- GET /v0/workbook continues to report the original.",
+        "description": "Opens a local file by path. A .twb/.twbx opens as a workbook; a datasource file (Excel, text, spatial, extract, .tds, and the like) attaches to the open workbook, creating one if none is open. filePath must name an existing file: a missing file is rejected with 404 file-not-found and an extension Tableau cannot open with 400 unsupported-file-type, both before anything is dispatched. The extension is checked first: a missing file with an unsupported extension gets 400. For local workbook files, captured load, parse, and unsupported-extract failures produce FAILED with the available original error details after recovery; a declined open or cancelled load produces CANCELLED. Successful delegation to a new Desktop window produces SUCCEEDED without loading that workbook in this API session. Datasource and other file formats may still complete the command before their UI or asynchronous work finishes; check GET /v0/app/dialogs if the file does not appear. Opening a workbook while the open workbook is empty and unsaved replaces it in this window, and GET /v0/workbook then reports the opened workbook. Re-opening the file that is already open reloads it in place, prompting first to save unsaved changes. Opening any other workbook while one is open launches it in a NEW Desktop window, and this API session stays bound to the workbook it started with -- GET /v0/workbook continues to report the original.",
         "operationId": "openFile",
         "parameters": [
           {
@@ -359,7 +359,7 @@
         },
         "responses": {
           "200": {
-            "description": "Opens a local file by path. A .twb/.twbx opens as a workbook; a datasource file (Excel, text, spatial, extract, .tds, and the like) attaches to the open workbook, creating one if none is open. filePath must name an existing file: a missing file is rejected with 404 file-not-found and an extension Tableau cannot open with 400 unsupported-file-type, both before anything is dispatched. The extension is checked first: a missing file with an unsupported extension gets 400. A SUCCEEDED operation means the open command ran, not that the file finished loading; the product may show a dialog (for example a login or upgrade prompt), so check GET /v0/app/dialogs if the file does not appear. Opening a workbook while the open workbook is empty and unsaved replaces it in this window, and GET /v0/workbook then reports the opened workbook. Re-opening the file that is already open reloads it in place, prompting first to save unsaved changes. Opening any other workbook while one is open launches it in a NEW Desktop window, and this API session stays bound to the workbook it started with -- GET /v0/workbook continues to report the original.",
+            "description": "Opens a local file by path. A .twb/.twbx opens as a workbook; a datasource file (Excel, text, spatial, extract, .tds, and the like) attaches to the open workbook, creating one if none is open. filePath must name an existing file: a missing file is rejected with 404 file-not-found and an extension Tableau cannot open with 400 unsupported-file-type, both before anything is dispatched. The extension is checked first: a missing file with an unsupported extension gets 400. For local workbook files, captured load, parse, and unsupported-extract failures produce FAILED with the available original error details after recovery; a declined open or cancelled load produces CANCELLED. Successful delegation to a new Desktop window produces SUCCEEDED without loading that workbook in this API session. Datasource and other file formats may still complete the command before their UI or asynchronous work finishes; check GET /v0/app/dialogs if the file does not appear. Opening a workbook while the open workbook is empty and unsaved replaces it in this window, and GET /v0/workbook then reports the opened workbook. Re-opening the file that is already open reloads it in place, prompting first to save unsaved changes. Opening any other workbook while one is open launches it in a NEW Desktop window, and this API session stays bound to the workbook it started with -- GET /v0/workbook continues to report the original.",
             "content": {
               "application/json": {
                 "schema": {
@@ -603,7 +603,7 @@
     "/v0/datasources/{id}:refreshData": {
       "post": {
         "summary": "Refresh a datasource's data",
-        "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a connection failure outside the Data tab is shown in a Desktop error dialog and the Operation still ends SUCCEEDED. A cancellation reported by the refresh command ends as a CANCELLED Operation. A refresh requested while the workbook is committing is skipped and ends SUCCEEDED, even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+        "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a caught datasource connection failure outside the Data tab settles as a FAILED Operation with the original Tableau error code, message, and source. When the refresh uses the extract workflow, declining a refresh confirmation produces a CANCELLED Operation. Errors captured during extract creation produce FAILED after extract-file recovery. A cancellation reported by the refresh command also ends as a CANCELLED Operation. A refresh requested while the workbook is committing is skipped and ends SUCCEEDED, even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
         "operationId": "refreshData",
         "parameters": [
           {
@@ -621,7 +621,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a connection failure outside the Data tab is shown in a Desktop error dialog and the Operation still ends SUCCEEDED. A cancellation reported by the refresh command ends as a CANCELLED Operation. A refresh requested while the workbook is committing is skipped and ends SUCCEEDED, even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+            "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), the way the toolbar Refresh Data Source does. Use refreshExtract to refresh an extract. For an OData datasource, the extract is refreshed instead. A credential prompt keeps the Operation RUNNING with blockingWindows; a caught datasource connection failure outside the Data tab settles as a FAILED Operation with the original Tableau error code, message, and source. When the refresh uses the extract workflow, declining a refresh confirmation produces a CANCELLED Operation. Errors captured during extract creation produce FAILED after extract-file recovery. A cancellation reported by the refresh command also ends as a CANCELLED Operation. A refresh requested while the workbook is committing is skipped and ends SUCCEEDED, even for an id that matches no datasource. Otherwise an id that matches no datasource returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2291,6 +2291,246 @@
         }
       }
     },
+    "/v0/workbook/datasources/{id}/logicalTables": {
+      "get": {
+        "summary": "List datasource logical tables",
+        "description": "Lists the logical table ids and captions of the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources).",
+        "operationId": "listDatasourceLogicalTables",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lists the logical table ids and captions of the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalTableList"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: datasource-not-found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/datasources/{id}/logicalTables/{logicalTableId}/data": {
+      "get": {
+        "summary": "Get datasource logical table data",
+        "description": "Returns the underlying data for one logical table of the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources) as JSON.",
+        "operationId": "getDatasourceLogicalTableData",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "logicalTableId",
+            "in": "path",
+            "required": true,
+            "description": "Logical table id from the datasource's logicalTables list, or single-table-id-sentinel to address the datasource's only table. The sentinel returns 500 when the datasource has no logical tables or more than one.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxRows",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of data rows to return, capped at a configurable maximum (10000 rows by default). A positive value returns at most that many rows; 0 or an omitted value returns up to the maximum.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "columnsToIncludeByFieldName",
+            "in": "query",
+            "required": false,
+            "description": "Restricts the returned columns. Each value is a base source-column name qualified by the datasource's internal name (e.g. \"[federated.0abc123].[Sales]\"). A value that matches no column is silently ignored; if no value resolves to a field in the workbook, the filter is ignored and every column is returned. Repeat the parameter to name several; values are not comma-split, so a name may contain a comma.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the underlying data for one logical table of the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources) as JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataTable"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body. Codes specific to this route: invalid-query-parameter.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: datasource-not-found, logical-table-not-found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/datasources/{id}:validateCalculatedField": {
+      "post": {
+        "summary": "Validate a new or edited calculated field on a datasource",
+        "description": "Validates the formula, and optionally the caption, of a calculated field in the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), without adding or changing any field. Omit fieldName to validate a new calculated field; set it to the qualified internal name of an existing calculated field to validate an edit of that field. References resolve against the workbook as it is now, so a formula that references a calculation not yet added to the workbook is reported as invalid. An id that matches no datasource, or names the Parameters datasource, returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+        "operationId": "validateDatasourceCalculatedField",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateCalculatedFieldRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validates the formula, and optionally the caption, of a calculated field in the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources), without adding or changing any field. Omit fieldName to validate a new calculated field; set it to the qualified internal name of an existing calculated field to validate an edit of that field. References resolve against the workbook as it is now, so a formula that references a calculation not yet added to the workbook is reported as invalid. An id that matches no datasource, or names the Parameters datasource, returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateCalculatedFieldResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body. Codes specific to this route: invalid-request-body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: datasource-not-found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/diagnostics": {
       "get": {
         "summary": "Get workbook diagnostics",
@@ -2510,7 +2750,7 @@
     "/v0/workbook/document:validate": {
       "post": {
         "summary": "Validate a workbook document",
-        "description": "Validates the submitted Tableau XML against the schema without applying it.",
+        "description": "Checks the submitted Tableau XML without applying it: well-formedness, document version, the schema, and the dashboard-zone type-v2 rule an apply enforces. Within each datasource, including a bare datasource document from GET /v0/workbook/datasources/{id}/document, a column defined more than once, or a calculated field whose caption attribute matches another column's caption attribute, is reported as an error. Failures are reported in issues with isValid false. Passing does not guarantee that an apply succeeds.",
         "operationId": "validateWorkbookDocument",
         "parameters": [
           {
@@ -2544,7 +2784,7 @@
         },
         "responses": {
           "200": {
-            "description": "Validates the submitted Tableau XML against the schema without applying it.",
+            "description": "Checks the submitted Tableau XML without applying it: well-formedness, document version, the schema, and the dashboard-zone type-v2 rule an apply enforces. Within each datasource, including a bare datasource document from GET /v0/workbook/datasources/{id}/document, a column defined more than once, or a calculated field whose caption attribute matches another column's caption attribute, is reported as an error. Failures are reported in issues with isValid false. Passing does not guarantee that an apply succeeds.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4025,7 +4265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummaryData"
+                  "$ref": "#/components/schemas/DataTable"
                 }
               }
             }
@@ -4234,7 +4474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SummaryData"
+                  "$ref": "#/components/schemas/DataTable"
                 }
               }
             }
@@ -4947,102 +5187,6 @@
         }
       }
     },
-    "/v0/workbook/worksheets/{id}:validateCalculatedField": {
-      "post": {
-        "summary": "Validate a calculated-field formula",
-        "description": "Validates a calculated-field formula against a worksheet's data model without adding or changing any field. A formula that does not qualify its fields with a data source is validated against the worksheet's primary data source, falling back to the data source selected in the schema viewer. On a layered worksheet, which can have several primary data sources, the data source selected in the schema viewer is always used, and it may not be one of this sheet's. If the sheet lookup does not settle in time, the request is rejected with 503 operation-pending and a Retry-After header; retry it.",
-        "operationId": "validateWorksheetCalculatedField",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/UserAgent"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ValidateCalculatedFieldRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Validates a calculated-field formula against a worksheet's data model without adding or changing any field. A formula that does not qualify its fields with a data source is validated against the worksheet's primary data source, falling back to the data source selected in the schema viewer. On a layered worksheet, which can have several primary data sources, the data source selected in the schema viewer is always used, and it may not be one of this sheet's. If the sheet lookup does not settle in time, the request is rejected with 503 operation-pending and a Retry-After header; retry it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidateCalculatedFieldResponse"
-                }
-              }
-            }
-          },
-          "202": {
-            "$ref": "#/components/responses/Accepted"
-          },
-          "400": {
-            "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body. Codes specific to this route: invalid-request-body.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: sheet-not-found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "421": {
-            "$ref": "#/components/responses/MisdirectedRequest"
-          },
-          "500": {
-            "$ref": "#/components/responses/ServerError"
-          },
-          "503": {
-            "description": "The service is temporarily unavailable. The code field identifies the cause, such as api-disabled. Codes specific to this route: operation-pending.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds to wait before retrying the request. Sent only with operation-pending.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v0/workbook/worksheets:new": {
       "post": {
         "summary": "Add a blank worksheet",
@@ -5342,7 +5486,7 @@
     "/v0/workbook:save": {
       "post": {
         "summary": "Save the workbook",
-        "description": "Saves the open workbook. Omit filePath, or send an empty or non-string filePath, to save in place at the path the workbook already has. Supply a filePath to Save As: the workbook is written to that path and the open document is re-pointed at it, so later saves go there (use exportAs for a copy that leaves the open document unchanged). filePath must end in .twb or .twbx: save writes workbook content verbatim without converting, so any other extension is rejected rather than writing a mislabeled file. The save is headless whenever the workbook has a writable path to save to -- a supplied filePath, or the existing path of an already-saved workbook whose file can be written. It cannot be headless when there is no writable existing path and no filePath is supplied: a workbook that has never been saved, a workbook whose existing file is read-only, or a workbook recovered from an autosave draft. In those cases the product opens its native Save As dialog, which blocks until a person responds, and cancelling that dialog still reports SUCCEEDED. The product may also show an upgrade prompt when saving a workbook from an older version.",
+        "description": "Saves the open workbook. Omit filePath, or send an empty or non-string filePath, to save in place at the path the workbook already has. Supply a filePath to Save As: the workbook is written to that path and the open document is re-pointed at it, so later saves go there (use exportAs for a copy that leaves the open document unchanged). filePath must end in .twb or .twbx: save writes workbook content verbatim without converting, so any other extension is rejected rather than writing a mislabeled file. The save is headless whenever the workbook has a writable path to save to -- a supplied filePath, or the existing path of an already-saved workbook whose file can be written. It cannot be headless when there is no writable existing path and no filePath is supplied: a workbook that has never been saved, a workbook whose existing file is read-only, or a workbook recovered from an autosave draft. In those cases the product opens its native Save As dialog, which blocks until a person responds. Dismissing Save As or declining a save confirmation produces CANCELLED. Captured save failures produce FAILED with the original error details after save cleanup; a failed Save As retains the prior API workbook location. With no open document the command is a successful no-op. The product may also show an upgrade prompt when saving a workbook from an older version.",
         "operationId": "saveWorkbook",
         "parameters": [
           {
@@ -5361,7 +5505,7 @@
         },
         "responses": {
           "200": {
-            "description": "Saves the open workbook. Omit filePath, or send an empty or non-string filePath, to save in place at the path the workbook already has. Supply a filePath to Save As: the workbook is written to that path and the open document is re-pointed at it, so later saves go there (use exportAs for a copy that leaves the open document unchanged). filePath must end in .twb or .twbx: save writes workbook content verbatim without converting, so any other extension is rejected rather than writing a mislabeled file. The save is headless whenever the workbook has a writable path to save to -- a supplied filePath, or the existing path of an already-saved workbook whose file can be written. It cannot be headless when there is no writable existing path and no filePath is supplied: a workbook that has never been saved, a workbook whose existing file is read-only, or a workbook recovered from an autosave draft. In those cases the product opens its native Save As dialog, which blocks until a person responds, and cancelling that dialog still reports SUCCEEDED. The product may also show an upgrade prompt when saving a workbook from an older version.",
+            "description": "Saves the open workbook. Omit filePath, or send an empty or non-string filePath, to save in place at the path the workbook already has. Supply a filePath to Save As: the workbook is written to that path and the open document is re-pointed at it, so later saves go there (use exportAs for a copy that leaves the open document unchanged). filePath must end in .twb or .twbx: save writes workbook content verbatim without converting, so any other extension is rejected rather than writing a mislabeled file. The save is headless whenever the workbook has a writable path to save to -- a supplied filePath, or the existing path of an already-saved workbook whose file can be written. It cannot be headless when there is no writable existing path and no filePath is supplied: a workbook that has never been saved, a workbook whose existing file is read-only, or a workbook recovered from an autosave draft. In those cases the product opens its native Save As dialog, which blocks until a person responds. Dismissing Save As or declining a save confirmation produces CANCELLED. Captured save failures produce FAILED with the original error details after save cleanup; a failed Save As retains the prior API workbook location. With no open document the command is a successful no-op. The product may also show an upgrade prompt when saving a workbook from an older version.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6927,9 +7071,9 @@
           }
         ]
       },
-      "SummaryData": {
+      "DataTable": {
         "type": "object",
-        "description": "Tabular worksheet data as columns and rows. Returned by both the summary-data and underlying-data endpoints; the shape is identical for each.",
+        "description": "Tabular data as columns and rows.",
         "required": [
           "columns",
           "rows"
@@ -6990,7 +7134,7 @@
       },
       "LogicalTableItem": {
         "type": "object",
-        "description": "A logical table available for a worksheet's data.",
+        "description": "A logical table of a worksheet or datasource.",
         "required": [
           "id",
           "caption"
@@ -7018,21 +7162,55 @@
           }
         }
       },
+      "WorkbookValidationIssue": {
+        "type": "object",
+        "description": "One issue found while validating a workbook document.",
+        "required": [
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "description": "error makes the document invalid; warning does not. Clients must tolerate values not listed here.",
+            "x-extensible-enum": [
+              "error",
+              "warning"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "description": "1-based line of the offending element; omitted when unknown."
+          },
+          "column": {
+            "type": "integer",
+            "description": "1-based column of the offending element; omitted when unknown."
+          },
+          "element": {
+            "type": "string",
+            "description": "Tag name of the offending element; omitted when unknown."
+          }
+        }
+      },
       "ValidationResult": {
         "type": "object",
         "description": "The outcome of validating a workbook document.",
         "required": [
           "isValid",
-          "validationIssues"
+          "issues"
         ],
         "properties": {
           "isValid": {
             "type": "boolean"
           },
-          "validationIssues": {
+          "issues": {
             "type": "array",
+            "description": "Issues found in the document; empty when the document is clean.",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/WorkbookValidationIssue"
             }
           }
         }
@@ -7185,23 +7363,9 @@
           }
         }
       },
-      "ValidateCalculatedFieldRequest": {
-        "type": "object",
-        "description": "The calculated-field formula to validate on a worksheet.",
-        "additionalProperties": false,
-        "required": [
-          "formula"
-        ],
-        "properties": {
-          "formula": {
-            "type": "string",
-            "description": "The calculated-field formula text to validate."
-          }
-        }
-      },
       "CalculatedFieldValidationError": {
         "type": "object",
-        "description": "A validation error located within the calculated-field formula.",
+        "description": "A validation error in the calculated-field formula or its caption.",
         "required": [
           "position",
           "length",
@@ -7209,19 +7373,46 @@
         ],
         "properties": {
           "position": {
-            "type": "integer"
+            "type": "integer",
+            "description": "0-based offset of the error in formula, in UTF-16 code units; 0 when the error is not tied to formula text."
           },
           "length": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Length of the error in UTF-16 code units; 0 when the error is not tied to formula text."
           },
           "message": {
             "type": "string"
           }
         }
       },
+      "ValidateCalculatedFieldRequest": {
+        "type": "object",
+        "description": "The formula, and optionally the caption, of a new or edited calculated field to validate on a datasource.",
+        "additionalProperties": false,
+        "required": [
+          "formula"
+        ],
+        "properties": {
+          "formula": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The calculated-field formula text to validate."
+          },
+          "caption": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The caption the calculated field would have. A blank caption or one that matches another field's caption is reported as an error."
+          },
+          "fieldName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The existing calculated field being edited, given as its internal name qualified by the datasource's internal name, in the form [datasource-name].[field-name] (e.g. \"[federated.0abc123].[Calculation_123]\"). The field keeps its own caption, and a formula that references the field itself, directly or through other calculations, is reported as a circular reference. A field that is not a calculated field in the datasource named by {id} is reported as an error. Omit to validate a new calculated field."
+          }
+        }
+      },
       "ValidateCalculatedFieldResponse": {
         "type": "object",
-        "description": "The outcome of validating a calculated-field formula.",
+        "description": "The outcome of validating a new or edited calculated field on a datasource.",
         "required": [
           "isValid",
           "errors"
@@ -7235,6 +7426,28 @@
             "items": {
               "$ref": "#/components/schemas/CalculatedFieldValidationError"
             }
+          },
+          "isAggregate": {
+            "type": "boolean",
+            "description": "Whether the formula aggregates, such as SUM([Sales]). Present only when isValid is true."
+          },
+          "dataType": {
+            "type": "string",
+            "description": "The data type the formula evaluates to, using the datatype values of a workbook <column> element. Present only when isValid is true. Clients must tolerate values not listed here.",
+            "x-extensible-enum": [
+              "integer",
+              "real",
+              "string",
+              "datetime",
+              "boolean",
+              "date",
+              "tuple",
+              "spatial",
+              "unknown",
+              "binary",
+              "time",
+              "table"
+            ]
           }
         }
       },
