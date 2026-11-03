@@ -122,10 +122,10 @@ describe('desktopCallTimeoutMessage', () => {
     expect(message).toContain('Do not blindly retry the originating operation');
     expect(message).toContain('get-active-dialogs');
     expect(message).toContain('exact returned dialog identity');
-    expect(message).toContain('exact returned action');
+    expect(message).toContain('advertised action');
     expect(message).toContain('at most one invoke-dialog-action call');
     expect(message).toContain('Do not guess or assume Cancel is safe');
-    expect(message).toContain('action-invoked-dialog-remains');
+    expect(message).toContain('pending or indeterminate status');
     expect(message).toContain('ask the user to handle the dialog');
     expect(message).toContain('list-instances');
   });

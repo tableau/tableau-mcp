@@ -9,6 +9,9 @@ import {
   EXTERNAL_API_ROUTES,
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
+  InvokeDialogActionRequest,
+  invokeDialogActionRequestSchema,
+  InvokeDialogActionResult,
   SHOW_ME_TYPES,
   type ShowMeOptionsResult,
 } from './types.js';
@@ -201,6 +204,10 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 1,
+    family: 'qt',
+    status: 'active',
     messageText: 'Do you want to save changes to Regional Sales?',
     informativeText: 'Unsaved changes will be lost if you discard them.',
     detailedText: 'Workbook: Regional Sales',
@@ -213,9 +220,6 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     ],
   },
 ];
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const readBody = (req: IncomingMessage): Promise<string> =>
   new Promise((resolve) => {
@@ -370,6 +374,10 @@ export async function startMockExternalApiServer(
     buttons: [...(dialog.buttons ?? [])],
     actions: dialog.actions?.map((action) => ({ ...action })),
   }));
+  const dialogRequests = new Map<
+    string,
+    { request: InvokeDialogActionRequest; result: InvokeDialogActionResult }
+  >();
   const workbookDatasources = options.workbookDatasources ?? DEFAULT_WORKBOOK_DATASOURCES;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
@@ -496,7 +504,11 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
-      sendJson(res, 200, { dialogs });
+      sendJson(res, 200, {
+        dialogs,
+        uiSnapshotAvailable: true,
+        recentActions: [...dialogRequests.values()].map(({ result }) => result.status),
+      });
       return;
     }
 
@@ -542,76 +554,77 @@ export async function startMockExternalApiServer(
         return;
       }
 
-      const identity = isRecord(request) ? request.dialog : undefined;
-      const action = isRecord(request) ? request.action : undefined;
+      const parsed = invokeDialogActionRequestSchema.safeParse(request);
+      if (!parsed.success) {
+        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
+        return;
+      }
+      const { dialog: identity, requestId, action } = parsed.data;
+      const key = JSON.stringify([identity.sessionId, requestId]);
+      const previous = dialogRequests.get(key);
+      const respond = (code?: string): void => {
+        const canceled = action.kind === 'cancel';
+        const result: InvokeDialogActionResult = {
+          outcome: code ? 'failed' : canceled ? 'canceled' : 'completed',
+          dialog: identity,
+          status: {
+            sessionId: identity.sessionId,
+            revision: identity.revision,
+            requestId,
+            state: code ? 'failed' : canceled ? 'canceled' : 'completed',
+            effect: code ? 'none' : 'dialog-dismissed',
+            ...(code ? { code } : {}),
+          },
+          uiSnapshotAvailable: true,
+          dialogs: [...dialogs],
+        };
+        if (!previous) dialogRequests.set(key, { request: parsed.data, result });
+        sendJson(res, 200, result);
+      };
+      if (previous) {
+        if (JSON.stringify(previous.request) === JSON.stringify(parsed.data)) {
+          sendJson(res, 200, { ...previous.result, dialogs: [...dialogs] });
+        } else {
+          respond('dialog-request-conflict');
+        }
+        return;
+      }
+
+      const target = dialogs.find((dialog) => dialog.sessionId === identity.sessionId);
+      if (!target) {
+        respond('dialog-session-inactive');
+        return;
+      }
       if (
-        !isRecord(identity) ||
-        typeof identity.objectName !== 'string' ||
-        typeof identity.title !== 'string' ||
-        typeof identity.className !== 'string' ||
-        !isRecord(action)
+        target.revision !== identity.revision ||
+        target.objectName !== identity.objectName ||
+        target.title !== identity.title ||
+        target.className !== identity.className
       ) {
-        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
-        return;
-      }
-      const isButtonAction =
-        action.kind === 'button' && typeof action.label === 'string' && action.label.length > 0;
-      const isCloseAction = action.kind === 'close' && !Object.hasOwn(action, 'label');
-      if (!isButtonAction && !isCloseAction) {
-        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
+        respond('dialog-session-stale');
         return;
       }
 
-      if (dialogs.length === 0) {
-        sendJson(res, 200, { outcome: 'no-active-dialog', dialogs: [] });
-        return;
-      }
-
-      const matches = dialogs.filter(
-        (dialog) =>
-          dialog.objectName === identity.objectName &&
-          dialog.title === identity.title &&
-          dialog.className === identity.className,
-      );
-      if (matches.length === 0) {
-        sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
-        return;
-      }
-      if (matches.length > 1) {
-        sendProblem(
-          res,
-          409,
-          'dialog-ambiguous',
-          'More than one active dialog matched the request.',
-        );
-        return;
-      }
-
-      const actionMatches = (matches[0].actions ?? []).filter(
+      const actionMatches = (target.actions ?? []).filter(
         (candidate) =>
           candidate.kind === action.kind &&
-          (candidate.kind === 'close' || candidate.label === action.label),
+          (action.kind !== 'button' || candidate.label === action.label),
       );
       if (actionMatches.length === 0) {
-        sendProblem(res, 409, 'dialog-action-not-found', 'No visible dialog action matched.');
+        respond('dialog-action-unsupported');
         return;
       }
       if (actionMatches.length > 1) {
-        sendProblem(res, 409, 'dialog-action-ambiguous', 'More than one visible action matched.');
+        respond('dialog-action-ambiguous');
+        return;
+      }
+      if (actionMatches[0].enabled === false) {
+        respond('dialog-action-disabled');
         return;
       }
 
-      dialogs.splice(dialogs.indexOf(matches[0]), 1);
-      sendJson(res, 200, {
-        outcome: 'dismissed',
-        dialog: {
-          objectName: identity.objectName,
-          title: identity.title,
-          className: identity.className,
-        },
-        action,
-        dialogs,
-      });
+      dialogs.splice(dialogs.indexOf(target), 1);
+      respond();
       return;
     }
 

@@ -1555,9 +1555,9 @@ function mapClientError(
             'operation until the dialog is handled and its cause is corrected. Only the dedicated ' +
             'dialog tools can be used while the modal blocks ordinary UI-thread operations: call ' +
             'get-active-dialogs, then, only when the task or user intent makes the choice ' +
-            'unambiguous, copy the exact returned dialog identity and exact returned action ' +
-            'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
-            'invoke-dialog-action after action-invoked-dialog-remains. If either tool is unavailable, ' +
+            'unambiguous, copy the exact returned dialog identity, select an advertised action, ' +
+            'and supply its invocation values in one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
+            'invoke-dialog-action with a pending or indeterminate status. Track recentActions by sessionId and requestId; an empty dialogs array is only evidence of no blockers when uiSnapshotAvailable is true. If either tool is unavailable, ' +
             'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +
             `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,
