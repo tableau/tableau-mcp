@@ -67,6 +67,8 @@ export function makeExecutorMock(
     getWorksheetSummaryData: vi.fn(),
     listWorksheetLogicalTables: vi.fn(),
     getWorksheetUnderlyingData: vi.fn(),
+    listDatasourceLogicalTables: vi.fn(),
+    getDatasourceLogicalTableData: vi.fn(),
     setStartPageVisibility: vi
       .fn<ExternalApiToolExecutor['setStartPageVisibility']>()
       .mockResolvedValue(Ok({ isStartPageVisible: false })),
@@ -74,7 +76,7 @@ export function makeExecutorMock(
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
-    validateWorksheetCalculatedField: vi.fn(),
+    validateDatasourceCalculatedField: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyDatasourceDocument: vi.fn(),

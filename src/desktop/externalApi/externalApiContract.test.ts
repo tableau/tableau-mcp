@@ -17,6 +17,7 @@ import {
   dashboardRefreshTargetSchema,
   datasourceItemSchema,
   datasourceListSchema,
+  dataTableSchema,
   desktopStateSchema,
   dialogActionSchema,
   dialogIdentitySchema,
@@ -40,12 +41,13 @@ import {
   showMeWorksheetSchema,
   storyboardItemSchema,
   storyboardListSchema,
-  summaryDataSchema,
+  ValidateCalculatedFieldRequest,
   validateCalculatedFieldResponseSchema,
   validationResultSchema,
   windowInfoSchema,
   workbookDiagnosticsSchema,
   workbookInventorySchema,
+  workbookValidationIssueSchema,
   worksheetDiagnosticsSchema,
   worksheetInvalidFieldSchema,
   worksheetItemSchema,
@@ -155,10 +157,10 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
   StoryboardList: ['storyboards'],
   WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
-  SummaryData: ['columns', 'rows'],
+  DataTable: ['columns', 'rows'],
   LogicalTableItem: ['id', 'caption'],
   LogicalTableList: ['tables'],
-  ValidationResult: ['validationIssues'],
+  ValidationResult: ['issues'],
   ImageExport: ['effectiveMimeType', 'width', 'height'],
 };
 
@@ -189,8 +191,8 @@ function specPropertiesWithoutDialogDrift(name: string, keys: string[]): string[
 }
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.28 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.28');
+  it('tracks the 0.2.31 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.31');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -280,7 +282,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['StoryboardItem', storyboardItemSchema],
       ['StoryboardList', storyboardListSchema],
       ['WorkbookInventory', workbookInventorySchema],
-      ['SummaryData', summaryDataSchema],
+      ['DataTable', dataTableSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
       ['ShowMeWorksheet', showMeWorksheetSchema],
@@ -288,6 +290,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
+      ['WorkbookValidationIssue', workbookValidationIssueSchema],
       ['ImageExport', imageResultSchema],
       ['OperationList', operationListSchema],
       ['ValidateCalculatedFieldResponse', validateCalculatedFieldResponseSchema],
@@ -343,10 +346,10 @@ describe('external client API contract (captured openapi fixture)', () => {
         StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
         StoryboardList: ['storyboards'],
         WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
-        SummaryData: ['columns', 'rows'],
+        DataTable: ['columns', 'rows'],
         LogicalTableItem: ['id', 'caption'],
         LogicalTableList: ['tables'],
-        ValidationResult: ['validationIssues'],
+        ValidationResult: ['issues'],
         ImageExport: ['effectiveMimeType', 'width', 'height'],
       });
       for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
@@ -692,7 +695,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.oauthProtectedResource,
       EXTERNAL_API_ROUTES.appToggleDataSourcePage,
       EXTERNAL_API_ROUTES.capabilities,
-      EXTERNAL_API_ROUTES.worksheetValidateCalculatedField,
+      EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
+      EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables,
+      EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
       EXTERNAL_API_ROUTES.worksheetReloadExtension,
       EXTERNAL_API_ROUTES.dashboardReloadExtensions,
     ])('spec documents %s', (route) => {
@@ -746,7 +751,6 @@ describe('external client API contract (captured openapi fixture)', () => {
         [
           EXTERNAL_API_ROUTES.appToggleDataSourcePage,
           EXTERNAL_API_ROUTES.capabilities,
-          EXTERNAL_API_ROUTES.worksheetValidateCalculatedField,
           EXTERNAL_API_ROUTES.worksheetReloadExtension,
           EXTERNAL_API_ROUTES.dashboardReloadExtensions,
         ].map((route) => {
@@ -758,10 +762,41 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(operationIds).toEqual({
         [EXTERNAL_API_ROUTES.appToggleDataSourcePage]: 'toggleDataSourcePage',
         [EXTERNAL_API_ROUTES.capabilities]: 'getCapabilities',
-        [EXTERNAL_API_ROUTES.worksheetValidateCalculatedField]: 'validateWorksheetCalculatedField',
         [EXTERNAL_API_ROUTES.worksheetReloadExtension]: 'reloadWorksheetExtension',
         [EXTERNAL_API_ROUTES.dashboardReloadExtensions]: 'reloadDashboardExtensions',
       });
+    });
+
+    it('documents the 0.2.30 and 0.2.31 datasource operations by operationId', () => {
+      const operationIds = Object.fromEntries(
+        [
+          EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
+          EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables,
+          EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
+        ].map((route) => {
+          const item = spec.paths[route] as Record<string, { operationId?: string }>;
+          return [route, (item.get ?? item.post)?.operationId];
+        }),
+      );
+
+      expect(operationIds).toEqual({
+        [EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField]:
+          'validateDatasourceCalculatedField',
+        [EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables]: 'listDatasourceLogicalTables',
+        [EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData]: 'getDatasourceLogicalTableData',
+      });
+    });
+
+    it('matches the calculated-field validation request body', () => {
+      const request = specSchema('ValidateCalculatedFieldRequest');
+      const sent: Record<keyof ValidateCalculatedFieldRequest, true> = {
+        formula: true,
+        caption: true,
+        fieldName: true,
+      };
+
+      expect(Object.keys(request.properties ?? {}).sort()).toEqual(Object.keys(sent).sort());
+      expect(request.required).toEqual(['formula']);
     });
 
     it('requires an explicit target state for the Data Source page', () => {
