@@ -35,7 +35,7 @@ const SKILL_MANIFEST = 'SKILL.md';
 const LOGGER = 'skills';
 
 /** Maximum number of whole skill entries returned by one `skills/list` page. */
-export const MAX_SKILLS_PAGE_SIZE = 50;
+export const MAX_SKILLS_PAGE_SIZE = 30;
 
 // Use mime-types to find the file type for a file path; `lookup` returns `false`
 // for unknown/extensionless files, so fall back to a binary type.

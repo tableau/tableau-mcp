@@ -139,6 +139,7 @@ describe('skills/list pagination', () => {
     [N + 1, [N, 1]],
     [2 * N, [N, N]],
     [2 * N + 1, [N, N, 1]],
+    [100, [30, 30, 30, 10]],
   ])('pages the built registry of %i skills over MCP as %j', async (count, pageSizes) => {
     const pages = await fetchPages(realRegistry(count));
 
