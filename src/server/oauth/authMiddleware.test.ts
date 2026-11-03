@@ -872,4 +872,16 @@ describe('subset-mode regression guards (G6)', () => {
     expect(scopeList).toContain(writeScope); // required-but-missing
     expect(scopeList).toContain(MCP_SITE_SETTINGS_READ_SCOPE); // a held scope, preserved
   });
+
+  it('names the mandatory scope once when the tool also requires it', async () => {
+    // list-users carries the site-settings scope in its own API scopes, so a token without it is
+    // missing it both per-tool and as the mandatory scope.
+    expect(getRequiredApiScopesForTool('list-users')).toContain(MANDATORY_SCOPE);
+    const grant = [...getRequiredMcpScopesForTool('list-users')];
+
+    const { res } = await drive(grant, callBody('list-users'));
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error_description.split(MANDATORY_SCOPE)).toHaveLength(2);
+  });
 });

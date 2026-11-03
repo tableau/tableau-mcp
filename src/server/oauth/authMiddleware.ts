@@ -153,7 +153,10 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         !authInfo.scopes.includes(MCP_SITE_SETTINGS_READ_SCOPE)
           ? [MCP_SITE_SETTINGS_READ_SCOPE]
           : [];
-      const missingScopes = [...missingMcpScopes, ...missingApiScopes, ...missingMandatory];
+      // Dedupe: many tools also list the mandatory scope among their own API scopes.
+      const missingScopes = [
+        ...new Set([...missingMcpScopes, ...missingApiScopes, ...missingMandatory]),
+      ];
 
       if (missingScopes.length > 0) {
         // A tools/call that is under-scoped is an error (the client asked to run a specific tool it
