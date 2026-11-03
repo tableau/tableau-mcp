@@ -1311,6 +1311,44 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
     });
 
+    it('captures app screenshots into an encoded outputPath under read telemetry', async () => {
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        onRpc,
+      });
+      await executor.start();
+      const outputPath = '/tmp/tableau screenshot #1&b=2';
+
+      const result = await executor.captureAppScreenshot(outputPath, signal);
+
+      expect(result.unwrap()).toEqual({ filePaths: [`${outputPath}/ScreenShot_1.png`] });
+      const request = server.requests.at(-1);
+      expect(request?.method).toBe('GET');
+      expect(request?.path).toBe('/v0/app/screenshot');
+      expect(request?.searchParams).toEqual({ outputPath });
+      expect(onRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'read',
+          transportSuccess: true,
+          rescanCount: 0,
+        }),
+      );
+    });
+
+    it('surfaces an invalid screenshot outputPath as a canonical problem', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.captureAppScreenshot('relative/dir', signal);
+
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('invalid-query-parameter');
+      }
+    });
+
     it('gets a worksheet item by id', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
