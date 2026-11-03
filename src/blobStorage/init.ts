@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import type { BlobStorageProvider } from './blobStorageProvider.js';
 
@@ -57,6 +58,34 @@ export function getBlobStorageProvider(): BlobStorageProvider {
  */
 export function isBlobStorageEnabled(): boolean {
   return globalBlobStorageProvider !== null;
+}
+
+/**
+ * Origins presigned upload URLs point at, for the upload picker app's CSP `connectDomains`. Empty
+ * when blob storage is unset or the origin can't be determined.
+ */
+export async function getBlobUploadOrigins(): Promise<string[]> {
+  if (globalBlobStorageProvider === null) {
+    return [];
+  }
+  try {
+    if (globalBlobStorageProvider.getUploadOrigins) {
+      return await globalBlobStorageProvider.getUploadOrigins();
+    }
+    // Signing creates nothing in storage; only the URL's origin is used.
+    const { uploadUrl } = await globalBlobStorageProvider.getPresignedUploadUrl({
+      key: 'csp-probe/probe',
+      contentType: 'application/octet-stream',
+    });
+    return [new URL(uploadUrl).origin];
+  } catch (error) {
+    log({
+      message: `Could not determine blob upload origins for CSP: ${error instanceof Error ? error.name : 'unknown error'}`,
+      level: 'debug',
+      logger: 'blobStorage',
+    });
+    return [];
+  }
 }
 
 /**

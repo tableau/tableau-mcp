@@ -597,7 +597,7 @@ export class WebMcpServer extends Server {
   ): Promise<void> => {
     invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
 
-    const { resourceUri, htmlPath } = tool.app;
+    const { resourceUri, htmlPath, extraConnectDomains } = tool.app;
 
     // Register a tool with UI metadata. When the host calls this tool, it reads
     // `_meta.ui.resourceUri` to know which resource to fetch and render as an
@@ -641,6 +641,10 @@ export class WebMcpServer extends Server {
           throw new Error(`SEA app resource '${htmlPath}' is missing or unreadable`);
         }
 
+        const connectDomains = extraConnectDomains
+          ? [...new Set([...cspDomains, ...(await extraConnectDomains())])]
+          : cspDomains;
+
         return {
           contents: [
             {
@@ -650,7 +654,7 @@ export class WebMcpServer extends Server {
               _meta: {
                 ui: {
                   csp: {
-                    connectDomains: cspDomains,
+                    connectDomains,
                     resourceDomains: cspDomains,
                     frameDomains: cspDomains,
                   },

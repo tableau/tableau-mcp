@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload a file to Tableau</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        margin: 0;
+        padding: 12px;
+      }
+      #drop {
+        border: 2px dashed #8a8a8a;
+        border-radius: 8px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+      }
+      #drop.over {
+        border-color: #1f77b4;
+        background: #eef5fb;
+      }
+      #drop[aria-disabled='true'] {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      #file {
+        display: none;
+      }
+      #status {
+        margin-top: 12px;
+        min-height: 1.4em;
+      }
+      #status.error {
+        color: #b00020;
+      }
+      #status.ok {
+        color: #1b7f3b;
+      }
+      progress {
+        width: 100%;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="drop" role="button" tabindex="0" aria-disabled="true">
+      <strong>Choose a file</strong> or drag it here
+      <div id="accept"></div>
+    </div>
+    <input id="file" type="file" />
+    <div id="picked"></div>
+    <progress id="progress" max="100" value="0" hidden></progress>
+    <div id="status">Waiting for the server...</div>
+    <script type="module" src="./upload-picker.ts"></script>
+  </body>
+</html>

@@ -38,6 +38,8 @@ import { getRequestUploadTool } from './requestUpload.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
+import { getGetUploadUrlTool } from './uploadPicker/getUploadUrl.js';
+import { getPickUploadFileTool } from './uploadPicker/pickUploadFile.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -60,6 +62,8 @@ export const webToolFactories = [
   getRenderInteractiveVizTool,
   getListDatasourcesTool,
   getRequestUploadTool,
+  getPickUploadFileTool,
+  getGetUploadUrlTool,
   getPublishDatasourceTool,
   getListExtractRefreshTasksTool,
   getUpdateCloudExtractRefreshTaskTool,

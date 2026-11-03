@@ -168,6 +168,7 @@ const checkNoDesktopSources = variant === 'default';
     const htmlEntries = [
       { root: resolve(appsDir, 'src/embed'), html: 'mcp-app.html' },
       { root: resolve(appsDir, 'src/hitl'), html: 'hitl-confirm.html' },
+      { root: resolve(appsDir, 'src/upload'), html: 'upload-picker.html' },
     ];
 
     const distDir = resolve(appsDir, 'dist');
