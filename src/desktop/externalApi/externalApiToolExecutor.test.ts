@@ -6,6 +6,7 @@ import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { Provider } from '../../utils/provider.js';
 import {
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
@@ -2517,12 +2518,15 @@ describe('ExternalApiToolExecutor', () => {
         // Session-fatal guidance leads: stop every command and read, restart Desktop.
         expect(error.error?.message).toContain('restart Tableau Desktop');
         expect(error.error?.message).toContain('including reads');
-        // Replay-safety core is kept: the first outcome is unknown, so the agent must not re-invoke
-        // the action (holds even after a restart in a new session).
+        // The first outcome stays unknown after a restart, so a new session cannot deduplicate it.
         expect(error.error?.message).toContain(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE);
         expect(error.error?.message).toContain('may already have been invoked');
         // But the get-active-dialogs read clause is dropped: a dead session forbids every read.
-        expect(error.error?.message).not.toContain('get-active-dialogs once for fresh inspection');
+        expect(error.error?.message).not.toContain('get-active-dialogs');
+        expect(error.error?.message).toContain(
+          'This failed session must not receive more commands or reads',
+        );
+        expect(error.error?.message).toContain('restart or session change');
         expect(error.error?.message).not.toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
       }
       expect(
@@ -3165,6 +3169,7 @@ describe('ExternalApiToolExecutor', () => {
           expect(commandError.message).toContain('advertised action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
           expect(commandError.message).toContain('pending or indeterminate status');
+          expect(commandError.message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3514,7 +3519,8 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('get-active-dialogs');
   expect(message).toContain('exact returned dialog identity');
   expect(message).toContain('advertised action');
-  expect(message).toContain('at most one invoke-dialog-action call');
+  expect(message).toContain('invoke-dialog-action for one logical action');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
   expect(message).toContain('Do not guess or assume Cancel is safe');
   expect(message).toContain('pending or indeterminate status');
   expect(message).toContain('ask the user to handle the dialog');
@@ -3525,10 +3531,12 @@ function expectIndeterminateDialogAction(message: string): void {
   expect(message).toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
   expect(message).toContain('invoke-dialog-action outcome is indeterminate');
   expect(message).toContain('action may already have been invoked');
-  expect(message).toContain('Do not call invoke-dialog-action again or click another action');
-  expect(message).toContain('get-active-dialogs once for fresh inspection only');
-  expect(message).toContain('result does not prove that the first click did not happen');
-  expect(message).toContain('Ask the user to handle any consequential choice');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
+  expect(message).toContain('replay only the identical request with the same requestId');
+  expect(message).toContain('Never use a new requestId');
+  expect(message).toContain('original sessionId/requestId');
+  expect(message).toContain('ask the user to handle any consequential choice');
+  expect(message).not.toContain('Do not call invoke-dialog-action again');
   expect(message).not.toContain('retry with that session');
   expect(message).not.toContain('at most one invoke-dialog-action call');
 }

@@ -729,35 +729,38 @@ export type DialogAction = z.infer<typeof dialogActionSchema>;
 const dialogInputStringSchema = z.string().refine((value) => !value.includes('\0'), {
   message: 'Dialog input must not contain NUL characters.',
 });
-const dialogPathSchema = dialogInputStringSchema.refine((value) => value.length > 0, {
-  message: 'A nonempty path is required.',
-});
+const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
+  (value) => value.length > 0,
+  {
+    message: 'A nonempty value is required.',
+  },
+);
 const dialogColorChannelSchema = z.number().int().min(0).max(255);
 
 /** Only caller-selected input fields belong on the wire; descriptors are read-only. */
 export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('button'), label: dialogPathSchema }).strict(),
+  z.object({ kind: z.literal('button'), label: dialogNonemptyInputStringSchema }).strict(),
   z.object({ kind: z.literal('close') }).strict(),
   z.object({ kind: z.literal('cancel') }).strict(),
   z
     .object({
       kind: z.literal('choose-file'),
-      path: dialogPathSchema,
+      path: dialogNonemptyInputStringSchema,
       filterId: dialogInputStringSchema.optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal('choose-files'),
-      paths: z.array(dialogPathSchema).min(1),
+      paths: z.array(dialogNonemptyInputStringSchema).min(1),
       filterId: dialogInputStringSchema.optional(),
     })
     .strict(),
-  z.object({ kind: z.literal('choose-directory'), path: dialogPathSchema }).strict(),
+  z.object({ kind: z.literal('choose-directory'), path: dialogNonemptyInputStringSchema }).strict(),
   z
     .object({
       kind: z.literal('save-file'),
-      path: dialogPathSchema,
+      path: dialogNonemptyInputStringSchema,
       filterId: dialogInputStringSchema,
       overwriteConfirmed: z.boolean(),
     })
@@ -782,7 +785,7 @@ export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
       copies: z.number().int().min(1),
       collate: z.boolean(),
       exportSelection: z.boolean(),
-      outputPath: dialogPathSchema.optional(),
+      outputPath: dialogNonemptyInputStringSchema.optional(),
     })
     .strict(),
 ]);

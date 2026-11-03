@@ -202,6 +202,23 @@ describe('invoke-dialog-action tool', () => {
     ).toBe(false);
   });
 
+  it('identifies an empty button label without asking for a path', () => {
+    const tool = getInvokeDialogActionTool(new DesktopMcpServer());
+    const parsed = z.object(tool.paramsSchema as z.ZodRawShape).safeParse({
+      ...defaultRequest,
+      action: { kind: 'button', label: '' },
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) throw new Error('Expected the empty button label to be rejected.');
+    expect(parsed.error.issues).toEqual([
+      expect.objectContaining({
+        path: ['action', 'label'],
+        message: 'A nonempty value is required.',
+      }),
+    ]);
+  });
+
   it('rejects invalid compact-schema inputs through MCP before dispatching the tool', async () => {
     const tool = getInvokeDialogActionTool(new DesktopMcpServer());
     const { McpServer: RealMcpServer } = await vi.importActual<

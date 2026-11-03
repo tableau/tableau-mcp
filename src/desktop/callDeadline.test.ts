@@ -3,7 +3,10 @@ import {
   DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
   DesktopCallTimeoutError,
   desktopCallTimeoutMessage,
+  DIALOG_ACTION_REPLAY_GUIDANCE,
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
+  INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
   isDesktopCallTimeout,
 } from './callDeadline.js';
 
@@ -123,7 +126,8 @@ describe('desktopCallTimeoutMessage', () => {
     expect(message).toContain('get-active-dialogs');
     expect(message).toContain('exact returned dialog identity');
     expect(message).toContain('advertised action');
-    expect(message).toContain('at most one invoke-dialog-action call');
+    expect(message).toContain('invoke-dialog-action for one logical action');
+    expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
     expect(message).toContain('Do not guess or assume Cancel is safe');
     expect(message).toContain('pending or indeterminate status');
     expect(message).toContain('ask the user to handle the dialog');
@@ -144,7 +148,7 @@ describe('desktopCallTimeoutMessage', () => {
     expect(message).not.toContain('at most one invoke-dialog-action call');
   });
 
-  it('treats a invoke-dialog-action timeout as indeterminate and forbids another click', () => {
+  it('permits only identical-request recovery after an invoke-dialog-action timeout', () => {
     const message = desktopCallTimeoutMessage({
       budgetMs: 60_000,
       tool: 'invoke-dialog-action',
@@ -153,11 +157,29 @@ describe('desktopCallTimeoutMessage', () => {
 
     expect(message).toContain('invoke-dialog-action outcome is indeterminate');
     expect(message).toContain('action may already have been invoked');
-    expect(message).toContain('Do not call invoke-dialog-action again or click another action');
-    expect(message).toContain('get-active-dialogs once for fresh inspection only');
-    expect(message).toContain('Ask the user to handle any consequential choice');
-    expect(message).toContain('leave the dialog to the user');
+    expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
+    expect(message).toContain('original sessionId/requestId');
+    expect(message).toContain('replay only the identical request with the same requestId');
+    expect(message).toContain('Never use a new requestId');
+    expect(message).toContain('restart or session change');
+    expect(message).toContain('ask the user to handle any consequential choice');
+    expect(message).toContain('tracking is unavailable, expired, or still uncertain');
+    expect(message).not.toContain('Do not call invoke-dialog-action again');
     expect(message).not.toContain('at most one invoke-dialog-action call');
     expect(message).toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
+  });
+
+  it('keeps fatal-session recovery free of inspection and replacement-session replay', () => {
+    expect(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE).toContain(
+      'This failed session must not receive more commands or reads',
+    );
+    expect(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE).toContain(DIALOG_ACTION_REPLAY_GUIDANCE);
+    expect(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE).toContain(
+      'If the original Desktop session is still usable',
+    );
+    expect(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE).toContain(
+      'Never use a new requestId for an uncertain outcome or replay across a Desktop restart or session change',
+    );
+    expect(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE).not.toContain('get-active-dialogs');
   });
 });

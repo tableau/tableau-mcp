@@ -421,7 +421,10 @@ describe('export-image tools', () => {
       expect(result.content[0].text).toContain('get-active-dialogs');
       expect(result.content[0].text).toContain('exact returned dialog identity');
       expect(result.content[0].text).toContain('advertised action');
-      expect(result.content[0].text).toContain('at most one invoke-dialog-action call');
+      expect(result.content[0].text).toContain('invoke-dialog-action for one logical action');
+      expect(result.content[0].text).toContain(
+        'replay only the identical request with the same requestId',
+      );
       expect(result.content[0].text).toContain('Do not guess or assume Cancel is safe');
       expect(result.content[0].text).toContain('ask the user to handle the dialog');
     } finally {

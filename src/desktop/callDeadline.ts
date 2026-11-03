@@ -40,13 +40,26 @@ export function formatBudget(budgetMs: number): string {
   return budgetMs % 1000 === 0 ? `${budgetMs / 1000}s` : `${budgetMs}ms`;
 }
 
+export const DIALOG_ACTION_REPLAY_GUIDANCE =
+  'If the original Desktop session is still usable, replay only the identical request with the ' +
+  'same requestId. Never use a new requestId for an uncertain outcome or replay across a Desktop ' +
+  'restart or session change.';
+
+export const DIALOG_REQUEST_TRACKING_GUIDANCE =
+  'Poll recentActions with get-active-dialogs for the original sessionId/requestId. ' +
+  DIALOG_ACTION_REPLAY_GUIDANCE +
+  ' Do not choose another action with a pending or indeterminate status. An empty dialogs array ' +
+  'is only evidence of no blockers when uiSnapshotAvailable is true.';
+
 export const BLOCKING_DIALOG_GUIDANCE =
   'Desktop may be showing a blocking dialog, or the instance may be wedged. Do not blindly ' +
   'retry the originating operation. Call get-active-dialogs for fresh state. Only when the task ' +
   'or user intent makes the choice unambiguous, copy the exact returned dialog identity, select an ' +
-  'advertised action, and supply its invocation values in at most one invoke-dialog-action call. Do not guess or assume Cancel is ' +
-  'safe. Do not submit another action with a pending or indeterminate status. Track recentActions by sessionId and requestId; an empty dialogs array is only evidence of no blockers when uiSnapshotAvailable is true. If inspection times ' +
-  'out, either dialog tool is unavailable or version-gated, the identity or intent is ambiguous, ' +
+  'advertised action, and supply its invocation values to invoke-dialog-action for one logical ' +
+  'action. Do not guess or assume Cancel is safe. ' +
+  DIALOG_REQUEST_TRACKING_GUIDANCE +
+  ' If inspection times out, either dialog tool is unavailable or version-gated, the identity or ' +
+  'intent is ambiguous, ' +
   'or no action is clearly safe, ask the user to handle the dialog. After the dialog is handled, ' +
   'correct its cause before retrying the originating operation, then call list-instances to confirm ' +
   'the session is still reachable and re-target if the pid changed.';
@@ -56,21 +69,22 @@ const GET_ACTIVE_DIALOGS_TIMEOUT_GUIDANCE =
   'invoke-dialog-action without a fresh exact result. Ask the user to inspect and handle any open ' +
   'Tableau dialog, then call list-instances to confirm the session is still reachable.';
 
-// The replay-safety core of the indeterminate guidance, with no dialog-inspection read clause. A
-// session-fatal dialog action still needs this part: its first outcome is unknown, so even after a
-// Desktop restart the agent must not blindly replay a possibly-consequential action. The read clause
-// is split out below because it permits a get-active-dialogs call, which a dead session forbids.
-export const INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE =
+const INVOKE_DIALOG_ACTION_UNCERTAIN_OUTCOME =
   'The invoke-dialog-action outcome is indeterminate: the action may already have been invoked even ' +
-  'though no valid response confirmed the outcome. Do not call invoke-dialog-action again or click ' +
-  'another action. Ask the user to handle any consequential choice.';
+  'though no valid response confirmed the outcome. ';
+
+// A fatal session cannot be inspected; a restarted Desktop may have lost the request ledger.
+export const INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE =
+  INVOKE_DIALOG_ACTION_UNCERTAIN_OUTCOME +
+  'This failed session must not receive more commands or reads. ' +
+  DIALOG_ACTION_REPLAY_GUIDANCE +
+  ' Ask the user to handle any consequential choice.';
 
 export const INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE =
-  'The invoke-dialog-action outcome is indeterminate: the action may already have been invoked even ' +
-  'though no valid response confirmed the outcome. Do not call invoke-dialog-action again or click ' +
-  'another action. You may call get-active-dialogs once for fresh inspection only; its result does ' +
-  'not prove that the first click did not happen. Ask the user to handle any consequential choice. ' +
-  'If inspection also times out or is unavailable, leave the dialog to the user. Do not retry the ' +
+  INVOKE_DIALOG_ACTION_UNCERTAIN_OUTCOME +
+  DIALOG_REQUEST_TRACKING_GUIDANCE +
+  ' If inspection times out or tracking is unavailable, expired, or still uncertain, ask the user ' +
+  'to handle any consequential choice. Do not retry the ' +
   'originating operation until the dialog is handled and its cause is corrected.';
 
 /**

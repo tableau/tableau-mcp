@@ -16,35 +16,30 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
-// The tool-list budget cannot carry every native payload branch. Validate the complete
-// producer union during argument parsing while advertising a compact object input.
-const actionSchema = z.record(z.unknown()).transform((value, context) => {
-  const parsed = dialogActionInvocationSchema.safeParse(value);
-  if (!parsed.success) {
-    for (const issue of parsed.error.issues) context.addIssue(issue);
-    return z.NEVER;
-  }
-  return parsed.data;
-});
-
-const identitySchema = z.record(z.unknown()).transform((value, context) => {
-  const parsed = dialogIdentitySchema.safeParse(value);
-  if (!parsed.success) {
-    for (const issue of parsed.error.issues) context.addIssue(issue);
-    return z.NEVER;
-  }
-  return parsed.data;
-});
+// Full identity and native-action schemas exceed the tool-list budget. Keep their complete
+// validation during argument parsing while advertising compact object inputs.
+function compactObjectSchema<Output>(
+  schema: z.ZodType<Output>,
+): z.ZodEffects<z.ZodRecord<z.ZodString, z.ZodUnknown>, Output> {
+  return z.record(z.unknown()).transform((value, context) => {
+    const parsed = schema.safeParse(value);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) context.addIssue(issue);
+      return z.NEVER;
+    }
+    return parsed.data;
+  });
+}
 
 const paramsSchema = {
   session: sessionParam(),
-  dialog: identitySchema.describe(
+  dialog: compactObjectSchema(dialogIdentitySchema).describe(
     'Exact objectName/title/className/sessionId/revision returned for the current dialog.',
   ),
   requestId: invokeDialogActionRequestSchema.shape.requestId.describe(
     'Unique logical request ID; preserve it for retries.',
   ),
-  action: actionSchema.describe(
+  action: compactObjectSchema(dialogActionInvocationSchema).describe(
     'kind plus values for one enabled capability advertised by the current dialog.',
   ),
 };
