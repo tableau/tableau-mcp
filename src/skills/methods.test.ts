@@ -230,6 +230,32 @@ describe('skills/list pagination', () => {
     }
   });
 
+  it('returns the generic params error over MCP for a non-string cursor', async () => {
+    await expect(listSkills(makeRegistry([]), { cursor: 42 })).rejects.toMatchObject({
+      code: ErrorCode.InvalidParams,
+      message: expect.stringContaining('Invalid skills/list params'),
+    });
+  });
+
+  // Exercise malformed params directly; the SDK can reject non-object wire params before routing.
+  it.each([42, null, 'invalid', [], { cursor: 42 }])(
+    'reports a generic params error for an invalid request: %j',
+    async (params) => {
+      const mcp = {
+        server: { setRequestHandler: vi.fn() },
+      } as unknown as Parameters<typeof registerSkillMethodHandlers>[0];
+      registerSkillMethodHandlers(mcp, makeRegistry([]));
+      const handler = vi.mocked(mcp.server.setRequestHandler).mock.calls[0][1];
+
+      await expect(
+        handler({ method: 'skills/list', params } as never, {} as never),
+      ).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Invalid skills/list params'),
+      });
+    },
+  );
+
   it('does not report unrelated registry failures as invalid params', async () => {
     const registry: SkillRegistry = {
       ...makeRegistry([]),

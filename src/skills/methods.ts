@@ -21,7 +21,7 @@ export function registerSkillMethodHandlers(mcp: McpServer, registry: SkillRegis
     async (request): Promise<SkillsListResult> => {
       const parsed = SkillsListRequestSchema.safeParse(request);
       if (!parsed.success) {
-        throw new McpError(ErrorCode.InvalidParams, 'skills/list cursor must be a string');
+        throw new McpError(ErrorCode.InvalidParams, 'Invalid skills/list params');
       }
       try {
         // resultType stays 'complete' per the skills spec, even for a partial page
