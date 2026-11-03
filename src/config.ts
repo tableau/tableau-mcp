@@ -302,7 +302,7 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
-      strictScopeMatch: strictScopeMatch === 'true',
+      strictScopeMatch: strictScopeMatch !== 'false',
       external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
         ? {
             discovery: oauthExternalDiscovery === 'true',

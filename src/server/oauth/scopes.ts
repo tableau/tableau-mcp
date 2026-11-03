@@ -210,8 +210,8 @@ export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:
 
 /**
  * Reading the per-site MCP security layer requires this Tableau API scope. Under subset
- * (non-strict) scope matching it is mandatory whenever MCP site settings are enabled, independent
- * of whether API scopes are advertised.
+ * (non-strict) scope matching it is mandatory when MCP site settings are enabled and API scopes
+ * are advertised (see isSiteSettingsScopeRequired).
  */
 export const MCP_SITE_SETTINGS_READ_SCOPE: TableauApiScope = 'tableau:mcp_site_settings:read';
 

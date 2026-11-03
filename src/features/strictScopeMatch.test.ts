@@ -16,8 +16,8 @@ describe('isStrictScopeMatchEnabled', () => {
 
   it.each([
     [true, true, true],
-    [true, false, true],
-    [false, true, true],
+    [true, false, false],
+    [false, true, false],
     [false, false, false],
   ])(
     'ENFORCE_STRICT_SCOPE_MATCH=%s, enforce-strict-scope-match flag=%s → %s',
@@ -30,17 +30,17 @@ describe('isStrictScopeMatchEnabled', () => {
     },
   );
 
-  it('does not consult the feature gate when ENFORCE_STRICT_SCOPE_MATCH is on (short-circuit)', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+  it('does not consult the feature gate when ENFORCE_STRICT_SCOPE_MATCH is off (short-circuit)', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
-    await isStrictScopeMatchEnabled({ oauth: { strictScopeMatch: true } } as never);
+    await isStrictScopeMatchEnabled({ oauth: { strictScopeMatch: false } } as never);
 
     expect(mocks.mockIsFeatureEnabled).not.toHaveBeenCalled();
   });
 
-  it('ships with the enforce-strict-scope-match flag off', () => {
-    // Either input alone turns strict on, so shipping the flag on would make strict the default.
-    expect(features['enforce-strict-scope-match']).toBe(false);
+  it('ships with the enforce-strict-scope-match flag on', () => {
+    // Either input alone turns strict off, so shipping the flag off would make subset the default.
+    expect(features['enforce-strict-scope-match']).toBe(true);
   });
 });
 
@@ -56,10 +56,11 @@ describe('isSiteSettingsScopeRequired', () => {
     const { enableMcpSiteSettings = true, ...oauth } = overrides;
     return {
       enableMcpSiteSettings,
-      oauth: { enforceScopes: true, advertiseApiScopes: true, strictScopeMatch: false, ...oauth },
+      oauth: { enforceScopes: true, advertiseApiScopes: true, strictScopeMatch: true, ...oauth },
     } as never;
   };
 
+  // The flag is off by default here, so strict is off and matching is subset.
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
@@ -69,16 +70,23 @@ describe('isSiteSettingsScopeRequired', () => {
     await expect(isSiteSettingsScopeRequired(config())).resolves.toBe(true);
   });
 
+  it('is required when the env var alone turns strict off', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+
+    await expect(isSiteSettingsScopeRequired(config({ strictScopeMatch: false }))).resolves.toBe(
+      true,
+    );
+  });
+
   it.each([
     ['scopes are not enforced', { enforceScopes: false }],
     ['API scopes are not advertised', { advertiseApiScopes: false }],
-    ['strict is on via the env var', { strictScopeMatch: true }],
     ['site settings are off', { enableMcpSiteSettings: false }],
   ])('is not required when %s', async (_label, overrides) => {
     await expect(isSiteSettingsScopeRequired(config(overrides))).resolves.toBe(false);
   });
 
-  it('is not required when strict is on via the feature flag', async () => {
+  it('is not required when strict is on (env var and feature flag both on)', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
     await expect(isSiteSettingsScopeRequired(config())).resolves.toBe(false);

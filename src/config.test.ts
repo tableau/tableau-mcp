@@ -687,7 +687,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
-      strictScopeMatch: false,
+      strictScopeMatch: true,
       external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -709,7 +709,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
-        strictScopeMatch: false,
+        strictScopeMatch: true,
         external: null,
         ...defaultOAuthTimeoutMs,
       });
@@ -1096,26 +1096,26 @@ describe('Config', () => {
     });
 
     describe('ENFORCE_STRICT_SCOPE_MATCH', () => {
-      it('defaults strictScopeMatch to false', () => {
-        const config = new Config();
-        expect(config.oauth.strictScopeMatch).toBe(false);
-      });
-
-      it('sets strictScopeMatch to true when ENFORCE_STRICT_SCOPE_MATCH is "true"', () => {
-        vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'true');
+      it('defaults strictScopeMatch to true', () => {
         const config = new Config();
         expect(config.oauth.strictScopeMatch).toBe(true);
       });
 
-      it('treats any non-"true" ENFORCE_STRICT_SCOPE_MATCH as false', () => {
+      it('sets strictScopeMatch to false when ENFORCE_STRICT_SCOPE_MATCH is "false"', () => {
         vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'false');
         const config = new Config();
         expect(config.oauth.strictScopeMatch).toBe(false);
       });
+
+      it('treats any non-"false" ENFORCE_STRICT_SCOPE_MATCH as true', () => {
+        vi.stubEnv('ENFORCE_STRICT_SCOPE_MATCH', 'yes');
+        const config = new Config();
+        expect(config.oauth.strictScopeMatch).toBe(true);
+      });
     });
 
-    // Scope defaults (enforced, not advertised, non-strict, site settings on) must boot: requiring
-    // the site-settings scope with API scopes unadvertised once made this config refuse to start.
+    // Scope defaults (enforced, not advertised, site settings on) must boot: requiring the
+    // site-settings scope with API scopes unadvertised once made this config refuse to start.
     it('starts the embedded authz server with the default scope settings', () => {
       vi.stubEnv('OAUTH_ISSUER', 'https://example.com');
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', 'path/to/private.pem');
@@ -1126,7 +1126,7 @@ describe('Config', () => {
         embeddedAuthzServer: true,
         enforceScopes: true,
         advertiseApiScopes: false,
-        strictScopeMatch: false,
+        strictScopeMatch: true,
       });
       expect(config.enableMcpSiteSettings).toBe(true);
     });
