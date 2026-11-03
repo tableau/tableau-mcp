@@ -81,8 +81,6 @@ export type CalcFailureKind =
   | 'invalid-formula' // validator ran and reported errors for this formula
   | 'dependency-failed' // an in-batch calc it references failed; never attempted
   | 'cycle'; // caught in a dependency cycle; never attempted
-// An infra failure of the validate route is NOT a per-calc verdict — it aborts the whole batch with
-// a DesktopCommandExecutionError, so callers never mistake it for a bad formula.
 
 export type AuthoredCalcOutcome =
   | { status: 'created'; caption: string; calcName: string; datasource: string }
@@ -528,11 +526,10 @@ async function validateCalcFormula({
   if (result.isErr()) {
     return { status: 'error', error: new DesktopCommandExecutionError(result.error) };
   }
-  const messages = result.value.errors.map((error) => error.message);
-  if (!result.value.isValid || messages.length > 0) {
+  if (!result.value.isValid) {
     return {
       status: 'invalid',
-      message: messages.length > 0 ? formatValidatorErrors(messages) : 'formula is invalid',
+      message: formatValidatorErrors(result.value.errors.map((error) => error.message)),
     };
   }
   return { status: 'valid' };

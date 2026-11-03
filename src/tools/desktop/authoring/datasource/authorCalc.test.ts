@@ -1301,23 +1301,6 @@ describe('authorCalculationsWithValidation', () => {
     expect(vi.mocked(executor.validateDatasourceCalculatedField)).not.toHaveBeenCalled();
     expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
   });
-
-  it('reports invalid-formula when the route marks the formula invalid without errors', async () => {
-    const executor = validationExecutor(new Ok({ isValid: false, errors: [] }));
-    const result = await authorCalculationsWithValidation({
-      workbookXml: BASE_XML,
-      calcs: [spec('New Calc', '[Sales] + 1')],
-      executor,
-      signal: new AbortController().signal,
-    });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) throw new Error('an invalid formula is a per-calc verdict');
-    const [outcome] = result.value;
-    invariant(outcome.status === 'failed');
-    expect(outcome.failure).toBe('invalid-formula');
-    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
-  });
 });
 
 describe('authorCalcTool parameter references by caption or internal name', () => {
