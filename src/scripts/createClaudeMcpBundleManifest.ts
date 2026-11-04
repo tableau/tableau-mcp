@@ -697,7 +697,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable read-only Tableau Knowledge MCP tools',
     description:
-      'Set to "true" to enable query-knowledge-context and inspect-knowledge-context, or "false" to disable them. When "true", the tools appear only on sites where Tableau Knowledge is available.',
+      'Set to "true" to enable query-knowledge-context and inspect-knowledge-context, or "false" to disable them. When "true", the tools appear only on sites where Tableau Knowledge is available, which is checked when tools register.',
     required: false,
     sensitive: false,
   },
