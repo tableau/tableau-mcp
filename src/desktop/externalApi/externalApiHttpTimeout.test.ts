@@ -51,7 +51,7 @@ describe('ExternalApiHttp request deadline', () => {
     try {
       await executor.health(signal);
       await executor.getWorkbookDocument(signal);
-      await executor.executeCommand({ namespace: 'tabdoc', command: 'undo', signal });
+      await executor.undo(signal);
 
       expect(timeoutSpy.mock.calls.map(([budgetMs]) => budgetMs)).toEqual([10_000, 60_000, 60_000]);
     } finally {

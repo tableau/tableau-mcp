@@ -637,16 +637,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
 
-    it('has a route constant for every spec path and only the hidden invokeCommand beyond it', () => {
+    it('has a route constant for every spec path', () => {
       const constants = Object.values(EXTERNAL_API_ROUTES);
       expect(
         Object.keys(spec.paths).filter((route) => !constants.includes(route as never)),
       ).toEqual([]);
-      expect(
-        constants.filter(
-          (route) => !(route in spec.paths) && route !== EXTERNAL_API_ROUTES.invokeCommand,
-        ),
-      ).toEqual([]);
+      expect(constants.filter((route) => !(route in spec.paths))).toEqual([]);
     });
 
     it('serves every spec operation from the mock server', async () => {
@@ -829,10 +825,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(specSchema('Operation').properties?.diagnostics?.$ref).toBe(
         '#/components/schemas/WorkbookDiagnostics',
       );
-    });
-
-    it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
-      expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
 
     it('documents the dialog routes with their exact request and response schemas', () => {

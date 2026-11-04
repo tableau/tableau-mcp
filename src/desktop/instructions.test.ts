@@ -92,7 +92,6 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
     expect(rendered).not.toContain('tabdoc:goto-sheet');
     expect(rendered).toContain('activate-sheet');
-    expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
   it('requires explicit requested encodings to participate in template discovery', () => {
@@ -582,16 +581,14 @@ describe('buildDesktopInstructions', () => {
     );
   });
 
-  it('keeps legacy template guidance only for demo and makes spec-loop no template claims', () => {
+  it('keeps legacy template guidance only for demo', () => {
     const demo = buildDesktopInstructions({ sessionPinned: false, profile: 'demo' });
-    const specLoop = buildDesktopInstructions({ sessionPinned: false, profile: 'spec-loop' });
 
     expect(demo).toContain('bind-template');
     expect(demo).toContain('run-dashboard-batch');
     expect(demo).toContain('compose-only');
     expect(demo).toContain('live worksheet names');
     expect(demo).not.toContain('build-worksheets-from-templates');
-    expect(specLoop).not.toMatch(/template/i);
   });
 
   it.each(['dynamic-authoring', 'full', 'combined-lean'])(
@@ -640,7 +637,7 @@ const CORE_ENTRY_IDS = [
   'dense-scatter-bubble',
 ];
 
-const PROFILES_WITHOUT_TABLE = ['demo', 'spec-loop'];
+const PROFILES_WITHOUT_TABLE = ['demo'];
 const TABLE_PROFILES = ['', 'not-a-profile', ...TOOL_PROFILE_NAMES].filter(
   (profile) => !PROFILES_WITHOUT_TABLE.includes(profile),
 );
@@ -698,7 +695,7 @@ describe('instruction visibility under the Claude Code default cut', () => {
   );
 
   it.each(variants(PROFILES_WITHOUT_TABLE).map((v) => [v.name, v] as const))(
-    'fits demo and spec-loop whole within the default limit in %s',
+    'fits demo whole within the default limit in %s',
     (_name, { text }) => {
       expect(text.length).toBeLessThanOrEqual(CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT);
     },

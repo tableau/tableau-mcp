@@ -32,14 +32,6 @@ type WithExecutor = {
 
 export type WithExecutorAndAbortSignal = WithExecutor & WithAbortSignal;
 
-export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> = {
-  command: string;
-  namespace: 'tabui' | 'tabdoc';
-  args?: Record<string, any>;
-  schema?: Z;
-  expectedInstanceId?: string;
-} & WithAbortSignal;
-
 export type ExecuteCommandError =
   | {
       type: 'command-failed';

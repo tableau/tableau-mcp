@@ -33,12 +33,6 @@ const accepted202 = (operationId: string): MockOverride => ({
   body: JSON.stringify({ id: operationId, kind: 'command.invoke', state: 'RUNNING' }),
 });
 
-const invokeBody = (
-  namespace: string,
-  command: string,
-  parameters: Record<string, unknown> = {},
-): Record<string, unknown> => ({ namespace, command, parameters });
-
 describe('ExternalApiHttp async dispatch (0.2.0)', () => {
   let server: MockExternalApiServer;
   let http: ExternalApiHttp;
@@ -52,9 +46,9 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
     await server.close();
   });
 
-  describe('write / invokeCommand path', () => {
-    it('polls a 202 invokeCommand to a terminal SUCCEEDED and unwraps its result', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-invoke-1'));
+  describe('write path', () => {
+    it('polls a 202 undo to a terminal SUCCEEDED and unwraps its result', async () => {
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-invoke-1'));
       server.setOperation('op-invoke-1', {
         retryAfterSeconds: 0,
         poll: [
@@ -71,10 +65,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         ],
       });
 
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'sort'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isOk()).toBe(true);
       const envelope = result.unwrap();
       expect(envelope.state).toBe('SUCCEEDED');
@@ -99,7 +90,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
     });
 
     it('surfaces a terminal FAILED operation as an envelope the executor can classify', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-fail-1'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-fail-1'));
       server.setOperation('op-fail-1', {
         poll: [
           {
@@ -111,16 +102,13 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         ],
       });
 
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'sort'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().state).toBe('FAILED');
     });
 
     it('returns awaiting-user with the blocking window(s) when a poll reaches AWAITING_USER', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-user-1'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-user-1'));
       server.setOperation('op-user-1', {
         poll: [
           {
@@ -134,10 +122,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         ],
       });
 
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabui', 'open-bookmark'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
       expect(error.type).toBe('awaiting-user');
@@ -149,7 +134,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
     });
 
     it('returns awaiting-user when a RUNNING poll carries blockingWindows (server never sets AWAITING_USER)', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-user-2'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-user-2'));
       server.setOperation('op-user-2', {
         poll: [
           {
@@ -163,10 +148,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         ],
       });
 
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabui', 'open-bookmark'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
       expect(error.type).toBe('awaiting-user');
@@ -178,7 +160,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
     });
 
     it('does not fail fast on progressWindows — self-clearing, polling continues to success', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-progress-1'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-progress-1'));
       server.setOperation('op-progress-1', {
         retryAfterSeconds: 0,
         poll: [
@@ -199,16 +181,13 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         ],
       });
 
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'sort'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().state).toBe('SUCCEEDED');
     });
 
     it('returns poll-timeout carrying the last-seen progressWindows', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-progress-2'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-progress-2'));
       server.setOperation('op-progress-2', {
         poll: [
           {
@@ -223,10 +202,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       });
       const shortHttp = new ExternalApiHttp(makeInstance(server.baseUrl), { pollDeadlineMs: 50 });
 
-      const result = await shortHttp.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'sort'),
-      );
+      const result = await shortHttp.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
       expect(error.type).toBe('poll-timeout');
@@ -238,29 +214,23 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
     });
 
     it('returns operation-expired when the polled operation 404s', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-gone-1'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-gone-1'));
       // No setOperation → the poll route 404s operation-not-found.
 
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'sort'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr().type).toBe('operation-expired');
     });
 
-    it('does exactly one request when the command completes in-window (no spurious poll)', async () => {
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'undo'),
-      );
+    it('does exactly one request when the operation completes in-window (no spurious poll)', async () => {
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().state).toBe('succeeded');
       expect(server.requests.filter((r) => r.path.startsWith('/v0/operations')).length).toBe(0);
     });
 
     it('waits the Retry-After interval between polls', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', {
+      server.setOverride('POST /v0/workbook:undo', {
         status: 202,
         contentType: 'application/json',
         headers: {
@@ -275,10 +245,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       });
 
       const start = Date.now();
-      const result = await http.postJsonEnvelope(
-        EXTERNAL_API_ROUTES.invokeCommand,
-        invokeBody('tabdoc', 'sort'),
-      );
+      const result = await http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo);
       const elapsed = Date.now() - start;
 
       expect(result.isOk()).toBe(true);
