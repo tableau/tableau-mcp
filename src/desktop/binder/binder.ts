@@ -45,6 +45,7 @@ import {
   type Blocker,
   type EscalateReason,
   type FilterSpec,
+  pieSliceGateDetail,
   resolveInSummary,
   validateBinding,
 } from './validate.js';
@@ -122,7 +123,7 @@ export function buildLlmInput(
   ask: string,
   manifests: Map<string, RuntimeTemplateDescriptor>,
   summary: SchemaSummary,
-  opts?: { maxFields?: number },
+  opts?: { maxFields?: number; alsoOffer?: readonly string[] },
 ): LlmProposeInput {
   return enrichSemanticRoles(buildCoreLlmInput(ask, manifests, summary, opts), summary);
 }
@@ -179,6 +180,8 @@ export type BinderResult =
       apply_instruction: string;
       /** Advisory avoid_when cautions matching the ask; present only when non-empty. Never blocks. */
       warnings?: string[];
+      /** Cardinality legibility hints; shown to the agent but never gate coverage or completion. */
+      advisories?: string[];
       /**
        * Encodings the classifier analyzed, split by what this bind actually filled. The
        * deterministic classifier always supplies this report, including empty arrays when
@@ -582,6 +585,7 @@ function validateAndBuild(
     apply_hint: APPLY_HINT,
     apply_instruction: APPLY_INSTRUCTION,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(v.advisories && v.advisories.length > 0 ? { advisories: v.advisories } : {}),
   };
 }
 
@@ -647,6 +651,7 @@ export async function bindTemplate(args: {
 
   // ── Call 1: no-LLM fast path ─────────────────────────────────────
   const cls = classifyNoLlm(args.ask, args.manifests, summary, args.requireCompleteRequest);
+  let pieGateDetail: string | undefined;
   let declineReason: DeclineReason = {
     code: 'no_llm_classifier_declined',
     detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
@@ -692,11 +697,13 @@ export async function bindTemplate(args: {
       }
       return res;
     }
+    pieGateDetail = res.status === 'escalate' ? pieSliceGateDetail(res.blockers) : undefined;
     declineReason = {
       code: 'no_llm_validation_declined',
       detail:
         res.status === 'escalate'
-          ? `classifyNoLlm selected '${cls.template}', but deterministic validation declined (${res.reason})`
+          ? `classifyNoLlm selected '${cls.template}', but deterministic validation declined (${res.reason})` +
+            (pieGateDetail ? `: ${pieGateDetail}` : '')
           : `classifyNoLlm selected '${cls.template}', but deterministic validation did not bind`,
     };
     // else fall through — the no-LLM guess didn't validate.
@@ -706,7 +713,12 @@ export async function bindTemplate(args: {
 
   // ── Miss. Eval-only injected LLM closes the loop in-process ───────
   if (args.llmPropose) {
-    const input = buildLlmInput(args.ask, args.manifests, summary);
+    const input = buildLlmInput(
+      args.ask,
+      args.manifests,
+      summary,
+      pieGateDetail ? { alsoOffer: ['ranking-ordered-bar'] } : undefined,
+    );
     const proposal = await args.llmPropose(input);
     return validateAndBuild(proposal, args.manifests, summary, minConfidence, true, args.ask);
   }
@@ -715,7 +727,12 @@ export async function bindTemplate(args: {
   return {
     status: 'propose',
     decline_reason: declineReason,
-    llm_input: buildLlmInput(args.ask, args.manifests, summary),
+    llm_input: buildLlmInput(
+      args.ask,
+      args.manifests,
+      summary,
+      pieGateDetail ? { alsoOffer: ['ranking-ordered-bar'] } : undefined,
+    ),
     output_schema: PROPOSAL_OUTPUT_SCHEMA,
   };
 }

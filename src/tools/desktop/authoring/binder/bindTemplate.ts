@@ -27,6 +27,7 @@ import {
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
+import { pieSliceGateDetail } from '../../../../desktop/binder/validate.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import {
@@ -194,6 +195,7 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   call_2_contract?: Call2Contract;
   authored_calcs?: string[];
   warnings?: string[];
+  advisories?: string[];
   applied?: boolean;
   sheet_name?: string;
   phase_ms?: AuthoringPhaseMs;
@@ -243,6 +245,7 @@ type AppliedFastPathResult = {
   applied: true;
   authored_calcs?: string[];
   warnings?: string[];
+  advisories?: string[];
   /** Desktop's own apply warnings; present only when Desktop returned any. */
   desktop_warnings?: ExecuteCommandWarning[];
   sheet_name: string;
@@ -645,10 +648,10 @@ function bareResubmitFallbackResult(
   );
 }
 
-function correctionFallbackResult(): StructuredBindTemplateToolResult {
+function correctionFallbackResult(detail?: string): StructuredBindTemplateToolResult {
   return blockedResult(
     'fallback_required',
-    'Blocked: the single structured bind correction did not bind and apply. Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
+    `Blocked: the single structured bind correction did not bind and apply.${detail ? ` ${detail}.` : ''} Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.`,
     'Use template artifact fallback',
   );
 }
@@ -2948,6 +2951,9 @@ async function performAutoApply({
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
+    ...('advisories' in base && base.advisories && base.advisories.length > 0
+      ? { advisories: base.advisories }
+      : {}),
     ...(documentWarnings.length > 0 ? { desktop_warnings: documentWarnings } : {}),
     guidance: settledGuidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
@@ -3789,7 +3795,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 }),
               ).toErr();
             }
-            return new IncompleteOperationError(correctionFallbackResult()).toErr();
+            return new IncompleteOperationError(
+              correctionFallbackResult(
+                res.status === 'escalate' ? pieSliceGateDetail(res.blockers) : undefined,
+              ),
+            ).toErr();
           }
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
