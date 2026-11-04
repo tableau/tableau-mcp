@@ -1,7 +1,11 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { enclosingDashboard, enclosingDeviceLayoutName } from './dashboardZoneContext.js';
+import {
+  enclosingDashboard,
+  enclosingDeviceLayoutName,
+  worksheetZoneName,
+} from './dashboardZoneContext.js';
 import { parseXml } from './parseXml.js';
 
 const CARD_ZONE_XPATH =
@@ -15,8 +19,8 @@ function worksheetZoneNames(dashboard: Element): string[] {
   const names = new Set<string>();
   const zones = xpath.select('.//zone', dashboard as unknown as Node) as Element[];
   for (const zone of zones) {
-    const name = zone.getAttribute('name');
-    if (!isBlank(name) && !zone.hasAttribute('type-v2')) names.add(name!.trim());
+    const name = worksheetZoneName(zone);
+    if (!isBlank(name ?? null)) names.add(name!.trim());
   }
   return [...names];
 }

@@ -1,3 +1,4 @@
+import { DOMParser, type Element } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
@@ -16,9 +17,15 @@ import {
   runValidation,
 } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { sourceSha256 } from './cacheFingerprint.js';
+import {
+  dashboardZoneContents,
+  findZoneIdChange,
+  findZoneWorksheetSwap,
+} from './dashboardZoneTransitions.js';
 
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
@@ -145,6 +152,8 @@ export async function loadWorkbookXml({
       if (cachedLiveRelative) {
         const sheetsRemoved = rejectRemovedSheets(xml, currentWorkbook.value.xml);
         if (sheetsRemoved !== undefined) return sheetsRemoved;
+        const zoneRefusal = rejectDashboardZoneTransitions(xml, currentWorkbook.value.xml);
+        if (zoneRefusal !== undefined) return zoneRefusal;
       }
 
       if (cachedLiveRelative && !skipValidation) {
@@ -224,6 +233,73 @@ function rejectRemovedSheets(xml: string, liveXml: string): LoadWorkbookXmlResul
         'For any other edit, re-read the workbook with get-workbook-xml, redo the edit on the new cache file keeping every sheet, and retry apply-workbook.',
     },
   });
+}
+
+function workbookDashboards(workbookXml: string): Element[] {
+  const root = new DOMParser({
+    onError: (level, message) => {
+      if (level !== 'warning') throw new Error(message);
+    },
+  }).parseFromString(workbookXml, 'text/xml').documentElement;
+  if (!root) return [];
+  const dashboards: Element[] = [];
+  for (const group of Array.from(root.childNodes)) {
+    if (group.nodeType !== 1 || group.nodeName !== 'dashboards') continue;
+    for (const child of Array.from(group.childNodes)) {
+      if (child.nodeType === 1 && child.nodeName === 'dashboard') dashboards.push(child as Element);
+    }
+  }
+  return dashboards;
+}
+
+// The per-dashboard apply runs these guards too; whole-workbook apply must not bypass them.
+function rejectDashboardZoneTransitions(
+  xml: string,
+  liveXml: string,
+): LoadWorkbookXmlResult | undefined {
+  try {
+    const liveDashboards = workbookDashboards(liveXml);
+    const submittedDashboards = workbookDashboards(xml);
+    for (const dashboard of submittedDashboards) {
+      const name = dashboard.getAttribute('name') ?? '';
+      if (dashboard.getAttribute('type') === 'storyboard') continue;
+      const submittedMatches = submittedDashboards.filter((d) =>
+        parsedXmlNamesEqual(d.getAttribute('name') ?? '', name),
+      );
+      const liveMatches = liveDashboards.filter((d) =>
+        parsedXmlNamesEqual(d.getAttribute('name') ?? '', name),
+      );
+      if (liveMatches.length !== 1 || submittedMatches.length !== 1) continue;
+      const live = dashboardZoneContents(liveMatches[0]);
+      const submitted = dashboardZoneContents(dashboard);
+      const swap = findZoneWorksheetSwap(live, submitted);
+      const idChange = swap === undefined ? findZoneIdChange(live, submitted) : undefined;
+      const message = swap ?? idChange;
+      if (message === undefined) continue;
+      return Err({
+        type: 'load-workbook-xml-error',
+        error: {
+          type: 'validation-failed',
+          issues: [
+            {
+              ruleId:
+                swap === undefined ? 'dashboard-zone-id-change' : 'dashboard-zone-worksheet-swap',
+              severity: 'error',
+              message: `Dashboard "${name}": ${message}`,
+            },
+          ],
+        },
+      });
+    }
+  } catch (error) {
+    log({
+      level: 'debug',
+      message: 'Zone id checks skipped: workbook not parseable',
+      logger: 'workbookCommands',
+      data: { error: String(error) },
+    });
+  }
+  return undefined;
 }
 
 function rejectBlockingValidationIssues(

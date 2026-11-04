@@ -27,6 +27,16 @@ describe('dashboard-card-zone-name', () => {
     expect(issues[0].suggestion).toContain('"Revenue"');
   });
 
+  it('lists a type-v2="visual" worksheet zone in the suggestion', () => {
+    const issues = dashboardCardZoneNameRule.validate(
+      dashboard('D', '<zone id="1" name="A" type-v2="visual" /><zone id="2" type-v2="filter" />'),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].suggestion).toContain('"A"');
+    expect(issues[0].suggestion).not.toContain('no worksheet zones yet');
+  });
+
   it.each(['filter', 'color', 'size', 'shape', 'highlighter'])('flags a nameless %s zone', (t) => {
     expect(
       dashboardCardZoneNameRule.validate(dashboard('D', `<zone id="2" type-v2="${t}" />`)),

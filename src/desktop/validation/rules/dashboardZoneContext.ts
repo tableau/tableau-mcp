@@ -41,3 +41,12 @@ export function nextFreeId(dashboard: Element | undefined): bigint {
   }
   return max + 1n;
 }
+
+/** The worksheet a zone shows, or undefined for containers, filters, text and other non-worksheet zones. */
+export function worksheetZoneName(zone: {
+  getAttribute(name: string): string | null;
+}): string | undefined {
+  const name = zone.getAttribute('name');
+  const type = zone.getAttribute('type-v2');
+  return name && (!type || type === 'visual') ? name : undefined;
+}
