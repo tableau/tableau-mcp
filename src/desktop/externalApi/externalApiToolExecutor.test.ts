@@ -1626,6 +1626,23 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/dash-exec/document');
     });
 
+    it('attaches the serving instance id to per-sheet document reads', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [{ ...instanceFor(server), instanceId: 'inst-read' }],
+      });
+      await executor.start();
+
+      expect((await executor.getWorksheetDocument('sheet-sales', signal)).unwrap().instanceId).toBe(
+        'inst-read',
+      );
+      expect((await executor.getDashboardDocument('dash-exec', signal)).unwrap().instanceId).toBe(
+        'inst-read',
+      );
+      expect((await executor.getStoryboardDocument('story-qbr', signal)).unwrap().instanceId).toBe(
+        'inst-read',
+      );
+    });
+
     it('validates workbook XML via the first-class validation endpoint', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

@@ -46,6 +46,13 @@ const BOOLEAN_FLAG_ALLOWLIST: Readonly<Record<string, string>> = {
     spliced.warnings.length > 0 ||
     promiseOutcome === 'failed'`,
   )]: 'Presence is affirmative evidence of an incomplete bind, never evidence of completion.',
+  // WHY safe: loadDashboardXml sets verifiedWorksheetNames only after its readback settled and
+  // passed (a failed readback returns Err), so presence, even `[]`, is the pass signal. The
+  // in-place no-readback path is pinned by loadDashboardXml.crashGuard.test.ts (toBeUndefined).
+  [booleanExemptionKey(
+    'src/tools/desktop/api/applyDashboard.ts',
+    'readbackVerified = result.value.verifiedWorksheetNames !== undefined',
+  )]: 'Presence of verifiedWorksheetNames means the readback ran and passed; absence yields false.',
 };
 
 const CLAIM_EVIDENCE = [

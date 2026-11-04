@@ -1,3 +1,5 @@
+import { createDashboardReadbackDiagnoser } from './dashboardViewpoints.js';
+
 export const REFLOW_DASHBOARD_NAME = 'Tiled Layout Reflow';
 export const REFLOW_WORKSHEET_NAME = 'Sample Worksheet';
 export const REFLOW_DASHBOARD_ID = '{00000000-0000-0000-0000-000000000001}';
@@ -67,3 +69,12 @@ export function reflowWorkbook(dashboardXml: string, registered = true): string 
       <window class="dashboard" name="${REFLOW_DASHBOARD_NAME}"><viewpoints>${registered ? `<viewpoint name="${REFLOW_WORKSHEET_NAME}"/>` : ''}</viewpoints></window>
     </windows></workbook>`;
 }
+
+/** Prepare once before the POST; each readback is a boolean match. */
+export const createDashboardReadbackVerifier = (
+  candidateXml: string,
+  dashboardName: string,
+): ((readbackXml: string) => boolean) => {
+  const difference = createDashboardReadbackDiagnoser(candidateXml, dashboardName);
+  return (readbackXml) => difference(readbackXml) === undefined;
+};

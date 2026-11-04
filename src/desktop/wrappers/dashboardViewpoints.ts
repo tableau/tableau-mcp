@@ -5,8 +5,11 @@ import type { ValidationIssue } from '../validation/types.js';
 import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../xmlElement.js';
 import {
   canOmitDefaultStrategy,
+  capReason,
   hasDesktopManagedGeometry,
-  layoutGeometryMatches,
+  layoutGeometryDifference,
+  quoted,
+  zoneLabel,
 } from './dashboardLayoutGeometry.js';
 
 function parse(xml: string): Document {
@@ -249,46 +252,56 @@ export function dashboardMembershipMatches(
   }
 }
 
-/** Prepare once before the POST; each readback parses only the returned workbook. */
-export function createDashboardReadbackVerifier(
+/** Prepare once before the POST; returns the first difference in plain words (undefined = match). */
+export function createDashboardReadbackDiagnoser(
   candidateXml: string,
   dashboardName: string,
-): (readbackXml: string) => boolean {
+): (readbackXml: string) => string | undefined {
   const expected = dashboardReadbackState(parse(candidateXml), dashboardName);
   if (!expected) throw new Error('Expected an unambiguous dashboard and window.');
   const expectedNames = worksheetNamesIn(expected.dashboard);
-  return (readbackXml) => {
+  const diagnose = (readbackXml: string): string | undefined => {
     try {
       const actual = dashboardReadbackState(parse(readbackXml), dashboardName);
-      if (!actual || !containsAuthoredContent(expected.dashboard, actual.dashboard)) return false;
+      if (!actual)
+        return `Desktop does not have exactly one dashboard and one dashboard window named ${quoted(dashboardName)}`;
+      const authored = authoredContentDifference(expected.dashboard, actual.dashboard);
+      if (authored) return authored;
       const actualNames = worksheetNamesIn(actual.dashboard);
-      if (
-        actualNames.length !== expectedNames.length ||
-        actualNames.some(
-          (name) => !expectedNames.some((other) => parsedXmlNamesEqual(name, other)),
-        ) ||
-        expectedNames.some(
-          (name) =>
-            actual.viewpoints.filter((viewpoint) =>
-              parsedXmlNamesEqual(viewpoint.getAttribute('name') ?? '', name),
-            ).length !== 1,
-        )
-      )
-        return false;
+      if (actualNames.length !== expectedNames.length)
+        return `the dashboard has ${actualNames.length} worksheet zones in Desktop, ${expectedNames.length} submitted`;
+      const unexpected = actualNames.find(
+        (name) => !expectedNames.some((other) => parsedXmlNamesEqual(name, other)),
+      );
+      if (unexpected !== undefined)
+        return `worksheet ${quoted(unexpected)} is in the dashboard in Desktop but was not submitted`;
+      for (const name of expectedNames) {
+        const count = actual.viewpoints.filter((viewpoint) =>
+          parsedXmlNamesEqual(viewpoint.getAttribute('name') ?? '', name),
+        ).length;
+        if (count !== 1)
+          return `worksheet ${quoted(name)} has ${count} viewpoints in Desktop, expected 1`;
+      }
       // Desktop can retain unused viewpoints and reorder them. Each requested view must
       // still be unique and retain the submitted settings, not merely its worksheet name.
-      return expected.viewpoints.every((viewpoint) => {
+      for (const viewpoint of expected.viewpoints) {
+        const name = viewpoint.getAttribute('name') ?? '';
         const matches = actual.viewpoints.filter((other) =>
-          parsedXmlNamesEqual(
-            other.getAttribute('name') ?? '',
-            viewpoint.getAttribute('name') ?? '',
-          ),
+          parsedXmlNamesEqual(other.getAttribute('name') ?? '', name),
         );
-        return matches.length === 1 && containsAuthoredContent(viewpoint, matches[0]);
-      });
-    } catch {
-      return false;
+        if (matches.length !== 1)
+          return `worksheet ${quoted(name)} has ${matches.length} viewpoints in Desktop, expected 1`;
+        const difference = authoredContentDifference(viewpoint, matches[0]);
+        if (difference) return `worksheet ${quoted(name)} view settings: ${difference}`;
+      }
+      return undefined;
+    } catch (error) {
+      return `the readback could not be checked: ${error instanceof Error ? error.message : String(error)}`;
     }
+  };
+  return (readbackXml) => {
+    const difference = diagnose(readbackXml);
+    return difference === undefined ? undefined : capReason(difference);
   };
 }
 
@@ -323,13 +336,33 @@ function expandedName(element: Element): string {
   return `${element.namespaceURI ?? ''}:${element.localName ?? element.tagName}`;
 }
 
+function elementLabel(element: Element): string {
+  if (element.tagName === 'zone') return zoneLabel(element);
+  const name = element.getAttribute('name');
+  return `<${element.tagName}>${name ? ` ${quoted(name)}` : ''}`;
+}
+
+/** Quoted window of `value` around its first difference from `other`. */
+function textAround(value: string, other: string): string {
+  let at = 0;
+  while (at < value.length && value[at] === other[at]) at++;
+  const start = Math.max(0, at - 30);
+  const end = start + 80;
+  return JSON.stringify(
+    `${start > 0 ? '…' : ''}${value.slice(start, end)}${end < value.length ? '…' : ''}`,
+  );
+}
+
 /**
  * Compare authored attributes, ordered layout nodes, styles and text. Allow Desktop
  * to reflow automatic tiled geometry and add defaults/metadata that were not authored.
  * Never allow added/removed/reordered zones or device layouts inside authored collections.
+ * Returns the first difference in plain words, or undefined when the actual element contains it.
  */
-function containsAuthoredContent(expected: Element, actual: Element): boolean {
-  if (expandedName(expected) !== expandedName(actual)) return false;
+function authoredContentDifference(expected: Element, actual: Element): string | undefined {
+  const label = elementLabel(expected);
+  if (expandedName(expected) !== expandedName(actual))
+    return `${label}: element is <${actual.tagName}> in Desktop, <${expected.tagName}> submitted`;
   for (const attribute of Array.from(expected.attributes)) {
     if (attribute.namespaceURI === 'http://www.w3.org/2000/xmlns/') continue;
     const localName = attribute.localName ?? attribute.name;
@@ -342,13 +375,17 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
       canOmitDefaultStrategy(expected, actual)
     )
       continue;
-    if (!present) return false;
+    const missing = (): string =>
+      `${label}: ${attribute.name} is missing in Desktop, ${quoted(attribute.value)} submitted`;
+    if (!present) return missing();
     const actualValue = attribute.namespaceURI
       ? actual.getAttributeNS(attribute.namespaceURI, localName)
       : actual.getAttribute(attribute.name);
-    if (actualValue === null) return false;
+    if (actualValue === null) return missing();
+    const differs = (): string =>
+      `${label}: ${attribute.name} is ${quoted(actualValue)} in Desktop, ${quoted(attribute.value)} submitted`;
     if (attribute.name === 'name') {
-      if (!parsedXmlNamesEqual(attribute.value, actualValue)) return false;
+      if (!parsedXmlNamesEqual(attribute.value, actualValue)) return differs();
     } else if (expected.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute.name)) {
       if (
         !attribute.value.trim() ||
@@ -356,16 +393,16 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
         !Number.isInteger(Number(attribute.value)) ||
         !Number.isInteger(Number(actualValue))
       )
-        return false;
+        return `${differs()} (not a whole number)`;
       if (hasDesktopManagedGeometry(expected)) {
         if (
           ['w', 'h'].includes(attribute.name) &&
           Number(attribute.value) > 0 &&
           Number(actualValue) <= 0
         )
-          return false;
-      } else if (Math.abs(Number(attribute.value) - Number(actualValue)) > 1) return false;
-    } else if (attribute.value !== actualValue) return false;
+          return `${differs()} (Desktop-managed size collapsed to zero)`;
+      } else if (Math.abs(Number(attribute.value) - Number(actualValue)) > 1) return differs();
+    } else if (attribute.value !== actualValue) return differs();
   }
   const text = (element: Element): string => {
     const value = Array.from(element.childNodes)
@@ -374,7 +411,8 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
       .join('');
     return element.tagName === 'run' || value.trim() ? value : '';
   };
-  if (text(expected) !== text(actual)) return false;
+  if (text(expected) !== text(actual))
+    return `${label}: text is ${textAround(text(actual), text(expected))} in Desktop, ${textAround(text(expected), text(actual))} submitted`;
   const expectedChildren = children(expected);
   const expectedTags = new Set(expectedChildren.map(expandedName));
   const actualChildren = children(actual).filter(
@@ -383,11 +421,23 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
       (expected.tagName === 'zone' && child.tagName === 'zone') ||
       expectedTags.has(expandedName(child)),
   );
-  return (
-    expectedChildren.length === actualChildren.length &&
-    layoutGeometryMatches(expected, actual) &&
-    expectedChildren.every((child, index) => containsAuthoredContent(child, actualChildren[index]))
-  );
+  if (expectedChildren.length !== actualChildren.length) {
+    const countOf = (list: Element[], child: Element): number =>
+      list.filter((item) => expandedName(item) === expandedName(child)).length;
+    for (const child of [...expectedChildren, ...actualChildren]) {
+      const submittedCount = countOf(expectedChildren, child);
+      const desktopCount = countOf(actualChildren, child);
+      if (submittedCount !== desktopCount)
+        return `${label} has ${desktopCount} ${child.tagName === 'zone' ? 'child zones' : `<${child.tagName}> children`} in Desktop, ${submittedCount} submitted`;
+    }
+  }
+  const geometry = layoutGeometryDifference(expected, actual);
+  if (geometry) return geometry;
+  for (const [index, child] of expectedChildren.entries()) {
+    const difference = authoredContentDifference(child, actualChildren[index]);
+    if (difference) return difference;
+  }
+  return undefined;
 }
 
 /** Registrations observed in the snapshot, before any native repair during apply. */

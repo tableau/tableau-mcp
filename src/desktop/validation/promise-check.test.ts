@@ -169,6 +169,27 @@ describe('promise check receipt (W-23447506)', () => {
     expect(text).toContain('do not report problems without host evidence');
   });
 
+  it('formats a passed dashboard readback as verified, with the rendering caveat', () => {
+    const text = formatDashboardPromiseCheck([], [], { dashboardName: 'D' });
+    expect(text).toBe(
+      '\n\nHOST VERIFICATION — verified: preflight clean · Desktop\'s readback of "D" passed the layout and worksheet view check. It checked the stored layout and views, not rendering; do not report problems without host evidence.',
+    );
+  });
+
+  it('keeps a passed dashboard readback unverified while Desktop warnings remain', () => {
+    const text = formatDashboardPromiseCheck(
+      [],
+      [{ code: 'dropped-node', message: 'zone removed' }],
+      {
+        dashboardName: 'D',
+      },
+    );
+    expect(text).toContain('HOST VERIFICATION — unverified');
+    expect(text).toContain('passed the layout and worksheet view check');
+    expect(text).toContain('Desktop reported 1 warning(s); Desktop warnings still need checking.');
+    expect(text).not.toContain('HOST VERIFICATION — verified');
+  });
+
   it.each([formatWorkbookPromiseCheck, formatDashboardPromiseCheck])(
     'treats Desktop warnings as host evidence instead of telling the model not to report',
     (format) => {

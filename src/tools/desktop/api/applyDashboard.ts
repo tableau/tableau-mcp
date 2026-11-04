@@ -87,24 +87,26 @@ export const getApplyDashboardTool = (
             }
           }
 
-          if (result.isOk()) {
-            await emitEpisodeEvent(extra.config, {
-              type: 'apply_succeeded',
-              session_id: resolvedSession,
-              episode_id: currentEpisodeId(resolvedSession),
-              tool: 'apply-dashboard',
-              operation: 'load-dashboard',
-              promise_outcome: 'unverified',
-            });
-          }
+          // Presence, not length: a readback that ran over zero worksheets still passed.
+          const readbackVerified = result.value.verifiedWorksheetNames !== undefined;
+          const warned = result.value.documentWarnings.length > 0;
+          await emitEpisodeEvent(extra.config, {
+            type: 'apply_succeeded',
+            session_id: resolvedSession,
+            episode_id: currentEpisodeId(resolvedSession),
+            tool: 'apply-dashboard',
+            operation: 'load-dashboard',
+            promise_outcome: readbackVerified && !warned ? 'verified' : 'unverified',
+          });
 
-          // Dispatch, preflight and Desktop's warnings were observed; the applied structure was
-          // not, so it is listed as unverified (promise_outcome 'unverified' above).
+          // Without a readback only dispatch, preflight and Desktop's warnings were observed; the
+          // applied structure stays unverified.
           return new Ok(
             acceptedDashboardLoadResult({
               kind: 'dashboard',
               loaded: result.value,
               fallbackName: dashboardName,
+              readbackVerified,
             }),
           );
         },

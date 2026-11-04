@@ -34,10 +34,11 @@ function fixture(
     <windows><window class="dashboard" name="D"><viewpoints>${registered.map((name) => `<viewpoint name="${name}"><zoom type="standard"/></viewpoint>`).join('')}</viewpoints></window>
     <window class="dashboard" name="Unrelated"><viewpoints/></window></windows></workbook>`;
   let live = original;
+  let dashboardDocument = fragment(names);
   const executor = makeExecutorMock({
     desktopApiVersion: apiVersion,
     listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
-    getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment(names) })),
+    getDashboardDocument: vi.fn().mockImplementation(async () => Ok({ xml: dashboardDocument })),
     getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live })),
     applyWorkbookDocument: vi.fn().mockImplementation(async (xml: string) => {
       live = beforeWrite(live);
@@ -45,6 +46,7 @@ function fixture(
       return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
     }),
     applyDashboardDocument: vi.fn().mockImplementation(async (_id: string, xml: string) => {
+      dashboardDocument = xml;
       const parser = new DOMParser();
       const doc = parser.parseFromString(beforeWrite(live), 'text/xml');
       const dashboard = Array.from(doc.getElementsByTagName('dashboard')).find(

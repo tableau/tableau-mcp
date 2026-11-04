@@ -111,6 +111,7 @@ export const getApplyStoryboardTool = (
               kind: 'storyboard',
               loaded: result.value,
               fallbackName: storyboardName,
+              readbackVerified: false,
             }),
           );
         },
