@@ -16,6 +16,7 @@ const STRICT_CHILD: Record<string, string> = {
   zones: 'zone',
   zone: 'zone',
   devicelayouts: 'devicelayout',
+  'formatted-text': 'run',
 };
 
 function elementMatches(submitted: Element, live: Element): boolean {
@@ -34,6 +35,7 @@ function elementMatches(submitted: Element, live: Element): boolean {
     return false;
   }
   if (submittedChildren.length === 0) {
+    if (submitted.nodeName === 'run') return submitted.textContent === live.textContent;
     return (submitted.textContent ?? '').trim() === (live.textContent ?? '').trim();
   }
   let cursor = 0;
@@ -47,8 +49,8 @@ function elementMatches(submitted: Element, live: Element): boolean {
 
 /**
  * True when every submitted element and attribute is already present, in order, in the live
- * document (live may carry extra attributes and children Desktop added, but zone and devicelayout
- * collections and element text must match exactly). Unparseable input
+ * document (live may carry extra attributes and children Desktop added, but zone, devicelayout and
+ * formatted-text run collections must match exactly, as must run text). Unparseable input
  * counts as contained: this gate must never fail an apply it cannot judge.
  */
 export function submissionContainedInLive(submittedXml: string, liveXml: string): boolean {

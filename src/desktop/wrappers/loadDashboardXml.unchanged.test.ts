@@ -224,6 +224,65 @@ describe('apply Desktop accepted but did not change', () => {
     expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);
   });
 
+  it('runs the readback and fails when Desktop ignores a run deletion', async () => {
+    const two = '<formatted-text><run>First</run><run>Second</run></formatted-text>';
+    const withRuns = live.replace(/<formatted-text\/>/, two);
+    const submitted = live.replace(
+      /<formatted-text\/>/,
+      '<formatted-text><run>First</run></formatted-text>',
+    );
+    const { executor, postApplyReads } = setup([withRuns], 'dashboard', withRuns);
+    const result = await run(executor, submitted);
+    expect(result.isErr()).toBe(true);
+    expect((result.unwrapErr() as { error: { type: string } }).error.type).toBe(
+      'verification-failed',
+    );
+    expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);
+  });
+
+  it('runs the readback and fails when Desktop ignores a whitespace edit', async () => {
+    const withRuns = live.replace(
+      /<formatted-text\/>/,
+      '<formatted-text><run>Hello </run><run>World</run></formatted-text>',
+    );
+    const submitted = live.replace(
+      /<formatted-text\/>/,
+      '<formatted-text><run>Hello</run><run>World</run></formatted-text>',
+    );
+    const { executor, postApplyReads } = setup([withRuns], 'dashboard', withRuns);
+    const result = await run(executor, submitted);
+    expect(result.isErr()).toBe(true);
+    expect((result.unwrapErr() as { error: { type: string } }).error.type).toBe(
+      'verification-failed',
+    );
+    expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);
+  });
+
+  it('fails when a different-instance read is followed by a read error', async () => {
+    let applied = false;
+    let reads = 0;
+    const read = vi.fn().mockImplementation(async () => {
+      if (!applied) return Ok({ xml: live });
+      return reads++ === 0
+        ? Ok({ xml: moved, instanceId: 'two' })
+        : Err({ type: 'invalid-response', error: new Error('boom') });
+    });
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'one',
+      listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
+      getDashboardDocument: read,
+      applyDashboardDocument: vi.fn().mockImplementation(async () => {
+        applied = true;
+        return Ok({ ...applyOk.value, warnings: [] });
+      }),
+    });
+    const result = await run(executor, moved);
+    expect(result.isErr()).toBe(true);
+    const error = (result.unwrapErr() as { error: { type: string; message: string } }).error;
+    expect(error.type).toBe('verification-failed');
+    expect(error.message).toContain('different instance');
+  });
+
   it('fails when the post-apply read comes from a different Desktop instance', async () => {
     let applied = false;
     let reads = 0;

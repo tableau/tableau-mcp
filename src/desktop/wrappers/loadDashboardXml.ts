@@ -524,9 +524,25 @@ export async function loadDashboardXml({
         const instanceChanged = (value: { instanceId?: string }): boolean =>
           pinnedInstanceId !== undefined &&
           (value.instanceId ?? executor.desktopInstanceId) !== pinnedInstanceId;
+        const differentInstanceError = Err({
+          type: 'load-dashboard-xml-error' as const,
+          error: {
+            type: 'verification-failed' as const,
+            message: `Tableau accepted the ${kind} apply for "${checked.name}", but Desktop is now a different instance than the one the apply was sent to (it restarted or was reset). Changes may have been applied. Re-read the live ${kind} before retrying; do not blindly repeat the apply.`,
+          },
+        });
+        let latestRead: { instanceId?: string } | undefined;
         const changed = await pollReadback({
-          read: () =>
-            getDocumentForKind(kind, checked.id, executor as ExternalApiToolExecutor, signal),
+          read: async () => {
+            const result = await getDocumentForKind(
+              kind,
+              checked.id,
+              executor as ExternalApiToolExecutor,
+              signal,
+            );
+            if (result.isOk()) latestRead = result.value;
+            return result;
+          },
           settled: (value) => {
             if (instanceChanged(value)) return false;
             return value.xml !== before;
@@ -535,6 +551,8 @@ export async function loadDashboardXml({
         });
         if (!changed.ok) {
           throwIfSessionFatalError(changed.error);
+          if (latestRead !== undefined && instanceChanged(latestRead))
+            return differentInstanceError;
           log({
             level: 'warning',
             message: `Could not read the ${kind} back to confirm the apply changed it`,
@@ -542,13 +560,7 @@ export async function loadDashboardXml({
             data: { dashboardName: checked.name, error: changed.error },
           });
         } else if (!changed.settled && instanceChanged(changed.value)) {
-          return Err({
-            type: 'load-dashboard-xml-error',
-            error: {
-              type: 'verification-failed',
-              message: `Tableau accepted the ${kind} apply for "${checked.name}", but Desktop is now a different instance than the one the apply was sent to (it restarted or was reset). Changes may have been applied. Re-read the live ${kind} before retrying; do not blindly repeat the apply.`,
-            },
-          });
+          return differentInstanceError;
         } else if (!changed.settled) {
           const flowHint =
             kind === 'dashboard'
