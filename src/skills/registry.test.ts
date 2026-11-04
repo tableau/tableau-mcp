@@ -10,7 +10,14 @@ vi.mock('../logging/logger.js', () => ({
 }));
 
 import { log } from '../logging/logger.js';
-import { buildSkillRegistry, getSkillRegistry, resetSkillRegistry } from './registry.js';
+import { InvalidSkillsCursorError } from './cursor.js';
+import {
+  buildSkillRegistry,
+  getSkillRegistry,
+  MAX_SKILLS_PAGE_SIZE,
+  resetSkillRegistry,
+  type SkillRegistry,
+} from './registry.js';
 
 // SHA-256 digest in the `sha256:<hex>` form the registry emits.
 const registryDigest = (content: string | Buffer): string =>
@@ -287,6 +294,94 @@ describe('registry', () => {
       expect(registry.files()).toEqual([]);
       expect(mockLogs('info').some((e) => e.message.includes('No skills directory found'))).toBe(
         true,
+      );
+    });
+  });
+
+  describe('pagination', () => {
+    const N = MAX_SKILLS_PAGE_SIZE;
+    const tinyUri = (i: number): string => `skill://skill-${String(i).padStart(4, '0')}/SKILL.md`;
+
+    // Tiny valid skills with zero-padded names so URI order matches creation order.
+    const writeTinySkills = (count: number): void => {
+      for (let i = 0; i < count; i++) {
+        const name = `skill-${String(i).padStart(4, '0')}`;
+        createSkillManifest(name, manifest({ name, description: 'tiny' }));
+      }
+    };
+
+    // Follow nextCursor until it is omitted, returning every page.
+    const collectPages = (registry: SkillRegistry): Array<ReturnType<SkillRegistry['list']>> => {
+      const pages: Array<ReturnType<SkillRegistry['list']>> = [];
+      let cursor: string | undefined;
+      do {
+        // A repeated or non-advancing cursor must fail fast rather than loop forever.
+        expect(pages.length).toBeLessThanOrEqual(10);
+        const page = registry.list(cursor);
+        pages.push(page);
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      return pages;
+    };
+
+    it.each([
+      [0, [0]],
+      [1, [1]],
+      [N, [N]],
+      [N + 1, [N, 1]],
+      [2 * N, [N, N]],
+      [2 * N + 1, [N, N, 1]],
+      [100, [30, 30, 30, 10]],
+    ])('pages %i skills as %j with no gaps or duplicates', (count, pageSizes) => {
+      writeTinySkills(count);
+
+      const pages = collectPages(buildSkillRegistry(skillsDir));
+
+      expect(pages.map((p) => p.skills.length)).toEqual(pageSizes);
+      pages.forEach((page, i) => {
+        // Only a non-final page carries nextCursor; the final page omits the key entirely.
+        expect('nextCursor' in page).toBe(i < pages.length - 1);
+      });
+      expect(pages.flatMap((p) => p.skills.map((s) => s.uri))).toEqual(
+        Array.from({ length: count }, (_, i) => tinyUri(i)),
+      );
+    });
+
+    it('returns the same page for the same cursor', () => {
+      writeTinySkills(2 * N + 1);
+      const registry = buildSkillRegistry(skillsDir);
+      const { nextCursor } = registry.list();
+
+      expect(registry.list(nextCursor)).toEqual(registry.list(nextCursor));
+      expect(registry.list(nextCursor).skills[0].uri).toBe(tinyUri(N));
+    });
+
+    it('keeps get() and files() complete beyond the first page', () => {
+      writeTinySkills(N + 1);
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills.map((s) => s.uri)).not.toContain(tinyUri(N));
+      expect(registry.get(tinyUri(N))?.uri).toBe(tinyUri(N));
+      expect(registry.files()).toHaveLength(N + 1);
+    });
+
+    it('returns every resource of an entry, however many it has', () => {
+      const extra = Object.fromEntries(
+        Array.from({ length: 120 }, (_, i) => [`refs/file-${i}.md`, `ref ${i}`]),
+      );
+      createSkillManifest('big', manifest({ name: 'big', description: 'many files' }), extra);
+
+      const entry = buildSkillRegistry(skillsDir).list().skills[0];
+
+      expect(entry.uri).toBe('skill://big/SKILL.md');
+      expect(entry.resources).toHaveLength(121);
+    });
+
+    it('rejects an invalid cursor with the cursor module error', () => {
+      writeTinySkills(N + 1);
+
+      expect(() => buildSkillRegistry(skillsDir).list('invalid!')).toThrow(
+        InvalidSkillsCursorError,
       );
     });
   });
