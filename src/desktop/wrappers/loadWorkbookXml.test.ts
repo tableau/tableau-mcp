@@ -505,6 +505,44 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       }
     }
 
+    it('refuses a duplicate dashboard name that hides a zone id change', async () => {
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('D', wsZone('10', 'A'))),
+        wb(dash('D', wsZone('13', 'A')) + dash('D', wsZone('10', 'A'))),
+      );
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues).toHaveLength(1);
+        expect(result.error.error.issues[0].ruleId).toBe('dashboard-duplicate-name');
+        expect(result.error.error.issues[0].message).toContain('has 2 dashboards or stories');
+      }
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('refuses a dashboard and a storyboard sharing a name', async () => {
+      const story = '<dashboard name="D" type="storyboard"><zones /></dashboard>';
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('D', wsZone('10', 'A'))),
+        wb(dash('D', wsZone('10', 'A')) + story),
+      );
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues[0].ruleId).toBe('dashboard-duplicate-name');
+      }
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('does not refuse a duplicate name the live workbook already has', async () => {
+      const both = wb(dash('D', wsZone('10', 'A')) + dash('D', wsZone('10', 'A')));
+      const { result, applyWorkbookDocument } = await run(both, both);
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalled();
+    });
+
     it('refuses a live worksheet zone id change', async () => {
       const { result, applyWorkbookDocument } = await run(
         wb(dash('Overview', wsZone('10', 'A'))),

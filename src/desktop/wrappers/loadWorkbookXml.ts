@@ -262,6 +262,31 @@ function rejectDashboardZoneTransitions(
     const submittedDashboards = workbookDashboards(xml);
     for (const dashboard of submittedDashboards) {
       const name = dashboard.getAttribute('name') ?? '';
+      const copies = submittedDashboards.filter((d) =>
+        parsedXmlNamesEqual(d.getAttribute('name') ?? '', name),
+      ).length;
+      const liveCopies = liveDashboards.filter((d) =>
+        parsedXmlNamesEqual(d.getAttribute('name') ?? '', name),
+      ).length;
+      if (copies > 1 && copies > liveCopies) {
+        // Duplicates make the one-to-one live match below ambiguous, which would skip the zone guards.
+        return Err({
+          type: 'load-workbook-xml-error',
+          error: {
+            type: 'validation-failed',
+            issues: [
+              {
+                ruleId: 'dashboard-duplicate-name',
+                severity: 'error',
+                message: `Dashboard "${name}": the workbook has ${copies} dashboards or stories with this name. Sheet names must be unique; rename or remove the extra copy. No changes were sent to Tableau.`,
+              },
+            ],
+          },
+        });
+      }
+    }
+    for (const dashboard of submittedDashboards) {
+      const name = dashboard.getAttribute('name') ?? '';
       if (dashboard.getAttribute('type') === 'storyboard') continue;
       const submittedMatches = submittedDashboards.filter((d) =>
         parsedXmlNamesEqual(d.getAttribute('name') ?? '', name),
