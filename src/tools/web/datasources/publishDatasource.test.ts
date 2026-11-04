@@ -400,7 +400,7 @@ describe('publishDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Unable to determine the signed-in Tableau site and user',
+      "couldn't determine the signed-in Tableau site and user",
     );
     // Returned as an Err from the useRestApi callback, not thrown.
     const callbackResult = await vi.mocked(useRestApi).mock.results[0].value;

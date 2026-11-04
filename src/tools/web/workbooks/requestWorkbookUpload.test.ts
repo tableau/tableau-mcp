@@ -218,7 +218,7 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Unable to determine the signed-in Tableau site and user',
+      "couldn't determine the signed-in Tableau site and user",
     );
     expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
   });

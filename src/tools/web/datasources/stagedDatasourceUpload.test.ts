@@ -221,11 +221,10 @@ describe('cross-tenant isolation', () => {
     vi.resetAllMocks();
   });
 
-  it("does not resolve an upload staged by another tenant, since the key is rebuilt from the caller's identity", async () => {
-    const otherTenant = {
-      siteLuid: '11111111-2222-4333-8444-555555555555',
-      userLuid: tenant.userLuid,
-    };
+  it.each([
+    ['other site', { siteLuid: '11111111-2222-4333-8444-555555555555', userLuid: tenant.userLuid }],
+    ['other user', { siteLuid: tenant.siteLuid, userLuid: '66666666-7777-4888-9999-aaaaaaaaaaaa' }],
+  ])('does not resolve an upload staged by another tenant (%s)', async (_, otherTenant) => {
     const stagedKey = buildDatasourceUploadS3Key(config.keyPrefix, tenant, uploadId, 'tds');
     mocks.downloadObjectFromS3IfExists.mockImplementation(async ({ key }: { key: string }) =>
       key === stagedKey ? Buffer.from('<datasource />') : undefined,

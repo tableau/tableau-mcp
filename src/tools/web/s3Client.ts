@@ -123,16 +123,16 @@ export function joinS3Prefix(base: string, segment: string): string {
 }
 
 /**
- * Builds a tenant-scoped object key, `<keyPrefix>/<kind>/<siteLuid>/<userLuid>/<rest>`.
- * Throws if the tenant LUIDs or kind are not safe key segments, so an unscoped key is never built.
+ * Builds a tenant-scoped object key, `<keyPrefix>/<folder>/<siteLuid>/<userLuid>/<rest>`.
+ * Throws if the tenant LUIDs or folder are not safe key segments, so an unscoped key is never built.
  */
 export function buildTenantS3Key(
   keyPrefix: string,
   tenant: TenantLuids,
-  kind: string,
+  folder: string,
   rest: string,
 ): string {
-  return `${joinS3Prefix(keyPrefix, '')}${buildTenantBlobKey(tenant, kind, rest)}`;
+  return `${joinS3Prefix(keyPrefix, '')}${buildTenantBlobKey(tenant, folder, rest)}`;
 }
 
 /**

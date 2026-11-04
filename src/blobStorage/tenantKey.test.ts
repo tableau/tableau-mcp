@@ -1,6 +1,9 @@
-import { McpToolError } from '../errors/mcpToolError.js';
+import { TenantUnavailableError } from '../errors/mcpToolError.js';
+import { log } from '../logging/logger.js';
 import invariant from '../utils/invariant.js';
 import { buildTenantBlobKey, getTenantLuids } from './tenantKey.js';
+
+vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
 
 const MOCK_SITE_LUID = '0a1b2c3d-1111-4222-8333-444455556666';
 const MOCK_USER_LUID = '9f8e7d6c-aaaa-4bbb-8ccc-ddddeeeeffff';
@@ -8,17 +11,20 @@ const MOCK_USER_LUID = '9f8e7d6c-aaaa-4bbb-8ccc-ddddeeeeffff';
 describe('buildTenantBlobKey', () => {
   const tenant = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
 
-  it('places the kind before the site and user LUIDs', () => {
+  it('places the folder before the site and user LUIDs', () => {
     expect(buildTenantBlobKey(tenant, 'images', 'v/x.png')).toBe(
       `images/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/v/x.png`,
     );
   });
 
-  it.each(['', '..', '../images', 'images/v', 'Images'])('rejects an invalid kind (%j)', (kind) => {
-    expect(() => buildTenantBlobKey(tenant, kind, 'x.png')).toThrow(
-      'Invalid kind for blob storage key.',
-    );
-  });
+  it.each(['', '..', '../images', 'images/v', 'Images'])(
+    'rejects an invalid folder (%j)',
+    (folder) => {
+      expect(() => buildTenantBlobKey(tenant, folder, 'x.png')).toThrow(
+        'Invalid folder for blob storage key.',
+      );
+    },
+  );
 
   it.each([
     ['empty site', '', MOCK_USER_LUID],
@@ -45,10 +51,14 @@ describe('getTenantLuids', () => {
   it.each([
     ['empty site', '', MOCK_USER_LUID],
     ['empty user', MOCK_SITE_LUID, ''],
+    ['non-uuid site', 'test-site-luid', MOCK_USER_LUID],
     ['path traversal', MOCK_SITE_LUID, `../${MOCK_USER_LUID}`],
-  ])('returns an McpToolError for an invalid identity (%s)', (_, siteLuid, userLuid) => {
-    const result = getTenantLuids({ getSiteLuid: () => siteLuid, getUserLuid: () => userLuid });
+  ])('returns a TenantUnavailableError for an invalid identity (%s)', (_, siteLuid, userLuid) => {
+    const extra = { getSiteLuid: () => siteLuid, getUserLuid: () => userLuid };
+    const result = getTenantLuids(extra);
     invariant(result.isErr());
-    expect(result.error).toBeInstanceOf(McpToolError);
+    expect(result.error).toBeInstanceOf(TenantUnavailableError);
+    expect(result.error).toMatchObject({ type: 'tenant-unavailable', statusCode: 500 });
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ level: 'error' }), extra);
   });
 });
