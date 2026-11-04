@@ -173,7 +173,10 @@ describe('list-saved-datasources tool', () => {
     };
     const tool = getListSavedDatasourcesTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
-    const result: CallToolResult = await callback({ session: undefined, ...args }, extra);
+    const result: CallToolResult = await callback(
+      { session: undefined, nameContains: args.nameContains },
+      extra,
+    );
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     return JSON.parse(result.content[0].text) as Result;
