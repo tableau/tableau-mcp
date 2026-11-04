@@ -65,7 +65,7 @@ const actionSchema = z
       'contextId. "delete": remove an existing context by contextId.',
   );
 
-const paramsSchema = {
+const paramsShape = {
   action: actionSchema,
   graphId: optionalGraphIdSchema,
   contextId: contextIdSchema,
@@ -74,10 +74,10 @@ const paramsSchema = {
   name: nameSchema,
 };
 
-// Type-only helper: gives validateArgs a precise parameter type. This object schema is never
-// registered with the MCP server or used to parse anything — `paramsSchema` above (the flat raw
-// shape) is what the SDK advertises and parses against.
-type ManageArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
+// `.strict()` makes an unknown key a parse error. Otherwise the SDK silently drops it and the call
+// runs without whatever the caller meant that key to do.
+const paramsSchema = z.object(paramsShape).strict();
+type ManageArgs = z.infer<typeof paramsSchema>;
 
 const FIELDS_BY_ACTION: Record<ManageArgs['action'], ReadonlyArray<keyof ManageArgs>> = {
   create: ['statements', 'isGlobal', 'name'],
