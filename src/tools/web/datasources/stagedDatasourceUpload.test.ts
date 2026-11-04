@@ -111,7 +111,11 @@ describe('resolveStagedDatasourceUpload', () => {
   it('returns TDS bytes and applies the default download limit without looking up TDSX', async () => {
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
-    ).resolves.toEqual({ fileName: `${uploadId}.tds`, bytes: Buffer.from('<datasource />') });
+    ).resolves.toEqual({
+      fileName: `${uploadId}.tds`,
+      bytes: Buffer.from('<datasource />'),
+      stagedKey: expectedDownload('tds').key,
+    });
 
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledExactlyOnceWith(
       expectedDownload('tds'),
@@ -131,7 +135,11 @@ describe('resolveStagedDatasourceUpload', () => {
         tenant,
         maxBytes: 4096,
       }),
-    ).resolves.toEqual({ fileName: `${uploadId}.tdsx`, bytes });
+    ).resolves.toEqual({
+      fileName: `${uploadId}.tdsx`,
+      bytes,
+      stagedKey: expectedDownload('tdsx').key,
+    });
 
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(2);
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(

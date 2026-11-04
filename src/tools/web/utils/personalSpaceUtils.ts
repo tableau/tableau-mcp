@@ -33,7 +33,8 @@ const notInPersonalSpaceMessage = {
   publish: (landedIn: string) =>
     `This Tableau site published the workbook to ${landedIn} instead of your personal space — ` +
     'its REST API does not support personal-space publishing. Delete it there if unwanted, or ' +
-    'publish to a project explicitly by passing projectId.',
+    're-publish to a project by passing projectId; a staged upload must be re-requested with ' +
+    'request-workbook-upload.',
   move: (landedIn: string) =>
     `After the move the workbook is in ${landedIn} instead of your personal space — this ` +
     'Tableau site does not support moving workbooks into a personal space. Pass projectId to ' +
