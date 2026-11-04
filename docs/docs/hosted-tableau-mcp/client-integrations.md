@@ -41,6 +41,10 @@ For more information about Slackbot and MCP server support, see [Connecting an M
 
 </div>
 
+:::note
+Publishing workbooks and data apps is not supported from Slackbot.
+:::
+
 ## Claude Product Suite
 ### Tableau Connector for Claude and Cowork
 
@@ -61,6 +65,39 @@ After authorization completes, you’ll be returned to Claude. Start a new chat 
 <img src={require('./images/claude-connector-example.png').default} alt="Tableau connector example usage in Claude" width="650" />
 
 </div>
+
+### Claude Code
+Add Tableau MCP to Claude Code with this command:
+
+```bash
+claude mcp add --transport http Tableau https://mcp.tableau.com
+```
+
+Then start a Claude Code session, type `/mcp`, select **Tableau**, and choose **Authenticate** to approve the Tableau sign-in.
+
+You can verify the connection at any time with `claude mcp list` or within Claude Code with `/mcp`.
+
+### Allow network egress for data apps and workbook publishing
+
+:::warning[Client configuration required]
+Building and publishing data apps, and publishing workbooks, move files through presigned S3 URLs.
+Claude's code-execution environment must be allowed to reach those hosts. This is a Claude setting,
+not a Tableau MCP setting. Without it, the download or upload capabilities may be blocked. Find your pod in the
+[list of production pods](#production-pods) and allow its S3 host.
+:::
+
+In Claude, go to **Settings → Capabilities** and open **Code execution**:
+
+1. Turn on **Cloud code execution and file creation**.
+2. Turn on **Allow network egress**.
+3. Under **Domain allowlist**, keep **Package managers only** (or choose a wider option your
+   organization permits) and add the S3 host for your pod under **Additional allowed domains**. Use
+   the host only, with no `https://` (for example `10ax-tabmcp-content.s3.us-west-2.amazonaws.com`).
+   Use your own bucket's host if you run your own storage.
+
+On Team and Enterprise plans an organization admin may control these settings. If **Allow network
+egress** shows **Set by admin**, ask your admin to add the domain. Network egress controls apply to
+code execution; they don't apply to MCP connectors, web search or web fetch.
 
 ### Claude Desktop Extension
 
@@ -137,17 +174,6 @@ When everything is configured it should look like this:
 
 </div>
 
-### Claude Code
-Add Tableau MCP to Claude Code with this command:
-
-```bash
-claude mcp add --transport http Tableau https://mcp.tableau.com
-```
-
-Then start a Claude Code session, type `/mcp`, select **Tableau**, and choose **Authenticate** to approve the Tableau sign-in.
-
-You can verify the connection at any time with `claude mcp list` or within Claude Code with `/mcp`.
-
 ## OpenAI Product Suite
 Tableau MCP is now available as a plugin in the ChatGPT directory. To install the plugin, follow these steps.
 
@@ -167,8 +193,17 @@ After authorization completes, you’ll be returned to ChatGPT. Click **Try in c
 
 </div>
 
+:::warning[Client configuration required]
+Data app and workbook publishing need your agent's sandbox to reach the S3 host for your pod. In
+Codex and ChatGPT, allow it in the environment's network-access or domain-allowlist setting. See
+[Allow network egress to Tableau file staging storage](#allow-network-egress-to-tableau-file-staging-storage).
+:::
+
 ## Custom Connector
 For AI applications and agents not listed here, it's often possible to configure a custom MCP connector. For these, you typically just need to point to the Tableau hosted MCP endpoint `https://mcp.tableau.com`, then connect to run the auth flow.
+
+If the agent runs code in a sandbox, also allow the S3 host for your pod. See
+[Allow network egress to Tableau file staging storage](#allow-network-egress-to-tableau-file-staging-storage).
 
 Here's an example of adding a custom connector in Claude:
 
@@ -177,3 +212,9 @@ Here's an example of adding a custom connector in Claude:
 <img src={require('./images/custom_connector.png').default} alt="Claude Custom Connector Set Up" width="500" />
 
 </div>
+
+## Allow network egress to Tableau file staging storage
+
+import StagedUploadEndpoints from './_staged-upload-endpoints.mdx';
+
+<StagedUploadEndpoints />
