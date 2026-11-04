@@ -99,8 +99,8 @@ Configured via `AUTH` env var (see `src/config.ts`):
 - Instances are found via per-instance discovery files
   (`src/desktop/externalApi/discovery.ts`); sessions resolve to an
   `ExternalApiToolExecutor` through `SessionManager`
-- Wrappers around API calls (workbook read gateway, XML load/apply, command
-  guard, read harness) live in `src/desktop/wrappers/`
+- Wrappers around API calls (workbook read gateway, XML load/apply,
+  read harness) live in `src/desktop/wrappers/`
 
 ### Tool Architecture
 
@@ -121,10 +121,10 @@ Key tools include:
 #### Desktop Tools (`src/tools/desktop/`)
 Tools for local Tableau Desktop, organized by how they use the External Client API:
 - `api/`: thin tools over one or two API endpoints (reads, applies, exports,
-  undo/redo, execute-tableau-command)
+  undo/redo)
 - `authoring/`: multi-step orchestration (`binder/`, `fields/`, `templates/`,
   `sheets/`, `datasource/`)
-- `local/`: tools that make no API call (knowledge, search, cached-XML editing,
+- `local/`: tools that make no API call (knowledge, cached-XML editing,
   guides, interaction)
 - Root: `tool.ts` base class, `tools.ts` + `toolName.ts` registration, shared
   helpers, and the cross-tool invariant tests

@@ -296,7 +296,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings.',
   },
 ];
 
@@ -312,11 +312,6 @@ const DEMO_PROFILE_INSTRUCTIONS = [
   'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
   "For a chart request, use bind-template with the user's ask. Use the returned fallback tools when it cannot apply.",
   'For a dashboard, use bind-template to place views, then call run-dashboard-batch compose-only with existingWorksheetNames set to the live worksheet names.',
-] as const;
-
-const SPEC_LOOP_PROFILE_INSTRUCTIONS = [
-  'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
-  'Use execute-tableau-command for supported authoring operations and the list tools for discovery and readback.',
 ] as const;
 
 /**
@@ -335,12 +330,6 @@ export function buildDesktopInstructions({
   if (normalizedProfile === 'demo') {
     return [
       ...DEMO_PROFILE_INSTRUCTIONS,
-      sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
-    ].join('\n\n');
-  }
-  if (normalizedProfile === 'spec-loop') {
-    return [
-      ...SPEC_LOOP_PROFILE_INSTRUCTIONS,
       sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
     ].join('\n\n');
   }

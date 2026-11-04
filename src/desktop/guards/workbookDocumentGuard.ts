@@ -3,14 +3,15 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import { normalizeParsedXmlName } from '../xmlElement.js';
-import type { CommandValidationResult } from './commandNameRegistry.js';
 
 // Real Desktop documents carry comments between the prolog and the root
 // (e.g. "<!-- build main.26.0715.2311 -->") — a root check that forgets them
 // rejects every legitimate whole document.
 const WORKBOOK_ROOT_RE =
   /^\s*(?:<\?xml\b[\s\S]*?\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<workbook(?:\s|>|\/)/;
-function fail(problem: string, fix: string): CommandValidationResult {
+type DocumentValidationResult = { ok: true } | { ok: false; message: string };
+
+function fail(problem: string, fix: string): DocumentValidationResult {
   return { ok: false, message: `${problem}\nFIX: ${fix}` };
 }
 
@@ -92,7 +93,7 @@ export function liveSheetNamesMissingFrom(
 export function validateWorkbookDocumentApply(
   text: string,
   liveDocumentXml: string | null,
-): CommandValidationResult {
+): DocumentValidationResult {
   if (!WORKBOOK_ROOT_RE.test(text)) {
     return fail(
       'The edited workbook document is not rooted at <workbook>, so it cannot be applied.',

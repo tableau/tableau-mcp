@@ -415,9 +415,6 @@ describe('build-worksheets-from-templates', () => {
         liveXml = xml;
         return Ok({ command_id: 'apply', status: 'completed' as const, submitted_at: '' });
       }),
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'focus', status: 'completed', submitted_at: '' })),
     });
     const buildTool = getBuildWorksheetsFromTemplatesTool(server, {
       store,
@@ -890,9 +887,6 @@ describe('build-worksheets-from-templates', () => {
         liveXml = xml;
         return Ok({ command_id: 'apply', status: 'completed' as const, submitted_at: '' });
       }),
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'focus', status: 'completed', submitted_at: '' })),
     });
     const buildTool = getBuildWorksheetsFromTemplatesTool(server, {
       store,

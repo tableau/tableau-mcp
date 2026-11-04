@@ -32,14 +32,6 @@ type WithExecutor = {
 
 export type WithExecutorAndAbortSignal = WithExecutor & WithAbortSignal;
 
-export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> = {
-  command: string;
-  namespace: 'tabui' | 'tabdoc';
-  args?: Record<string, any>;
-  schema?: Z;
-  expectedInstanceId?: string;
-} & WithAbortSignal;
-
 export type ExecuteCommandError =
   | {
       type: 'command-failed';
@@ -68,16 +60,8 @@ export type ApplyWorkbookDocumentOptions = {
   onDispatch?: () => void;
 };
 
-export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
-  Z extends z.ZodTypeAny
-    ? GetCommandStatusResponse & {
-        parsedResult: z.infer<Z>;
-        warnings?: ExecuteCommandWarning[];
-        diagnostics?: WorkbookDiagnostics;
-        diagnosticsInvalid?: boolean;
-      }
-    : GetCommandStatusResponse & {
-        warnings?: ExecuteCommandWarning[];
-        diagnostics?: WorkbookDiagnostics;
-        diagnosticsInvalid?: boolean;
-      };
+export type ExecuteCommandResult = GetCommandStatusResponse & {
+  warnings?: ExecuteCommandWarning[];
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
+};

@@ -153,8 +153,8 @@ let _knowledgeDocs: KnowledgeDoc[] | null = null;
 let _knowledgeKeywordFuse: Fuse<KnowledgeDoc> | null = null;
 let _knowledgeBroadNearestFuse: Fuse<KnowledgeDoc> | null = null;
 
-// Weights are raw exponents here, not normalized ratios — but unlike the command index, this
-// path never ranks on the fuse score directly. Every query is an extended-search include
+// Weights are raw exponents here, not normalized ratios, and this path never ranks on the fuse
+// score directly. Every query is an extended-search include
 // (`'token`), so each per-key score is 0 and the record score collapses to EPSILON^(sum of
 // matched key weights / sqrt(field length)); the composite ranker below consumes it only as the
 // sub-1 tiebreaker `1 - avgFuseScore`. Scaling these weights UP therefore destroys the ranking

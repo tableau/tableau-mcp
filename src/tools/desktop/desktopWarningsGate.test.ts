@@ -405,7 +405,7 @@ function executorReturning(
     submitted_at: '2026-01-01T00:00:00Z',
     parsedResult: { outcome: 'COMPLETE', refreshed: [], failed: [] },
     ...(warnings ? { warnings } : {}),
-  } as unknown as ExecuteCommandResult<undefined>;
+  } as unknown as ExecuteCommandResult;
   const overrides: Record<string, unknown> = {
     listWorksheets: vi
       .fn()
