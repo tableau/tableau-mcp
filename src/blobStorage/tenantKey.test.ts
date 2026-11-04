@@ -8,17 +8,20 @@ const MOCK_USER_LUID = '9f8e7d6c-aaaa-4bbb-8ccc-ddddeeeeffff';
 describe('buildTenantBlobKey', () => {
   const tenant = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
 
-  it('places the kind before the site and user LUIDs', () => {
+  it('places the folder before the site and user LUIDs', () => {
     expect(buildTenantBlobKey(tenant, 'images', 'v/x.png')).toBe(
       `images/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/v/x.png`,
     );
   });
 
-  it.each(['', '..', '../images', 'images/v', 'Images'])('rejects an invalid kind (%j)', (kind) => {
-    expect(() => buildTenantBlobKey(tenant, kind, 'x.png')).toThrow(
-      'Invalid kind for blob storage key.',
-    );
-  });
+  it.each(['', '..', '../images', 'images/v', 'Images'])(
+    'rejects an invalid folder (%j)',
+    (folder) => {
+      expect(() => buildTenantBlobKey(tenant, folder, 'x.png')).toThrow(
+        'Invalid folder for blob storage key.',
+      );
+    },
+  );
 
   it.each([
     ['empty site', '', MOCK_USER_LUID],

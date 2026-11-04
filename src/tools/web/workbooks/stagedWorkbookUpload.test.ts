@@ -162,11 +162,10 @@ describe('resolveStagedWorkbookUpload', () => {
     ).rejects.toThrow('Workbook upload not found. Upload the workbook bytes before publishing.');
   });
 
-  it("does not resolve an upload staged by another tenant, since the key is rebuilt from the caller's identity", async () => {
-    const otherTenant = {
-      siteLuid: '11111111-2222-4333-8444-555555555555',
-      userLuid: MOCK_USER_LUID,
-    };
+  it.each([
+    ['other site', { siteLuid: '11111111-2222-4333-8444-555555555555', userLuid: MOCK_USER_LUID }],
+    ['other user', { siteLuid: MOCK_SITE_LUID, userLuid: '66666666-7777-4888-9999-aaaaaaaaaaaa' }],
+  ])('does not resolve an upload staged by another tenant (%s)', async (_, otherTenant) => {
     const stagedKey = buildWorkbookUploadS3Key(config.keyPrefix, tenant, uploadId, 'twb');
     mocks.downloadObjectFromS3IfExists.mockImplementation(async ({ key }: { key: string }) =>
       key === stagedKey ? Buffer.from('<workbook />') : undefined,
