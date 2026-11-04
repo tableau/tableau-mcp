@@ -736,7 +736,7 @@ const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
   },
 );
 const dialogColorChannelSchema = z.number().int().min(0).max(255);
-// The producer reads native print values with rapidjson::Value::IsInt()/GetInt().
+// Desktop accepts only signed 32-bit integers for print values; OpenAPI omits this maximum.
 const dialogPrintIntegerSchema = z.number().int().max(2_147_483_647);
 
 /** Only caller-selected input fields belong on the wire; descriptors are read-only. */

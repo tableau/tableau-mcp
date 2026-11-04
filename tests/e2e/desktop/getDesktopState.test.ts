@@ -374,6 +374,12 @@ describe('get-desktop-state real stdio MCP boundary', () => {
           toolArgs: { session: SESSION },
         });
       expect((await readDialogs()).dialogs).toEqual([activeDialog]);
+      expect(await readState()).toMatchObject({
+        state: 'BLOCKED',
+        blockedBy: 'MODAL_DIALOG',
+        activeActivities: ['QUERYING'],
+        blockingWindows: [activeDialog],
+      });
       const invoke = async (): Promise<InvokeDialogActionResult> =>
         await requireClient().callTool('invoke-dialog-action', {
           schema: invokeDialogActionResultSchema,
@@ -397,7 +403,12 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         uiSnapshotAvailable: true,
         recentActions: [nativeScenario.result.status],
       });
-      expect(await readState()).toMatchObject({ state: 'RUNNING', blockingWindows: [] });
+      expect(await readState()).toMatchObject({
+        state: 'BLOCKED',
+        blockedBy: 'QUERYING',
+        activeActivities: ['QUERYING'],
+        blockingWindows: [],
+      });
       // This is transport-state coverage only; independent save-result checks follow below.
       nativeScenario.appIdle = true;
       expect(await readState()).toMatchObject({ state: 'IDLE', blockingWindows: [] });
@@ -506,7 +517,12 @@ describe('get-desktop-state real stdio MCP boundary', () => {
           schema: invokeDialogActionResultSchema,
           toolArgs: { session: SESSION, ...request },
         });
-        expect(await readState()).toMatchObject({ state: 'RUNNING', blockingWindows: [] });
+        expect(await readState()).toMatchObject({
+          state: 'BLOCKED',
+          blockedBy: 'QUERYING',
+          activeActivities: ['QUERYING'],
+          blockingWindows: [],
+        });
         expect(await readOperation()).toMatchObject({ id: operationId, state: 'RUNNING' });
         expect(await readInventory()).toEqual(originalInventory);
         await expect(readFile(outputPath)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -796,9 +812,10 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         : nativeScenario && !nativeScenario.appIdle;
       if (busy && nativeScenario) {
         sendJson(response, 200, {
-          state: 'RUNNING',
+          state: 'BLOCKED',
+          blockedBy: nativeScenario.panelClosed ? 'QUERYING' : 'MODAL_DIALOG',
           uiSnapshotAvailable: true,
-          activeActivities: ['EXECUTING'],
+          activeActivities: ['QUERYING'],
           blockingWindows: nativeScenario.panelClosed ? [] : [nativeScenario.dialog],
           progressWindows: [],
         });
