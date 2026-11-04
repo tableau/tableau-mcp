@@ -5,8 +5,7 @@ import { z } from 'zod';
  *
  * Contract derived from the External Client API rollout, then tightened against the
  * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.31), derived from
- * the production registry/generator harness. The dialog contract was canonical-JSON
- * compared on 2026-09-08.
+ * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
  * write-thin, and an older Desktop build may omit a field a newer spec marks required.
@@ -635,8 +634,14 @@ export const PROBLEM_CODES = [
   'operation-not-found',
   'operation-pending',
   'dialog-not-found',
-  'dialog-ambiguous',
-  'dialog-action-not-found',
+  'dialog-action-indeterminate',
+  'dialog-action-invalid',
+  'dialog-action-unsupported',
+  'dialog-request-capacity',
+  'dialog-request-conflict',
+  'dialog-request-expired',
+  'dialog-session-inactive',
+  'dialog-session-stale',
   'dialog-action-ambiguous',
   'dialog-action-disabled',
   'method-not-allowed',
@@ -694,22 +699,97 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
-/** A visible dialog action copied exactly into `POST /v0/app:invokeDialogAction`. */
-export const dialogActionSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('button'),
-      label: z.string().min(1),
-    })
-    .passthrough(),
-  z
-    .object({
-      kind: z.literal('close'),
-      label: z.never().optional(),
-    })
-    .passthrough(),
-]);
+/** Advertised capabilities contain no selected file, color, or printer payload. */
+export const dialogActionSchema = z
+  .object({
+    kind: z.string(),
+    label: z.string().optional(),
+    enabled: z.boolean().optional(),
+    filters: z.array(z.unknown()).optional(),
+    selectedFilterId: z.string().optional(),
+    defaultFilterId: z.string().optional(),
+    minimumPaths: z.number().int().optional(),
+    maximumPaths: z.number().int().optional(),
+    overwriteConfirmationRequired: z.boolean().optional(),
+    alphaSupported: z.boolean().optional(),
+    printers: z.array(z.unknown()).optional(),
+    minimumPage: z.number().int().optional(),
+    maximumPage: z.number().int().optional(),
+    minimumCopies: z.number().int().optional(),
+    maximumCopies: z.number().int().optional(),
+    ranges: z.array(z.unknown()).optional(),
+    sheetScopes: z.array(z.unknown()).optional(),
+    supportsCollation: z.boolean().optional(),
+    supportsPrintToFile: z.boolean().optional(),
+    supportsExportSelection: z.boolean().optional(),
+  })
+  .passthrough();
 export type DialogAction = z.infer<typeof dialogActionSchema>;
+
+const dialogInputStringSchema = z.string().refine((value) => !value.includes('\0'), {
+  message: 'Dialog input must not contain NUL characters.',
+});
+const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
+  (value) => value.length > 0,
+  {
+    message: 'A nonempty value is required.',
+  },
+);
+const dialogColorChannelSchema = z.number().int().min(0).max(255);
+
+/** Only caller-selected input fields belong on the wire; descriptors are read-only. */
+export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('button'), label: dialogNonemptyInputStringSchema }).strict(),
+  z.object({ kind: z.literal('close') }).strict(),
+  z.object({ kind: z.literal('cancel') }).strict(),
+  z
+    .object({
+      kind: z.literal('choose-file'),
+      path: dialogNonemptyInputStringSchema,
+      filterId: dialogInputStringSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('choose-files'),
+      paths: z.array(dialogNonemptyInputStringSchema).min(1),
+      filterId: dialogInputStringSchema.optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('choose-directory'), path: dialogNonemptyInputStringSchema }).strict(),
+  z
+    .object({
+      kind: z.literal('save-file'),
+      path: dialogNonemptyInputStringSchema,
+      filterId: dialogInputStringSchema,
+      overwriteConfirmed: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('choose-color'),
+      red: dialogColorChannelSchema,
+      green: dialogColorChannelSchema,
+      blue: dialogColorChannelSchema,
+      alpha: dialogColorChannelSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('submit-print'),
+      printerId: dialogInputStringSchema,
+      range: z.enum(['all-pages', 'page-range', 'current-page', 'selection']),
+      sheetScope: z.enum(['entire-workbook', 'active-sheet', 'selected-sheets']),
+      firstPage: z.number().int().min(0),
+      lastPage: z.number().int().min(0),
+      copies: z.number().int().min(1),
+      collate: z.boolean(),
+      exportSelection: z.boolean(),
+      outputPath: dialogNonemptyInputStringSchema.optional(),
+    })
+    .strict(),
+]);
+export type DialogActionInvocation = z.infer<typeof dialogActionInvocationSchema>;
 
 /** A visible modal Qt window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
 export const windowInfoSchema = z
@@ -717,6 +797,11 @@ export const windowInfoSchema = z
     objectName: z.string(),
     title: z.string(),
     className: z.string(),
+    sessionId: z.string().optional(),
+    revision: z.number().int().nonnegative().optional(),
+    family: z.string().optional(),
+    mode: z.string().optional(),
+    status: z.string().optional(),
     messageText: z.string().optional(),
     informativeText: z.string().optional(),
     detailedText: z.string().optional(),
@@ -731,17 +816,35 @@ export type WindowInfo = z.infer<typeof windowInfoSchema>;
 /** Exact current-dialog identity copied from an item returned by `GET /v0/app/dialogs`. */
 export const dialogIdentitySchema = z
   .object({
-    objectName: z.string(),
-    title: z.string(),
-    className: z.string(),
+    objectName: dialogInputStringSchema,
+    title: dialogInputStringSchema,
+    className: dialogInputStringSchema,
+    sessionId: dialogInputStringSchema,
+    // Requests must preserve the revision exactly in JavaScript's JSON number representation.
+    revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
+
+export const dialogRequestStatusSchema = z
+  .object({
+    sessionId: z.string(),
+    revision: z.number().int(),
+    requestId: z.string(),
+    state: z.string(),
+    effect: z.string(),
+    code: z.string().optional(),
+    expiresInMilliseconds: z.number().int().optional(),
   })
   .passthrough();
-export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
+export type DialogRequestStatus = z.infer<typeof dialogRequestStatusSchema>;
 
 /** Current actionable Desktop dialogs returned independently of operation state. */
 export const dialogListSchema = z
   .object({
     dialogs: z.array(windowInfoSchema),
+    uiSnapshotAvailable: z.boolean(),
+    recentActions: z.array(dialogRequestStatusSchema),
   })
   .passthrough();
 export type DialogList = z.infer<typeof dialogListSchema>;
@@ -787,39 +890,28 @@ export type DesktopState = z.infer<typeof desktopStateSchema>;
 export const invokeDialogActionRequestSchema = z
   .object({
     dialog: dialogIdentitySchema,
-    action: dialogActionSchema,
+    requestId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[!-~]+$/),
+    action: dialogActionInvocationSchema,
   })
-  .passthrough();
+  .strict();
 export type InvokeDialogActionRequest = z.infer<typeof invokeDialogActionRequestSchema>;
 
 /**
- * Post-action dialog state. Only outcomes that confirm a click echo the selected
- * identity and action; `no-active-dialog` confirms that no action occurred.
+ * Request status and a bounded UI snapshot. Selection payloads are never echoed.
  */
-export const invokeDialogActionResultSchema = z.discriminatedUnion('outcome', [
-  z
-    .object({
-      outcome: z.literal('no-active-dialog'),
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('dismissed'),
-      dialog: dialogIdentitySchema,
-      action: dialogActionSchema,
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('action-invoked-dialog-remains'),
-      dialog: dialogIdentitySchema,
-      action: dialogActionSchema,
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-]);
+export const invokeDialogActionResultSchema = z
+  .object({
+    outcome: z.string(),
+    dialog: dialogIdentitySchema,
+    status: dialogRequestStatusSchema,
+    uiSnapshotAvailable: z.boolean(),
+    dialogs: z.array(windowInfoSchema),
+  })
+  .passthrough();
 export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
