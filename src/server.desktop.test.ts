@@ -831,7 +831,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((factory) => factory(new DesktopMcpServer()))
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
-    expect(floors.get('capture-window-screenshot')).toBe('0.2.17');
+    expect(floors.get('capture-window-screenshot')).toBe('0.2.28');
     expect(floors.get('pause-auto-updates')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
     expect(floors.get('refresh-storyboard-auto-updates')).toBe('0.2.20');
@@ -860,6 +860,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-capabilities')).toBe('0.2.25');
     expect(floors.get('reload-extensions')).toBe('0.2.25');
     expect(floors.get('validate-calculated-field')).toBe('0.2.30');
+    expect(floors.get('author-calc')).toBe('0.2.30');
     expect(floors.get('list-datasource-logical-tables')).toBe('0.2.31');
     expect(floors.get('get-datasource-underlying-data')).toBe('0.2.31');
   });
