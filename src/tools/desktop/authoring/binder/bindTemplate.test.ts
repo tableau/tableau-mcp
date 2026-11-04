@@ -3501,6 +3501,139 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 
+  it('tells the agent to build a sorted bar when Call 2 hits the pie slice gate', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    const pieDetail =
+      'pie slice field "State" has 56 distinct values, above the workable maximum of 12; keep "State" and build a sorted bar instead (template ranking-ordered-bar), and tell the user a pie with 56 slices is unreadable';
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce({
+        ...proposeResult,
+        decline_reason: { code: 'no_llm_validation_declined', detail: pieDetail },
+      } as BinderResult)
+      .mockResolvedValueOnce({
+        status: 'escalate',
+        reason: 'kind-mismatch',
+        blockers: [
+          { code: 'kind-mismatch', detail: pieDetail, pie_slice_gate: true },
+          { code: 'kind-mismatch', detail: 'unrelated blocker' },
+        ],
+      });
+
+    const call1 = await getToolResult({ session: '1', ask: 'pie chart of Sales by State' });
+    invariant(call1.content[0].type === 'text');
+    const call1Detail = JSON.parse(call1.content[0].text).decline_reason.detail;
+    expect(call1Detail).toContain('"State"');
+    expect(call1Detail).toContain('56');
+    expect(call1Detail).toContain('sorted bar');
+
+    const call2 = await getToolResult({
+      session: '1',
+      ask: 'pie chart of Sales by State',
+      proposal: sampleProposal,
+    });
+    expect(call2.isError).toBe(true);
+    invariant(call2.content[0].type === 'text');
+    const body = JSON.parse(call2.content[0].text);
+    expect(body.reason).toBe('fallback_required');
+    expect(body.guidance).toContain('"State"');
+    expect(body.guidance).toContain('56');
+    expect(body.guidance).toContain('sorted bar');
+    expect(body.guidance).toContain('ranking-ordered-bar');
+    expect(body.guidance).not.toContain('unrelated blocker');
+  });
+
+  it('admits the offered ranking-ordered-bar as the Call 2 choice after the pie gate declines', async () => {
+    const ask = 'pie chart of Sales by Region';
+    const slots = (cat: string, val: string): any[] => [
+      { slot_id: cat, role: ['dimension'], kind: 'categorical', required: true },
+      { slot_id: val, role: ['measure'], kind: 'quantitative', required: true },
+    ];
+    const pieDeclined: BinderResult = {
+      ...proposeResult,
+      decline_reason: {
+        code: 'no_llm_validation_declined',
+        detail:
+          'pie slice field "Region" has 56 distinct values; keep "Region" and build a sorted bar instead (template ranking-ordered-bar)',
+      },
+      llm_input: {
+        ...(proposeResult as Extract<BinderResult, { status: 'propose' }>).llm_input,
+        ask,
+        candidate_templates: [
+          {
+            template: 'part-to-whole-pie-chart',
+            description: 'Pie',
+            intent_keywords: ['pie'],
+            slots: slots('field_base_1', 'field_base_2'),
+          },
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: slots('field_base_1', 'field_base_2'),
+          },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    };
+    const barProposal: BindingProposal & { confidence: number } = {
+      template: 'ranking-ordered-bar',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundM7TwoFilterResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+      structuralReadback: true,
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(pieDeclined)
+      .mockResolvedValueOnce({
+        ...boundM7TwoFilterResult,
+        args: { ...(boundM7TwoFilterResult as any).args, filters: undefined },
+      } as BinderResult);
+
+    const call1 = await getToolResult({ session: 'pie-bar', ask, getExecutor });
+    invariant(call1.content[0].type === 'text');
+    const contract = JSON.parse(call1.content[0].text).call_2_contract;
+    expect(contract.proposal_choices.map((c: any) => c.template)).toEqual([
+      'part-to-whole-pie-chart',
+      'ranking-ordered-bar',
+    ]);
+    const call2 = await getToolResult({
+      session: 'pie-bar',
+      ask,
+      proposal: barProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    expect(call2.isError, JSON.stringify(call2)).toBe(false);
+    invariant(call2.content[0].type === 'text');
+    expect(call2.content[0].text).not.toContain('template-not-offered');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps advisories on the applied auto-apply result', async () => {
+    const advisory = 'slot cat has 80 distinct values in "Region" - a legibility hint';
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: { ...(boundResult as any), advisories: [advisory] } as BinderResult,
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.advisories).toEqual([advisory]);
+  });
+
   it('blocks an identical Call 2 retry when the admitted Call 2 fails before binding', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);

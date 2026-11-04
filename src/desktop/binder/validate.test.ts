@@ -822,7 +822,7 @@ describe('binder/validate — cardinality advice', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.warnings?.join('\n')).toContain('397 distinct values');
+    if (result.ok) expect(result.advisories?.join('\n')).toContain('397 distinct values');
   });
 
   it('uses a member-collapsing override instead of the authored none derivation', () => {
@@ -918,7 +918,7 @@ describe('binder/validate — cardinality advice', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.warnings?.join('\n')).toContain('397 distinct values');
+    if (result.ok) expect(result.advisories?.join('\n')).toContain('397 distinct values');
   });
 });
 

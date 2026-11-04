@@ -74,6 +74,17 @@ function withApproxCount(field: string, count: number): string {
   return FIXTURE.replace(localName, `${localName}<approx-count>${count}</approx-count>`);
 }
 
+function withExtractApproxCount(field: string, count: number): string {
+  const start = FIXTURE.indexOf("<datasource inline='true' name='Sample - Superstore'");
+  const end = FIXTURE.indexOf('</datasource>', start);
+  if (start < 0 || end < 0) throw new Error('Missing fixture datasource');
+  const extract =
+    "<extract enabled='true'><connection class='hyper'><metadata-records>" +
+    `<metadata-record class='column'><local-name>[${field}]</local-name><parent-name>[Extract].[Extract]</parent-name>` +
+    `<approx-count>${count}</approx-count></metadata-record></metadata-records></connection></extract>`;
+  return FIXTURE.slice(0, end) + extract + FIXTURE.slice(end);
+}
+
 // ── KNOWN ONE-SHOTS (bound, used_llm=false, correct template) ─────────────────
 const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['bar chart of Sales by Sub-Category', 'ranking-ordered-bar'],
@@ -418,6 +429,103 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       expect(res.status, JSON.stringify(res)).toBe(expectedStatus);
     },
   );
+
+  it('uses extract approx-counts to refuse a too-many-slices pie and steer to a sorted bar', async () => {
+    const res = await bind(
+      'pie chart of Sales by State/Province',
+      withExtractApproxCount('State/Province', 49),
+    );
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status !== 'propose') return;
+    expect(res.decline_reason.detail).toContain('"State/Province"');
+    expect(res.decline_reason.detail).toContain('49');
+    expect(res.decline_reason.detail).toContain('sorted bar');
+    expect(res.decline_reason.detail).toContain('ranking-ordered-bar');
+    expect(res.decline_reason.detail).not.toContain('lower-cardinality');
+  });
+
+  it('offers ranking-ordered-bar as a Call 2 choice when the pie gate fires', async () => {
+    const res = await bind(
+      'pie chart of Sales by State/Province',
+      withExtractApproxCount('State/Province', 49),
+    );
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status !== 'propose') return;
+    const bar = res.llm_input.candidate_templates.find((t) => t.template === 'ranking-ordered-bar');
+    expect(bar).toBeDefined();
+    expect(res.llm_input.fields.map((f) => f.name)).toEqual(
+      expect.arrayContaining(['State/Province', 'Sales']),
+    );
+    const proposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Sales by State/Province',
+      confidence: 1,
+      bindings: [
+        { slot_id: 'field_base_1', field: 'State/Province' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+    };
+    const call2 = await bindTemplate({
+      ask: 'pie chart of Sales by State/Province',
+      workbookXml: withExtractApproxCount('State/Province', 49),
+      manifests,
+      proposal,
+    });
+    expect(call2.status, JSON.stringify(call2)).toBe('bound');
+    if (call2.status === 'bound') expect(call2.args.template_name).toBe('ranking-ordered-bar');
+  });
+
+  it('shows the injected llmPropose path the ranking-ordered-bar when the pie gate fires', async () => {
+    let seen: string[] = [];
+    await bindTemplate({
+      ask: 'pie chart of Sales by State/Province',
+      workbookXml: withExtractApproxCount('State/Province', 49),
+      manifests,
+      llmPropose: async (input) => {
+        seen = input.candidate_templates.map((t) => t.template);
+        return { template: 'ranking-ordered-bar', title: 't', confidence: 0, bindings: [] };
+      },
+    });
+    expect(seen).toContain('ranking-ordered-bar');
+  });
+
+  it('still binds a low-cardinality pie when the extract count is small', async () => {
+    const res = await bind('pie chart of Sales by Category', withExtractApproxCount('Category', 3));
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status === 'bound') expect(res.args.template_name).toBe('part-to-whole-pie-chart');
+  });
+
+  it('warns on a bar bound to a high-count extract dimension', async () => {
+    const res = await bind(
+      'bar chart of Sales by Product Name',
+      withExtractApproxCount('Product Name', 1850),
+    );
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(JSON.stringify(res.advisories ?? [])).toContain('1850');
+  });
+
+  it('keeps cardinality advice as an advisory that does not break complete-request coverage', async () => {
+    const ask = 'bar chart of Sales by State/Province';
+    const baseline = await bindTemplate({
+      ask,
+      workbookXml: FIXTURE,
+      manifests,
+      requireCompleteRequest: true,
+    });
+    expect(baseline.status, JSON.stringify(baseline)).toBe('bound');
+    const res = await bindTemplate({
+      ask,
+      workbookXml: withExtractApproxCount('State/Province', 80),
+      manifests,
+      requireCompleteRequest: true,
+    });
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.requestCoverage).toBeDefined();
+    expect(res.warnings).toBeUndefined();
+    expect(JSON.stringify(res.advisories)).toContain('80');
+  });
 
   it('does not fabricate missing pie cardinality metadata', async () => {
     const res = await bind('pie chart of Sales by Product Name');
