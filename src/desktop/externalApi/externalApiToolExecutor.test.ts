@@ -6,6 +6,7 @@ import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { Provider } from '../../utils/provider.js';
 import {
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
@@ -37,10 +38,13 @@ const instanceFor = (
 });
 
 const invokeDialogActionRequest: InvokeDialogActionRequest = {
+  requestId: 'request-1',
   dialog: {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 1,
   },
   action: { kind: 'button', label: 'Discard' },
 };
@@ -2325,11 +2329,17 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.getActiveDialogs(signal);
 
       expect(result.unwrap()).toEqual({
+        uiSnapshotAvailable: true,
+        recentActions: [],
         dialogs: [
           {
             objectName: 'saveChangesDialog',
             title: 'Save Changes',
             className: 'QMessageBox',
+            sessionId: 'dialog-session-1',
+            revision: 1,
+            family: 'qt',
+            status: 'active',
             messageText: 'Do you want to save changes to Regional Sales?',
             informativeText: 'Unsaved changes will be lost if you discard them.',
             detailedText: 'Workbook: Regional Sales',
@@ -2357,43 +2367,42 @@ describe('ExternalApiToolExecutor', () => {
       server.setOverride('GET /v0/app/dialogs', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ dialogs: [] }),
+        body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.getActiveDialogs(signal);
 
-      expect(result.unwrap()).toEqual({ dialogs: [] });
+      expect(result.unwrap()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
     });
 
     it.each([
-      ['no-active-dialog', { outcome: 'no-active-dialog', dialogs: [] }],
-      [
-        'dismissed',
-        {
-          outcome: 'dismissed',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [],
+      'dispatched-pending',
+      'completed',
+      'canceled',
+      'failed',
+      'expired',
+      'indeterminate',
+    ] as const)('returns the %s request status exactly once', async (outcome) => {
+      const response = {
+        outcome,
+        dialog: invokeDialogActionRequest.dialog,
+        status: {
+          sessionId: invokeDialogActionRequest.dialog.sessionId,
+          revision: invokeDialogActionRequest.dialog.revision,
+          requestId: invokeDialogActionRequest.requestId,
+          state: outcome === 'dispatched-pending' ? 'pending' : outcome,
+          effect: outcome === 'completed' ? 'dialog-dismissed' : 'none',
         },
-      ],
-      [
-        'action-invoked-dialog-remains',
-        {
-          outcome: 'action-invoked-dialog-remains',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [
-            {
-              ...invokeDialogActionRequest.dialog,
-              messageText: 'The click started validation.',
-              buttons: ['Discard'],
-            },
-          ],
-        },
-      ],
-    ] as const)('returns the %s success exactly once', async (_outcome, response) => {
+        uiSnapshotAvailable: outcome === 'completed',
+        dialogs: [],
+      };
+
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status: 200,
         contentType: 'application/json',
@@ -2508,12 +2517,15 @@ describe('ExternalApiToolExecutor', () => {
         // Session-fatal guidance leads: stop every command and read, restart Desktop.
         expect(error.error?.message).toContain('restart Tableau Desktop');
         expect(error.error?.message).toContain('including reads');
-        // Replay-safety core is kept: the first outcome is unknown, so the agent must not re-invoke
-        // the action (holds even after a restart in a new session).
+        // The first outcome stays unknown after a restart, so a new session cannot deduplicate it.
         expect(error.error?.message).toContain(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE);
         expect(error.error?.message).toContain('may already have been invoked');
         // But the get-active-dialogs read clause is dropped: a dead session forbids every read.
-        expect(error.error?.message).not.toContain('get-active-dialogs once for fresh inspection');
+        expect(error.error?.message).not.toContain('get-active-dialogs');
+        expect(error.error?.message).toContain(
+          'This failed session must not receive more commands or reads',
+        );
+        expect(error.error?.message).toContain('restart or session change');
         expect(error.error?.message).not.toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
       }
       expect(
@@ -3153,9 +3165,10 @@ describe('ExternalApiToolExecutor', () => {
             'Do not retry the originating operation until the dialog is handled and its cause is corrected',
           );
           expect(commandError.message).toContain('exact returned dialog identity');
-          expect(commandError.message).toContain('exact returned action');
+          expect(commandError.message).toContain('advertised action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
-          expect(commandError.message).toContain('action-invoked-dialog-remains');
+          expect(commandError.message).toContain('pending or indeterminate status');
+          expect(commandError.message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3504,10 +3517,11 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('Do not blindly retry the originating operation');
   expect(message).toContain('get-active-dialogs');
   expect(message).toContain('exact returned dialog identity');
-  expect(message).toContain('exact returned action');
-  expect(message).toContain('at most one invoke-dialog-action call');
+  expect(message).toContain('advertised action');
+  expect(message).toContain('invoke-dialog-action for one logical action');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
   expect(message).toContain('Do not guess or assume Cancel is safe');
-  expect(message).toContain('action-invoked-dialog-remains');
+  expect(message).toContain('pending or indeterminate status');
   expect(message).toContain('ask the user to handle the dialog');
   expect(message).toContain('list-instances');
 }
@@ -3516,10 +3530,12 @@ function expectIndeterminateDialogAction(message: string): void {
   expect(message).toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
   expect(message).toContain('invoke-dialog-action outcome is indeterminate');
   expect(message).toContain('action may already have been invoked');
-  expect(message).toContain('Do not call invoke-dialog-action again or click another action');
-  expect(message).toContain('get-active-dialogs once for fresh inspection only');
-  expect(message).toContain('result does not prove that the first click did not happen');
-  expect(message).toContain('Ask the user to handle any consequential choice');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
+  expect(message).toContain('replay only the identical request with the same requestId');
+  expect(message).toContain('Never use a new requestId');
+  expect(message).toContain('original sessionId/requestId');
+  expect(message).toContain('ask the user to handle any consequential choice');
+  expect(message).not.toContain('Do not call invoke-dialog-action again');
   expect(message).not.toContain('retry with that session');
   expect(message).not.toContain('at most one invoke-dialog-action call');
 }

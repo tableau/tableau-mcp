@@ -21,11 +21,24 @@ const DECOY_TOKEN = 'fixture-decoy-state-token';
 const SESSION = String(process.pid);
 const DECOY_PID = process.ppid;
 const MISSING_PID = 99_999_991;
+const DIALOG_REQUEST_ID = 'headless-discard-request';
 
-const dialog = {
+const dialogIdentity = {
   objectName: 'saveChangesDialog',
   title: 'Save Changes',
   className: 'QMessageBox',
+  sessionId: 'headless-dialog-session',
+  revision: 1,
+};
+const completedDialogStatus = {
+  sessionId: dialogIdentity.sessionId,
+  revision: dialogIdentity.revision,
+  requestId: DIALOG_REQUEST_ID,
+  state: 'completed',
+  effect: 'dialog-dismissed',
+};
+const dialog = {
+  ...dialogIdentity,
   messageText: 'Save the workbook?',
   informativeText: 'Unsaved work may be lost.',
   detailedText: 'Workbook: Regional Sales',
@@ -164,7 +177,11 @@ describe('get-desktop-state real stdio MCP boundary', () => {
       schema: dialogListSchema,
       toolArgs: { session: SESSION },
     });
-    expect(inspected.dialogs).toEqual(before.blockingWindows);
+    expect(inspected).toEqual({
+      dialogs: before.blockingWindows,
+      uiSnapshotAvailable: true,
+      recentActions: [],
+    });
 
     const selectedDialog = inspected.dialogs[0];
     const selectedAction = selectedDialog.actions?.[0];
@@ -178,21 +195,31 @@ describe('get-desktop-state real stdio MCP boundary', () => {
             objectName: selectedDialog.objectName,
             title: selectedDialog.title,
             className: selectedDialog.className,
+            sessionId: selectedDialog.sessionId,
+            revision: selectedDialog.revision,
           },
+          requestId: DIALOG_REQUEST_ID,
           action: selectedAction,
         },
       }),
     ).toEqual({
-      outcome: 'dismissed',
-      dialog: {
-        objectName: dialog.objectName,
-        title: dialog.title,
-        className: dialog.className,
-      },
-      action: { kind: 'button', label: 'Discard' },
+      outcome: 'completed',
+      dialog: dialogIdentity,
+      status: completedDialogStatus,
+      uiSnapshotAvailable: true,
       dialogs: [],
     });
     expect(await readState()).toMatchObject({ state: 'IDLE', blockingWindows: [] });
+    expect(
+      await requireClient().callTool('get-active-dialogs', {
+        schema: dialogListSchema,
+        toolArgs: { session: SESSION },
+      }),
+    ).toEqual({
+      dialogs: [],
+      uiSnapshotAvailable: true,
+      recentActions: [completedDialogStatus],
+    });
 
     expect(requests.filter(({ server }) => server === 'decoy')).toEqual([]);
     expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
@@ -200,6 +227,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
       'GET /v0/app/dialogs',
       'POST /v0/app:invokeDialogAction',
       'GET /v0/app/state',
+      'GET /v0/app/dialogs',
     ]);
   });
 
@@ -391,25 +419,27 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     }
 
     if (request.method === 'GET' && request.url === '/v0/app/dialogs') {
-      sendJson(response, 200, { dialogs: dialogOpen ? [dialog] : [] });
+      sendJson(response, 200, {
+        dialogs: dialogOpen ? [dialog] : [],
+        uiSnapshotAvailable: true,
+        recentActions: dialogOpen ? [] : [completedDialogStatus],
+      });
       return;
     }
 
     if (request.method === 'POST' && request.url === '/v0/app:invokeDialogAction') {
       const parsed = JSON.parse(body) as { dialog: Record<string, unknown>; action: unknown };
       expect(parsed).toEqual({
-        dialog: {
-          objectName: dialog.objectName,
-          title: dialog.title,
-          className: dialog.className,
-        },
+        dialog: dialogIdentity,
+        requestId: DIALOG_REQUEST_ID,
         action: { kind: 'button', label: 'Discard' },
       });
       dialogOpen = false;
       sendJson(response, 200, {
-        outcome: 'dismissed',
+        outcome: 'completed',
         dialog: parsed.dialog,
-        action: parsed.action,
+        status: completedDialogStatus,
+        uiSnapshotAvailable: true,
         dialogs: [],
       });
       return;
@@ -469,7 +499,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         tokenType: 'Bearer',
         token: args.token,
         applicationVersion: 'headless-fixture',
-        apiVersion: '0.2.14',
+        apiVersion: '0.2.26',
         startedAt: args.startedAt,
       }),
       'utf8',
