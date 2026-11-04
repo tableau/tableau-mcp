@@ -1,4 +1,5 @@
 import { BucketS3Config } from '../s3Client.js';
+import { MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import {
   buildDatasourceUploadS3Key,
   getDatasourceFileType,
@@ -24,6 +25,8 @@ const config: BucketS3Config = {
   keyPrefix: '/mcp/',
   presignTtlSeconds: 300,
 };
+const tenant = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
+const tenantPrefix = `${MOCK_SITE_LUID}/${MOCK_USER_LUID}`;
 const uploadId = '123e4567-e89b-42d3-a456-426614174000';
 
 describe('requestStagedDatasourceUpload', () => {
@@ -44,7 +47,7 @@ describe('requestStagedDatasourceUpload', () => {
   ])(
     'presigns %s with the matching S3 key, TTL, content type, and bounded size',
     async (fileName, fileType, contentType) => {
-      const result = await requestStagedDatasourceUpload({ fileName, config });
+      const result = await requestStagedDatasourceUpload({ fileName, config, tenant });
 
       expect(result.datasourceUploadId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -58,7 +61,7 @@ describe('requestStagedDatasourceUpload', () => {
         requiredHeaders: { 'Content-Type': contentType },
       });
       expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledExactlyOnceWith({
-        key: `mcp/datasource-uploads/${result.datasourceUploadId}/datasource.${fileType}`,
+        key: `mcp/datasource-uploads/${tenantPrefix}/${result.datasourceUploadId}/datasource.${fileType}`,
         contentType,
         bucket: config.bucket,
         region: config.region,
@@ -70,7 +73,7 @@ describe('requestStagedDatasourceUpload', () => {
   it.each(['Sales.xml', 'Sales.tds.exe', 'Sales', ''])(
     'rejects unsupported filename %j before presigning',
     async (fileName) => {
-      await expect(requestStagedDatasourceUpload({ fileName, config })).rejects.toThrow(
+      await expect(requestStagedDatasourceUpload({ fileName, config, tenant })).rejects.toThrow(
         'Data source upload filename must end in .tds or .tdsx.',
       );
       expect(mocks.createPresignedPutUrlToS3).not.toHaveBeenCalled();
@@ -81,9 +84,9 @@ describe('requestStagedDatasourceUpload', () => {
     const error = new Error('Unable to presign');
     mocks.createPresignedPutUrlToS3.mockRejectedValue(error);
 
-    await expect(requestStagedDatasourceUpload({ fileName: 'Sales.tds', config })).rejects.toBe(
-      error,
-    );
+    await expect(
+      requestStagedDatasourceUpload({ fileName: 'Sales.tds', config, tenant }),
+    ).rejects.toBe(error);
   });
 });
 
@@ -98,7 +101,7 @@ describe('resolveStagedDatasourceUpload', () => {
     maxBytes = 5 * 1000 * 1000 * 1000,
   ): { key: string; bucket: string; region: string; maxBytes: number } {
     return {
-      key: `mcp/datasource-uploads/${uploadId}/datasource.${fileType}`,
+      key: `mcp/datasource-uploads/${tenantPrefix}/${uploadId}/datasource.${fileType}`,
       bucket: config.bucket,
       region: config.region,
       maxBytes,
@@ -107,7 +110,7 @@ describe('resolveStagedDatasourceUpload', () => {
 
   it('returns TDS bytes and applies the default download limit without looking up TDSX', async () => {
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
     ).resolves.toEqual({ fileName: `${uploadId}.tds`, bytes: Buffer.from('<datasource />') });
 
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledExactlyOnceWith(
@@ -122,7 +125,12 @@ describe('resolveStagedDatasourceUpload', () => {
       .mockResolvedValueOnce(bytes);
 
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, maxBytes: 4096 }),
+      resolveStagedDatasourceUpload({
+        datasourceUploadId: uploadId,
+        config,
+        tenant,
+        maxBytes: 4096,
+      }),
     ).resolves.toEqual({ fileName: `${uploadId}.tdsx`, bytes });
 
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(2);
@@ -140,6 +148,7 @@ describe('resolveStagedDatasourceUpload', () => {
     await resolveStagedDatasourceUpload({
       datasourceUploadId: uploadId,
       config,
+      tenant,
       maxBytes: 200 * 1024 * 1024,
     });
 
@@ -152,7 +161,7 @@ describe('resolveStagedDatasourceUpload', () => {
     mocks.downloadObjectFromS3IfExists.mockResolvedValue(undefined);
 
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
     ).rejects.toThrow(
       'Data source upload not found. Upload the data source bytes before publishing.',
     );
@@ -162,9 +171,9 @@ describe('resolveStagedDatasourceUpload', () => {
   it.each(['../not-safe', '', 'not-a-uuid'])(
     'rejects invalid upload id %j before S3 lookup',
     async (datasourceUploadId) => {
-      await expect(resolveStagedDatasourceUpload({ datasourceUploadId, config })).rejects.toThrow(
-        'Data source upload id is invalid.',
-      );
+      await expect(
+        resolveStagedDatasourceUpload({ datasourceUploadId, config, tenant }),
+      ).rejects.toThrow('Data source upload id is invalid.');
       expect(mocks.downloadObjectFromS3IfExists).not.toHaveBeenCalled();
     },
   );
@@ -173,7 +182,7 @@ describe('resolveStagedDatasourceUpload', () => {
     mocks.downloadObjectFromS3IfExists.mockResolvedValue(Buffer.alloc(0));
 
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
     ).rejects.toThrow('Data source upload bytes must not be empty.');
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(1);
   });
@@ -184,7 +193,7 @@ describe('resolveStagedDatasourceUpload', () => {
       .mockResolvedValueOnce(Buffer.alloc(0));
 
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
     ).rejects.toThrow('Data source upload bytes must not be empty.');
   });
 
@@ -193,9 +202,37 @@ describe('resolveStagedDatasourceUpload', () => {
     mocks.downloadObjectFromS3IfExists.mockRejectedValue(error);
 
     await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
     ).rejects.toBe(error);
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('cross-tenant isolation', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("does not resolve an upload staged by another tenant, since the key is rebuilt from the caller's identity", async () => {
+    const otherTenant = {
+      siteLuid: '11111111-2222-4333-8444-555555555555',
+      userLuid: tenant.userLuid,
+    };
+    const stagedKey = buildDatasourceUploadS3Key(config.keyPrefix, tenant, uploadId, 'tds');
+    mocks.downloadObjectFromS3IfExists.mockImplementation(async ({ key }: { key: string }) =>
+      key === stagedKey ? Buffer.from('<datasource />') : undefined,
+    );
+
+    await expect(
+      resolveStagedDatasourceUpload({
+        datasourceUploadId: uploadId,
+        config,
+        tenant: otherTenant,
+      }),
+    ).rejects.toThrow('Data source upload not found');
+    for (const [{ key }] of mocks.downloadObjectFromS3IfExists.mock.calls) {
+      expect(key).toContain(`${otherTenant.siteLuid}/${otherTenant.userLuid}/`);
+    }
   });
 });
 
@@ -203,14 +240,20 @@ describe('buildDatasourceUploadS3Key', () => {
   it.each(['tds', 'tdsx'] as const)(
     'normalizes the prefix and includes the %s extension',
     (fileType) => {
-      expect(buildDatasourceUploadS3Key('/base/', uploadId, fileType)).toBe(
-        `base/datasource-uploads/${uploadId}/datasource.${fileType}`,
+      expect(buildDatasourceUploadS3Key('/base/', tenant, uploadId, fileType)).toBe(
+        `base/datasource-uploads/${tenantPrefix}/${uploadId}/datasource.${fileType}`,
       );
     },
   );
 
+  it('builds a tenant-scoped key when no prefix is configured', () => {
+    expect(buildDatasourceUploadS3Key('', tenant, uploadId, 'tds')).toBe(
+      `datasource-uploads/${tenantPrefix}/${uploadId}/datasource.tds`,
+    );
+  });
+
   it('rejects an invalid upload id', () => {
-    expect(() => buildDatasourceUploadS3Key('base', '../other', 'tds')).toThrow(
+    expect(() => buildDatasourceUploadS3Key('base', tenant, '../other', 'tds')).toThrow(
       'Data source upload id is invalid.',
     );
   });

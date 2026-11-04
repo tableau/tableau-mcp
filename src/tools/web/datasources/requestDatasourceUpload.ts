@@ -1,10 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { getTenantLuids } from '../../../blobStorage/tenantKey.js';
+import { McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -62,11 +64,33 @@ export const getRequestDatasourceUploadTool = (
             );
           }
 
-          const result = await requestStagedDatasourceUpload({
-            fileName,
-            config: extra.config.bucketS3,
+          const config = extra.config.bucketS3;
+
+          // Non-OAuth publish signs in as the configured user, not the OAuth token user, so key by that.
+          const sessionTenant = getTenantLuids(extra);
+          if (extra.config.auth === 'oauth' && sessionTenant.isOk()) {
+            return new Ok(
+              await requestStagedDatasourceUpload({
+                fileName,
+                config,
+                tenant: sessionTenant.value,
+              }),
+            );
+          }
+
+          return await useRestApi<Result<RequestDatasourceUploadResult, McpToolError>>({
+            ...extra,
+            jwtScopes: tool.requiredApiScopes,
+            callback: async () => {
+              const tenant = getTenantLuids(extra);
+              if (tenant.isErr()) {
+                return tenant;
+              }
+              return new Ok(
+                await requestStagedDatasourceUpload({ fileName, config, tenant: tenant.value }),
+              );
+            },
           });
-          return new Ok(result);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({

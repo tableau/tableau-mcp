@@ -12,6 +12,8 @@
  * S3 client rather than each constructing their own.
  */
 
+import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
+
 /**
  * Socket-idle timeouts (ms) for the S3 client's Node HTTP handler.
  *
@@ -113,6 +115,19 @@ export function joinS3Prefix(base: string, segment: string): string {
     .filter(Boolean)
     .join('/');
   return joined ? `${joined}/` : '';
+}
+
+/**
+ * Builds a tenant-scoped object key, `<keyPrefix>/<kind>/<siteLuid>/<userLuid>/<rest>`.
+ * Throws if the tenant LUIDs or kind are not safe key segments, so an unscoped key is never built.
+ */
+export function buildTenantS3Key(
+  keyPrefix: string,
+  tenant: TenantLuids,
+  kind: string,
+  rest: string,
+): string {
+  return `${joinS3Prefix(keyPrefix, '')}${buildTenantBlobKey(tenant, kind, rest)}`;
 }
 
 /**

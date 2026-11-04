@@ -1,10 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFile } from 'fs/promises';
 import { basename } from 'path';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
+import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
+import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -100,11 +101,19 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
             datasourceFilePath,
           });
 
-          const result = await useRestApi<PublishDatasourceResult>({
+          const result = await useRestApi<Result<PublishDatasourceResult, McpToolError>>({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              const resolvedDatasourceFile = await loadDatasourceFile(input, extra.config.bucketS3);
+              const resolvedDatasourceInput = await loadDatasourceFile(
+                input,
+                extra.config.bucketS3,
+                extra,
+              );
+              if (resolvedDatasourceInput.isErr()) {
+                return resolvedDatasourceInput;
+              }
+              const resolvedDatasourceFile = resolvedDatasourceInput.value;
               const fileType = getDatasourceFileType(resolvedDatasourceFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -127,15 +136,15 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
                 overwrite,
               });
 
-              return {
+              return new Ok({
                 status: 'published' as const,
                 data: publishedDatasource,
                 url: publishedDatasource.webpageUrl ?? '',
-              };
+              });
             },
           });
 
-          return new Ok(result);
+          return result;
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({
@@ -201,13 +210,22 @@ function validateDatasourceInput({
 async function loadDatasourceFile(
   input: DatasourceInput,
   config: BucketS3Config,
-): Promise<ResolvedDatasource> {
-  return input.source === 'local'
-    ? await resolveLocalDatasourceFile(input.datasourceFilePath)
-    : await resolveStagedDatasourceUpload({
-        datasourceUploadId: input.datasourceUploadId,
-        config,
-      });
+  tenantSource: TenantIdentitySource,
+): Promise<Result<ResolvedDatasource, McpToolError>> {
+  if (input.source === 'local') {
+    return new Ok(await resolveLocalDatasourceFile(input.datasourceFilePath));
+  }
+  const tenant = getTenantLuids(tenantSource);
+  if (tenant.isErr()) {
+    return tenant;
+  }
+  return new Ok(
+    await resolveStagedDatasourceUpload({
+      datasourceUploadId: input.datasourceUploadId,
+      config,
+      tenant: tenant.value,
+    }),
+  );
 }
 
 async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<ResolvedDatasource> {

@@ -7,7 +7,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getPublishDatasourceTool } from './publishDatasource.js';
 
 const mocks = vi.hoisted(() => ({
@@ -207,6 +207,7 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockResolveStagedDatasourceUpload).toHaveBeenCalledWith({
       datasourceUploadId: validArgs.datasourceUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -357,6 +358,24 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledOnce();
   });
 
+  it('fails closed without resolving the staged upload when the session has no valid tenant LUIDs', async () => {
+    const result = await getToolResult(validArgs, {
+      transport: 'http',
+      extraOverrides: { _siteLuid: '' },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Unable to determine the signed-in Tableau site and user',
+    );
+    // Returned as an Err from the useRestApi callback, not thrown.
+    const callbackResult = await vi.mocked(useRestApi).mock.results[0].value;
+    expect(callbackResult.isErr()).toBe(true);
+    expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+  });
+
   it('returns an args-validation error when local data source path is neither tds nor tdsx', async () => {
     const result = await getToolResult(
       {
@@ -468,6 +487,7 @@ async function getToolResult(
     boundedProjectIds?: Set<string> | null;
     bucketS3Enabled?: boolean;
     transport?: 'stdio' | 'http';
+    extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
   } = {},
 ): Promise<CallToolResult> {
   const tool = getPublishDatasourceTool(new WebMcpServer());
@@ -488,12 +508,14 @@ function getMockExtra({
   boundedProjectIds = null,
   bucketS3Enabled = true,
   transport = 'stdio',
+  extraOverrides = {},
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
   transport?: 'stdio' | 'http';
+  extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
+  const extra = getMockRequestHandlerExtra(extraOverrides);
   return {
     ...extra,
     getConfigWithOverrides: vi.fn().mockResolvedValue({
