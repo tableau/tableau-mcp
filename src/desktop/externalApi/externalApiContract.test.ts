@@ -490,6 +490,31 @@ describe('external client API contract (captured openapi fixture)', () => {
         invokeDialogActionResultSchema.safeParse({ outcome: 'dismissed', dialogs: [] }).success,
       ).toBe(false);
     });
+
+    it.each(['firstPage', 'lastPage', 'copies'])(
+      'bounds native print %s to the producer signed 32-bit parser',
+      (field) => {
+        const action = {
+          kind: 'submit-print',
+          printerId: 'printer-id',
+          range: 'all-pages',
+          sheetScope: 'active-sheet',
+          firstPage: 0,
+          lastPage: 0,
+          copies: 1,
+        };
+        const validAction = { ...action, collate: false, exportSelection: false };
+        expect(
+          dialogActionInvocationSchema.safeParse({ ...validAction, [field]: 2_147_483_647 })
+            .success,
+        ).toBe(true);
+        for (const value of [2_147_483_648, Number.MAX_SAFE_INTEGER, 1.5]) {
+          expect(
+            dialogActionInvocationSchema.safeParse({ ...validAction, [field]: value }).success,
+          ).toBe(false);
+        }
+      },
+    );
   });
 
   describe('app-state contract', () => {
