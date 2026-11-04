@@ -81,7 +81,12 @@ describe('createDataAppWorkspace', () => {
       expect.soft(workbook.getAttribute('source-build')).toBe('2026.3.2 (20263.26.1027.1340)');
       const manifest = workbook.getElementsByTagName('document-format-change-manifest')[0];
       invariant(manifest);
-      for (const declaration of ['Extensions', 'VizExtensions', '_.fcp.Packages.true...Packages']) {
+      for (const declaration of [
+        'Extensions',
+        'VizExtensions',
+        '_.fcp.Packages.true...Packages',
+        '_.fcp.VizExtensionsDupEncodingUUID.true...VizExtensionsDupEncodingUUID',
+      ]) {
         expect.soft(manifest.getElementsByTagName(declaration).length, declaration).toBe(1);
       }
     });
