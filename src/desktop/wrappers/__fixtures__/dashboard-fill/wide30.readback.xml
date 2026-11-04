@@ -1,0 +1,29 @@
+<dashboard enable-sort-zone-taborder='true' name='Dashboard 1'>
+      <style />
+      <size maxheight='768' maxwidth='1366' minheight='768' minwidth='1366' />
+      <zones>
+        <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone h='100000' id='3' param='horz' type-v2='layout-flow' w='100000' x='0' y='0'>
+            <zone fixed-size='410' h='100000' id='5' is-fixed='true' name='Total Revenue' w='30015' x='0' y='0' />
+            <zone fixed-size='956' h='100000' id='6' is-fixed='true' name='Revenue by Product per Period' w='69985' x='30015' y='0' />
+          </zone>
+        </zone>
+      </zones>
+      <devicelayouts>
+        <devicelayout auto-generated='true' name='Phone'>
+          <size maxheight='700' minheight='700' sizing-mode='vscroll' />
+          <zones>
+            <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>
+              <zone h='84000' id='1' param='vert' type-v2='layout-flow' w='84000' x='8000' y='8000' />
+              <zone-style>
+                <format attr='border-color' value='#444444' />
+                <format attr='border-style' value='none' />
+                <format attr='border-width' value='0' />
+                <format attr='margin' value='8' />
+              </zone-style>
+            </zone>
+          </zones>
+        </devicelayout>
+      </devicelayouts>
+      <simple-id uuid='{0606CDFB-5D70-45F7-B203-C092D3DD4042}' />
+    </dashboard>

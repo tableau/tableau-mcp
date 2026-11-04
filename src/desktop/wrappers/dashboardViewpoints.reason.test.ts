@@ -150,7 +150,7 @@ describe('dashboard readback reasons', () => {
 
   it('reports a layout area that the flow allocation does not match', () => {
     expect(flowDifference([400, 500, 100])).toBe(
-      'zone 1 ("vert"): child heights are [400, 500, 100] in Desktop, which does not match the allocation of the submitted [300, 600, 100] in 1000px',
+      'zone 1 ("vert"): child heights are [400, 500, 100] in Desktop, which does not match the allocation of the submitted [300, 600, 100] in 1000 units (10px)',
     );
   });
 
