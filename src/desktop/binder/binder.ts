@@ -168,7 +168,7 @@ export type DeclineReason = {
 export type ApplyHint = 'worksheet-path';
 export const APPLY_HINT: ApplyHint = 'worksheet-path';
 export const APPLY_INSTRUCTION =
-  'Worksheet-path (tier-1 default): create a sheet with tabdoc:new-worksheet, substitute the template worksheet fragment using template_parameters + field_mapping, then apply-worksheet (no whole-workbook round-trip). NOTE: title, template_parameters.DATASOURCE, and every field_mapping value are already XML-escaped for verbatim substitution into (single- or double-quoted) XML attributes — substitute them as-is; do NOT escape them again.';
+  'Worksheet-path (tier-1 default): create a sheet with add-worksheet, substitute the template worksheet fragment using template_parameters + field_mapping, then apply-worksheet (no whole-workbook round-trip). NOTE: title, template_parameters.DATASOURCE, and every field_mapping value are already XML-escaped for verbatim substitution into (single- or double-quoted) XML attributes — substitute them as-is; do NOT escape them again.';
 
 export type BinderResult =
   | {
@@ -205,7 +205,7 @@ export type BinderResult =
  * The canonical derivation short-forms (== manifest-types `Derivation`). The
  * `satisfies` guard fails the build if this drifts from the union. Used as the
  * enum for the optional derivation override in both the strict output schema and
- * the `tableau-bind-template` proposal input schema.
+ * the `bind-template` proposal input schema.
  */
 export const DERIVATION_SHORT_FORMS = CANONICAL_DERIVATION_SHORT_FORMS;
 

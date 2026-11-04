@@ -69,6 +69,44 @@ describe('manageKnowledgeContextTool', () => {
     expect(await Provider.from(getTool().disabled)).toBe(disabled);
   });
 
+  it.each(
+    [undefined, 'false', 'true'].flatMap((readEnv) =>
+      [false, true].flatMap((readFlag) =>
+        [undefined, 'false', 'true'].flatMap((writeEnv) =>
+          [false, true].map((writeFlag) => ({ readEnv, readFlag, writeEnv, writeFlag })),
+        ),
+      ),
+    ),
+  )(
+    'requires both resolved Knowledge settings (read env=$readEnv, read FF=$readFlag, write env=$writeEnv, write FF=$writeFlag)',
+    async ({ readEnv, readFlag, writeEnv, writeFlag }) => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', readEnv);
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', writeEnv);
+      mocks.isFeatureEnabled.mockImplementation(
+        async (name: string) =>
+          (name === 'knowledge-tools' && readFlag) ||
+          (name === 'knowledge-write-tools' && writeFlag),
+      );
+
+      const readEnabled = readEnv === undefined ? readFlag : readEnv === 'true';
+      const writeEnabled = writeEnv === undefined ? writeFlag : writeEnv === 'true';
+      expect(await Provider.from(getTool().disabled)).toBe(!(readEnabled && writeEnabled));
+    },
+  );
+
+  it('blocks writes at call time when KNOWLEDGE_WRITE_TOOLS_ENABLED is false even if the flag is on', async () => {
+    vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'false');
+
+    const result = await (
+      await Provider.from(getTool().callback)
+    )({ action: 'delete', contextId: 'ctx-1' } as never, getMockRequestHandlerExtra());
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Knowledge write tools are disabled.');
+    expect(useRestApi).not.toHaveBeenCalled();
+  });
+
   it.each([
     { action: 'create', statements: [{ statement: 'AOV = revenue / orders' }], isGlobal: true },
     { action: 'update', contextId: 'ctx-1', statements: [{ statement: 'Updated definition' }] },

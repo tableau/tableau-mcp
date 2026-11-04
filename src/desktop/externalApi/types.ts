@@ -4,9 +4,8 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.25), derived from
- * the production registry/generator harness. The dialog contract was canonical-JSON
- * compared on 2026-09-08.
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.31), derived from
+ * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
  * write-thin, and an older Desktop build may omit a field a newer spec marks required.
@@ -17,6 +16,7 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appScreenshot: '/v0/app/screenshot',
   appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
@@ -31,10 +31,16 @@ export const EXTERNAL_API_ROUTES = {
   workbookDatasources: '/v0/workbook/datasources',
   workbookDatasource: '/v0/workbook/datasources/{id}',
   workbookDatasourceDocument: '/v0/workbook/datasources/{id}/document',
+  workbookDatasourceLogicalTables: '/v0/workbook/datasources/{id}/logicalTables',
+  workbookDatasourceLogicalTableData:
+    '/v0/workbook/datasources/{id}/logicalTables/{logicalTableId}/data',
+  workbookDatasourceValidateCalculatedField:
+    '/v0/workbook/datasources/{id}:validateCalculatedField',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
   workbookStoryboardsNew: '/v0/workbook/storyboards:new',
+  workbookExtensions: '/v0/workbook/extensions',
   workbookWorksheets: '/v0/workbook/worksheets',
   workbookWorksheetsNew: '/v0/workbook/worksheets:new',
   workbookUndo: '/v0/workbook:undo',
@@ -73,7 +79,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
-  worksheetValidateCalculatedField: '/v0/workbook/worksheets/{id}:validateCalculatedField',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
@@ -109,6 +114,12 @@ export type ShowMeOptionsQuery = {
    * preserves Desktop's ambient selection; an explicit empty array clears it.
    */
   fieldsSelectedInSchemaViewer?: Array<string>;
+};
+
+/** Query accepted by {@link workbookDatasourceLogicalTableDataRoute}. */
+export type DatasourceLogicalTableDataQuery = {
+  maxRows?: number;
+  columnsToIncludeByFieldName?: Array<string>;
 };
 
 /** Query accepted by {@link worksheetLogicalTableDataRoute}. */
@@ -316,6 +327,38 @@ export function workbookDatasourceDocumentRoute(datasourceId: string): string {
   );
 }
 
+export function workbookDatasourceValidateCalculatedFieldRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField.replace('{id}', () =>
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceLogicalTablesRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables.replace('{id}', () =>
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceLogicalTableDataRoute(
+  datasourceId: string,
+  logicalTableId: string,
+  query: DatasourceLogicalTableDataQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.maxRows !== undefined) {
+    search.set('maxRows', String(query.maxRows));
+  }
+  for (const column of query.columnsToIncludeByFieldName ?? []) {
+    search.append('columnsToIncludeByFieldName', column);
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  const route = EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData
+    .replace('{id}', () => canonicalDatasourceSegment(datasourceId))
+    .replace('{logicalTableId}', () => seg(logicalTableId));
+  return `${route}${suffix}`;
+}
+
 export function worksheetSummaryDataRoute(
   worksheetId: string,
   query: WorksheetSummaryDataQuery,
@@ -404,10 +447,6 @@ export function worksheetReloadExtensionRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:reloadExtension`;
 }
 
-export function worksheetValidateCalculatedFieldRoute(worksheetId: string): string {
-  return `${worksheetRoute(worksheetId)}:validateCalculatedField`;
-}
-
 export function worksheetRefreshNowRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
@@ -479,6 +518,10 @@ function imageQuerySuffix(query: ImageExportQuery): string {
     parts.push(`mimeType=${encodeURIComponent(query.mimeType)}`);
   }
   return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+export function appScreenshotRoute(outputPath: string): string {
+  return `${EXTERNAL_API_ROUTES.appScreenshot}?outputPath=${encodeURIComponent(outputPath)}`;
 }
 
 export function worksheetImageRoute(worksheetId: string, query: ImageExportQuery): string {
@@ -591,8 +634,14 @@ export const PROBLEM_CODES = [
   'operation-not-found',
   'operation-pending',
   'dialog-not-found',
-  'dialog-ambiguous',
-  'dialog-action-not-found',
+  'dialog-action-indeterminate',
+  'dialog-action-invalid',
+  'dialog-action-unsupported',
+  'dialog-request-capacity',
+  'dialog-request-conflict',
+  'dialog-request-expired',
+  'dialog-session-inactive',
+  'dialog-session-stale',
   'dialog-action-ambiguous',
   'dialog-action-disabled',
   'method-not-allowed',
@@ -650,22 +699,97 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
-/** A visible dialog action copied exactly into `POST /v0/app:invokeDialogAction`. */
-export const dialogActionSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('button'),
-      label: z.string().min(1),
-    })
-    .passthrough(),
-  z
-    .object({
-      kind: z.literal('close'),
-      label: z.never().optional(),
-    })
-    .passthrough(),
-]);
+/** Advertised capabilities contain no selected file, color, or printer payload. */
+export const dialogActionSchema = z
+  .object({
+    kind: z.string(),
+    label: z.string().optional(),
+    enabled: z.boolean().optional(),
+    filters: z.array(z.unknown()).optional(),
+    selectedFilterId: z.string().optional(),
+    defaultFilterId: z.string().optional(),
+    minimumPaths: z.number().int().optional(),
+    maximumPaths: z.number().int().optional(),
+    overwriteConfirmationRequired: z.boolean().optional(),
+    alphaSupported: z.boolean().optional(),
+    printers: z.array(z.unknown()).optional(),
+    minimumPage: z.number().int().optional(),
+    maximumPage: z.number().int().optional(),
+    minimumCopies: z.number().int().optional(),
+    maximumCopies: z.number().int().optional(),
+    ranges: z.array(z.unknown()).optional(),
+    sheetScopes: z.array(z.unknown()).optional(),
+    supportsCollation: z.boolean().optional(),
+    supportsPrintToFile: z.boolean().optional(),
+    supportsExportSelection: z.boolean().optional(),
+  })
+  .passthrough();
 export type DialogAction = z.infer<typeof dialogActionSchema>;
+
+const dialogInputStringSchema = z.string().refine((value) => !value.includes('\0'), {
+  message: 'Dialog input must not contain NUL characters.',
+});
+const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
+  (value) => value.length > 0,
+  {
+    message: 'A nonempty value is required.',
+  },
+);
+const dialogColorChannelSchema = z.number().int().min(0).max(255);
+
+/** Only caller-selected input fields belong on the wire; descriptors are read-only. */
+export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('button'), label: dialogNonemptyInputStringSchema }).strict(),
+  z.object({ kind: z.literal('close') }).strict(),
+  z.object({ kind: z.literal('cancel') }).strict(),
+  z
+    .object({
+      kind: z.literal('choose-file'),
+      path: dialogNonemptyInputStringSchema,
+      filterId: dialogInputStringSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('choose-files'),
+      paths: z.array(dialogNonemptyInputStringSchema).min(1),
+      filterId: dialogInputStringSchema.optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('choose-directory'), path: dialogNonemptyInputStringSchema }).strict(),
+  z
+    .object({
+      kind: z.literal('save-file'),
+      path: dialogNonemptyInputStringSchema,
+      filterId: dialogInputStringSchema,
+      overwriteConfirmed: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('choose-color'),
+      red: dialogColorChannelSchema,
+      green: dialogColorChannelSchema,
+      blue: dialogColorChannelSchema,
+      alpha: dialogColorChannelSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('submit-print'),
+      printerId: dialogInputStringSchema,
+      range: z.enum(['all-pages', 'page-range', 'current-page', 'selection']),
+      sheetScope: z.enum(['entire-workbook', 'active-sheet', 'selected-sheets']),
+      firstPage: z.number().int().min(0),
+      lastPage: z.number().int().min(0),
+      copies: z.number().int().min(1),
+      collate: z.boolean(),
+      exportSelection: z.boolean(),
+      outputPath: dialogNonemptyInputStringSchema.optional(),
+    })
+    .strict(),
+]);
+export type DialogActionInvocation = z.infer<typeof dialogActionInvocationSchema>;
 
 /** A visible modal Qt window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
 export const windowInfoSchema = z
@@ -673,6 +797,11 @@ export const windowInfoSchema = z
     objectName: z.string(),
     title: z.string(),
     className: z.string(),
+    sessionId: z.string().optional(),
+    revision: z.number().int().nonnegative().optional(),
+    family: z.string().optional(),
+    mode: z.string().optional(),
+    status: z.string().optional(),
     messageText: z.string().optional(),
     informativeText: z.string().optional(),
     detailedText: z.string().optional(),
@@ -687,17 +816,35 @@ export type WindowInfo = z.infer<typeof windowInfoSchema>;
 /** Exact current-dialog identity copied from an item returned by `GET /v0/app/dialogs`. */
 export const dialogIdentitySchema = z
   .object({
-    objectName: z.string(),
-    title: z.string(),
-    className: z.string(),
+    objectName: dialogInputStringSchema,
+    title: dialogInputStringSchema,
+    className: dialogInputStringSchema,
+    sessionId: dialogInputStringSchema,
+    // Requests must preserve the revision exactly in JavaScript's JSON number representation.
+    revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
+
+export const dialogRequestStatusSchema = z
+  .object({
+    sessionId: z.string(),
+    revision: z.number().int(),
+    requestId: z.string(),
+    state: z.string(),
+    effect: z.string(),
+    code: z.string().optional(),
+    expiresInMilliseconds: z.number().int().optional(),
   })
   .passthrough();
-export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
+export type DialogRequestStatus = z.infer<typeof dialogRequestStatusSchema>;
 
 /** Current actionable Desktop dialogs returned independently of operation state. */
 export const dialogListSchema = z
   .object({
     dialogs: z.array(windowInfoSchema),
+    uiSnapshotAvailable: z.boolean(),
+    recentActions: z.array(dialogRequestStatusSchema),
   })
   .passthrough();
 export type DialogList = z.infer<typeof dialogListSchema>;
@@ -743,39 +890,28 @@ export type DesktopState = z.infer<typeof desktopStateSchema>;
 export const invokeDialogActionRequestSchema = z
   .object({
     dialog: dialogIdentitySchema,
-    action: dialogActionSchema,
+    requestId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[!-~]+$/),
+    action: dialogActionInvocationSchema,
   })
-  .passthrough();
+  .strict();
 export type InvokeDialogActionRequest = z.infer<typeof invokeDialogActionRequestSchema>;
 
 /**
- * Post-action dialog state. Only outcomes that confirm a click echo the selected
- * identity and action; `no-active-dialog` confirms that no action occurred.
+ * Request status and a bounded UI snapshot. Selection payloads are never echoed.
  */
-export const invokeDialogActionResultSchema = z.discriminatedUnion('outcome', [
-  z
-    .object({
-      outcome: z.literal('no-active-dialog'),
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('dismissed'),
-      dialog: dialogIdentitySchema,
-      action: dialogActionSchema,
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('action-invoked-dialog-remains'),
-      dialog: dialogIdentitySchema,
-      action: dialogActionSchema,
-      dialogs: z.array(windowInfoSchema),
-    })
-    .passthrough(),
-]);
+export const invokeDialogActionResultSchema = z
+  .object({
+    outcome: z.string(),
+    dialog: dialogIdentitySchema,
+    status: dialogRequestStatusSchema,
+    uiSnapshotAvailable: z.boolean(),
+    dialogs: z.array(windowInfoSchema),
+  })
+  .passthrough();
 export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
@@ -797,6 +933,7 @@ export const operationEnvelopeSchema = z
     diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -810,6 +947,7 @@ export const operationListSchema = z
     operations: z.array(operationEnvelopeSchema),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
+    uiSnapshotAvailable: z.boolean().optional(),
   })
   .passthrough();
 export type OperationList = z.infer<typeof operationListSchema>;
@@ -976,8 +1114,40 @@ export const datasourceListSchema = z
   .passthrough();
 export type DatasourceList = z.infer<typeof datasourceListSchema>;
 
-/** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
-export const summaryDataSchema = z
+export const workbookExtensionSheetSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['worksheet', 'dashboard']),
+  })
+  .passthrough();
+
+export const workbookExtensionKeySchema = z
+  .object({
+    id: z.string(),
+    version: z.string(),
+    url: z.string(),
+  })
+  .passthrough();
+
+export const workbookExtensionSchema = z
+  .object({
+    instanceId: z.string(),
+    sheet: workbookExtensionSheetSchema,
+    extension: workbookExtensionKeySchema,
+    packagePath: z.string().nullable(),
+  })
+  .passthrough();
+
+/** Extensions placed in the open workbook, from `GET /v0/workbook/extensions`. */
+export const workbookExtensionListSchema = z
+  .object({
+    extensions: z.array(workbookExtensionSchema),
+  })
+  .passthrough();
+export type WorkbookExtensionList = z.infer<typeof workbookExtensionListSchema>;
+
+/** Tabular data returned by the summary-data and logical-table data reads. */
+export const dataTableSchema = z
   .object({
     columns: z
       .array(
@@ -992,9 +1162,9 @@ export const summaryDataSchema = z
     rows: z.array(z.array(z.unknown())).optional(),
   })
   .passthrough();
-export type SummaryData = z.infer<typeof summaryDataSchema>;
+export type DataTable = z.infer<typeof dataTableSchema>;
 
-/** One logical table available for a worksheet's underlying data. */
+/** One logical table of a worksheet or datasource. */
 export const logicalTableItemSchema = z
   .object({
     id: z.string().optional(),
@@ -1003,7 +1173,7 @@ export const logicalTableItemSchema = z
   .passthrough();
 export type LogicalTableItem = z.infer<typeof logicalTableItemSchema>;
 
-/** Logical table list returned by `GET /v0/workbook/worksheets/{id}/logicalTables`. */
+/** Logical table list returned by the worksheet and datasource `logicalTables` reads. */
 export const logicalTableListSchema = z
   .object({
     tables: z.array(logicalTableItemSchema).optional(),
@@ -1011,11 +1181,23 @@ export const logicalTableListSchema = z
   .passthrough();
 export type LogicalTableList = z.infer<typeof logicalTableListSchema>;
 
+/** One issue found while validating a workbook document. */
+export const workbookValidationIssueSchema = z
+  .object({
+    severity: z.string(),
+    message: z.string(),
+    element: z.string().optional(),
+    line: z.number().int().optional(),
+    column: z.number().int().optional(),
+  })
+  .passthrough();
+export type WorkbookValidationIssue = z.infer<typeof workbookValidationIssueSchema>;
+
 /** Validation result returned by `POST /v0/workbook/document:validate`. */
 export const validationResultSchema = z
   .object({
     isValid: z.boolean(),
-    validationIssues: z.array(z.string()).optional(),
+    issues: z.array(workbookValidationIssueSchema).optional(),
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
@@ -1103,10 +1285,17 @@ export const appInfoSchema = z
     isStartPageVisible: z.boolean().optional(),
     isDataSourcePageActive: z.boolean().optional(),
     isPresentationMode: z.boolean().optional(),
-    isFocusMode: z.boolean().optional(),
+    isCanvasMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
+
+export const appScreenshotSchema = z
+  .object({
+    filePaths: z.array(z.string()),
+  })
+  .passthrough();
+export type AppScreenshot = z.infer<typeof appScreenshotSchema>;
 
 /** Desired and resulting Start Page visibility for `POST /v0/app:toggleStartPage`. */
 export const startPageVisibilitySchema = z
@@ -1124,10 +1313,19 @@ export const capabilityMatrixSchema = z
   .passthrough();
 export type CapabilityMatrix = z.infer<typeof capabilityMatrixSchema>;
 
-/** Result of `POST /v0/workbook/worksheets/{id}:validateCalculatedField`. */
+/** Body of `POST /v0/workbook/datasources/{id}:validateCalculatedField`. */
+export type ValidateCalculatedFieldRequest = {
+  formula: string;
+  caption?: string;
+  fieldName?: string;
+};
+
+/** Result of `POST /v0/workbook/datasources/{id}:validateCalculatedField`. */
 export const validateCalculatedFieldResponseSchema = z
   .object({
     isValid: z.boolean(),
+    dataType: z.string().optional(),
+    isAggregate: z.boolean().optional(),
     errors: z.array(
       z
         .object({

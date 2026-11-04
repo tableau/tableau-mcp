@@ -7,6 +7,33 @@ import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeCha
 import request from '../../../src/testLoopbackRequest.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
+const mocks = vi.hoisted(() => ({
+  // Lets a test turn the disable-strict-scope-match flag off (strict on); otherwise delegates to the
+  // real gate.
+  disableStrictFlag: { value: true },
+}));
+
+// Override the feature gate for this file so the disable-strict-scope-match flag is controllable
+// per-test.
+// Composes with the shared testSetup mock (admin-tools forcing lives there); this file's mock wins.
+vi.mock('../../../src/features/init.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/features/init.js')>();
+  return {
+    ...original,
+    getFeatureGate: () => {
+      const featureGate = original.getFeatureGate();
+      return {
+        isFeatureEnabled: async (featureName: string) => {
+          if (featureName === 'disable-strict-scope-match') {
+            return mocks.disableStrictFlag.value;
+          }
+          return featureName === 'admin-tools' || featureGate.isFeatureEnabled(featureName);
+        },
+      };
+    },
+  };
+});
+
 describe('authorization code flow', () => {
   let _server: http.Server | undefined;
 
@@ -251,6 +278,81 @@ describe('authorization code flow', () => {
 
         expect(response.status).toBe(302);
       });
+    });
+  });
+
+  describe('mandatory site-settings scope under subset matching', () => {
+    const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
+    // A supported MCP scope that is NOT the mandatory scope, so requesting just this omits it.
+    const SUBSET_SCOPE = 'tableau:mcp:datasource:read';
+
+    function authorizeQuery(scope: string): Record<string, string> {
+      return {
+        client_id: 'test-client-id',
+        redirect_uri: 'http://localhost:3000',
+        response_type: 'code',
+        code_challenge: 'test-code-challenge',
+        code_challenge_method: 'S256',
+        scope,
+      };
+    }
+
+    beforeEach(() => {
+      // enforceScopes on; the suite default is OAUTH_DISABLE_SCOPES=true (enforcement off).
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+      // The scope is required only when API scopes are advertised.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      mocks.disableStrictFlag.value = true;
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      mocks.disableStrictFlag.value = true;
+    });
+
+    it('redirects (does not reject) when API scopes are not advertised, even for the same subset', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
+
+      expect(response.status).toBe(302);
+    });
+
+    it('rejects /authorize when the requested scopes omit the mandatory scope, site settings on, strict off', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('invalid_scope');
+      expect(response.body.error_description).toContain(MANDATORY_SCOPE);
+    });
+
+    it('redirects (does not reject) when strict scope match is on, even for the same subset', async () => {
+      mocks.disableStrictFlag.value = false;
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
+
+      expect(response.status).toBe(302);
+    });
+
+    it('redirects (does not reject) when MCP site settings are disabled, even for the same subset', async () => {
+      vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .get('/oauth2/authorize')
+        .query(authorizeQuery(SUBSET_SCOPE));
+
+      expect(response.status).toBe(302);
     });
   });
 });

@@ -87,6 +87,7 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    disableStrictScopeMatch: boolean;
     external: {
       discovery: boolean;
       usernameClaimName: string;
@@ -102,6 +103,8 @@ export class Config extends BaseConfig {
   pendingDeletionMaxAgeDays: number;
   flowReadToolsEnabled: boolean | undefined;
   flowWriteToolsEnabled: boolean | undefined;
+  knowledgeToolsEnabled: boolean | undefined;
+  knowledgeWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
   bucketS3: {
@@ -161,6 +164,7 @@ export class Config extends BaseConfig {
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
       ADVERTISE_API_SCOPES: advertiseApiScopes,
+      DISABLE_STRICT_SCOPE_MATCH: disableStrictScopeMatch,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -181,6 +185,8 @@ export class Config extends BaseConfig {
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
       FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
+      KNOWLEDGE_TOOLS_ENABLED: knowledgeToolsEnabled,
+      KNOWLEDGE_WRITE_TOOLS_ENABLED: knowledgeWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       MCP_S3_BUCKET: bucketS3Bucket,
@@ -300,6 +306,7 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      disableStrictScopeMatch: disableStrictScopeMatch === 'true',
       external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
         ? {
             discovery: oauthExternalDiscovery === 'true',
@@ -406,6 +413,8 @@ export class Config extends BaseConfig {
     );
     this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
     this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
+    this.knowledgeToolsEnabled = parseOptionalBoolean(knowledgeToolsEnabled);
+    this.knowledgeWriteToolsEnabled = parseOptionalBoolean(knowledgeWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.

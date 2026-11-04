@@ -7,6 +7,7 @@ import { log } from '../../logging/logger.js';
 import {
   BLOCKING_DIALOG_GUIDANCE,
   desktopCallTimeoutMessage,
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
   isDesktopCallTimeout,
@@ -33,6 +34,9 @@ import {
   apiRootSchema,
   AppInfo,
   appInfoSchema,
+  AppScreenshot,
+  appScreenshotRoute,
+  appScreenshotSchema,
   CapabilityMatrix,
   capabilityMatrixSchema,
   dashboardDocumentRoute,
@@ -52,8 +56,11 @@ import {
   datasourceItemSchema,
   DatasourceList,
   datasourceListSchema,
+  DatasourceLogicalTableDataQuery,
   datasourceRefreshDataRoute,
   datasourceRefreshExtractRoute,
+  DataTable,
+  dataTableSchema,
   DesktopState,
   desktopStateSchema,
   DialogList,
@@ -96,8 +103,7 @@ import {
   type StoryboardRefreshOutcome,
   storyboardRefreshOutcomeSchema,
   storyboardRoute,
-  SummaryData,
-  summaryDataSchema,
+  ValidateCalculatedFieldRequest,
   ValidateCalculatedFieldResponse,
   validateCalculatedFieldResponseSchema,
   ValidationResult,
@@ -105,9 +111,14 @@ import {
   WindowInfo,
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
+  workbookDatasourceLogicalTableDataRoute,
+  workbookDatasourceLogicalTablesRoute,
   workbookDatasourceRoute,
+  workbookDatasourceValidateCalculatedFieldRoute,
   WorkbookDiagnostics,
   workbookDiagnosticsSchema,
+  WorkbookExtensionList,
+  workbookExtensionListSchema,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
@@ -134,7 +145,6 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
-  worksheetValidateCalculatedFieldRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -405,6 +415,26 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async captureAppScreenshot(
+    outputPath: string,
+    signal: AbortSignal,
+  ): Promise<Result<AppScreenshot, ExecuteCommandError>> {
+    let expectedInstanceId: string | undefined;
+    const result = await this.withRescan('read', async (http) => {
+      expectedInstanceId ??= http.instanceId;
+      if (http.instanceId !== expectedInstanceId) {
+        return Err({
+          type: 'instance-mismatch' as const,
+          expected: expectedInstanceId,
+          actual: http.instanceId,
+        });
+      }
+      return await http.getJson(appScreenshotRoute(outputPath), appScreenshotSchema, signal);
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
+  }
+
   async getDesktopState(signal: AbortSignal): Promise<Result<DesktopState, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.appState, desktopStateSchema, signal),
@@ -432,6 +462,14 @@ export class ExternalApiToolExecutor {
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal),
+    );
+  }
+
+  async listWorkbookExtensions(
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookExtensionList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbookExtensions, workbookExtensionListSchema, signal),
     );
   }
 
@@ -622,12 +660,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     query: WorksheetSummaryDataQuery,
     signal: AbortSignal,
-  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+  ): Promise<Result<DataTable, ExecuteCommandError>> {
     let pendingResponses = 0;
     return this.readExternalApi(async (http) => {
       const route = worksheetSummaryDataRoute(worksheetId, query);
       while (true) {
-        const result = await http.getJson(route, summaryDataSchema, signal);
+        const result = await http.getJson(route, dataTableSchema, signal);
         if (result.isOk() || result.error.type !== 'operation-pending') return result;
         pendingResponses += 1;
         if (pendingResponses === SUMMARY_DATA_PENDING_MAX_RESPONSES) {
@@ -672,11 +710,39 @@ export class ExternalApiToolExecutor {
     logicalTableId: string,
     query: WorksheetUnderlyingDataQuery,
     signal: AbortSignal,
-  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+  ): Promise<Result<DataTable, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(
         worksheetLogicalTableDataRoute(worksheetId, logicalTableId, query),
-        summaryDataSchema,
+        dataTableSchema,
+        signal,
+      ),
+    );
+  }
+
+  async listDatasourceLogicalTables(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<LogicalTableList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        workbookDatasourceLogicalTablesRoute(datasourceId),
+        logicalTableListSchema,
+        signal,
+      ),
+    );
+  }
+
+  async getDatasourceLogicalTableData(
+    datasourceId: string,
+    logicalTableId: string,
+    query: DatasourceLogicalTableDataQuery,
+    signal: AbortSignal,
+  ): Promise<Result<DataTable, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        workbookDatasourceLogicalTableDataRoute(datasourceId, logicalTableId, query),
+        dataTableSchema,
         signal,
       ),
     );
@@ -759,15 +825,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async validateWorksheetCalculatedField(
-    worksheetId: string,
-    formula: string,
+  async validateDatasourceCalculatedField(
+    datasourceId: string,
+    request: ValidateCalculatedFieldRequest,
     signal: AbortSignal,
   ): Promise<Result<ValidateCalculatedFieldResponse, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.postJsonForBody(
-        worksheetValidateCalculatedFieldRoute(worksheetId),
-        { formula },
+        workbookDatasourceValidateCalculatedFieldRoute(datasourceId),
+        request,
         validateCalculatedFieldResponseSchema,
         signal,
       ),
@@ -1501,9 +1567,11 @@ function mapClientError(
             'operation until the dialog is handled and its cause is corrected. Only the dedicated ' +
             'dialog tools can be used while the modal blocks ordinary UI-thread operations: call ' +
             'get-active-dialogs, then, only when the task or user intent makes the choice ' +
-            'unambiguous, copy the exact returned dialog identity and exact returned action ' +
-            'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
-            'invoke-dialog-action after action-invoked-dialog-remains. If either tool is unavailable, ' +
+            'unambiguous, copy the exact returned dialog identity, select an advertised action, ' +
+            'and supply its invocation values to invoke-dialog-action for one logical action. ' +
+            'Do not guess or assume Cancel is safe. ' +
+            DIALOG_REQUEST_TRACKING_GUIDANCE +
+            ' If either tool is unavailable, ' +
             'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +
             `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,
@@ -1603,10 +1671,8 @@ function mapInvokeDialogActionError(
   ) {
     const mapped = mapClientError(error, pinnedPid);
     if (mapped.type === 'command-failed' && mapped.error !== undefined) {
-      // A session-fatal 5xx must not carry the full indeterminate guidance: its get-active-dialogs
-      // read clause contradicts the stop-all-commands-and-reads contract. But the replay-safety core
-      // (the action may already have run; do not re-invoke it; ask the user about any consequential
-      // choice) still holds — the first outcome is unknown even after a restart — so append only that.
+      // A fatal session forbids inspection. Preserve the replay rules without read guidance;
+      // restarting Desktop cannot make an uncertain request safe in a new session's ledger.
       const guidance = isSessionFatalError(mapped.error)
         ? INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE
         : INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE;

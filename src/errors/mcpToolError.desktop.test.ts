@@ -126,10 +126,11 @@ describe('ImageExportTimeoutError', () => {
     expect(error.message).toContain('Do not blindly retry the originating operation');
     expect(error.message).toContain('get-active-dialogs');
     expect(error.message).toContain('exact returned dialog identity');
-    expect(error.message).toContain('exact returned action');
-    expect(error.message).toContain('at most one invoke-dialog-action call');
+    expect(error.message).toContain('advertised action');
+    expect(error.message).toContain('invoke-dialog-action for one logical action');
+    expect(error.message).toContain('replay only the identical request with the same requestId');
     expect(error.message).toContain('Do not guess or assume Cancel is safe');
-    expect(error.message).toContain('action-invoked-dialog-remains');
+    expect(error.message).toContain('pending or indeterminate status');
     expect(error.message).toContain('ask the user to handle the dialog');
   });
 });

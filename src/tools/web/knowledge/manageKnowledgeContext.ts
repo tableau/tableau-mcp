@@ -2,8 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import { ArgsValidationError, FeatureDisabledError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/init.js';
+import {
+  isKnowledgeToolsEnabled,
+  isKnowledgeWriteToolsEnabled,
+} from '../../../features/knowledgeTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import type { SemanticContextNode } from '../../../sdks/tableau/types/knowledge.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -93,16 +97,14 @@ const REQUIRED_BY_ACTION: Record<ManageArgs['action'], ReadonlyArray<keyof Manag
 export const getManageKnowledgeContextTool = (
   server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const tool = new WebTool({
     server,
     name: 'manage-knowledge-context',
-    disabled: new Provider(async () => {
-      const gate = getFeatureGate();
-      return (
-        !(await gate.isFeatureEnabled('knowledge-tools')) ||
-        !(await gate.isFeatureEnabled('knowledge-write-tools'))
-      );
-    }),
+    disabled: new Provider(
+      async () =>
+        !(await isKnowledgeToolsEnabled(config)) || !(await isKnowledgeWriteToolsEnabled(config)),
+    ),
     minRequiredRole: SiteRole.CREATOR,
     registrationConditions: ['RequiresKnowledge'],
     description: `
