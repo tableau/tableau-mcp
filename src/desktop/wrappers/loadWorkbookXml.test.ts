@@ -461,6 +461,136 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  describe('cached live-relative dashboard zone guards', () => {
+    const wsZone = (id: string, name: string): string => `<zone id="${id}" name="${name}" />`;
+    const wb = (dashboards: string): string =>
+      '<?xml version="1.0"?><workbook><worksheets><worksheet name="A"><table /></worksheet>' +
+      '<worksheet name="B"><table /></worksheet></worksheets>' +
+      `<dashboards>${dashboards}</dashboards></workbook>`;
+    const dash = (name: string, zones: string, extra = ''): string =>
+      `<dashboard name="${name}"><zones><zone type-v2="layout-flow" id="5" param="horz">${zones}</zone></zones>${extra}</dashboard>`;
+
+    async function run(
+      live: string,
+      submitted: string,
+    ): Promise<{
+      result: Awaited<ReturnType<typeof loadWorkbookXml>>;
+      applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    }> {
+      const applyWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+      const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: live }));
+      const result = await loadWorkbookXml({
+        xml: submitted,
+        cachedLiveRelative: true,
+        executor: makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument }),
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+      return { result, applyWorkbookDocument };
+    }
+
+    function expectRefusal(
+      result: Awaited<ReturnType<typeof run>>['result'],
+      ruleId: string,
+    ): void {
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues).toHaveLength(1);
+        expect(result.error.error.issues[0].ruleId).toBe(ruleId);
+        expect(result.error.error.issues[0].message).toMatch(/^Dashboard "Overview": /);
+      }
+    }
+
+    it('refuses a duplicate dashboard name that hides a zone id change', async () => {
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('D', wsZone('10', 'A'))),
+        wb(dash('D', wsZone('13', 'A')) + dash('D', wsZone('10', 'A'))),
+      );
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues).toHaveLength(1);
+        expect(result.error.error.issues[0].ruleId).toBe('dashboard-duplicate-name');
+        expect(result.error.error.issues[0].message).toContain('has 2 dashboards or stories');
+      }
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('refuses a dashboard and a storyboard sharing a name', async () => {
+      const story = '<dashboard name="D" type="storyboard"><zones /></dashboard>';
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('D', wsZone('10', 'A'))),
+        wb(dash('D', wsZone('10', 'A')) + story),
+      );
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues[0].ruleId).toBe('dashboard-duplicate-name');
+      }
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('does not refuse a duplicate name the live workbook already has', async () => {
+      const both = wb(dash('D', wsZone('10', 'A')) + dash('D', wsZone('10', 'A')));
+      const { result, applyWorkbookDocument } = await run(both, both);
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalled();
+    });
+
+    it('refuses a live worksheet zone id change', async () => {
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('Overview', wsZone('10', 'A'))),
+        wb(dash('Overview', wsZone('13', 'A'))),
+      );
+      expectRefusal(result, 'dashboard-zone-id-change');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('refuses two worksheets trading zone ids', async () => {
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('Overview', wsZone('10', 'A') + wsZone('11', 'B'))),
+        wb(dash('Overview', wsZone('10', 'B') + wsZone('11', 'A'))),
+      );
+      expectRefusal(result, 'dashboard-zone-worksheet-swap');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('dispatches unchanged ids with an edited attribute', async () => {
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('Overview', wsZone('10', 'A'))),
+        wb(dash('Overview', '<zone id="10" name="A" w="500" />')),
+      );
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+
+    it('dispatches a dashboard that is not in the live workbook', async () => {
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('Overview', wsZone('10', 'A'))),
+        wb(dash('Overview', wsZone('10', 'A')) + dash('Fresh', wsZone('99', 'A'))),
+      );
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+
+    it('does not refuse different ids in device layouts', async () => {
+      const device = (id: string): string =>
+        `<devicelayouts><devicelayout name="Phone"><zones>${wsZone(id, 'A')}</zones></devicelayout></devicelayouts>`;
+      const { result, applyWorkbookDocument } = await run(
+        wb(dash('Overview', wsZone('10', 'A'), device('20'))),
+        wb(dash('Overview', wsZone('10', 'A'), device('23'))),
+      );
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('cached live-relative sheet-removal guard', () => {
     const realLiveXml = readFileSync(REAL_FIXTURE, 'utf8');
 

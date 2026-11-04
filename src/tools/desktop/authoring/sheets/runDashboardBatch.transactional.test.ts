@@ -108,6 +108,26 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(harness.executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('does not block a rebuild because another dashboard already holds a nameless card zone', async () => {
+    const initialXml = BASELINE.replace(
+      '<dashboard name="Keep"><simple-id uuid="{22222222-2222-2222-2222-222222222222}"/><zones><zone name="Existing"/></zones>',
+      '<dashboard name="Keep"><simple-id uuid="{22222222-2222-2222-2222-222222222222}"/><zones><zone name="Existing"/><zone type-v2="layout-basic"><zone id="9" type-v2="filter" param="[federated.x].[none:p:nk]"/></zone></zones>',
+    );
+    expect(initialXml).not.toBe(BASELINE);
+    const harness = statefulExecutor({ initialXml });
+
+    const result = await callBatch(
+      artifactStore(['a1', 'a2']),
+      harness.executor,
+      ['a1', 'a2'],
+      true,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(harness.posts).toHaveLength(1);
+    expect(harness.posts[0]).toContain('type-v2="filter"');
+  });
+
   it('builds two worksheets and deletes the old dashboard natively, then applies a rebuild with one shared readback', async () => {
     const store = artifactStore(['a1', 'a2']);
     const consume = vi.spyOn(store, 'consume');

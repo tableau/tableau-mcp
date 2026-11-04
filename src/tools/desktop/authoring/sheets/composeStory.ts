@@ -150,6 +150,7 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
           const introduced = introducedBlockingValidationIssues(
             runValidation(source.value.xml, 'dashboard').issues,
             runValidation(composed.xml, 'dashboard').issues,
+            'dashboard',
           );
           if (introduced.length > 0) {
             return new ArgsValidationError(
