@@ -167,6 +167,7 @@ describe('runApplyPreamble secure contained cache read', () => {
   });
 
   it('names the failed check when a cache file is unsafe', () => {
+    vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
     const directory = cacheDirectory('reason');
     writeFileSync(join(directory, 'a.xml'), '<datasource/>');
     linkSync(join(directory, 'a.xml'), join(directory, 'b.xml'));

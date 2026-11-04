@@ -14,6 +14,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
+import { CacheFileOutsideCacheError } from '../errors/mcpToolError.desktop.js';
 import { FileNotFoundError } from '../errors/mcpToolError.js';
 import {
   checkCacheFileArg,
@@ -121,15 +122,18 @@ describe('missing-file messages do not reveal what exists outside the cache', ()
     'answers the same for a present and a missing file under a planted directory symlink',
     () => {
       symlinkSync(join(root, 'outside'), join(state.cacheDir, 'd'));
-      for (const name of ['present.xml', 'missing.xml']) {
+      const messages = ['present.xml', 'missing.xml'].map((name) => {
         const file = join(state.cacheDir, 'd', name);
-        for (const result of [
+        return [
           readCacheFileArg('workbookFile', file),
           checkCacheFileArg('workbookFile', file),
-        ]) {
+        ].map((result) => {
           expect(result.isErr() && result.error.type).toBe('cache-file-outside-cache');
-        }
-      }
+          return result.isErr() ? result.error.message : '';
+        });
+      });
+      expect(messages[0]).toEqual(messages[1]);
+      expect(messages[0][0]).not.toContain('Reason:');
     },
   );
 
@@ -302,10 +306,12 @@ describe.skipIf(process.platform === 'win32')('hardlinks to files outside the ca
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(root, { recursive: true, force: true });
   });
 
   it('are refused by the contained reader and writer', () => {
+    vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
     const victim = join(root, 'outside', 'victim.xml');
     writeFileSync(victim, 'original');
     const linked = join(state.cacheDir, 'linked.xml');
@@ -319,6 +325,91 @@ describe.skipIf(process.platform === 'win32')('hardlinks to files outside the ca
     });
     expect(readFileSync(victim, 'utf-8')).toBe('original');
     expect(statSync(victim).mtimeMs).toBe(mtime);
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('file-argument refusal reasons', () => {
+  let root: string;
+  const tail = 'hard-linked';
+  const refusal = (reason: string): string =>
+    new CacheFileOutsideCacheError('workbookFile', `\nReason: ${reason}`).message;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'cache-reason-'));
+    state.cacheDir = join(root, 'cache');
+    mkdirSync(state.cacheDir);
+    mkdirSync(join(root, 'outside'));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function hardLinked(): string {
+    const file = join(state.cacheDir, 'a.xml');
+    writeFileSync(file, 'x');
+    linkSync(file, join(state.cacheDir, 'b.xml'));
+    return file;
+  }
+
+  it('end the read, write and check refusals with the reason line after the wait budget', () => {
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+    const file = hardLinked();
+    for (const result of [
+      readCacheFileArg('workbookFile', file),
+      writeCacheFileArg('workbookFile', file, 'y'),
+      checkCacheFileArg('workbookFile', file),
+    ]) {
+      expect(result.isErr() && result.error.message).toBe(refusal(tail));
+    }
+    expect(wait).toHaveBeenCalledTimes(60);
+  });
+
+  it('check waits out a brief second link', () => {
+    const file = hardLinked();
+    const wait = vi.spyOn(Atomics, 'wait').mockImplementation(() => {
+      if (wait.mock.calls.length === 4) rmSync(join(state.cacheDir, 'b.xml'));
+      return 'ok';
+    });
+    expect(checkCacheFileArg('workbookFile', file).isOk()).toBe(true);
+    expect(wait).toHaveBeenCalledTimes(4);
+  });
+
+  it('check names a symlink inside the cache without waiting', () => {
+    const wait = vi.spyOn(Atomics, 'wait');
+    writeFileSync(join(state.cacheDir, 'a.xml'), 'x');
+    symlinkSync(join(state.cacheDir, 'a.xml'), join(state.cacheDir, 's.xml'));
+    const result = checkCacheFileArg('workbookFile', join(state.cacheDir, 's.xml'));
+    expect(result.isErr() && result.error.message).toBe(refusal('symlink'));
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it('check answers a final symlink the same whether its target exists or not', () => {
+    const wait = vi.spyOn(Atomics, 'wait');
+    writeFileSync(join(root, 'outside', 'present.xml'), 'x');
+    symlinkSync(join(root, 'outside', 'present.xml'), join(state.cacheDir, 'x.xml'));
+    symlinkSync(join(root, 'outside', 'missing.xml'), join(state.cacheDir, 'y.xml'));
+    for (const name of ['x.xml', 'y.xml']) {
+      const result = checkCacheFileArg('workbookFile', join(state.cacheDir, name));
+      expect(result.isErr() && result.error.message).toBe(refusal('symlink'));
+    }
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it('check reports a hard link behind an outside directory symlink as outside, without waiting', () => {
+    const wait = vi.spyOn(Atomics, 'wait');
+    const victim = join(root, 'outside', 'v.xml');
+    writeFileSync(victim, 'x');
+    linkSync(victim, join(root, 'outside', 'w.xml'));
+    symlinkSync(join(root, 'outside'), join(state.cacheDir, 'd'));
+    for (const name of ['v.xml', 'w.xml']) {
+      const result = checkCacheFileArg('workbookFile', join(state.cacheDir, 'd', name));
+      expect(result.isErr() && result.error.message).toBe(
+        new CacheFileOutsideCacheError('workbookFile').message,
+      );
+    }
+    expect(wait).not.toHaveBeenCalled();
   });
 });
 
