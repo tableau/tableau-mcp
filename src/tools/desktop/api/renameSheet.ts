@@ -15,7 +15,7 @@ import { resolveSheetRef } from './resolveSheetRef.js';
 const paramsSchema = {
   session: sessionParam(),
   sheet: z.string().describe('Worksheet, dashboard, or storyboard name/id to rename.'),
-  name: z.string().min(1).describe('The new name for the sheet.'),
+  name: z.string().trim().min(1).describe('The new name for the sheet.'),
 };
 const title = 'Rename Sheet';
 
@@ -60,9 +60,11 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
             }
 
             const subject =
-              result.value.status === 'completed'
-                ? `Renamed ${ref.kind} "${previousName}" to "${name}"`
-                : `Requested rename to "${name}"; Desktop is still applying it`;
+              result.value.status !== 'completed'
+                ? `Requested rename to "${name}"; Desktop is still applying it`
+                : name === previousName
+                  ? `The ${ref.kind} is already named "${name}"; nothing was renamed`
+                  : `Renamed ${ref.kind} "${previousName}" to "${name}"`;
             return new Ok(
               commandOk(
                 {

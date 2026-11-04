@@ -192,6 +192,9 @@ describe('combined entrypoint startup', () => {
     expect(startupState.sessionStoreConnectedAtWebToolRegistration).toBe(true);
     expect(startupState.resourcesAvailableAtConnect).toBe(true);
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(McpServer).mock.calls[0][1]).toMatchObject({
+      instructions: 'web instructions desktop instructions',
+    });
   });
 
   it('uses the shared shutdown handlers', async () => {

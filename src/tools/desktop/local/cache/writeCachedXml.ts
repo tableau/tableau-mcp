@@ -23,8 +23,9 @@ import {
   CONTAINED_CACHE_READ_ISSUE,
   CONTAINED_CACHE_WRITE_ISSUE,
   getCacheDir,
-  isWithinCacheDir,
+  isLexicallyWithinCacheDir,
   readContainedCacheTextFile,
+  unsafeFileReasonLine,
   writeContainedCacheTextFile,
 } from './cachePath.js';
 
@@ -87,7 +88,7 @@ export const getWriteCachedXmlTool = (
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
 
-          if (!isWithinCacheDir(absolutePath, cacheDir)) {
+          if (!isLexicallyWithinCacheDir(absolutePath, cacheDir)) {
             return new ArgsValidationError(
               `Security error: file path must be within cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
             ).toErr();
@@ -157,7 +158,7 @@ export const getWriteCachedXmlTool = (
                 containedRead.issue === CONTAINED_CACHE_READ_ISSUE.unsafeFile)
             ) {
               return new ArgsValidationError(
-                `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+                `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}${unsafeFileReasonLine(containedRead)}`,
               ).toErr();
             }
             if (!containedRead.ok) {
@@ -189,7 +190,7 @@ export const getWriteCachedXmlTool = (
               writeResult.issue === CONTAINED_CACHE_WRITE_ISSUE.unsafeFile)
           ) {
             return new ArgsValidationError(
-              `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+              `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}${unsafeFileReasonLine(writeResult)}`,
             ).toErr();
           }
           if (!writeResult.ok) {

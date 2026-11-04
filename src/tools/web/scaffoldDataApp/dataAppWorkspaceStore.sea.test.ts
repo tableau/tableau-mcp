@@ -67,6 +67,7 @@ function installSea(assets: Record<string, Buffer>): void {
 async function create(): ReturnType<typeof createDataAppWorkspace> {
   return createDataAppWorkspace({
     datappName: 'Sales Demo',
+    productVersion: { value: '2026.3.2', build: '20263.26.1027.1340' },
     allowedOrigins: [],
     config: getConfig(),
   });

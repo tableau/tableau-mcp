@@ -19,7 +19,7 @@ export const getListDashboardsTool = (
     name: 'list-dashboards',
     title,
     description:
-      "Lists the workbook's dashboards, each with its stable id, name, and state (hidden, index, active sheet, auto-updates, contained sheets).",
+      "Lists the workbook's dashboards, each with its stable id, name, and state (hidden, index, active sheet, auto-updates, contained sheets). index is the 0-based tab position across all sheet types, not the position in this list.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

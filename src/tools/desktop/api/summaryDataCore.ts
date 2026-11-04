@@ -3,7 +3,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
-import { SummaryData, WorksheetItem } from '../../../desktop/externalApi/types.js';
+import { DataTable, WorksheetItem } from '../../../desktop/externalApi/types.js';
 import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
 
 export type SummaryDataRead = <T>(
@@ -56,7 +56,7 @@ export async function fetchWorksheetSummaryData({
   maxRows: number;
   columns?: string[];
   materializeEmpty?: boolean;
-  /** Return underlying values instead of display aliases; omitted keeps the API default. */
+  /** API 0.2.25 and later always return raw values and ignore this; earlier builds honor it. */
   ignoreAliases?: boolean;
 }): Promise<Result<WorksheetSummaryData, WorksheetSummaryDataError>> {
   const worksheetsResult = await read(
@@ -85,7 +85,7 @@ export async function fetchWorksheetSummaryData({
 
   // No columnsToIncludeByFieldName: it matches only a column-instance name, not a plain field
   // name, so it would silently no-op. Columns are projected from the returned data below instead.
-  const querySummary = async (): Promise<Result<SummaryData, McpToolError>> =>
+  const querySummary = async (): Promise<Result<DataTable, McpToolError>> =>
     await read(
       'summary-data',
       async (activeExecutor, activeSignal) =>

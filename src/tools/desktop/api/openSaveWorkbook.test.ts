@@ -64,13 +64,15 @@ describe('open-file / save-workbook tools', () => {
     }
   });
 
-  it('save-workbook with a path saves a copy there', async () => {
+  it('save-workbook with a path saves as that path and reports it as the open document', async () => {
     const harness = await startHarness(getSaveWorkbookTool);
     try {
       setSaved(harness.server);
       const result = await harness.callTool({ filePath: '/Users/me/Copy.twbx' });
       expect(result.isError).toBeFalsy();
-      expect(messageOf(result)).toBe('Saved a copy to "/Users/me/Copy.twbx".');
+      expect(messageOf(result)).toBe(
+        'Saved the workbook as "/Users/me/Copy.twbx"; it is now the open document.',
+      );
 
       const posted = harness.server.requests.filter(
         (r) => r.method === 'POST' && r.path === '/v0/workbook:save',
@@ -108,10 +110,19 @@ describe('open-file / save-workbook tools', () => {
       setUnsaved(harness.server);
       const result = await harness.callTool({ filePath: '/Users/me/Copy.twbx' });
       expect(result.isError).toBeFalsy();
-      expect(messageOf(result)).toBe('Saved a copy to "/Users/me/Copy.twbx".');
+      expect(messageOf(result)).toBe(
+        'Saved the workbook as "/Users/me/Copy.twbx"; it is now the open document.',
+      );
     } finally {
       await harness.close();
     }
+  });
+
+  it('save-workbook describes a filePath as Save As rather than a copy', () => {
+    const tool = getSaveWorkbookTool(new DesktopMcpServer());
+    expect(tool.description).toContain('Save As');
+    expect(tool.description).toContain('becomes the open document');
+    expect(tool.description).not.toContain('save a copy');
   });
 
   it('save-workbook is marked destructive because an in place save overwrites the file', () => {

@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
-import { workbookTargetFingerprint } from './workbookTargetFingerprint.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -20,7 +19,7 @@ export const getWorkbookInventoryTool = (
     name: 'get-workbook-inventory',
     title,
     description:
-      "Orienting read: title, unsaved changes, and worksheet/dashboard/storyboard inventory. A worksheet's datasource list contains its references; an empty list does not mean the workbook has no connected datasource. Use list-workbook-datasources only when connection inventory matters. Not needed before template discovery or building; use for exploration or non-template authoring.",
+      "Orienting read: title, unsaved changes, and worksheet/dashboard/storyboard inventory. A worksheet's datasource list contains its references; an empty list does not mean the workbook has no connected datasource. Use list-workbook-datasources only when connection inventory matters. Each sheet's 0-based index is its tab position across all sheet types; the arrays are not in tab order. Not needed before template discovery or building; use for exploration or non-template authoring.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -53,7 +52,6 @@ export const getWorkbookInventoryTool = (
             worksheets: result.value.worksheets ?? [],
             dashboards: result.value.dashboards ?? [],
             storyboards: result.value.storyboards ?? [],
-            targetFingerprint: workbookTargetFingerprint(result.value),
           });
         },
       });

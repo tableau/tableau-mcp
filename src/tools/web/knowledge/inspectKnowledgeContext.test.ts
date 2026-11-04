@@ -80,6 +80,26 @@ describe('inspectKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
+  it.each(
+    [undefined, 'false', 'true'].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for KNOWLEDGE_TOOLS_ENABLED=$readEnv, knowledge-tools FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', readEnv);
+      mocks.isFeatureEnabled.mockImplementation(
+        async (name: string) => name === 'knowledge-tools' && readFlag,
+      );
+
+      const enabled = readEnv === undefined ? readFlag : readEnv === 'true';
+      expect(await Provider.from(getTool().disabled)).toBe(!enabled);
+      if (readEnv !== undefined) {
+        expect(mocks.isFeatureEnabled).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it('advertises a non-empty inputSchema carrying the action enum', async () => {
     // Reproduces the MCP SDK's own schema-advertisement conversion (see
     // knowledgeSchemaTestUtils.ts). A z.discriminatedUnion (this tool's schema before the fix)
@@ -122,7 +142,7 @@ describe('inspectKnowledgeContextTool', () => {
     await getResult({ action: 'status' });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({
-        jwtScopes: ['tableau:knowledge:read'],
+        jwtScopes: ['tableau:knowledge:read', 'tableau:mcp_site_settings:read'],
       }),
     );
   });

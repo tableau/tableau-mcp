@@ -9,12 +9,15 @@ import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
-const authoringToolsEnabled = Boolean(features['authoring-tools']);
+const datasourceAuthoringEnabled = Boolean(features['datasource-authoring']);
 const flowReadToolsEnabled = Boolean(features['flow-read-tools']);
 const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
 let flowReadExpected: boolean;
 let flowWriteExpected: boolean;
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
+const knowledgeWriteToolsEnabled = Boolean(features['knowledge-write-tools']);
+let knowledgeReadExpected: boolean;
+let knowledgeWriteExpected: boolean;
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
@@ -25,6 +28,9 @@ describe('server', () => {
     const config = new Config();
     flowReadExpected = config.flowReadToolsEnabled ?? flowReadToolsEnabled;
     flowWriteExpected = config.flowWriteToolsEnabled ?? flowWriteToolsEnabled;
+    knowledgeReadExpected = config.knowledgeToolsEnabled ?? knowledgeToolsEnabled;
+    knowledgeWriteExpected =
+      knowledgeReadExpected && (config.knowledgeWriteToolsEnabled ?? knowledgeWriteToolsEnabled);
   });
   afterAll(resetEnv);
 
@@ -38,7 +44,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -79,14 +85,12 @@ describe('server', () => {
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
-      // authoring tools are gated off by default (authoring-tools feature flag)
-      const authoringTools: ReadonlyArray<WebToolName> = [
-        'request-workbook-upload',
+      // datasource publishing tools are gated off by default (datasource-authoring feature flag)
+      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = [
         'request-datasource-upload',
-        'publish-workbook',
         'publish-datasource',
       ];
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      // Knowledge tools follow KNOWLEDGE_TOOLS_ENABLED / KNOWLEDGE_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
         'inspect-knowledge-context',
@@ -117,13 +121,17 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!authoringToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      if (!datasourceAuthoringEnabled) {
+        expectedToolNames = expectedToolNames.filter(
+          (name) => !datasourceAuthoringTools.includes(name),
+        );
       }
 
-      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
-      if (!knowledgeToolsEnabled) {
+      if (!knowledgeReadExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
+      }
+      if (!knowledgeWriteExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'manage-knowledge-context');
       }
 
       // Filter out data-app tools if they are not enabled (data-apps feature flag)
@@ -138,9 +146,6 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
-      if (!authoringToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
-      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -175,7 +180,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     // The substrings here are kept in lockstep with the unit test in src/server.web.test.ts.
@@ -208,7 +213,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -239,7 +244,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -280,14 +285,12 @@ describe('server', () => {
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
-      // authoring tools are gated off by default (authoring-tools feature flag)
-      const authoringTools: ReadonlyArray<WebToolName> = [
-        'request-workbook-upload',
+      // datasource publishing tools are gated off by default (datasource-authoring feature flag)
+      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = [
         'request-datasource-upload',
-        'publish-workbook',
         'publish-datasource',
       ];
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      // Knowledge tools follow KNOWLEDGE_TOOLS_ENABLED / KNOWLEDGE_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
         'inspect-knowledge-context',
@@ -322,16 +325,20 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!authoringToolsEnabled) {
+      if (!datasourceAuthoringEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
-          (name) => !authoringTools.includes(name),
+          (name) => !datasourceAuthoringTools.includes(name),
         );
       }
 
-      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
-      if (!knowledgeToolsEnabled) {
+      if (!knowledgeReadExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !knowledgeTools.includes(name),
+        );
+      }
+      if (!knowledgeWriteExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => name !== 'manage-knowledge-context',
         );
       }
 
@@ -349,9 +356,6 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
-      if (!authoringToolsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
-      }
 
       const expectedDesktopToolNames = desktopToolNames.filter((name) =>
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),

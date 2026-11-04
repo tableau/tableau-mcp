@@ -68,6 +68,8 @@ A comma-separated list of loggers to enable.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
+  The Desktop server starts every name with `desktop-mcp-`, e.g.
+  `desktop-mcp-2025-10-15T22-00-00-000Z.log`.
 - Each line in the log file is a JSON object with a timestamp and additional properties:
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
@@ -91,7 +93,8 @@ The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_logge
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
 - The server will attempt to create the directory if it does not exist.
-- There is no cleanup of old log files. The server will continue to create log files indefinitely.
+- The web server never deletes old log files.
+- The Desktop server deletes its own `desktop-mcp-*.log` files older than 14 days when it starts.
 
 <hr />
 
@@ -517,6 +520,14 @@ set).
 
 <hr />
 
+## `TABLEAU_DATA_APP_WORKSPACE_DIR`
+
+Desktop only. Absolute directory where `scaffold-data-app` writes durable data-app package trees.
+Relative or unset values are ignored; the tool then fails with an actionable error instead of
+writing relative to the process working directory.
+
+<hr />
+
 ## `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID`
 
 Desktop only. Set by the launcher (Tableau Desktop and its agent), not by hand. They are sent as
@@ -529,12 +540,11 @@ well-formed GUID.
 ## Product telemetry fields
 
 Every event also carries `type`, `host_timestamp` (UTC time of the call), `service_name`
-(`tableau-mcp`), `pod`, `podname` and `is_hyperforce`.
+(`tableau-mcp`), `podname` and `is_hyperforce`.
 
 | Field                                          | Web                                                                                                                                         | Desktop                                                                               |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `tool_name`, `request_id`                      | yes                                                                                                                                         | yes                                                                                   |
-| `host_name`                                    | the machine's hostname                                                                                                                      | not sent                                                                              |
 | `session_id`                                   | MCP session ID, empty on stdio                                                                                                              | `TABLEAU_DESKTOP_SESSION_LUID`, empty if unset                                        |
 | `site_luid`, `user_luid`                       | from the signed-in session                                                                                                                  | `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`                                              |
 | `chat_id`                                      | not sent                                                                                                                                    | `TABLEAU_CHAT_ID`                                                                     |
@@ -546,8 +556,7 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
-1024 characters), `site_luid`, `user_luid` and `host_name` (the machine's hostname). Calling it also
-sends the usual `tool_call` event.
+1024 characters), `site_luid` and `user_luid`. Calling it also sends the usual `tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
@@ -609,6 +618,52 @@ called again with that token, after the user approves the preview.
 | unset or `true` | `false` | read-only flow tools |
 | `false` | unset or `true` | mutating flow tools |
 | `false` | `false` | none |
+
+<hr />
+
+## `KNOWLEDGE_TOOLS_ENABLED`
+
+Controls the read-only Tableau Knowledge tools. They are disabled by default.
+
+- Default: unset, which leaves the read-only Knowledge tools disabled
+- Set to `true` to enable them. Any other value is treated as unset
+- Set to `false` to disable them
+- When `true`, the server checks whether Tableau Knowledge is available on the site when it
+  registers tools. The tools appear only on sites where it is. If the site rejects the check (for
+  example, the request isn't authorized), the tools are left out as unavailable. If the check fails
+  with a temporary error, they are left out with a warning that the error is likely transient
+- When enabled, registers:
+  - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
+  - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)
+- When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is
+  neither advertised nor accepted
+- The mutating Knowledge tool is controlled by
+  [`KNOWLEDGE_WRITE_TOOLS_ENABLED`](#knowledge_write_tools_enabled), and also needs this setting on
+
+<hr />
+
+## `KNOWLEDGE_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** Tableau Knowledge tool. It is disabled by default. Changes are
+shared with everyone and every agent that uses the Knowledge graph.
+
+- Default: unset, which leaves the mutating Knowledge tool disabled
+- Set to `true` to enable it. Any other value is treated as unset
+- Set to `false` to disable it
+- Unlike the flow settings, this one does not stand alone: the tool is registered only when the
+  read-only Knowledge tools are also enabled (see
+  [`KNOWLEDGE_TOOLS_ENABLED`](#knowledge_tools_enabled))
+- When enabled, registers:
+  - [`manage-knowledge-context`](../../tools/knowledge/manage-knowledge-context.md)
+- When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is neither
+  advertised nor accepted, and the `tableau:knowledge:write` REST API scope is not advertised
+- The tool requires the Creator site role or higher
+
+| `KNOWLEDGE_TOOLS_ENABLED` | `KNOWLEDGE_WRITE_TOOLS_ENABLED` | Registered Knowledge tools |
+| --- | --- | --- |
+| `true` | `true` | read-only and mutating Knowledge tools |
+| `true` | unset or `false` | read-only Knowledge tools |
+| unset or `false` | any value | none |
 
 <hr />
 
@@ -770,7 +825,7 @@ discretion.
 
 ## `CSP_ALLOWED_DOMAINS`
 
-A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps (when the `mcp-apps` feature is enabled).
+A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps.
 
 - Default: `https://*.online.tableau.com,https://*.tableau.com`
 - The configured [`SERVER`](#server) origin is automatically appended to this list.
@@ -794,8 +849,6 @@ presigned URL (as a `resource_link` content block) instead of inlining the image
 client fetches the image bytes directly from S3, so the image never streams back through the MCP
 server on read.
 
-- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
-  disabled, this variable has no effect and the tools return inline base64.
 - Default: unset (feature disabled — tools return inline base64, the original behavior).
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
