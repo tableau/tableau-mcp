@@ -223,6 +223,9 @@ describe('restApiInstance', () => {
       vi.stubEnv('AUTH', 'oauth');
       vi.stubEnv('OAUTH_ISSUER', 'http://127.0.0.1:3927');
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY', 'test-private-key');
+      // Advertise API scopes so the embedded mint is satisfiable under the default enforce +
+      // site-settings-on posture; otherwise Config refuses to start. Irrelevant to token handling.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
 
       const restApi = await useRestApi({
         config: getConfig(),
@@ -252,6 +255,9 @@ describe('restApiInstance', () => {
       vi.stubEnv('AUTH', 'oauth');
       vi.stubEnv('OAUTH_ISSUER', 'http://127.0.0.1:3927');
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY', 'test-private-key');
+      // Advertise API scopes so the embedded mint is satisfiable under the default enforce +
+      // site-settings-on posture; otherwise Config refuses to start. Irrelevant to token handling.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
 
       const restApi = await useRestApi({
         config: getConfig(),

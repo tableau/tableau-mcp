@@ -3,6 +3,7 @@ import {
   buildPermissionErrorMessage,
   describeAuthTarget,
   OAUTH_AUTH_CHALLENGE_GUIDANCE,
+  OAUTH_INSUFFICIENT_SCOPE_GUIDANCE,
 } from './authErrorMessage.js';
 
 describe('authErrorMessage (W-23757363)', () => {
@@ -61,5 +62,13 @@ describe('authErrorMessage (W-23757363)', () => {
     expect(OAUTH_AUTH_CHALLENGE_GUIDANCE).toContain(
       'A 401 is an authentication problem, not a missing feature.',
     );
+  });
+
+  describe('OAUTH_INSUFFICIENT_SCOPE_GUIDANCE', () => {
+    it('is 403-specific and not a copy of the 401 guidance', () => {
+      expect(OAUTH_INSUFFICIENT_SCOPE_GUIDANCE).toContain('403');
+      expect(OAUTH_INSUFFICIENT_SCOPE_GUIDANCE).not.toContain('401');
+      expect(OAUTH_INSUFFICIENT_SCOPE_GUIDANCE.toLowerCase()).not.toContain('re-authenticate');
+    });
   });
 });
