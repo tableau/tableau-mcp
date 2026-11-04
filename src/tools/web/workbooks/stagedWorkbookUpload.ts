@@ -72,3 +72,25 @@ export function buildWorkbookUploadS3Key(
 export function getWorkbookFileType(fileName: string): WorkbookFileType | undefined {
   return getStagedFileType(workbookKind, fileName);
 }
+
+export type RequestClientWorkbookUploadResult = {
+  workbookUploadId: string;
+  uploadUrl: string;
+  requiredHeaders: Record<string, string>;
+  maxChunkBytes: number;
+};
+
+// Tableau upload session ids carry no file type, so it rides along in the id the client returns.
+export function buildClientWorkbookUploadId(
+  fileType: WorkbookFileType,
+  uploadSessionId: string,
+): string {
+  return `${fileType}:${uploadSessionId}`;
+}
+
+export function parseClientWorkbookUploadId(
+  workbookUploadId: string,
+): { fileType: WorkbookFileType; uploadSessionId: string } | undefined {
+  const match = /^(twbx?):(.+)$/.exec(workbookUploadId);
+  return match ? { fileType: match[1] as WorkbookFileType, uploadSessionId: match[2] } : undefined;
+}

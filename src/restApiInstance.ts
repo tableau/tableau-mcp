@@ -186,9 +186,11 @@ export const useRestApi = async <T>(
   args: RestApiArgs & {
     jwtScopes: ReadonlyArray<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
+    // Leaves the session open so a token handed back to the client stays valid.
+    keepSignedIn?: boolean;
   },
 ): Promise<T> => {
-  const { callback, ...remaining } = args;
+  const { callback, keepSignedIn, ...remaining } = args;
   const { restApi, signOutWhenCompleted } = await getNewRestApiInstanceAsync({
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
@@ -197,7 +199,7 @@ export const useRestApi = async <T>(
   try {
     return await callback(restApi);
   } finally {
-    if (signOutWhenCompleted) {
+    if (signOutWhenCompleted && !keepSignedIn) {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
       // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.

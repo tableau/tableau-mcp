@@ -2,15 +2,18 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
+import { useRestApi } from '../../../restApiInstance.js';
+import { MAX_FILE_UPLOAD_CHUNK_BYTES } from '../../../sdks/tableau/methods/publishingMethods.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import {
-  requestStagedWorkbookUpload,
-  RequestWorkbookUploadResult,
+  buildClientWorkbookUploadId,
+  getWorkbookFileType,
+  RequestClientWorkbookUploadResult,
 } from './stagedWorkbookUpload.js';
 
 const paramsSchema = {
@@ -27,8 +30,12 @@ export const getRequestWorkbookUploadTool = (
     server,
     name: 'request-workbook-upload',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    description:
-      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId.',
+    description: [
+      'Starts a Tableau file upload session for a TWB or TWBX workbook so the client can upload the bytes directly to Tableau.',
+      'PUT the workbook to uploadUrl with requiredHeaders and a multipart/mixed body (not multipart/form-data) of two parts: "request_payload" (text/xml, empty) and "tableau_file" (application/octet-stream, with the file name). For example:',
+      "curl -fsS -X PUT -H 'Content-Type: multipart/mixed' -H '<each requiredHeaders entry>' -F 'request_payload=;type=text/xml' -F 'tableau_file=@<workbook file>;type=application/octet-stream' '<uploadUrl>'",
+      'Files larger than maxChunkBytes must be split and PUT in order, one chunk per request, to the same uploadUrl. Then call publish-workbook with the returned workbookUploadId.',
+    ].join('\n\n'),
     paramsSchema,
     annotations: {
       title: 'Request Workbook Upload',
@@ -39,7 +46,7 @@ export const getRequestWorkbookUploadTool = (
     },
     disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {
-      return await tool.logAndExecute<RequestWorkbookUploadResult>({
+      return await tool.logAndExecute<RequestClientWorkbookUploadResult>({
         extra,
         args: {
           fileName,
@@ -51,17 +58,26 @@ export const getRequestWorkbookUploadTool = (
             );
           }
 
-          if (!extra.config.bucketS3.enabled) {
-            throw new UnknownError(
-              'MCP_S3_BUCKET must be configured before requesting staged workbook uploads.',
-            );
+          const fileType = getWorkbookFileType(fileName);
+          if (!fileType) {
+            throw new ArgsValidationError('Workbook upload filename must end in .twb or .twbx.');
           }
 
-          const result = await requestStagedWorkbookUpload({
-            fileName,
-            config: extra.config.bucketS3,
+          const { uploadSessionId, uploadUrl, authHeaders } = await useRestApi({
+            ...extra,
+            jwtScopes: tool.requiredApiScopes,
+            // The client appends with this session's token, so it must outlive the tool call.
+            keepSignedIn: true,
+            callback: async (restApi) =>
+              restApi.publishingMethods.initiateClientFileUpload({ siteId: restApi.siteId }),
           });
-          return new Ok(result);
+
+          return new Ok({
+            workbookUploadId: buildClientWorkbookUploadId(fileType, uploadSessionId),
+            uploadUrl,
+            requiredHeaders: authHeaders,
+            maxChunkBytes: MAX_FILE_UPLOAD_CHUNK_BYTES,
+          });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({

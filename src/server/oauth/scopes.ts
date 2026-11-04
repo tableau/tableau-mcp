@@ -294,7 +294,7 @@ const toolScopeMap: Record<
   },
   'request-workbook-upload': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set([]),
+    api: new Set(['tableau:file_uploads:create']),
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],

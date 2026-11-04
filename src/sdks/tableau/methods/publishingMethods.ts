@@ -55,6 +55,31 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
   };
 
   /**
+   * Starts an upload session for a client to append to itself: returns the Append to File Upload
+   * URL and the auth headers the client must send with each chunk.
+   *
+   * Required scopes: `tableau:file_uploads:create`
+   *
+   * @param siteId - The Tableau site ID
+   */
+  initiateClientFileUpload = async ({
+    siteId,
+  }: {
+    siteId: string;
+  }): Promise<{
+    uploadSessionId: string;
+    uploadUrl: string;
+    authHeaders: Record<string, string>;
+  }> => {
+    const { uploadSessionId } = await this.initiateFileUpload({ siteId });
+    return {
+      uploadSessionId,
+      uploadUrl: `${this._apiClient.axios.defaults.baseURL}${buildRestPath('sites', siteId, 'fileUploads', uploadSessionId)}`,
+      authHeaders: this.authHeader.headers,
+    };
+  };
+
+  /**
    * Appends a chunk (up to 64 MB) of file content to an upload session previously
    * created by `initiateFileUpload`. Call repeatedly, in order, to upload files larger
    * than a single request can carry.

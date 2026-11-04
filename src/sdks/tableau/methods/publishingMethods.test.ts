@@ -32,6 +32,34 @@ describe('PublishingMethods', () => {
     });
   });
 
+  describe('initiateClientFileUpload', () => {
+    it('returns the absolute append URL and the auth headers for the client', async () => {
+      const mockPost = vi.fn().mockResolvedValue({
+        data: { fileUpload: { uploadSessionId: '26578:abc-0:0', fileSize: '0' } },
+      });
+      const publishingMethods = new PublishingMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      publishingMethods._apiClient = {
+        axios: {
+          post: mockPost,
+          defaults: { baseURL: 'http://test/api/3.29' },
+        } as unknown as AxiosInstance,
+      };
+
+      const upload = await publishingMethods.initiateClientFileUpload({ siteId: 'site-1' });
+
+      expect(upload).toEqual({
+        uploadSessionId: '26578:abc-0:0',
+        uploadUrl: 'http://test/api/3.29/sites/site-1/fileUploads/26578:abc-0:0',
+        authHeaders: { Authorization: 'Bearer test' },
+      });
+    });
+  });
+
   describe('appendToFileUpload', () => {
     it('PUTs the chunk as multipart form data and returns the updated upload session', async () => {
       const mockPut = vi.fn().mockResolvedValue({

@@ -1,27 +1,30 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import * as loggerModule from '../../../logging/logger.js';
+import { MAX_FILE_UPLOAD_CHUNK_BYTES } from '../../../sdks/tableau/methods/publishingMethods.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getRequestWorkbookUploadTool } from './requestWorkbookUpload.js';
-import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
-  mockRequestStagedWorkbookUpload: vi.fn(),
+  mockInitiateClientFileUpload: vi.fn(),
+  mockUseRestApi: vi.fn(),
 }));
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
-vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./stagedWorkbookUpload.js')>()),
-  requestStagedWorkbookUpload: mocks.mockRequestStagedWorkbookUpload,
+vi.mock('../../../restApiInstance.js', () => ({
+  useRestApi: mocks.mockUseRestApi,
 }));
+
+const uploadSessionId = '26578:d1b7318519cb453e9e5dca2f77863df3-0:0';
+const uploadUrl = `https://tableau.example.com/api/3.29/sites/test-site-id/fileUploads/${uploadSessionId}`;
 
 beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
@@ -33,24 +36,28 @@ describe('requestWorkbookUploadTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag !== 'authoring-with-slack');
-    mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
-      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
-      expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-      requiredHeaders: { 'Content-Type': 'application/xml' },
+    mocks.mockInitiateClientFileUpload.mockResolvedValue({
+      uploadSessionId,
+      uploadUrl,
+      authHeaders: { 'X-Tableau-Auth': 'session-token' },
     });
+    mocks.mockUseRestApi.mockImplementation(async (opts) =>
+      opts.callback({
+        publishingMethods: { initiateClientFileUpload: mocks.mockInitiateClientFileUpload },
+        siteId: 'test-site-id',
+      }),
+    );
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('creates a tool instance with staged upload properties', () => {
+  it('creates a tool instance with direct upload properties', () => {
     const tool = getRequestWorkbookUploadTool(new WebMcpServer());
 
     expect(tool.name).toBe('request-workbook-upload');
-    expect(tool.description).toContain('staged upload URL');
+    expect(tool.description).toContain('multipart/mixed');
     expect(tool.paramsSchema).toMatchObject({
       fileName: expect.any(Object),
     });
@@ -105,71 +112,47 @@ describe('requestWorkbookUploadTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('returns a staged upload URL when S3 is configured', async () => {
+  it('returns the Tableau upload URL and session headers for a .twbx filename', async () => {
     const result = await getToolResult({
-      fileName: 'BoltBikes Workbook.twb',
+      fileName: 'BoltBikes Workbook.twbx',
     });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
-      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
-      expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-      requiredHeaders: { 'Content-Type': 'application/xml' },
+      workbookUploadId: `twbx:${uploadSessionId}`,
+      uploadUrl,
+      requiredHeaders: { 'X-Tableau-Auth': 'session-token' },
+      maxChunkBytes: MAX_FILE_UPLOAD_CHUNK_BYTES,
     });
-    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
-      fileName: 'BoltBikes Workbook.twb',
-      config: expect.objectContaining({
-        enabled: true,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
+    expect(mocks.mockInitiateClientFileUpload).toHaveBeenCalledWith({ siteId: 'test-site-id' });
+    expect(mocks.mockUseRestApi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jwtScopes: ['tableau:file_uploads:create'],
+        keepSignedIn: true,
       }),
-    });
+    );
   });
 
-  it('returns a staged upload URL for a .twbx filename', async () => {
-    mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
-      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
-      expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-      requiredHeaders: { 'Content-Type': 'application/octet-stream' },
-    });
-
+  it('tags the upload id with the twb file type', async () => {
     const result = await getToolResult({
-      fileName: 'BoltBikes Workbook.twbx',
+      fileName: 'BoltBikes Workbook.twb',
     });
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
-      fileName: 'BoltBikes Workbook.twbx',
-      config: expect.objectContaining({ enabled: true }),
-    });
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).workbookUploadId).toBe(`twb:${uploadSessionId}`);
   });
 
-  it('returns an error when S3 is not configured', async () => {
-    const result = await getToolResult(
-      { fileName: 'BoltBikes Workbook.twb' },
-      {
-        config: {
-          ...getMockRequestHandlerExtra().config,
-          bucketS3: {
-            enabled: false,
-            bucket: '',
-            region: '',
-            keyPrefix: '',
-            presignTtlSeconds: 60,
-          },
-        },
-      },
-    );
+  it('returns an error for a non-workbook filename without starting an upload', async () => {
+    const result = await getToolResult({
+      fileName: 'BoltBikes Workbook.tds',
+    });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('MCP_S3_BUCKET must be configured');
-    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain('.twb or .twbx');
+    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
   });
 
   it('returns an error for Passthrough auth before creating a signed upload URL', async () => {
@@ -191,10 +174,10 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Passthrough authentication');
-    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
   });
 
-  it('redacts no presigned URL from logs because it is only produced after execution', async () => {
+  it('logs only the file name because the upload URL and token are produced after execution', async () => {
     const tool = getRequestWorkbookUploadTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const logAndExecute = vi
@@ -231,20 +214,5 @@ async function getToolResult(
 function getMockExtra(
   overrides: Partial<ReturnType<typeof getMockRequestHandlerExtra>> = {},
 ): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
-  return {
-    ...extra,
-    ...overrides,
-    config: {
-      ...extra.config,
-      bucketS3: {
-        enabled: true,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-        keyPrefix: 'mcp/',
-        presignTtlSeconds: 300,
-      },
-      ...overrides.config,
-    },
-  };
+  return { ...getMockRequestHandlerExtra(), ...overrides };
 }

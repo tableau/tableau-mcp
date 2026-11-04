@@ -372,6 +372,28 @@ describe('publishWorkbookTool', () => {
     });
   });
 
+  it('publishes a client-uploaded workbook from its Tableau upload session without re-uploading', async () => {
+    const result = await getToolResult({
+      ...validArgs,
+      workbookUploadId: 'twbx:26578:d1b7318519cb453e9e5dca2f77863df3-0:0',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).status).toBe('published');
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      uploadSessionId: '26578:d1b7318519cb453e9e5dca2f77863df3-0:0',
+      name: 'My New Workbook',
+      workbookType: 'twbx',
+      projectId: 'target-project-id',
+      overwrite: false,
+    });
+  });
+
   it('returns an error when Tableau rejects an invalid TWBX workbook during publish', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twbx',

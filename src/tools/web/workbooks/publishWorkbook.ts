@@ -31,8 +31,10 @@ import {
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
+  parseClientWorkbookUploadId,
   type ResolvedWorkbook,
   resolveStagedWorkbookUpload,
+  type WorkbookFileType,
 } from './stagedWorkbookUpload.js';
 
 const paramsSchema = {
@@ -41,7 +43,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path.',
+      'Workbook upload id returned by request-workbook-upload, after the client has uploaded the workbook bytes. Use this for hosted clients that cannot pass a local path.',
     ),
   workbookFilePath: z
     .string()
@@ -128,7 +130,7 @@ export const getPublishWorkbookTool = (
           (dataAppsEnabled
             ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
             : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
-          'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
+          'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX. Workbooks uploaded through request-workbook-upload are likewise validated by Tableau as part of publishing.',
         'Project publishes also return the workbook permission rules (configured rules, not effective access) in permissions, or permissionsNote if that optional read fails.',
       ].join('\n\n');
     }),
@@ -199,22 +201,38 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
-              const resolvedWorkbookFile = await resolveWorkbookInput({
-                config: extra.config.bucketS3,
-                workbookUploadId,
-                workbookFilePath,
-              });
-              const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
-              if (!fileType) {
-                throw new UnknownError(
-                  `Resolved workbook file "${resolvedWorkbookFile.fileName}" is neither a .twb nor a .twbx file.`,
-                );
+              const clientUpload =
+                workbookUploadId && !workbookFilePath
+                  ? parseClientWorkbookUploadId(workbookUploadId)
+                  : undefined;
+              let fileType: WorkbookFileType;
+              let outcome: ValidationOutcome;
+              if (clientUpload) {
+                // The client already uploaded the bytes to Tableau; Tableau validates at publish.
+                fileType = clientUpload.fileType;
+                outcome = {
+                  status: 'valid',
+                  warnings: [],
+                  uploadSessionId: clientUpload.uploadSessionId,
+                };
+              } else {
+                const resolvedWorkbookFile = await resolveWorkbookInput({
+                  config: extra.config.bucketS3,
+                  workbookUploadId,
+                  workbookFilePath,
+                });
+                const resolvedFileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
+                if (!resolvedFileType) {
+                  throw new UnknownError(
+                    `Resolved workbook file "${resolvedWorkbookFile.fileName}" is neither a .twb nor a .twbx file.`,
+                  );
+                }
+                fileType = resolvedFileType;
+                outcome =
+                  fileType === 'twb'
+                    ? await validateAndUploadTwb({ restApi, resolvedWorkbookFile })
+                    : await uploadTwbx({ restApi, resolvedWorkbookFile });
               }
-
-              const outcome =
-                fileType === 'twb'
-                  ? await validateAndUploadTwb({ restApi, resolvedWorkbookFile })
-                  : await uploadTwbx({ restApi, resolvedWorkbookFile });
 
               if (outcome.status === 'invalid') {
                 return new Ok({
