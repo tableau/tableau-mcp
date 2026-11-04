@@ -22,7 +22,7 @@ export const getActiveDialogsTool = (
     minApiVersion: DIALOG_SESSION_MIN_API_VERSION,
     title,
     description:
-      'List sessionId/revision, status, visible message and diagnostic text, and recentActions. Native panels advertise capabilities; act only when active/enabled. Files: path(s), filterId, overwriteConfirmed with user consent; color: red/green/blue, alpha if supported; print: printerId, range, sheetScope, firstPage/lastPage, copies, collate, exportSelection, optional outputPath. Respect advertised bounds/support flags. Empty dialogs proves clear only with uiSnapshotAvailable. Poll pending requestId; never use a new ID for uncertainty. Panel closure or print-prepared is not caller success; verify the originating operation.',
+      'List sessionId/revision, status, visible message and diagnostic text, and recentActions. Native panels advertise capabilities; act only when active; skip enabled=false. Files: path(s), filterId, overwriteConfirmed with user consent; color: red/green/blue, alpha if supported; print: printerId, range, sheetScope, firstPage/lastPage, copies, collate, exportSelection, optional outputPath. Respect advertised bounds/support flags. Empty dialogs proves clear only with uiSnapshotAvailable. Poll pending requestId; never use a new ID for uncertainty. Panel closure or print-prepared is not caller success; verify the originating operation.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

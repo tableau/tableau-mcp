@@ -62,7 +62,7 @@ describe('get-active-dialogs tool', () => {
     expect(tool.minApiVersion).toBe('0.2.26');
     expect(tool.description).toContain('visible message and diagnostic text');
     expect(tool.description).toContain('Native panels advertise');
-    expect(tool.description).toContain('act only when active/enabled');
+    expect(tool.description).toContain('act only when active; skip enabled=false');
     expect(tool.description).toContain('overwriteConfirmed with user consent');
     expect(tool.description).toContain('Respect advertised bounds/support flags');
     expect(tool.description).toContain('print-prepared is not caller success');
