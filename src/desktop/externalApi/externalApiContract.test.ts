@@ -19,9 +19,11 @@ import {
   datasourceListSchema,
   dataTableSchema,
   desktopStateSchema,
+  dialogActionInvocationSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
+  dialogRequestStatusSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
   imageResultSchema,
@@ -162,33 +164,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   LogicalTableList: ['tables'],
   ValidationResult: ['issues'],
   ImageExport: ['effectiveMimeType', 'width', 'height'],
+  WindowInfo: ['sessionId', 'revision', 'family', 'status'],
 };
-
-// The dialog tools still speak the pre-0.2.26 protocol; these are the spec properties they omit.
-const KNOWN_DIALOG_PROTOCOL_DRIFT: Readonly<Record<string, readonly string[]>> = {
-  WindowInfo: ['family', 'mode', 'revision', 'sessionId', 'status'],
-  DialogIdentity: ['revision', 'sessionId'],
-  DialogList: ['recentActions', 'uiSnapshotAvailable'],
-  InvokeDialogActionRequest: ['requestId'],
-};
-const KNOWN_DIALOG_PROBLEM_CODE_DRIFT = {
-  specOnly: [
-    'dialog-action-indeterminate',
-    'dialog-action-invalid',
-    'dialog-action-unsupported',
-    'dialog-request-capacity',
-    'dialog-request-conflict',
-    'dialog-request-expired',
-    'dialog-session-inactive',
-    'dialog-session-stale',
-  ],
-  clientOnly: ['dialog-action-not-found', 'dialog-ambiguous'],
-};
-
-function specPropertiesWithoutDialogDrift(name: string, keys: string[]): string[] {
-  const drift = new Set(KNOWN_DIALOG_PROTOCOL_DRIFT[name] ?? []);
-  return keys.filter((key) => !drift.has(key)).sort();
-}
 
 describe('external client API contract (captured openapi fixture)', () => {
   it('tracks the 0.2.31 producer contract', () => {
@@ -298,15 +275,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       '%s: properties and required set match except known version deltas',
       (name, schema) => {
         const component = specSchema(name);
-        expect(declaredKeys(schema).sort()).toEqual(
-          specPropertiesWithoutDialogDrift(name, specPropertyNames(component)),
-        );
+        expect(declaredKeys(schema).sort()).toEqual(specPropertyNames(component).sort());
         const exceptions = new Set(KNOWN_READ_REQUIREDNESS_EXCEPTIONS[name] ?? []);
         expect(requiredKeys(schema).sort()).toEqual(
-          specPropertiesWithoutDialogDrift(
-            name,
-            specRequiredKeys(component).filter((key) => !exceptions.has(key)),
-          ),
+          specRequiredKeys(component)
+            .filter((key) => !exceptions.has(key))
+            .sort(),
         );
       },
     );
@@ -351,6 +325,7 @@ describe('external client API contract (captured openapi fixture)', () => {
         LogicalTableList: ['tables'],
         ValidationResult: ['issues'],
         ImageExport: ['effectiveMimeType', 'width', 'height'],
+        WindowInfo: ['sessionId', 'revision', 'family', 'status'],
       });
       for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
         const component = specSchema(name);
@@ -428,15 +403,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(extras.sort()).toEqual(['detail', 'type']);
     });
 
-    it('PROBLEM_CODES equals the spec x-extensible-enum except the known dialog drift', () => {
-      const specOnly = new Set(KNOWN_DIALOG_PROBLEM_CODE_DRIFT.specOnly);
+    it('PROBLEM_CODES equals the spec x-extensible-enum', () => {
       expect([...PROBLEM_CODES].sort()).toEqual(
-        [
-          ...(problem.properties?.code?.['x-extensible-enum'] ?? []).filter(
-            (code) => !specOnly.has(code),
-          ),
-          ...KNOWN_DIALOG_PROBLEM_CODE_DRIFT.clientOnly,
-        ].sort(),
+        [...(problem.properties?.code?.['x-extensible-enum'] ?? [])].sort(),
       );
     });
 
@@ -452,109 +421,73 @@ describe('external client API contract (captured openapi fixture)', () => {
 
   describe('dialog contracts', () => {
     it.each([
+      ['DialogAction', dialogActionSchema],
       ['DialogIdentity', dialogIdentitySchema],
       ['DialogList', dialogListSchema],
+      ['DialogRequestStatus', dialogRequestStatusSchema],
       ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
-    ] as const)('%s properties and required set match except the known drift', (name, schema) => {
+      ['InvokeDialogActionResult', invokeDialogActionResultSchema],
+    ] as const)('%s properties and required set match the producer', (name, schema) => {
       const component = specSchema(name);
-      expect(declaredKeys(schema).sort()).toEqual(
-        specPropertiesWithoutDialogDrift(name, Object.keys(component.properties ?? {})),
-      );
-      expect(requiredKeys(schema).sort()).toEqual(
-        specPropertiesWithoutDialogDrift(name, [...(component.required ?? [])]),
-      );
+      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
     });
 
-    it('pins the 0.2.28 dialog protocol the dialog tools do not speak yet', () => {
-      const invokeResponses = (
-        spec.paths[EXTERNAL_API_ROUTES.appInvokeDialogAction] as {
-          post?: { responses?: Record<string, unknown> };
-        }
-      ).post?.responses;
-
-      expect(specSchema('InvokeDialogActionRequest').properties?.action?.$ref).toBe(
-        '#/components/schemas/DialogActionInvocation',
-      );
-      expect(specSchema('DialogAction').oneOf).toBeUndefined();
-      expect(specSchema('InvokeDialogActionResult').oneOf).toBeUndefined();
-      expect(Object.keys(specSchema('InvokeDialogActionResult').properties ?? {}).sort()).toEqual([
-        'dialog',
-        'dialogs',
-        'outcome',
-        'status',
-        'uiSnapshotAvailable',
-      ]);
-      expect(Object.keys(invokeResponses ?? {})).not.toContain('409');
-    });
-
-    it('reuses WindowInfo for every dialog snapshot', () => {
-      const dialogList = specSchema('DialogList');
-      const dismissResult = specSchema('InvokeDialogActionResult');
-
-      expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      for (const outcome of dismissResult.oneOf ?? []) {
-        expect(outcome.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
+    it('matches every advertised invocation branch and its required input fields', () => {
+      const branches = specSchema('DialogActionInvocation').oneOf ?? [];
+      expect(dialogActionInvocationSchema.options).toHaveLength(branches.length);
+      for (const branch of branches) {
+        const kind = branch.properties?.kind?.const;
+        const schema = dialogActionInvocationSchema.options.find(
+          (option) => option.shape.kind.value === kind,
+        );
+        expect(schema, String(kind)).toBeDefined();
+        if (!schema) throw new Error(`Missing invocation schema for ${String(kind)}`);
+        expect(declaredKeys(schema).sort()).toEqual(Object.keys(branch.properties ?? {}).sort());
+        expect(requiredKeys(schema).sort()).toEqual([...(branch.required ?? [])].sort());
+        expect(schema._def.unknownKeys).toBe('strict');
       }
     });
 
-    it('documents bounded detailed text and its truncation marker', () => {
-      const windowInfo = specSchema('WindowInfo');
-
-      expect(windowInfo.properties?.detailedText?.maxLength).toBe(1024 * 1024);
-      expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
-    });
-
-    it('models exact labeled button and semantic close actions', () => {
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'unknown' }).success).toBe(false);
-    });
-
-    it('requires an exact returned action in requests and invoked responses', () => {
-      expect(specSchema('InvokeDialogActionRequest').properties?.dialog?.$ref).toBe(
-        '#/components/schemas/DialogIdentity',
+    it('uses shared snapshots and status schemas without echoing selection payloads', () => {
+      expect(specSchema('InvokeDialogActionRequest').properties?.action?.$ref).toBe(
+        '#/components/schemas/DialogActionInvocation',
       );
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: '' },
-        }).success,
-      ).toBe(false);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: ' ' },
-        }).success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: 'dialog', title: 'Save' },
-          action: { kind: 'button', label: 'Discard' },
-        }).success,
-      ).toBe(false);
+      expect(specSchema('InvokeDialogActionResult').properties?.status?.$ref).toBe(
+        '#/components/schemas/DialogRequestStatus',
+      );
+      expect(specSchema('DialogList').properties?.recentActions?.items?.$ref).toBe(
+        '#/components/schemas/DialogRequestStatus',
+      );
+      for (const name of ['DialogList', 'InvokeDialogActionResult']) {
+        expect(specSchema(name).properties?.dialogs?.items?.$ref).toBe(
+          '#/components/schemas/WindowInfo',
+        );
+      }
+      expect(declaredKeys(invokeDialogActionResultSchema)).not.toContain('action');
+      expect(specSchema('WindowInfo').properties?.detailedText?.maxLength).toBe(1024 * 1024);
+      expect(specSchema('WindowInfo').properties?.detailedTextTruncated?.type).toBe('boolean');
     });
 
-    it('models the exact three outcome branches and their required fields', () => {
+    it('accepts future read capabilities and statuses without accepting unknown write actions', () => {
       expect(
-        invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
-          .success,
+        dialogActionSchema.safeParse({ kind: 'future-action', enabled: true, future: 1 }).success,
       ).toBe(true);
+      expect(dialogActionInvocationSchema.safeParse({ kind: 'future-action' }).success).toBe(false);
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'dismissed',
-          dialog: { objectName: 'dialog', title: 'Save', className: 'QMessageBox' },
-          action: { kind: 'button', label: 'Discard' },
-          dialogs: [],
+        dialogRequestStatusSchema.safeParse({
+          sessionId: 's',
+          revision: 1,
+          requestId: 'r',
+          state: 'future-state',
+          effect: 'future-effect',
         }).success,
       ).toBe(true);
+    });
+
+    it('rejects the obsolete result that cannot identify or track the request', () => {
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'action-invoked-dialog-remains',
-          dialogs: [],
-        }).success,
+        invokeDialogActionResultSchema.safeParse({ outcome: 'dismissed', dialogs: [] }).success,
       ).toBe(false);
     });
   });

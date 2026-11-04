@@ -5,6 +5,7 @@
     <Extensions />
     <VizExtensions />
     <_.fcp.Packages.true...Packages />
+    <_.fcp.VizExtensionsDupEncodingUUID.true...VizExtensionsDupEncodingUUID />
     <AnimationOnByDefault />
     <MarkAnimation />
     <SheetIdentifierTracking />

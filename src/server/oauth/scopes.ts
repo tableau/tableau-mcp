@@ -207,9 +207,17 @@ export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
   'tableau:projects:read',
+  'tableau:mcp_site_settings:read',
 ];
 
 export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
+
+/**
+ * Reading the per-site MCP security layer requires this Tableau API scope. Under subset
+ * (non-strict) scope matching it is mandatory when MCP site settings are enabled and API scopes
+ * are advertised (see isSiteSettingsScopeRequired).
+ */
+export const MCP_SITE_SETTINGS_READ_SCOPE: TableauApiScope = 'tableau:mcp_site_settings:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -227,6 +235,9 @@ const toolScopeMap: Record<
     // Each condition check has its own set of scopes used. Each tool needs to provide
     // the set of scopes used to check all conditions it requires.
     conditionApiScopes?: ReadonlySet<TableauApiScope>;
+    // Scopes a tool may use that are not essential for the tool's usability.
+    // A missing optional scope must not keep the tool from being registered.
+    optionalApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
   'list-datasources': {
@@ -235,7 +246,7 @@ const toolScopeMap: Record<
   },
   'list-extract-refresh-tasks': {
     mcp: ['tableau:mcp:tasks:read'],
-    api: new Set(['tableau:tasks:read', 'tableau:users:read']),
+    api: new Set(['tableau:tasks:read', 'tableau:users:read', 'tableau:mcp_site_settings:read']),
   },
   'update-cloud-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:write'],
@@ -255,12 +266,12 @@ const toolScopeMap: Record<
   },
   'query-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:read'],
-    api: new Set(['tableau:knowledge:read']),
+    api: new Set(['tableau:knowledge:read', 'tableau:mcp_site_settings:read']),
     conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   'inspect-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:read'],
-    api: new Set(['tableau:knowledge:read']),
+    api: new Set(['tableau:knowledge:read', 'tableau:mcp_site_settings:read']),
     conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   // The duplicate check on create and the existence check on delete read before writing.
@@ -271,7 +282,7 @@ const toolScopeMap: Record<
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
-    api: new Set(['tableau:users:read']),
+    api: new Set(['tableau:users:read', 'tableau:mcp_site_settings:read']),
   },
   'update-user': {
     mcp: ['tableau:mcp:users:write'],
@@ -288,6 +299,7 @@ const toolScopeMap: Record<
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
+    optionalApiScopes: new Set([PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE]),
   },
   'request-datasource-upload': {
     mcp: ['tableau:mcp:datasource:create'],
@@ -295,7 +307,11 @@ const toolScopeMap: Record<
   },
   'publish-datasource': {
     mcp: ['tableau:mcp:datasource:create'],
-    api: new Set(['tableau:datasources:create', 'tableau:file_uploads:create']),
+    api: new Set([
+      'tableau:datasources:create',
+      'tableau:file_uploads:create',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -673,14 +689,15 @@ export async function getSupportedApiScopes(
     'enforce-registration-conditions',
   );
 
-  if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
-    scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
-  }
-
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
       for (const scope of scopeConfig.api) {
         scopes.add(scope);
+      }
+      if (includeOptionalScopes) {
+        for (const scope of scopeConfig.optionalApiScopes ?? []) {
+          scopes.add(scope);
+        }
       }
       // adding api scopes needed to check the registration conditions required by this tool
       if (enforceRegistrationConditions) {
@@ -758,7 +775,7 @@ export function validateScopes(
  * @param endpoint - The MCP endpoint or tool name
  * @returns Array of required scopes for the endpoint
  */
-export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<McpScope> {
+export function getRequiredMcpScopesForTool(toolName: WebToolName): ReadonlyArray<McpScope> {
   const oauthConfig = getConfig().oauth;
   if (!oauthConfig || !oauthConfig.enforceScopes) {
     return [];

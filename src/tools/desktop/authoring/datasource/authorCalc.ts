@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { DATASOURCE_CALC_VALIDATION_MIN_API_VERSION } from '../../../../desktop/externalApi/apiVersion.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
@@ -37,6 +38,7 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
   const tool = new DesktopTool({
     server,
     name: 'author-calc',
+    minApiVersion: DATASOURCE_CALC_VALIDATION_MIN_API_VERSION,
     title,
     description: 'Author a calculated field (caption + formula).',
     paramsSchema,
