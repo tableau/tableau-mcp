@@ -629,9 +629,10 @@ Controls the read-only Tableau Knowledge tools. They are disabled by default.
 - Set to `true` to enable them. Any other value is treated as unset
 - Set to `false` to disable them
 - When `true`, the tools appear only on sites where Tableau Knowledge is available. The server
-  checks this when it registers tools, as it does for other site-dependent tools. If the site rejects the check (for
-  example, the request isn't authorized), the tools are left out as unavailable. If the check fails
-  with a temporary error, they are left out with a warning that the error is likely transient
+  checks this when it registers tools, as it does for other site-dependent tools. If the site
+  rejects the check (for example, the request isn't authorized), the tools are left out as
+  unavailable. If the check fails with a temporary error, they are left out with a warning that the
+  error is likely transient
 - When enabled, registers:
   - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
   - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)

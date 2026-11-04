@@ -352,9 +352,9 @@ Examples:
 
 2. **Exclude Pulse tools and the Get View Image tool**. Since Tableau Pulse is not available on
    Tableau Server, the Pulse tools are omitted automatically when the server registers tools. They
-   can also be excluded explicitly using the `pulse` tool group. This example
-   also excludes the `get-view-image` tool to demonstrate tool groups and individual tools can be
-   provided simultaneously.
+   can also be excluded explicitly using the `pulse` tool group. This example also excludes the
+   `get-view-image` tool to demonstrate tool groups and individual tools can be provided
+   simultaneously.
 
    ```
    EXCLUDE_TOOLS=pulse,get-view-image
