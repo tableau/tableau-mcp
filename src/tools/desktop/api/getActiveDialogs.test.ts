@@ -17,6 +17,8 @@ import { getActiveDialogsTool } from './getActiveDialogs.js';
 vi.mock('../../../desktop/session/sessionResolution.js');
 
 const completeDialogList: DialogList = {
+  uiSnapshotAvailable: true,
+  recentActions: [],
   dialogs: [
     {
       objectName: 'saveChangesDialog',
@@ -53,13 +55,15 @@ describe('get-active-dialogs tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.13 API floor', () => {
+  it('declares the read contract and 0.2.26 API floor', () => {
     const tool = getActiveDialogsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-active-dialogs');
-    expect(tool.minApiVersion).toBe('0.2.13');
+    expect(tool.minApiVersion).toBe('0.2.26');
     expect(tool.description).toContain('visible message and diagnostic text');
-    expect(tool.description).toContain('semantic actions such as close');
+    expect(tool.description).toContain('native panels advertise');
+    expect(tool.description).toContain('uiSnapshotAvailable');
+    expect(tool.description).toContain('recentActions');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toEqual({
       readOnlyHint: true,
@@ -113,14 +117,48 @@ describe('get-active-dialogs tool', () => {
     harness.server.setOverride('GET /v0/app/dialogs', {
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ dialogs: [] }),
+      body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
     });
 
     try {
       const result = await harness.callTool({ session: undefined });
 
       expect(result.isError).toBe(false);
-      expect(parseResult(result)).toEqual({ dialogs: [] });
+      expect(parseResult(result)).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
+      expect(dialogGets(harness.server)).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('preserves an incomplete UI snapshot and a pending request instead of declaring no blockers', async () => {
+    vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
+    const response: DialogList = {
+      dialogs: [],
+      uiSnapshotAvailable: false,
+      recentActions: [
+        {
+          sessionId: 'native-panel-session',
+          revision: 2,
+          requestId: 'request-pending',
+          state: 'pending',
+          effect: 'none',
+          expiresInMilliseconds: 1000,
+        },
+      ],
+    };
+    const harness = await startHarness();
+    harness.server.setOverride('GET /v0/app/dialogs', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(response),
+    });
+    try {
+      expect(parseResult(await harness.callTool({ session: undefined }))).toEqual(response);
       expect(dialogGets(harness.server)).toHaveLength(1);
     } finally {
       await harness.close();
@@ -202,6 +240,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-get-active-dialogs',
-    apiVersion: '0.2.13',
+    apiVersion: '0.2.26',
   };
 }
