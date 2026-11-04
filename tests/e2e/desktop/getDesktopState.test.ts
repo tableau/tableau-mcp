@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -15,7 +15,12 @@ import {
   type InvokeDialogActionRequest,
   type InvokeDialogActionResult,
   invokeDialogActionResultSchema,
+  type OperationEnvelope,
+  operationEnvelopeSchema,
+  operationListSchema,
   type WindowInfo,
+  type WorkbookInventory,
+  workbookInventorySchema,
 } from '../../../src/desktop/externalApi/types.js';
 import { buildVariant } from '../build.js';
 import { McpClient } from '../mcpClient.js';
@@ -65,6 +70,11 @@ type ObservedRequest = {
   authorization: string | undefined;
   contentType: string | undefined;
   body: string;
+};
+
+type CallerScenario = {
+  operation: OperationEnvelope;
+  inventory: WorkbookInventory;
 };
 
 const nativeCases: Array<{
@@ -163,9 +173,11 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         request: InvokeDialogActionRequest;
         result: InvokeDialogActionResult;
         panelClosed: boolean;
-        callerFinished: boolean;
+        appIdle: boolean;
+        closeOnDispatch?: boolean;
       }
     | undefined;
+  let callerScenario: CallerScenario | undefined;
 
   beforeAll(async () => {
     await buildVariant('desktop');
@@ -244,6 +256,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     acceptedToken = currentDiscoveryToken;
     refreshDiscoveryOnUnauthorized = undefined;
     nativeScenario = undefined;
+    callerScenario = undefined;
   });
 
   it('selects the exact requested PID among multiple live discovery candidates', async () => {
@@ -322,7 +335,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
   });
 
   it.each(nativeCases)(
-    'tracks $action.kind across the stdio boundary without treating $effect as caller completion',
+    'preserves $action.kind statuses and scripted app-state transitions across stdio',
     async ({ family, action, capability, effect }) => {
       const request: InvokeDialogActionRequest = {
         dialog: { ...dialogIdentity, sessionId: `native-${action.kind}`, revision: 7 },
@@ -353,7 +366,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         request,
         result: pending,
         panelClosed: false,
-        callerFinished: false,
+        appIdle: false,
       };
       const readDialogs = async (): Promise<ReturnType<typeof dialogListSchema.parse>> =>
         await requireClient().callTool('get-active-dialogs', {
@@ -385,9 +398,173 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         recentActions: [nativeScenario.result.status],
       });
       expect(await readState()).toMatchObject({ state: 'RUNNING', blockingWindows: [] });
-      nativeScenario.callerFinished = true;
+      // This is transport-state coverage only; independent save-result checks follow below.
+      nativeScenario.appIdle = true;
       expect(await readState()).toMatchObject({ state: 'IDLE', blockingWindows: [] });
       expect(requests.filter(({ server }) => server === 'decoy')).toEqual([]);
+    },
+  );
+
+  it.each([
+    { state: 'SUCCEEDED', writesWorkbook: true, isError: false },
+    { state: 'FAILED', writesWorkbook: false, isError: true },
+    { state: 'CANCELLED', writesWorkbook: false, isError: true },
+    { state: 'SUCCEEDED', writesWorkbook: false, isError: true },
+  ])(
+    'verifies a correlated mock save result and workbook output: $state, writes=$writesWorkbook',
+    async ({ state, writesWorkbook, isError }) => {
+      if (!tempHome) throw new Error('The isolated test directory was not initialized.');
+      const caseDir = await mkdtemp(join(tempHome, 'caller-save-'));
+      const outputPath = join(caseDir, 'saved.twb');
+      const originalPath = join(caseDir, 'original.twb');
+      const originalBytes = '<workbook name="Original scratch workbook" />';
+      const savedBytes = '<workbook name="Saved scratch workbook" />';
+      await writeFile(originalPath, originalBytes);
+      const originalInventory: WorkbookInventory = {
+        title: 'Untitled scratch workbook',
+        location: null,
+        unsavedChanges: true,
+        worksheets: [],
+        dashboards: [],
+        storyboards: [],
+      };
+      const origin: CallerScenario = {
+        operation: {
+          id: `save-${state}-${writesWorkbook}`,
+          kind: 'save-workbook',
+          state: 'RUNNING',
+          // A bounded snapshot can miss the native panel while the operation is polled.
+          uiSnapshotAvailable: false,
+        },
+        inventory: originalInventory,
+      };
+      callerScenario = origin;
+      const request: InvokeDialogActionRequest = {
+        dialog: { ...dialogIdentity, sessionId: origin.operation.id, revision: 1 },
+        requestId: `choose-${origin.operation.id}`,
+        action: { kind: 'save-file', path: outputPath, filterId: 'twb', overwriteConfirmed: false },
+      };
+      nativeScenario = {
+        dialog: {
+          ...request.dialog,
+          family: 'file',
+          status: 'active',
+          actions: [nativeCases[0].capability, { kind: 'cancel' }],
+        },
+        request,
+        result: {
+          dialog: request.dialog,
+          outcome: 'completed',
+          status: {
+            sessionId: request.dialog.sessionId,
+            revision: request.dialog.revision,
+            requestId: request.requestId,
+            state: 'completed',
+            effect: 'file-choice-returned',
+          },
+          uiSnapshotAvailable: true,
+          dialogs: [],
+        },
+        panelClosed: false,
+        appIdle: false,
+        closeOnDispatch: true,
+      };
+      let saveSettled = false;
+      const saveResponse = requireClient()
+        .client.callTool({ name: 'save-workbook', arguments: { session: SESSION } })
+        .finally(() => {
+          saveSettled = true;
+        });
+      try {
+        await waitUntil(() =>
+          requests.some(({ method, url }) => method === 'POST' && url === '/v0/workbook:save'),
+        );
+        const listed = await requireClient().callTool('list-operations', {
+          schema: operationListSchema,
+          toolArgs: { session: SESSION },
+        });
+        expect(listed.operations).toHaveLength(1);
+        const operationId = listed.operations[0].id;
+        expect(operationId).toBe(origin.operation.id);
+        expect(listed.operations[0].kind).toBe('save-workbook');
+        const readOperation = async (): Promise<OperationEnvelope> =>
+          await requireClient().callTool('get-operation', {
+            schema: operationEnvelopeSchema,
+            toolArgs: { session: SESSION, operationId },
+          });
+        const readInventory = async (): Promise<WorkbookInventory> =>
+          await requireClient().callTool('get-workbook-inventory', {
+            schema: workbookInventorySchema,
+            toolArgs: { session: SESSION },
+          });
+        const inspected = await requireClient().callTool('get-active-dialogs', {
+          schema: dialogListSchema,
+          toolArgs: { session: SESSION },
+        });
+        expect(inspected.dialogs).toEqual([nativeScenario.dialog]);
+        await requireClient().callTool('invoke-dialog-action', {
+          schema: invokeDialogActionResultSchema,
+          toolArgs: { session: SESSION, ...request },
+        });
+        expect(await readState()).toMatchObject({ state: 'RUNNING', blockingWindows: [] });
+        expect(await readOperation()).toMatchObject({ id: operationId, state: 'RUNNING' });
+        expect(await readInventory()).toEqual(originalInventory);
+        await expect(readFile(outputPath)).rejects.toMatchObject({ code: 'ENOENT' });
+        expect(saveSettled).toBe(false);
+
+        if (writesWorkbook) {
+          await writeFile(outputPath, savedBytes);
+          origin.inventory = { ...originalInventory, location: outputPath, unsavedChanges: false };
+        }
+        origin.operation = {
+          ...origin.operation,
+          state,
+          ...(state === 'SUCCEEDED'
+            ? { result: writesWorkbook ? { filePath: outputPath } : {} }
+            : { error: { code: `save-${state.toLowerCase()}`, message: `Save ${state}` } }),
+        };
+        const saved = CallToolResultSchema.parse(await saveResponse);
+        expect(saved.isError ?? false).toBe(isError);
+        expect(await readState()).toMatchObject({ state: 'IDLE', blockingWindows: [] });
+        const terminal = await readOperation();
+        expect(terminal).toEqual(origin.operation);
+        if (writesWorkbook) {
+          expect(saved.content[0]).toMatchObject({
+            type: 'text',
+            text: expect.stringContaining('Saved the open workbook'),
+          });
+          expect(terminal.result).toEqual({ filePath: outputPath });
+          expect(await readInventory()).toMatchObject({
+            location: outputPath,
+            unsavedChanges: false,
+          });
+          expect(await readFile(outputPath, 'utf8')).toBe(savedBytes);
+        } else {
+          expect(await readInventory()).toEqual(originalInventory);
+          await expect(readFile(outputPath)).rejects.toMatchObject({ code: 'ENOENT' });
+          const errorText = toolErrorText(saved);
+          expect(errorText).not.toContain('Saved the open workbook');
+          expect(errorText).toContain(
+            state === 'SUCCEEDED' ? 'save did not complete' : `Save ${state}`,
+          );
+          if (state !== 'SUCCEEDED') {
+            expect(terminal.error).toEqual({
+              code: `save-${state.toLowerCase()}`,
+              message: `Save ${state}`,
+            });
+          }
+        }
+        expect(await readFile(originalPath, 'utf8')).toBe(originalBytes);
+        expect(
+          requests.filter(({ method, url }) => method === 'POST' && url === '/v0/workbook:save'),
+        ).toHaveLength(1);
+        expect(requests.filter(({ server }) => server === 'decoy')).toEqual([]);
+      } finally {
+        if (origin.operation.state === 'RUNNING') {
+          origin.operation = { ...origin.operation, state: 'CANCELLED' };
+        }
+        await saveResponse;
+      }
     },
   );
 
@@ -419,7 +596,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         request,
         result,
         panelClosed: false,
-        callerFinished: false,
+        appIdle: false,
       };
       expect(
         await requireClient().callTool('invoke-dialog-action', {
@@ -586,8 +763,38 @@ describe('get-desktop-state real stdio MCP boundary', () => {
       return;
     }
 
+    if (callerScenario) {
+      if (request.method === 'POST' && request.url === '/v0/workbook:save') {
+        expect(JSON.parse(body)).toEqual({});
+        response.setHeader('Location', `/v0/operations/${callerScenario.operation.id}`);
+        response.setHeader('X-Tableau-Operation-Id', callerScenario.operation.id);
+        response.setHeader('Retry-After', '0');
+        sendJson(response, 202, callerScenario.operation);
+        return;
+      }
+      if (request.method === 'GET' && request.url === '/v0/operations') {
+        sendJson(response, 200, { operations: [callerScenario.operation] });
+        return;
+      }
+      if (
+        request.method === 'GET' &&
+        request.url === `/v0/operations/${callerScenario.operation.id}`
+      ) {
+        response.setHeader('Retry-After', '0');
+        sendJson(response, 200, callerScenario.operation);
+        return;
+      }
+      if (request.method === 'GET' && request.url === '/v0/workbook') {
+        sendJson(response, 200, callerScenario.inventory);
+        return;
+      }
+    }
+
     if (request.method === 'GET' && request.url === '/v0/app/state') {
-      if (nativeScenario && !nativeScenario.callerFinished) {
+      const busy = callerScenario
+        ? callerScenario.operation.state === 'RUNNING'
+        : nativeScenario && !nativeScenario.appIdle;
+      if (busy && nativeScenario) {
         sendJson(response, 200, {
           state: 'RUNNING',
           uiSnapshotAvailable: true,
@@ -629,7 +836,9 @@ describe('get-desktop-state real stdio MCP boundary', () => {
 
     if (request.method === 'GET' && request.url === '/v0/app/dialogs') {
       if (nativeScenario) {
-        const submitted = requests.some(({ method }) => method === 'POST');
+        const submitted = requests.some(
+          ({ method, url }) => method === 'POST' && url === '/v0/app:invokeDialogAction',
+        );
         sendJson(response, 200, {
           dialogs: nativeScenario.panelClosed ? [] : [nativeScenario.dialog],
           uiSnapshotAvailable: true,
@@ -649,6 +858,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
       const parsed = JSON.parse(body) as { dialog: Record<string, unknown>; action: unknown };
       if (nativeScenario) {
         expect(parsed).toEqual(nativeScenario.request);
+        if (nativeScenario.closeOnDispatch) nativeScenario.panelClosed = true;
         sendJson(response, 200, nativeScenario.result);
         return;
       }
