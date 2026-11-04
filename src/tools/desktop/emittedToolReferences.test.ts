@@ -163,6 +163,8 @@ const NON_TOOL_VOCABULARY = [
   'pre-dispatch-validation',
   'pre-dispatch-workbook-drift',
   'preflight-invariant',
+  // Native dialog completion effect, not a callable tool.
+  'print-prepared',
   'prior-version',
   'quantitative-or-categorical',
   're-call',
