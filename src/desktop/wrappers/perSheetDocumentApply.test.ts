@@ -81,13 +81,9 @@ describe('tryApplyViaPerSheetRoute', () => {
       const apply = vi
         .fn()
         .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
-      const executeCommand = vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' }));
       const executor = makeExecutorMock({
         [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
         [applyMethod]: apply,
-        executeCommand,
       });
 
       const result = await tryApplyViaPerSheetRoute({
