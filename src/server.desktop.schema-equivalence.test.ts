@@ -169,11 +169,10 @@ describe('always-load pin list', () => {
         'read-knowledge-resource',
         'rename-sheet',
         'run-dashboard-batch',
-        'search-commands',
         'search-knowledge',
       ].sort(),
     );
-    expect(ALWAYS_LOAD_TOOL_NAMES.size).toBe(7);
+    expect(ALWAYS_LOAD_TOOL_NAMES.size).toBe(6);
   });
 });
 
