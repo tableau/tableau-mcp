@@ -500,6 +500,25 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
 
 <hr />
 
+### `DISABLE_STRICT_SCOPE_MATCH`
+
+Do not require every access token to carry all supported scopes before it can connect. Allows for access tokens that are subsets of the full supported scopes lists to be used in a connection.
+
+- Default: `false`.
+- Has no effect when [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `true`.
+- When `false`, a token missing any supported `tableau:mcp:*` scope is rejected with a `403`
+  `insufficient_scope` error. When [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`, the
+  token must also carry the supported Tableau API scopes, except optional ones.
+- When `true`, a token with only some of the supported scopes can connect. Tools the token lacks
+  scopes for are left out of the tool list, and the server's initialize instructions name them.
+- When `true`, `ADVERTISE_API_SCOPES` is `true`, and
+  [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
+  every token must carry `tableau:mcp_site_settings:read` so the server can read the site's
+  settings. A token without it is rejected with a `403`, and the embedded authorization server
+  refuses to issue one (`400` `invalid_scope`).
+
+<hr />
+
 ### `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS`
 
 The timeout for the OAuth authorization codes.

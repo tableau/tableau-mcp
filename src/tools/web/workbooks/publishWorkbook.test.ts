@@ -915,6 +915,7 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
+      'tableau:mcp_site_settings:read',
     ]);
 
     mocks.useRestApiCalls.length = 0;
@@ -925,6 +926,7 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
+      'tableau:mcp_site_settings:read',
     ]);
     expect(mocks.useRestApiCalls[1]?.jwtScopes).toEqual(['tableau:permissions:read']);
     expect(mocks.useRestApiCalls).toHaveLength(2);
@@ -968,6 +970,7 @@ describe('publishWorkbookTool', () => {
             'tableau:workbooks:create',
             'tableau:file_uploads:create',
             'tableau:projects:read',
+            'tableau:mcp_site_settings:read',
           ],
         },
         { jwtScopes: ['tableau:permissions:read'] },
@@ -1139,8 +1142,10 @@ describe('publishWorkbookTool', () => {
         expect(response.permissions).toEqual([]);
         expect(response.permissionsNote).toBeUndefined();
       } else {
+        // Optional scope withheld: the read is skipped (consent boundary), not attempted-and-failed,
+        // so the note names the missing scope rather than reporting a retrieval failure.
         expect(response.permissions).toBeUndefined();
-        expect(response.permissionsNote).toContain('could not be retrieved');
+        expect(response.permissionsNote).toContain('was not granted');
         expect(response).not.toHaveProperty('permissionsMessage');
       }
     },
