@@ -570,7 +570,7 @@ function pieSliceWarningFor({
   const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
   // Unresolved captions would route the ask to propose, not bind, so only name the ask when both resolved.
   const offer =
-    sliceCaption === undefined || measureCaption === undefined || uncertain
+    sliceCaption === undefined || measureCaption === undefined || uncertain || unfilledEncodings
       ? 'A sorted bar would read better; offer it to the user.'
       : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of ${measureCaption} by ${sliceCaption}" and target_worksheet "${sheetName}".`;
   return {

@@ -10158,6 +10158,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
     });
     expect(body.guidance).toContain('slices of Region');
     expect(body.guidance).not.toContain('nothing more is needed');
+    expect(body.guidance).not.toContain('call bind-template with ask');
   });
 
   const boundBarResult: BinderResult = {
