@@ -161,6 +161,8 @@ const NON_TOOL_VOCABULARY = [
   'output-serialization-failed',
   'packaged-workbook',
   'param-domain-type',
+  // Template id compared in code, not emitted guidance.
+  'part-to-whole-pie-chart',
   // Field resolver transformation marker, not a callable tool.
   'part-to-whole-waterfall',
   'percent-encoded',
