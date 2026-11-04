@@ -1649,10 +1649,10 @@ describe('server', () => {
       expect(registered).toEqual([]);
     });
 
-    it('checks Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=true even with enforce-registration-conditions off', async () => {
+    it('checks Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is on', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
       mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
 
       const { registered } = await registerKnowledgeTools();
@@ -1665,10 +1665,10 @@ describe('server', () => {
       expect(getWarningLogs()).toHaveLength(0);
     });
 
-    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true and the site lacks Knowledge', async () => {
+    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true, conditions are enforced, and the site lacks Knowledge', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
       mocks.mockCheckRegistrationConditions.mockResolvedValue({
         registrationConditionsMet: false,
         failingCondition: 'RequiresKnowledge',
@@ -1691,10 +1691,10 @@ describe('server', () => {
       }
     });
 
-    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true and the probe fails transiently', async () => {
+    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true, conditions are enforced, and the probe fails transiently', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
       mocks.mockCheckRegistrationConditions.mockResolvedValue({
         registrationConditionsMet: false,
         failingCondition: 'RequiresKnowledge',
@@ -1732,20 +1732,15 @@ describe('server', () => {
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
     });
 
-    it('does not check other registration conditions when only KNOWLEDGE_TOOLS_ENABLED=true', async () => {
+    it('checks no registration conditions when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is off', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
 
-      const server = getServer();
-      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
-      await server.registerTools();
+      const { registered } = await registerKnowledgeTools();
 
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
-        'mock-conditional-tool',
-        expect.anything(),
-        expect.any(Function),
-      );
+      expect(registered).toEqual(knowledgeToolNames);
     });
   });
 

@@ -20,6 +20,11 @@ For example, for the [`query-datasource`](../../../tools/data-qna/query-datasour
 it internally calls into VizQL Data Service, the JWT will only have the
 `tableau:viz_data_service:read` scope.
 
+When the server registers tools, it also checks whether the site supports Pulse and Tableau
+Knowledge. The Connected App must be able to grant `tableau:insight_definitions_metrics:read`,
+`tableau:entitlements:read`, and `tableau:knowledge:read` for these checks. Tools for unsupported
+features are left out automatically.
+
 ## Required Variables
 
 ### `JWT_SUB_CLAIM`
