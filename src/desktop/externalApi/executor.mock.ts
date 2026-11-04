@@ -27,9 +27,13 @@ export function makeExecutorMock(
     health: vi.fn(),
     getRoot: vi.fn(),
     getApp: vi.fn(),
+    getCapabilities: vi.fn(),
+    listOperations: vi.fn(),
+    getOperation: vi.fn(),
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
-      .mockResolvedValue(Ok({ dialogs: [] })),
+      .mockResolvedValue(Ok({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] })),
+    captureAppScreenshot: vi.fn(),
     getDesktopState: vi.fn<ExternalApiToolExecutor['getDesktopState']>().mockResolvedValue(
       Ok({
         state: 'IDLE',
@@ -41,8 +45,24 @@ export function makeExecutorMock(
     ),
     invokeDialogAction: vi
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
-      .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
+      .mockImplementation(async (request) =>
+        Ok({
+          outcome: 'failed',
+          dialog: request.dialog,
+          status: {
+            sessionId: request.dialog.sessionId,
+            revision: request.dialog.revision,
+            requestId: request.requestId,
+            state: 'failed',
+            effect: 'none',
+            code: 'dialog-session-inactive',
+          },
+          uiSnapshotAvailable: true,
+          dialogs: [],
+        }),
+      ),
     getWorkbook: vi.fn(),
+    listWorkbookExtensions: vi.fn(),
     listWorksheets: vi.fn(),
     listDashboards: vi.fn(),
     listStoryboards: vi.fn(),
@@ -62,12 +82,16 @@ export function makeExecutorMock(
     getWorksheetSummaryData: vi.fn(),
     listWorksheetLogicalTables: vi.fn(),
     getWorksheetUnderlyingData: vi.fn(),
+    listDatasourceLogicalTables: vi.fn(),
+    getDatasourceLogicalTableData: vi.fn(),
     setStartPageVisibility: vi
       .fn<ExternalApiToolExecutor['setStartPageVisibility']>()
       .mockResolvedValue(Ok({ isStartPageVisible: false })),
+    toggleDataSourcePage: vi.fn(),
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
+    validateDatasourceCalculatedField: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyDatasourceDocument: vi.fn(),
@@ -92,6 +116,8 @@ export function makeExecutorMock(
     pauseWorksheetAutoUpdates: vi.fn(),
     resumeWorksheetAutoUpdates: vi.fn(),
     refreshWorksheetNow: vi.fn(),
+    reloadWorksheetExtension: vi.fn(),
+    reloadDashboardExtensions: vi.fn(),
     refreshStoryboardNow: vi.fn(),
     refreshDashboardNow: vi.fn(),
     pauseDashboardAutoUpdates: vi.fn(),

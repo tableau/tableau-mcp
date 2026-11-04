@@ -1,3 +1,8 @@
+import { XMLValidator } from 'fast-xml-parser';
+import { Err, Ok, Result } from 'ts-results-es';
+
+import { normalizeArray, parseXML } from '../metadata/parser.js';
+import { normalizeParsedXmlName } from '../xmlElement.js';
 import type { CommandValidationResult } from './commandNameRegistry.js';
 
 // Real Desktop documents carry comments between the prolog and the root
@@ -5,20 +10,83 @@ import type { CommandValidationResult } from './commandNameRegistry.js';
 // rejects every legitimate whole document.
 const WORKBOOK_ROOT_RE =
   /^\s*(?:<\?xml\b[\s\S]*?\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<workbook(?:\s|>|\/)/;
-// Match single- OR double-quoted worksheet names so a dropped worksheet cannot
-// slip through when Desktop serializes names with either quote style.
-const WORKSHEET_NAME_RE = /<worksheet\b[^>]*\bname=(['"])(.*?)\1/g;
-
 function fail(problem: string, fix: string): CommandValidationResult {
   return { ok: false, message: `${problem}\nFIX: ${fix}` };
 }
 
-function worksheetNames(xml: string): Set<string> {
-  const names = new Set<string>();
-  for (const match of xml.matchAll(WORKSHEET_NAME_RE)) {
-    names.add(match[2]);
+type Sheet = { kind: 'worksheet' | 'dashboard' | 'story'; name: string };
+
+export type SheetCheckError = { document: 'edited' | 'open'; cause: unknown };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sheetElements(container: unknown, tag: string): Record<string, unknown>[] {
+  if (container === undefined || container === '') return [];
+  if (!isRecord(container)) throw new Error(`Ambiguous ${tag} container in workbook XML`);
+  return normalizeArray<unknown>(container[tag]).map((sheet) => {
+    if (
+      !isRecord(sheet) ||
+      typeof sheet['@_name'] !== 'string' ||
+      normalizeParsedXmlName(sheet['@_name']) === ''
+    ) {
+      throw new Error(`Missing or invalid ${tag} name in workbook XML`);
+    }
+    return sheet;
+  });
+}
+
+function readSheets(xml: string): Sheet[] {
+  const parsed = parseXML(xml, { normalizeAttributeWhitespace: true });
+  const validation = XMLValidator.validate(xml);
+  if (validation !== true) throw new Error(`Invalid workbook XML: ${validation.err.msg}`);
+  const roots = Object.keys(parsed).filter((key) => !key.startsWith('?'));
+  const workbook: unknown = parsed.workbook;
+  if (roots.length !== 1 || roots[0] !== 'workbook' || (workbook !== '' && !isRecord(workbook))) {
+    throw new Error('Expected a single workbook root in workbook XML');
   }
-  return names;
+  if (workbook === '') return [];
+  return [
+    ...sheetElements(workbook.worksheets, 'worksheet').map((sheet) => ({
+      kind: 'worksheet' as const,
+      name: sheet['@_name'] as string,
+    })),
+    // Stories are <dashboard type='storyboard'>.
+    ...sheetElements(workbook.dashboards, 'dashboard').map((sheet) => ({
+      kind: sheet['@_type'] === 'storyboard' ? ('story' as const) : ('dashboard' as const),
+      name: sheet['@_name'] as string,
+    })),
+  ];
+}
+
+function sheetKey(sheet: Sheet): string {
+  return `${sheet.kind}:${normalizeParsedXmlName(sheet.name)}`;
+}
+
+export function liveSheetNamesMissingFrom(
+  submittedXml: string,
+  liveXml: string,
+): Result<string[], SheetCheckError> {
+  let submittedSheets: Sheet[];
+  try {
+    submittedSheets = readSheets(submittedXml);
+  } catch (cause) {
+    return Err({ document: 'edited', cause });
+  }
+  let liveSheets: Sheet[];
+  try {
+    liveSheets = readSheets(liveXml);
+  } catch (cause) {
+    return Err({ document: 'open', cause });
+  }
+  const submitted = new Set(submittedSheets.map(sheetKey));
+  const missing = new Map<string, string>();
+  for (const sheet of liveSheets) {
+    const key = sheetKey(sheet);
+    if (!submitted.has(key) && !missing.has(key)) missing.set(key, sheet.name);
+  }
+  return Ok([...missing.values()]);
 }
 
 export function validateWorkbookDocumentApply(
@@ -43,14 +111,18 @@ export function validateWorkbookDocumentApply(
     return { ok: true };
   }
 
-  const submittedWorksheetNames = worksheetNames(text);
-  const missingWorksheetNames = [...worksheetNames(liveDocumentXml)].filter(
-    (name) => !submittedWorksheetNames.has(name),
-  );
-  if (missingWorksheetNames.length > 0) {
+  const missingSheets = liveSheetNamesMissingFrom(text, liveDocumentXml);
+  if (missingSheets.isErr()) {
     return fail(
-      'This edit would remove worksheet(s) that are present in the live workbook.',
-      `the edit would DROP worksheet(s) ${missingWorksheetNames.join(', ')}, so it was refused. Retry this tool — it re-reads the live workbook on every call. Removing a sheet on purpose is a separate request; say so rather than editing it out here.`,
+      'The sheet check could not read the edited or live workbook document, so the edit was refused.',
+      'Retry this tool — it re-reads the live workbook on every call. If it fails again, report that instead of retrying a third time.',
+    );
+  }
+  const missingSheetNames = missingSheets.value;
+  if (missingSheetNames.length > 0) {
+    return fail(
+      'This edit would remove sheet(s) that are present in the live workbook.',
+      `the edit would DROP sheet(s) ${missingSheetNames.join(', ')}, so it was refused. Retry this tool — it re-reads the live workbook on every call. Removing a sheet on purpose is a separate request; say so rather than editing it out here.`,
     );
   }
 

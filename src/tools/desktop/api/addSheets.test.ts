@@ -48,6 +48,19 @@ describe('add-worksheet / add-dashboard / add-storyboard tools', () => {
   });
 
   it.each([
+    { makeTool: getAddWorksheetTool },
+    { makeTool: getAddDashboardTool },
+    { makeTool: getAddStoryboardTool },
+  ])(
+    'tells the caller the new sheet becomes active and its id must be looked up',
+    ({ makeTool }) => {
+      const { description } = makeTool(new DesktopMcpServer());
+      expect(description).toContain('becomes the active sheet');
+      expect(description).toContain('get-workbook-inventory');
+    },
+  );
+
+  it.each([
     { makeTool: getAddWorksheetTool, path: '/v0/workbook/worksheets:new' },
     { makeTool: getAddDashboardTool, path: '/v0/workbook/dashboards:new' },
     { makeTool: getAddStoryboardTool, path: '/v0/workbook/storyboards:new' },

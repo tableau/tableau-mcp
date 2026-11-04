@@ -5,10 +5,10 @@ import {
   startMockExternalApiServer,
 } from './mockExternalApiServer.js';
 import {
+  dataTableSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   startPageVisibilitySchema,
-  summaryDataSchema,
   worksheetDocumentRoute,
   worksheetListSchema,
   worksheetSummaryDataRoute,
@@ -481,7 +481,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
 
       const result = await http.getJson(
         worksheetSummaryDataRoute('sheet-sales', {}),
-        summaryDataSchema,
+        dataTableSchema,
       );
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();

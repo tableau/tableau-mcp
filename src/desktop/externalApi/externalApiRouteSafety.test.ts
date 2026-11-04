@@ -4,6 +4,7 @@ import { MockExternalApiServer, startMockExternalApiServer } from './mockExterna
 import {
   dashboardRoute,
   datasourceRefreshDataRoute,
+  datasourceRefreshExtractRoute,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   sheetActionRoute,
@@ -196,6 +197,7 @@ describe('route builders refuse unsafe ids', () => {
     ['workbookDatasourceRoute', workbookDatasourceRoute],
     ['workbookDatasourceDocumentRoute', workbookDatasourceDocumentRoute],
     ['datasourceRefreshDataRoute', datasourceRefreshDataRoute],
+    ['datasourceRefreshExtractRoute', datasourceRefreshExtractRoute],
     ['sheetActionRoute', (id) => sheetActionRoute({ kind: 'worksheet', id }, 'delete')],
     ['worksheetLogicalTableDataRoute', (id) => worksheetLogicalTableDataRoute('s1', id, {})],
   ];
@@ -250,6 +252,38 @@ describe('executor sends nothing for an unsafe id', () => {
       expect(server.requests.length).toBe(before);
     },
   );
+
+  it.each(['..', '%2e%2e', '%252e%252e', 'a\u0000b'])(
+    'sends no request for datasource id %s',
+    async (id) => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instance(server.baseUrl, 'valid-token')],
+      });
+      await executor.start();
+      const before = server.requests.length;
+
+      const data = await executor.refreshDatasourceData(id, signal);
+      const extract = await executor.refreshDatasourceExtract(id, {}, signal);
+
+      expect(data.isErr()).toBe(true);
+      expect(extract.isErr()).toBe(true);
+      expect(server.requests.length).toBe(before);
+    },
+  );
+
+  it('sends an already-encoded datasource id to the refresh routes without re-encoding it', async () => {
+    const executor = new ExternalApiToolExecutor({
+      discover: () => [instance(server.baseUrl, 'valid-token')],
+    });
+    await executor.start();
+
+    await executor.refreshDatasourceData('My%20Data', signal);
+    await executor.refreshDatasourceExtract('My%20Data', {}, signal);
+
+    const posts = server.requests.filter((r) => r.method === 'POST').map((r) => r.path);
+    expect(posts).toContain('/v0/datasources/My%20Data:refreshData');
+    expect(posts).toContain('/v0/datasources/My%20Data:refreshExtract');
+  });
 
   it('sends the delete POST exactly once when the poll returns 401', async () => {
     const discover = vi.fn(() => [instance(server.baseUrl, 'valid-token')]);

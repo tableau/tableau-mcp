@@ -12,7 +12,13 @@ import { log } from '../../logging/logger.js';
 import { RouteSafetyError } from '../../sdks/routeSafety/core.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
-import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
+import {
+  getConditionApiScopesForTool,
+  getRequiredApiScopesForTool,
+  getRequiredMcpScopesForTool,
+  McpScope,
+  TableauApiScope,
+} from '../../server/oauth/scopes.js';
 import { getAuthTypeForTelemetry } from '../../telemetry/authType.js';
 import {
   getClientDisplayName,
@@ -137,6 +143,8 @@ export class WebTool<
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
+  requiredMcpScopes: ReadonlyArray<McpScope>;
+  requiredConditionApiScopes: ReadonlyArray<TableauApiScope>;
   minRequiredRole: SiteRole;
   registrationConditions: ReadonlyArray<RegistrationCondition>;
   app?: AppDetails;
@@ -158,6 +166,8 @@ export class WebTool<
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
+    this.requiredMcpScopes = getRequiredMcpScopesForTool(name as WebToolName);
+    this.requiredConditionApiScopes = Array.from(getConditionApiScopesForTool(name as WebToolName));
     this.minRequiredRole = minRequiredRole;
     this.registrationConditions = registrationConditions ?? [];
     this.app = app;

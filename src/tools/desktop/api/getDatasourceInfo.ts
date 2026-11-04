@@ -23,7 +23,8 @@ export const getDatasourceInfoTool = (
     name: 'get-datasource-info',
     minApiVersion: '0.2.10',
     title,
-    description: 'Read metadata for one datasource in the open workbook by name or inventory id.',
+    description:
+      'Read metadata for one datasource in the open workbook by id, internal name, or caption from list-workbook-datasources.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

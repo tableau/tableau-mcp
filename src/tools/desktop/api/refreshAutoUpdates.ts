@@ -30,7 +30,7 @@ export const getRefreshAutoUpdatesTool = (
     minApiVersion: '0.2.13',
     title,
     description:
-      'Run pending automatic updates for one worksheet now. Use after batching edits with pause-auto-updates.',
+      'Run pending automatic updates for one worksheet now, without changing the active sheet. Use after batching edits with pause-auto-updates.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

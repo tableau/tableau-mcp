@@ -7,12 +7,12 @@ import dotenv from 'dotenv';
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
-import { buildDesktopInstructions } from './desktop/instructions.js';
+import { buildCombinedInstructions } from './instructions.combined.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { DesktopMcpServer } from './server.desktop.js';
-import { buildWebInstructions, WebMcpServer } from './server.web.js';
+import { WebMcpServer } from './server.web.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
 
 const serverName = 'tableau-combined-mcp';
@@ -40,14 +40,14 @@ async function startServer(): Promise<void> {
   // The combined bundle supplies its own McpServer to both WebMcpServer and DesktopMcpServer so the
   // web and desktop tools register onto a single server. The SDK takes `instructions` from the
   // McpServer constructor options, so we MUST build it here with both variants' instructions composed
-  // — the web part kept in lockstep with the default path via buildWebInstructions(); the base Server
+  // by buildCombinedInstructions() (the web part kept in lockstep with the default path); the base Server
   // constructor asserts the supplied instructions are contained. Admin guidance is appended later by
   // WebMcpServer.registerTools.
   const desktopConfig = getDesktopConfig();
-  const instructions = `${buildWebInstructions()} ${buildDesktopInstructions({
+  const instructions = buildCombinedInstructions({
     sessionPinned: desktopConfig.desktopSessionId !== undefined,
     profile: desktopConfig.toolProfile,
-  })}`;
+  });
   const mcpServer = new McpServer(
     {
       name: serverName,

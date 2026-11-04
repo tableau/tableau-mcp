@@ -1,9 +1,8 @@
 import { constants, type Stats } from 'fs';
 import { tmpdir } from 'os';
-import { dirname, isAbsolute, relative, resolve, sep } from 'path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import probeImageSize from 'probe-image-size/sync.js';
 import { Err, Ok, type Result } from 'ts-results-es';
-import { z } from 'zod';
 
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { type FileSystem, NODE_FILE_SYSTEM } from '../../utils/fileSystem.js';
@@ -20,15 +19,6 @@ const MAX_WINDOW_SCREENSHOT_PIXELS = 100_000_000;
 const SCREENSHOT_NAME = /^ScreenShot_\d+\.png$/;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_IEND = Buffer.from('0000000049454e44ae426082', 'hex');
-
-const screenshotCommandResultSchema = z
-  .object({
-    tempFilePath: z
-      .string()
-      .min(1)
-      .refine((value) => value.trim().length > 0 && isAbsolute(value)),
-  })
-  .strict();
 
 export interface WindowScreenshotCapture {
   bytes: Buffer;
@@ -198,7 +188,7 @@ function readCandidate(
   }
 }
 
-function cleanCommandArtifacts(
+function cleanScreenshotArtifacts(
   canonicalDirectory: string,
   directoryStats: Stats,
   validatedPaths: ValidatedPath[],
@@ -237,6 +227,50 @@ function cleanCommandArtifacts(
   }
 }
 
+interface ScreenshotArtifacts {
+  outputDirectory: string;
+  filePaths: string[];
+}
+
+async function captureThroughScreenshotRoute(
+  executor: WithExecutorAndAbortSignal['executor'],
+  signal: AbortSignal,
+  fileSystem: FileSystem,
+): Promise<Result<ScreenshotArtifacts, CaptureWindowScreenshotError>> {
+  let outputDirectory: string;
+  try {
+    outputDirectory = fileSystem.mkdtemp(
+      join(fileSystem.realpath(tmpdir()), 'desktop-window-capture-'),
+    );
+  } catch {
+    return failure(
+      'A temporary directory for the Tableau Desktop screenshot could not be created.',
+    );
+  }
+
+  const result = await executor.captureAppScreenshot(outputDirectory, signal);
+  if (result.isOk()) {
+    return Ok({ outputDirectory, filePaths: result.value.filePaths });
+  }
+
+  return removeRequestedDirectory(outputDirectory, fileSystem)
+    ? Err(result.error)
+    : failure('Tableau Desktop screenshot artifacts could not be safely removed.');
+}
+
+function removeRequestedDirectory(outputDirectory: string, fileSystem: FileSystem): boolean {
+  try {
+    const directoryStats = fileSystem.lstat(outputDirectory);
+    const validated = fileSystem
+      .readdir(outputDirectory)
+      .filter((name) => SCREENSHOT_NAME.test(name))
+      .map((name) => inspectCandidate(resolve(outputDirectory, name), outputDirectory, fileSystem));
+    return cleanScreenshotArtifacts(outputDirectory, directoryStats, validated, fileSystem);
+  } catch {
+    return false;
+  }
+}
+
 export async function captureWindowScreenshot(
   { executor, signal }: WithExecutorAndAbortSignal,
   fileSystemOverrides: Partial<FileSystem> = {},
@@ -245,31 +279,19 @@ export async function captureWindowScreenshot(
   if (signal.aborted) {
     return failure('Tableau Desktop window capture was cancelled.');
   }
-  const expectedInstanceId = executor.desktopInstanceId;
-  const commandResult = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'take-all-screenshots',
-    args: { HideMouse: true },
-    schema: screenshotCommandResultSchema,
-    expectedInstanceId,
-    signal,
-  });
-  if (commandResult.isErr()) {
-    return Err(commandResult.error);
+  const captured = await captureThroughScreenshotRoute(executor, signal, fileSystem);
+  if (captured.isErr()) {
+    return captured;
   }
-
-  const parsedResult = screenshotCommandResultSchema.safeParse(commandResult.value.parsedResult);
-  if (!parsedResult.success) {
-    return failure('Tableau Desktop returned an invalid screenshot result.');
-  }
-  const cancelledAfterCommand: boolean = Boolean(signal.aborted);
+  const { outputDirectory, filePaths } = captured.value;
+  const cancelledAfterCapture: boolean = Boolean(signal.aborted);
 
   let canonicalDirectory: string | undefined;
   let directoryStats: Stats | undefined;
   const validatedPaths: ValidatedPath[] = [];
   let outcome: Result<WindowScreenshotCapture, CaptureWindowScreenshotError>;
   try {
-    const returnedDirectory = resolve(parsedResult.data.tempFilePath);
+    const returnedDirectory = resolve(outputDirectory);
     const canonicalTempRoot = fileSystem.realpath(tmpdir());
     const validatedDirectory = validatePathSnapshot(
       returnedDirectory,
@@ -286,16 +308,24 @@ export async function captureWindowScreenshot(
     const names = fileSystem
       .readdir(canonicalDirectory)
       .filter((name) => SCREENSHOT_NAME.test(name));
+    if (
+      filePaths.some(
+        (filePath) =>
+          dirname(resolve(filePath)) !== returnedDirectory || !names.includes(basename(filePath)),
+      )
+    ) {
+      throw new Error('Returned screenshot path is outside the requested directory.');
+    }
     if (names.length === 0) {
       outcome = failure('Tableau Desktop did not produce a screenshot.');
     } else {
       names.sort((left, right) => left.localeCompare(right));
       const overCandidateLimit = names.length > MAX_WINDOW_SCREENSHOT_CANDIDATES;
       let invalidCandidate = false;
-      let cancelled: boolean = cancelledAfterCommand;
+      let cancelled: boolean = cancelledAfterCapture;
       let aggregateBytes = 0;
       for (const name of names) {
-        if (signal.aborted && !cancelledAfterCommand) {
+        if (signal.aborted && !cancelledAfterCapture) {
           cancelled = true;
         }
         try {
@@ -362,7 +392,7 @@ export async function captureWindowScreenshot(
   if (
     canonicalDirectory !== undefined &&
     directoryStats !== undefined &&
-    !cleanCommandArtifacts(canonicalDirectory, directoryStats, validatedPaths, fileSystem)
+    !cleanScreenshotArtifacts(canonicalDirectory, directoryStats, validatedPaths, fileSystem)
   ) {
     return failure('Tableau Desktop screenshot artifacts could not be safely removed.');
   }

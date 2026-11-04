@@ -276,6 +276,30 @@ describe('refresh-storyboard-auto-updates', () => {
     }
   });
 
+  it('says nothing was refreshed when the refresh fails before any worksheet is attempted', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride(`POST ${REFRESH_ROUTE}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-storyboard-no-result',
+          kind: 'storyboard.refreshNow',
+          state: 'FAILED',
+          error: { code: 'storyboard-refresh-now-failed', message: 'The storyboard is closing.' },
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+
+      expect(result.isError).toBe(true);
+      expect(errorText(result)).toContain('The storyboard is closing.');
+      expect(errorText(result)).toContain('nothing was refreshed');
+    } finally {
+      await harness.close();
+    }
+  });
+
   it.each([
     ['PARTIAL', [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }]],
     ['FAILED', []],

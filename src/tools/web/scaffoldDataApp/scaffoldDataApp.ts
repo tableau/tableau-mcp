@@ -1,34 +1,22 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
+import { datappNameSchema } from '../../../dataApps/dataAppName.js';
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { SCAFFOLD_DATA_APP_API_SCOPES } from '../../../server/oauth/scopes.js';
-import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
+import { isDataAppVersionSupported } from './dataAppVersion.js';
 import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspaceStore.js';
 
-// Data apps are hosted extension packages, which Tableau can only host on 2026.3.0+.
-// Below this floor the scaffolded app can never be published, so the tool is not registered.
-const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.0';
-
 const paramsSchema = {
-  datappName: z
-    .string()
-    .min(1)
-    .max(100)
-    .regex(
-      /^[A-Za-z0-9](?:[A-Za-z0-9 ._-]{0,98}[A-Za-z0-9])?$/,
-      'Name must be 1-100 characters using letters, digits, spaces, dot, underscore, or hyphen, and must start and end with a letter or digit.',
-    )
-    .refine((value) => !value.includes('..'), 'Name must not contain "..".')
-    .describe(
-      'Name for the new data app. Used verbatim as the workspace folder name, the workbook (.twb) filename, and the extension display name, and slugified into the extension package id. Letters, digits, spaces, dot, underscore, and hyphen only; no path separators.',
-    ),
+  datappName: datappNameSchema.describe(
+    'Name for the new data app. Used verbatim as the workspace folder name, the workbook (.twb) filename, and the extension display name, and slugified into the extension package id. Letters, digits, spaces, dot, underscore, and hyphen only; no path separators.',
+  ),
 };
 
 export const getScaffoldDataAppTool = (
@@ -51,11 +39,8 @@ export const getScaffoldDataAppTool = (
     },
     disabled: new Provider(async () => {
       const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
-      const versionAllowed = getResultForTableauVersion({
-        productVersion,
-        mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
-      });
-      return !(flagOn && versionAllowed);
+      const versionAllowed = isDataAppVersionSupported(productVersion);
+      return !(flagOn && versionAllowed && (await isAuthoringAllowedForClient(server.clientId)));
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
@@ -73,6 +58,7 @@ export const getScaffoldDataAppTool = (
 
           return await createDataAppWorkspace({
             datappName,
+            productVersion,
             allowedOrigins,
             config: extra.config,
           });

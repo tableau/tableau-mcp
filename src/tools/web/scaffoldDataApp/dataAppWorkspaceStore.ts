@@ -2,26 +2,28 @@
  * Creates a new data app workspace from the committed placeholder template.
  */
 
-import { existsSync } from 'fs';
-import { access, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { readFile } from 'fs/promises';
 import { Ok, Result } from 'ts-results-es';
 
 import { Config } from '../../../config.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
+import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
-  DataAppIdentity,
   deriveIdentity,
   PostUnzipPlan,
   RequestedOriginsGuide,
 } from './templateIdentity.js';
+import {
+  exportedForTesting as templateZipForTesting,
+  materializeSeaTemplate,
+  resolveTemplateSource,
+  type TemplateSource,
+} from './templateZip.js';
 
 /**
  * Result of scaffolding a workspace. A single shape covers both output modes; both always return
@@ -43,93 +45,28 @@ export type DataAppWorkspaceResult = {
   postUnzip?: PostUnzipPlan;
 };
 
-// Candidate parents of the template zip, tried in order, resolved relative to this module's own
-// directory. In the bundled build everything collapses into `build/index.js`, so `__dirname` is
-// `build/` and the build step's copy lands at `build/templates/`; when running from source (tests,
-// tsx) `__dirname` is this module's directory, three levels below `src/templates/`.
-const TEMPLATE_PARENT_CANDIDATES = ['templates', join('..', '..', '..', 'templates')];
-
-function resolveTemplateZip(): string | undefined {
-  for (const candidate of TEMPLATE_PARENT_CANDIDATES) {
-    const path = join(__dirname, candidate, TEMPLATE_ZIP_FILENAME);
-    if (existsSync(path)) {
-      return path;
-    }
-  }
-  return undefined;
-}
-
-const SEA_TEMPLATE_ASSET_KEY = `templates/${TEMPLATE_ZIP_FILENAME}`;
-
-type TemplateSource = { path: string } | { bytes: Buffer };
-
-function resolveTemplateSource(): TemplateSource | undefined {
-  if (runningAsSea()) {
-    const bytes = readSeaAssetBytes(SEA_TEMPLATE_ASSET_KEY);
-    if (bytes) {
-      return { bytes };
-    }
-  }
-  const path = resolveTemplateZip();
-  return path ? { path } : undefined;
-}
-
-let seaTemplatePath: Promise<string> | undefined;
-
-// WHY: the client may still be reading this file after we return, so it is not deleted on exit.
-async function materializeSeaTemplate(bytes: Buffer): Promise<string> {
-  if (seaTemplatePath) {
-    const cached = seaTemplatePath;
-    try {
-      const path = await cached;
-      await access(path);
-      return path;
-    } catch {
-      // Gone (tmp reaper, manual cleanup) or the earlier write failed: write a fresh copy below.
-      if (seaTemplatePath === cached) {
-        seaTemplatePath = undefined;
-      }
-      if (seaTemplatePath) {
-        return materializeSeaTemplate(bytes);
-      }
-    }
-  }
-  const pending = (async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'tableau-mcp-template-'));
-    const path = join(dir, TEMPLATE_ZIP_FILENAME);
-    try {
-      await writeFile(path, bytes, { flag: 'wx', mode: 0o600 });
-    } catch (error) {
-      await rm(dir, { recursive: true, force: true });
-      throw error;
-    }
-    return path;
-  })();
-  seaTemplatePath = pending;
-  pending.catch(() => {
-    if (seaTemplatePath === pending) {
-      seaTemplatePath = undefined;
-    }
-  });
-  return pending;
-}
-
 export const exportedForTesting = {
-  resetSeaTemplatePath: (): void => {
-    seaTemplatePath = undefined;
-  },
+  resetSeaTemplatePath: templateZipForTesting.resetSeaTemplatePath,
 };
 
 export async function createDataAppWorkspace({
   datappName,
+  productVersion,
   allowedOrigins,
   config,
 }: {
   datappName: string;
+  productVersion: ProductVersion;
   allowedOrigins: string[];
   config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
+  const workspace: DataAppWorkspaceResult = {
+    datappName,
+    allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
+    postUnzip: buildPostUnzipPlan(identity, productVersion),
+  };
 
   // Both output modes serve the same static, un-substituted template zip — the artifact built at
   // `npm run build` time, resolved on disk or, inside a SEA, from the embedded asset. If it isn't
@@ -142,7 +79,11 @@ export async function createDataAppWorkspace({
   }
 
   if (config.bucketS3.enabled) {
-    return await createS3Workspace({ datappName, allowedOrigins, identity, config, source });
+    return await createS3Workspace({
+      workspace,
+      config,
+      source,
+    });
   }
 
   let zipPath: string;
@@ -153,19 +94,15 @@ export async function createDataAppWorkspace({
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
-  return createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
+  return new Ok({ ...workspace, filePath: zipPath });
 }
 
 async function createS3Workspace({
-  datappName,
-  allowedOrigins,
-  identity,
+  workspace,
   config,
   source,
 }: {
-  datappName: string;
-  allowedOrigins: string[];
-  identity: DataAppIdentity;
+  workspace: DataAppWorkspaceResult;
   config: Config;
   source: TemplateSource;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
@@ -195,34 +132,5 @@ async function createS3Workspace({
     ).toErr();
   }
 
-  return new Ok({
-    datappName,
-    allowedOrigins,
-    requestedOrigins: buildRequestedOriginsGuide(identity),
-    s3URL,
-    postUnzip: buildPostUnzipPlan(identity),
-  });
-}
-
-function createLocalWorkspace({
-  datappName,
-  allowedOrigins,
-  identity,
-  zipPath,
-}: {
-  datappName: string;
-  allowedOrigins: string[];
-  identity: DataAppIdentity;
-  zipPath: string;
-}): Result<DataAppWorkspaceResult, McpToolError> {
-  // Local mode serves the same static, un-substituted template zip as S3 mode — just from the
-  // local filesystem instead of a presigned URL. Nothing is written per call, so nothing can
-  // collide; the client unzips and applies the same `postUnzip` plan to finalize.
-  return new Ok({
-    datappName,
-    allowedOrigins,
-    requestedOrigins: buildRequestedOriginsGuide(identity),
-    filePath: zipPath,
-    postUnzip: buildPostUnzipPlan(identity),
-  });
+  return new Ok({ ...workspace, s3URL });
 }

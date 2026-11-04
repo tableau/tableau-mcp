@@ -7,6 +7,9 @@ import { startMockExternalApiServer } from './mockExternalApiServer.js';
 import {
   apiRootSchema,
   appInfoSchema,
+  appScreenshotRoute,
+  appScreenshotSchema,
+  capabilityMatrixSchema,
   dashboardItemSchema,
   dashboardListSchema,
   dashboardRefreshFailureSchema,
@@ -14,10 +17,13 @@ import {
   dashboardRefreshTargetSchema,
   datasourceItemSchema,
   datasourceListSchema,
+  dataTableSchema,
   desktopStateSchema,
+  dialogActionInvocationSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
+  dialogRequestStatusSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
   imageResultSchema,
@@ -27,6 +33,7 @@ import {
   logicalTableListSchema,
   operationEnvelopeSchema,
   operationErrorSchema,
+  operationListSchema,
   operationWarningSchema,
   PROBLEM_CODES,
   problemResponseSchema,
@@ -36,11 +43,13 @@ import {
   showMeWorksheetSchema,
   storyboardItemSchema,
   storyboardListSchema,
-  summaryDataSchema,
+  ValidateCalculatedFieldRequest,
+  validateCalculatedFieldResponseSchema,
   validationResultSchema,
   windowInfoSchema,
   workbookDiagnosticsSchema,
   workbookInventorySchema,
+  workbookValidationIssueSchema,
   worksheetDiagnosticsSchema,
   worksheetInvalidFieldSchema,
   worksheetItemSchema,
@@ -52,17 +61,6 @@ import {
  * `/openapi.json` artifact. When the API owner ships a new spec, overwrite the
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
- *
- * Fixture provenance: live Desktop `/openapi.json` captured on 2026-09-15 from External Client
- * API 0.2.16. The dashboard `:refreshNow` path, result component, and 0.2.19 version were
- * projected from the authoritative W-24165695 monolith producer contract. The worksheet
- * `/showMe` path and its response components were projected on 2026-09-12 from
- * the W-23715530 monolith producer change because the live 0.2.16 artifact did not yet
- * include that producer addition.
- * The storyboard `:refreshNow` path and 0.2.20 version were projected from the
- * W-24165695 monolith producer contract because no live 0.2.20 capture was available.
- * The fixture excludes paths and response schemas for removed Desktop MCP tools;
- * it is not a complete inventory of the producer's endpoints.
  */
 
 type SpecProperty = {
@@ -101,6 +99,24 @@ const specSchema = (name: string): SpecSchema => {
   return schema;
 };
 
+const schemaBranches = (schema: SpecSchema): Array<SpecSchema> => schema.oneOf ?? [schema];
+
+const specPropertyNames = (schema: SpecSchema): Array<string> => [
+  ...new Set(schemaBranches(schema).flatMap((branch) => Object.keys(branch.properties ?? {}))),
+];
+
+const specRequiredKeys = (schema: SpecSchema): Array<string> => {
+  const [first, ...rest] = schemaBranches(schema);
+  return (first.required ?? []).filter((key) =>
+    rest.every((branch) => branch.required?.includes(key)),
+  );
+};
+
+const resolveRef = (property: SpecProperty | undefined): SpecProperty | undefined =>
+  property?.$ref === undefined
+    ? property
+    : (specSchema(property.$ref.replace('#/components/schemas/', '')) as SpecProperty);
+
 const declaredKeys = (schema: z.AnyZodObject): Array<string> => Object.keys(schema.shape);
 
 const requiredKeys = (schema: z.AnyZodObject): Array<string> =>
@@ -122,6 +138,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
     'isStartPageVisible',
     'isDataSourcePageActive',
     'isPresentationMode',
+    'isCanvasMode',
   ],
   DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
   DashboardList: ['dashboards'],
@@ -136,22 +153,23 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   ],
   DatasourceList: ['datasources'],
   Health: ['status'],
-  ProtectedResourceMetadata: ['authorization_servers', 'bearer_methods_supported'],
+  ProtectedResourceMetadata: ['resource', 'bearer_methods_supported'],
   WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources', 'index', 'type'],
   WorksheetList: ['worksheets'],
   StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
   StoryboardList: ['storyboards'],
   WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
-  SummaryData: ['columns', 'rows'],
+  DataTable: ['columns', 'rows'],
   LogicalTableItem: ['id', 'caption'],
   LogicalTableList: ['tables'],
-  ValidationResult: ['validationIssues'],
-  ImageExport: ['width', 'height'],
+  ValidationResult: ['issues'],
+  ImageExport: ['effectiveMimeType', 'width', 'height'],
+  WindowInfo: ['sessionId', 'revision', 'family', 'status'],
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.20 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.20');
+  it('tracks the 0.2.31 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.31');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -205,7 +223,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
       expect(outcome.properties?.outcome?.enum).toEqual(['COMPLETE', 'PARTIAL', 'FAILED']);
 
-      const refreshedItem = outcome.properties?.refreshed?.items;
+      const refreshedItem = resolveRef(outcome.properties?.refreshed?.items);
       expect(Object.keys(refreshedItem?.properties ?? {}).sort()).toEqual(
         declaredKeys(dashboardRefreshTargetSchema).sort(),
       );
@@ -213,7 +231,7 @@ describe('external client API contract (captured openapi fixture)', () => {
         requiredKeys(dashboardRefreshTargetSchema).sort(),
       );
 
-      const failedItem = outcome.properties?.failed?.items;
+      const failedItem = resolveRef(outcome.properties?.failed?.items);
       expect(Object.keys(failedItem?.properties ?? {}).sort()).toEqual(
         declaredKeys(dashboardRefreshFailureSchema).sort(),
       );
@@ -227,6 +245,7 @@ describe('external client API contract (captured openapi fixture)', () => {
     it.each([
       ['ApiRoot', apiRootSchema],
       ['AppInfo', appInfoSchema],
+      ['CapabilityMatrix', capabilityMatrixSchema],
       ['DashboardItem', dashboardItemSchema],
       ['DashboardList', dashboardListSchema],
       ['DatasourceItem', datasourceItemSchema],
@@ -240,7 +259,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['StoryboardItem', storyboardItemSchema],
       ['StoryboardList', storyboardListSchema],
       ['WorkbookInventory', workbookInventorySchema],
-      ['SummaryData', summaryDataSchema],
+      ['DataTable', dataTableSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
       ['ShowMeWorksheet', showMeWorksheetSchema],
@@ -248,20 +267,25 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
+      ['WorkbookValidationIssue', workbookValidationIssueSchema],
       ['ImageExport', imageResultSchema],
+      ['OperationList', operationListSchema],
+      ['ValidateCalculatedFieldResponse', validateCalculatedFieldResponseSchema],
     ] as const)(
       '%s: properties and required set match except known version deltas',
       (name, schema) => {
         const component = specSchema(name);
-        expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+        expect(declaredKeys(schema).sort()).toEqual(specPropertyNames(component).sort());
         const exceptions = new Set(KNOWN_READ_REQUIREDNESS_EXCEPTIONS[name] ?? []);
         expect(requiredKeys(schema).sort()).toEqual(
-          [...(component.required ?? [])].filter((key) => !exceptions.has(key)).sort(),
+          specRequiredKeys(component)
+            .filter((key) => !exceptions.has(key))
+            .sort(),
         );
       },
     );
 
-    it('pins the complete 0.2.20 requiredness exception set', () => {
+    it('pins the complete 0.2.25 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -275,6 +299,7 @@ describe('external client API contract (captured openapi fixture)', () => {
           'isStartPageVisible',
           'isDataSourcePageActive',
           'isPresentationMode',
+          'isCanvasMode',
         ],
         DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
         DashboardList: ['dashboards'],
@@ -289,21 +314,22 @@ describe('external client API contract (captured openapi fixture)', () => {
         ],
         DatasourceList: ['datasources'],
         Health: ['status'],
-        ProtectedResourceMetadata: ['authorization_servers', 'bearer_methods_supported'],
+        ProtectedResourceMetadata: ['resource', 'bearer_methods_supported'],
         WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources', 'index', 'type'],
         WorksheetList: ['worksheets'],
         StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
         StoryboardList: ['storyboards'],
         WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
-        SummaryData: ['columns', 'rows'],
+        DataTable: ['columns', 'rows'],
         LogicalTableItem: ['id', 'caption'],
         LogicalTableList: ['tables'],
-        ValidationResult: ['validationIssues'],
-        ImageExport: ['width', 'height'],
+        ValidationResult: ['issues'],
+        ImageExport: ['effectiveMimeType', 'width', 'height'],
+        WindowInfo: ['sessionId', 'revision', 'family', 'status'],
       });
       for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
         const component = specSchema(name);
-        expect(exceptions.every((key) => component.required?.includes(key))).toBe(true);
+        expect(exceptions.every((key) => specRequiredKeys(component).includes(key))).toBe(true);
       }
     });
 
@@ -366,7 +392,7 @@ describe('external client API contract (captured openapi fixture)', () => {
   describe('Problem ↔ problemResponseSchema', () => {
     const problem = specSchema('Problem');
 
-    it('declares every spec property (extras `type`/`detail` are standard RFC-9457 members, `tableauErrorCode` Tableau’s extension member)', () => {
+    it('declares every spec property (extras `type`/`detail` are standard RFC-9457 members)', () => {
       const missing = Object.keys(problem.properties ?? {}).filter(
         (key) => !declaredKeys(problemResponseSchema).includes(key),
       );
@@ -374,10 +400,10 @@ describe('external client API contract (captured openapi fixture)', () => {
       const extras = declaredKeys(problemResponseSchema).filter(
         (key) => !(key in (problem.properties ?? {})),
       );
-      expect(extras.sort()).toEqual(['detail', 'tableauErrorCode', 'type']);
+      expect(extras.sort()).toEqual(['detail', 'type']);
     });
 
-    it('PROBLEM_CODES equals the spec x-extensible-enum exactly', () => {
+    it('PROBLEM_CODES equals the spec x-extensible-enum', () => {
       expect([...PROBLEM_CODES].sort()).toEqual(
         [...(problem.properties?.code?.['x-extensible-enum'] ?? [])].sort(),
       );
@@ -395,114 +421,73 @@ describe('external client API contract (captured openapi fixture)', () => {
 
   describe('dialog contracts', () => {
     it.each([
+      ['DialogAction', dialogActionSchema],
       ['DialogIdentity', dialogIdentitySchema],
       ['DialogList', dialogListSchema],
+      ['DialogRequestStatus', dialogRequestStatusSchema],
       ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
-    ] as const)('%s properties and required set match exactly', (name, schema) => {
+      ['InvokeDialogActionResult', invokeDialogActionResultSchema],
+    ] as const)('%s properties and required set match the producer', (name, schema) => {
       const component = specSchema(name);
       expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
       expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
     });
 
-    it('reuses WindowInfo for every dialog snapshot', () => {
-      const dialogList = specSchema('DialogList');
-      const dismissResult = specSchema('InvokeDialogActionResult');
-
-      expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      for (const outcome of dismissResult.oneOf ?? []) {
-        expect(outcome.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
+    it('matches every advertised invocation branch and its required input fields', () => {
+      const branches = specSchema('DialogActionInvocation').oneOf ?? [];
+      expect(dialogActionInvocationSchema.options).toHaveLength(branches.length);
+      for (const branch of branches) {
+        const kind = branch.properties?.kind?.const;
+        const schema = dialogActionInvocationSchema.options.find(
+          (option) => option.shape.kind.value === kind,
+        );
+        expect(schema, String(kind)).toBeDefined();
+        if (!schema) throw new Error(`Missing invocation schema for ${String(kind)}`);
+        expect(declaredKeys(schema).sort()).toEqual(Object.keys(branch.properties ?? {}).sort());
+        expect(requiredKeys(schema).sort()).toEqual([...(branch.required ?? [])].sort());
+        expect(schema._def.unknownKeys).toBe('strict');
       }
     });
 
-    it('documents bounded detailed text and its truncation marker', () => {
-      const windowInfo = specSchema('WindowInfo');
-
-      expect(windowInfo.properties?.detailedText?.maxLength).toBe(1024 * 1024);
-      expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
-    });
-
-    it('models exact labeled button and semantic close actions', () => {
-      const variants = specSchema('DialogAction').oneOf ?? [];
-      const byKind = Object.fromEntries(
-        variants.map((variant) => [variant.properties?.kind?.const, variant]),
+    it('uses shared snapshots and status schemas without echoing selection payloads', () => {
+      expect(specSchema('InvokeDialogActionRequest').properties?.action?.$ref).toBe(
+        '#/components/schemas/DialogActionInvocation',
       );
-
-      expect(byKind.button.required?.sort()).toEqual(['kind', 'label']);
-      expect(byKind.button.properties?.label?.minLength).toBe(1);
-      expect(byKind.close.required).toEqual(['kind']);
-      expect(byKind.close.properties?.label).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'unknown' }).success).toBe(false);
-    });
-
-    it('requires an exact returned action in requests and invoked responses', () => {
-      const request = specSchema('InvokeDialogActionRequest');
-      const outcomes = specSchema('InvokeDialogActionResult').oneOf ?? [];
-
-      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: '' },
-        }).success,
-      ).toBe(false);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: ' ' },
-        }).success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: 'dialog', title: 'Save' },
-          action: { kind: 'button', label: 'Discard' },
-        }).success,
-      ).toBe(false);
-      for (const outcome of outcomes.filter(
-        (candidate) => candidate.properties?.outcome?.const !== 'no-active-dialog',
-      )) {
-        expect(outcome.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-        expect(outcome.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
+      expect(specSchema('InvokeDialogActionResult').properties?.status?.$ref).toBe(
+        '#/components/schemas/DialogRequestStatus',
+      );
+      expect(specSchema('DialogList').properties?.recentActions?.items?.$ref).toBe(
+        '#/components/schemas/DialogRequestStatus',
+      );
+      for (const name of ['DialogList', 'InvokeDialogActionResult']) {
+        expect(specSchema(name).properties?.dialogs?.items?.$ref).toBe(
+          '#/components/schemas/WindowInfo',
+        );
       }
+      expect(declaredKeys(invokeDialogActionResultSchema)).not.toContain('action');
+      expect(specSchema('WindowInfo').properties?.detailedText?.maxLength).toBe(1024 * 1024);
+      expect(specSchema('WindowInfo').properties?.detailedTextTruncated?.type).toBe('boolean');
     });
 
-    it('models the exact three outcome branches and their required fields', () => {
-      const outcomeSchemas = specSchema('InvokeDialogActionResult').oneOf ?? [];
-      const requiredByOutcome = Object.fromEntries(
-        outcomeSchemas.map((outcome) => [
-          outcome.properties?.outcome?.const,
-          [...(outcome.required ?? [])].sort(),
-        ]),
-      );
-
-      expect(requiredByOutcome).toEqual({
-        'no-active-dialog': ['dialogs', 'outcome'],
-        dismissed: ['action', 'dialog', 'dialogs', 'outcome'],
-        'action-invoked-dialog-remains': ['action', 'dialog', 'dialogs', 'outcome'],
-      });
-
+    it('accepts future read capabilities and statuses without accepting unknown write actions', () => {
       expect(
-        invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
-          .success,
+        dialogActionSchema.safeParse({ kind: 'future-action', enabled: true, future: 1 }).success,
       ).toBe(true);
+      expect(dialogActionInvocationSchema.safeParse({ kind: 'future-action' }).success).toBe(false);
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'dismissed',
-          dialog: { objectName: 'dialog', title: 'Save', className: 'QMessageBox' },
-          action: { kind: 'button', label: 'Discard' },
-          dialogs: [],
+        dialogRequestStatusSchema.safeParse({
+          sessionId: 's',
+          revision: 1,
+          requestId: 'r',
+          state: 'future-state',
+          effect: 'future-effect',
         }).success,
       ).toBe(true);
+    });
+
+    it('rejects the obsolete result that cannot identify or track the request', () => {
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'action-invoked-dialog-remains',
-          dialogs: [],
-        }).success,
+        invokeDialogActionResultSchema.safeParse({ outcome: 'dismissed', dialogs: [] }).success,
       ).toBe(false);
     });
   });
@@ -584,6 +569,7 @@ describe('external client API contract (captured openapi fixture)', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
+      EXTERNAL_API_ROUTES.appScreenshot,
       EXTERNAL_API_ROUTES.appDialogs,
       EXTERNAL_API_ROUTES.appState,
       EXTERNAL_API_ROUTES.appInvokeDialogAction,
@@ -640,8 +626,163 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.operationById,
       EXTERNAL_API_ROUTES.openapi,
       EXTERNAL_API_ROUTES.oauthProtectedResource,
+      EXTERNAL_API_ROUTES.appToggleDataSourcePage,
+      EXTERNAL_API_ROUTES.capabilities,
+      EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
+      EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables,
+      EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
+      EXTERNAL_API_ROUTES.worksheetReloadExtension,
+      EXTERNAL_API_ROUTES.dashboardReloadExtensions,
     ])('spec documents %s', (route) => {
       expect(Object.keys(spec.paths)).toContain(route);
+    });
+
+    it('has a route constant for every spec path and only the hidden invokeCommand beyond it', () => {
+      const constants = Object.values(EXTERNAL_API_ROUTES);
+      expect(
+        Object.keys(spec.paths).filter((route) => !constants.includes(route as never)),
+      ).toEqual([]);
+      expect(
+        constants.filter(
+          (route) => !(route in spec.paths) && route !== EXTERNAL_API_ROUTES.invokeCommand,
+        ),
+      ).toEqual([]);
+    });
+
+    it('serves every spec operation from the mock server', async () => {
+      const server = await startMockExternalApiServer({ token: 'route-coverage-token' });
+      try {
+        const unrouted: Array<string> = [];
+        for (const [route, item] of Object.entries(spec.paths)) {
+          for (const method of Object.keys(item as Record<string, unknown>)) {
+            const response = await fetch(`${server.baseUrl}${route.replaceAll(/\{\w+\}/g, 'x')}`, {
+              method: method.toUpperCase(),
+              headers: { Authorization: 'Bearer route-coverage-token' },
+            });
+            const problem =
+              response.status === 404 ? ((await response.json()) as { code?: string }) : {};
+            if (problem.code === 'not-found') {
+              unrouted.push(`${method.toUpperCase()} ${route}`);
+            }
+          }
+        }
+        expect(unrouted).toEqual([]);
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('documents getWorkbookExtensions at 0.2.27', () => {
+      const item = spec.paths[EXTERNAL_API_ROUTES.workbookExtensions] as {
+        get?: { operationId?: string };
+      };
+      expect(item.get?.operationId).toBe('getWorkbookExtensions');
+    });
+
+    it('documents the new 0.2.25 operations by operationId', () => {
+      const operationIds = Object.fromEntries(
+        [
+          EXTERNAL_API_ROUTES.appToggleDataSourcePage,
+          EXTERNAL_API_ROUTES.capabilities,
+          EXTERNAL_API_ROUTES.worksheetReloadExtension,
+          EXTERNAL_API_ROUTES.dashboardReloadExtensions,
+        ].map((route) => {
+          const item = spec.paths[route] as Record<string, { operationId?: string }>;
+          return [route, (item.get ?? item.post)?.operationId];
+        }),
+      );
+
+      expect(operationIds).toEqual({
+        [EXTERNAL_API_ROUTES.appToggleDataSourcePage]: 'toggleDataSourcePage',
+        [EXTERNAL_API_ROUTES.capabilities]: 'getCapabilities',
+        [EXTERNAL_API_ROUTES.worksheetReloadExtension]: 'reloadWorksheetExtension',
+        [EXTERNAL_API_ROUTES.dashboardReloadExtensions]: 'reloadDashboardExtensions',
+      });
+    });
+
+    it('documents the 0.2.30 and 0.2.31 datasource operations by operationId', () => {
+      const operationIds = Object.fromEntries(
+        [
+          EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
+          EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables,
+          EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
+        ].map((route) => {
+          const item = spec.paths[route] as Record<string, { operationId?: string }>;
+          return [route, (item.get ?? item.post)?.operationId];
+        }),
+      );
+
+      expect(operationIds).toEqual({
+        [EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField]:
+          'validateDatasourceCalculatedField',
+        [EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables]: 'listDatasourceLogicalTables',
+        [EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData]: 'getDatasourceLogicalTableData',
+      });
+    });
+
+    it('matches the calculated-field validation request body', () => {
+      const request = specSchema('ValidateCalculatedFieldRequest');
+      const sent: Record<keyof ValidateCalculatedFieldRequest, true> = {
+        formula: true,
+        caption: true,
+        fieldName: true,
+      };
+
+      expect(Object.keys(request.properties ?? {}).sort()).toEqual(Object.keys(sent).sort());
+      expect(request.required).toEqual(['formula']);
+    });
+
+    it('requires an explicit target state for the Data Source page', () => {
+      const request = specSchema('ToggleDataSourcePageRequest');
+
+      expect(request.required).toEqual(['isDataSourcePageActive']);
+      expect(request.properties?.isDataSourcePageActive?.type).toBe('boolean');
+    });
+
+    it('accepts spec-shaped capability, validation, operation list and metadata payloads', () => {
+      expect(
+        capabilityMatrixSchema.safeParse({
+          capabilities: {
+            getHealth: { requiresServer: false },
+            refreshDatasourceData: { requiresServer: true },
+          },
+        }).success,
+      ).toBe(true);
+      expect(
+        validateCalculatedFieldResponseSchema.safeParse({
+          isValid: false,
+          errors: [{ position: 4, length: 2, message: 'Unknown field.' }],
+        }).success,
+      ).toBe(true);
+      expect(
+        operationListSchema.safeParse({
+          operations: [
+            {
+              id: 'op-1',
+              kind: 'k',
+              state: 'RUNNING',
+              createdAt: '2026-10-21T10:00:00Z',
+              updatedAt: '2026-10-21T10:00:00Z',
+              warnings: [],
+            },
+          ],
+          blockingWindows: [],
+          progressWindows: [],
+        }).success,
+      ).toBe(true);
+      expect(
+        protectedResourceMetadataSchema.safeParse({
+          resource: 'http://127.0.0.1:1234',
+          bearer_methods_supported: ['header'],
+        }).success,
+      ).toBe(true);
+    });
+
+    it('rejects a validation response missing its verdict or errors', () => {
+      expect(validateCalculatedFieldResponseSchema.safeParse({ errors: [] }).success).toBe(false);
+      expect(validateCalculatedFieldResponseSchema.safeParse({ isValid: true }).success).toBe(
+        false,
+      );
     });
 
     it('documents the individual datasource operation contracts', () => {
@@ -727,9 +868,43 @@ describe('external client API contract (captured openapi fixture)', () => {
           'application/json'
         ]?.schema?.$ref,
       ).toBe('#/components/schemas/InvokeDialogActionResult');
+    });
+
+    it('documents the app screenshot read with an absolute outputPath and AppScreenshot response', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.appScreenshot] as {
+        get?: {
+          operationId?: string;
+          parameters?: Array<{ name?: string; in?: string; required?: boolean; $ref?: string }>;
+          responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+        };
+        post?: unknown;
+      };
+      const appScreenshot = specSchema('AppScreenshot');
+
+      expect(Object.keys(pathItem)).toEqual(['get']);
+      expect(pathItem.get?.operationId).toBe('getAppScreenshot');
       expect(
-        Object.keys(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses ?? {}),
-      ).toContain('409');
+        pathItem.get?.parameters?.find((parameter) => parameter.name === 'outputPath'),
+      ).toMatchObject({
+        in: 'query',
+        required: true,
+      });
+      expect(pathItem.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/AppScreenshot',
+      );
+      expect(Object.keys(pathItem.get?.responses ?? {})).toContain('400');
+      expect(declaredKeys(appScreenshotSchema)).toEqual(
+        Object.keys(appScreenshot.properties ?? {}),
+      );
+      expect(requiredKeys(appScreenshotSchema)).toEqual(appScreenshot.required);
+      expect(appScreenshot.properties?.filePaths?.items?.type).toBe('string');
+      expect(appScreenshotRoute('C:/tmp/shots dir')).toBe(
+        '/v0/app/screenshot?outputPath=C%3A%2Ftmp%2Fshots%20dir',
+      );
+      expect(
+        appScreenshotSchema.safeParse({ filePaths: ['C:/tmp/shots/ScreenShot_1.png'] }).success,
+      ).toBe(true);
+      expect(appScreenshotSchema.safeParse({}).success).toBe(false);
     });
 
     it('documents the app-state read with the shared AppState response', () => {
@@ -746,9 +921,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
     });
 
-    it('retains the worksheet refresh-now Operation contract in 0.2.20', () => {
-      expect(spec.info.version).toBe('0.2.20');
-
+    it('documents worksheet refresh-now as a bodyless Operation route', () => {
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {
           operationId?: string;
@@ -768,12 +941,16 @@ describe('external client API contract (captured openapi fixture)', () => {
         '#/components/responses/Accepted',
       );
       expect(pathItem.post?.responses).toHaveProperty(
-        '404.$ref',
-        '#/components/responses/NotFound',
+        '404.content.application/problem+json.schema.$ref',
+        '#/components/schemas/Problem',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '404.description',
+        expect.stringContaining('sheet-not-found'),
       );
     });
 
-    it('documents storyboard refresh-now as a bodyless Operation route in 0.2.20', () => {
+    it('documents storyboard refresh-now as a bodyless Operation route', () => {
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.storyboardRefreshNow] as {
         post?: {
           operationId?: string;
@@ -785,17 +962,26 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(pathItem)).toEqual(['post']);
       expect(pathItem.post?.operationId).toBe('refreshStoryboardNow');
       expect(pathItem.post).not.toHaveProperty('requestBody');
-      expect(pathItem.post?.responses).toHaveProperty(
-        '200.content.application/json.schema.$ref',
-        '#/components/schemas/Operation',
-      );
+      expect(pathItem.post?.responses).toHaveProperty('200.content.application/json.schema.allOf', [
+        { $ref: '#/components/schemas/Operation' },
+        {
+          type: 'object',
+          properties: {
+            result: { $ref: '#/components/schemas/StoryboardRefreshOutcome' },
+          },
+        },
+      ]);
       expect(pathItem.post?.responses).toHaveProperty(
         '202.$ref',
         '#/components/responses/Accepted',
       );
       expect(pathItem.post?.responses).toHaveProperty(
-        '404.$ref',
-        '#/components/responses/NotFound',
+        '404.content.application/problem+json.schema.$ref',
+        '#/components/schemas/Problem',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '404.description',
+        expect.stringContaining('sheet-not-found'),
       );
     });
 
@@ -815,7 +1001,10 @@ describe('external client API contract (captured openapi fixture)', () => {
               };
             };
             '202'?: { $ref?: string };
-            '404'?: { $ref?: string };
+            '404'?: {
+              content?: { 'application/problem+json'?: { schema?: { $ref?: string } } };
+              description?: string;
+            };
           };
         };
       };
@@ -835,10 +1024,13 @@ describe('external client API contract (captured openapi fixture)', () => {
         },
       ]);
       expect(pathItem.post?.responses?.['202']?.$ref).toBe('#/components/responses/Accepted');
-      expect(pathItem.post?.responses?.['404']?.$ref).toBe('#/components/responses/NotFound');
+      expect(
+        pathItem.post?.responses?.['404']?.content?.['application/problem+json']?.schema?.$ref,
+      ).toBe('#/components/schemas/Problem');
+      expect(pathItem.post?.responses?.['404']?.description).toContain('sheet-not-found');
     });
 
-    it('retains the projected worksheet Show Me option discovery contract in 0.2.19', () => {
+    it('documents the worksheet Show Me option discovery contract', () => {
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetShowMeOptions] as {
         get?: {
           operationId?: string;
@@ -879,6 +1071,7 @@ describe('external client API contract (captured openapi fixture)', () => {
           required: false,
           schema: { type: 'string', enum: ['ambient', 'explicit'] },
         }),
+        { $ref: '#/components/parameters/UserAgent' },
       ]);
       expect(Object.keys(pathItem.get?.responses ?? {})).toEqual([
         '200',
@@ -896,10 +1089,21 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
       expect(pathItem.get?.responses).toHaveProperty('202.$ref', '#/components/responses/Accepted');
       expect(pathItem.get?.responses).toHaveProperty(
-        '400.$ref',
-        '#/components/responses/BadRequest',
+        '400.content.application/problem+json.schema.$ref',
+        '#/components/schemas/Problem',
       );
-      expect(pathItem.get?.responses).toHaveProperty('404.$ref', '#/components/responses/NotFound');
+      expect(pathItem.get?.responses).toHaveProperty(
+        '400.description',
+        expect.stringContaining('invalid-query-parameter'),
+      );
+      expect(pathItem.get?.responses).toHaveProperty(
+        '404.content.application/problem+json.schema.$ref',
+        '#/components/schemas/Problem',
+      );
+      expect(pathItem.get?.responses).toHaveProperty(
+        '404.description',
+        expect.stringContaining('sheet-not-found'),
+      );
     });
 
     it('projects observable Show Me apply rejections', () => {
@@ -912,8 +1116,12 @@ describe('external client API contract (captured openapi fixture)', () => {
 
       expect(pathItem.post?.operationId).toBe('showMeWorksheet');
       expect(pathItem.post?.responses).toHaveProperty(
-        '409.$ref',
-        '#/components/responses/Conflict',
+        '409.content.application/problem+json.schema.$ref',
+        '#/components/schemas/Problem',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '409.description',
+        expect.stringMatching(/show-me-not-applicable.*show-me-unavailable/),
       );
       expect(PROBLEM_CODES).toEqual(
         expect.arrayContaining(['show-me-not-applicable', 'show-me-unavailable']),
@@ -935,9 +1143,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       const option = specSchema('ShowMeOption');
       const showMeType = option.properties?.showMeType;
 
-      expect(showMeType?.type).toBe('string');
-      expect(showMeType).not.toHaveProperty('enum');
-      expect(showMeType).not.toHaveProperty('x-extensible-enum');
+      expect(showMeType?.$ref).toBe('#/components/schemas/ShowMeType');
+      expect(showMeOptionSchema.shape.showMeType.safeParse('a-future-type').success).toBe(true);
       expect(Object.keys(option.properties ?? {})).toEqual([
         'showMeType',
         'isApplicable',

@@ -20,6 +20,7 @@ import { withApplyLock } from './applyMutex.js';
 import { sourceSha256 } from './cacheFingerprint.js';
 import { tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 import { pollReadback } from './pollReadback.js';
+import { qualifyDatasourceColumn } from './qualifyDatasourceColumn.js';
 
 export type ApplyRoundedStackedBarOutcome =
   | {
@@ -126,15 +127,13 @@ export async function applyRoundedStackedBar({
       );
     }
 
+    const qualify = (column: string): string =>
+      qualifyDatasourceColumn(executor.desktopApiVersion, contract.datasource, column);
     const requestedUnderlyingColumns = unique([
-      qualifyField(contract.datasource.caption, contract.category.column),
-      ...(contract.segment
-        ? [qualifyField(contract.datasource.caption, contract.segment.column)]
-        : []),
-      qualifyField(contract.datasource.caption, contract.measure.column),
-      ...(contract.filter
-        ? [qualifyField(contract.datasource.caption, contract.filter.column)]
-        : []),
+      qualify(contract.category.column),
+      ...(contract.segment ? [qualify(contract.segment.column)] : []),
+      qualify(contract.measure.column),
+      ...(contract.filter ? [qualify(contract.filter.column)] : []),
     ]);
     const underlying = await executor.getWorksheetUnderlyingData(
       contract.worksheetId,
@@ -361,14 +360,6 @@ function afterMutationUnknown(
     ...(error ? { error } : {}),
     ...(findings ? { findings } : {}),
   };
-}
-
-function qualifyField(datasourceCaption: string, fieldColumn: string): string {
-  const sourceName =
-    fieldColumn.startsWith('[') && fieldColumn.endsWith(']')
-      ? fieldColumn.slice(1, -1)
-      : fieldColumn;
-  return `[${datasourceCaption}].[${sourceName}]`;
 }
 
 function unique(values: string[]): string[] {

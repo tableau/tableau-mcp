@@ -153,6 +153,47 @@ describe('export-image tools', () => {
     }
   });
 
+  it.each([
+    {
+      tool: exportWorksheetImageTool,
+      args: { worksheetName: 'sheet-sales' },
+      path: '/v0/workbook/worksheets/sheet-sales/image',
+    },
+    {
+      tool: exportDashboardImageTool,
+      args: { dashboardName: 'Executive Dashboard' },
+      path: '/v0/workbook/dashboards/dash-exec/image',
+    },
+  ])('reports no pixel size for an SVG written to $path', async ({ tool, args, path }) => {
+    const harness = await startHarness(tool, (server) => {
+      server.setOverride(`GET ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          filePath: '/tmp/out.svg',
+          width: -1,
+          height: -1,
+          effectiveMimeType: 'image/svg+xml',
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({
+        ...args,
+        filePath: '/tmp/out.svg',
+        mimeType: 'image/svg+xml',
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('/tmp/out.svg');
+      expect(result.content[0].text).toContain('pixel size not applicable');
+      expect(result.content[0].text).not.toContain('-1');
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('downgrades an over-cap inline image to a cache file instead of an image block', async () => {
     const harness = await startHarness(exportWorksheetImageTool, undefined, {
       inlineImageMaxBytes: 1,
@@ -379,8 +420,11 @@ describe('export-image tools', () => {
       expect(result.content[0].text).toContain('Do not blindly retry the originating operation');
       expect(result.content[0].text).toContain('get-active-dialogs');
       expect(result.content[0].text).toContain('exact returned dialog identity');
-      expect(result.content[0].text).toContain('exact returned action');
-      expect(result.content[0].text).toContain('at most one invoke-dialog-action call');
+      expect(result.content[0].text).toContain('advertised action');
+      expect(result.content[0].text).toContain('invoke-dialog-action for one logical action');
+      expect(result.content[0].text).toContain(
+        'replay only the identical request with the same requestId',
+      );
       expect(result.content[0].text).toContain('Do not guess or assume Cancel is safe');
       expect(result.content[0].text).toContain('ask the user to handle the dialog');
     } finally {
