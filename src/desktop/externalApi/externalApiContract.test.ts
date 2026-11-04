@@ -662,16 +662,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
 
-    it('has a route constant for every spec path and only the hidden invokeCommand beyond it', () => {
+    it('has a route constant for every spec path', () => {
       const constants = Object.values(EXTERNAL_API_ROUTES);
       expect(
         Object.keys(spec.paths).filter((route) => !constants.includes(route as never)),
       ).toEqual([]);
-      expect(
-        constants.filter(
-          (route) => !(route in spec.paths) && route !== EXTERNAL_API_ROUTES.invokeCommand,
-        ),
-      ).toEqual([]);
+      expect(constants.filter((route) => !(route in spec.paths))).toEqual([]);
     });
 
     it('serves every spec operation from the mock server', async () => {
@@ -854,10 +850,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(specSchema('Operation').properties?.diagnostics?.$ref).toBe(
         '#/components/schemas/WorkbookDiagnostics',
       );
-    });
-
-    it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
-      expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
 
     it('documents the dialog routes with their exact request and response schemas', () => {
@@ -1229,18 +1221,18 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('parses a SUCCEEDED Operation result object and serialize-degradation warning', () => {
+    it('parses a SUCCEEDED Operation result object and a warning', () => {
       const parsed = operationEnvelopeSchema.safeParse({
         id: 'op-1',
-        kind: 'command.invoke',
+        kind: 'tabdoc:undo',
         state: 'SUCCEEDED',
         createdAt: '2026-07-20T10:00:00Z',
         updatedAt: '2026-07-20T10:00:02Z',
-        result: { outputParam: 'value' },
+        result: { undone: true },
         warnings: [
           {
-            code: 'output-serialization-failed',
-            message: 'Command output could not be serialized.',
+            code: 'partial',
+            message: 'one sheet skipped',
             target: 'result',
           },
         ],

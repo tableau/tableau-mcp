@@ -81,7 +81,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
-  invokeCommand: '/v0/app:invokeCommand',
   operations: '/v0/operations',
   operationById: '/v0/operations/{id}',
   openapi: '/openapi.json',
@@ -917,7 +916,7 @@ export const invokeDialogActionResultSchema = z
 export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
- * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
+ * Operation envelope returned by `POST /v0/workbook/document`
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
  * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
  * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older

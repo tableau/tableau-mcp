@@ -164,7 +164,7 @@ function toolNameToModule(): Map<string, string> {
   return map;
 }
 
-// Scope: the default dynamic-authoring profile only. demo, spec-loop and full serve sets that
+// Scope: the default dynamic-authoring profile only. demo and full serve sets that
 // cannot satisfy a strict check (their text legitimately names tools across profiles).
 describe('recovery text names only tools the caller actually has', () => {
   // The class: an error string that names a tool absent from the profile it ships in
@@ -207,7 +207,7 @@ describe('recovery text names only tools the caller actually has', () => {
   });
 
   it('recognizes underscore spellings as registered tool names', () => {
-    expect(toolNamesNamedIn("'execute_tableau_command'")).toContain('execute-tableau-command');
+    expect(toolNamesNamedIn("'list_templates'")).toContain('list-templates');
   });
 
   it('keeps scanning after an apostrophe inside a string', () => {
