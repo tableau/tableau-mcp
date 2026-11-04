@@ -155,7 +155,10 @@ export abstract class Server {
   }
 
   abstract registerResources: () => Promise<void>;
-  abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
+  abstract registerTools: (
+    tableauAuthInfo?: TableauAuthInfo,
+    grantedScopes?: ReadonlyArray<string>,
+  ) => Promise<void>;
 
   registerResource = (
     args:
