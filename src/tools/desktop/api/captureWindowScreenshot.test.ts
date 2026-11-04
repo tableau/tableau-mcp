@@ -49,6 +49,12 @@ describe('captureWindowScreenshotTool', () => {
     );
   });
 
+  it('declares the 0.2.28 API floor', () => {
+    const tool = getCaptureWindowScreenshotTool(new DesktopMcpServer());
+
+    expect(tool.minApiVersion).toBe('0.2.28');
+  });
+
   it.each([
     ['exactly at', PNG_BYTES.length],
     ['under', PNG_BYTES.length + 1],
@@ -141,7 +147,7 @@ describe('captureWindowScreenshotTool', () => {
         type: 'command-failed' as const,
         error: {
           code: 'not-found',
-          message: 'No route matches /v0/commands/tabui/capture-window-screenshot',
+          message: 'No route matches /v0/app/screenshot',
           recoverable: false,
         },
       },
