@@ -2,7 +2,10 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
-import { createCallDeadline } from '../../desktop/callDeadline.js';
+import {
+  createCallDeadline,
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
+} from '../../desktop/callDeadline.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
 import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
@@ -96,7 +99,8 @@ describe('DesktopTool per-call deadline', () => {
     expect(text).toContain('blocking dialog');
     expect(text).toContain('Do not blindly retry the originating operation');
     expect(text).toContain('get-active-dialogs');
-    expect(text).toContain('at most one invoke-dialog-action call');
+    expect(text).toContain('invoke-dialog-action for one logical action');
+    expect(text).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
     expect(text).toContain('ask the user to handle the dialog');
     // Not dressed up as a generic tool failure the agent can paper over.
     expect(text).not.toContain('requestId:');
@@ -109,7 +113,7 @@ describe('DesktopTool per-call deadline', () => {
     [
       'invoke-dialog-action',
       'invoke-dialog-action outcome is indeterminate',
-      'Do not call invoke-dialog-action again or click another action',
+      'replay only the identical request with the same requestId',
     ],
   ] as const)(
     'uses the side-effect-aware guidance for a timed-out %s call',
@@ -132,6 +136,13 @@ describe('DesktopTool per-call deadline', () => {
       expect(text).toContain(`tool: ${name}, session: 31875`);
       expect(text).toContain(state);
       expect(text).toContain(rule);
+      if (name === 'invoke-dialog-action') {
+        expect(text).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
+        expect(text).toContain('original sessionId/requestId');
+        expect(text).toContain('Never use a new requestId');
+        expect(text).toContain('restart or session change');
+        expect(text).not.toContain('Do not call invoke-dialog-action again');
+      }
       expect(text).not.toContain('at most one invoke-dialog-action call');
 
       extra.deadline.dispose();

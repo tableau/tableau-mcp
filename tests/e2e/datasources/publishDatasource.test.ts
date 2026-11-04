@@ -111,7 +111,7 @@ function getPublishDatasourceSmokeEnv(): Record<string, string> {
     ...getDefaultEnv(),
     FEATURE_GATE_PROVIDER: 'custom',
     FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
-      module: './tests/e2e/fixtures/authoringToolsFeatureGate.cjs',
+      module: './tests/e2e/fixtures/datasourceAuthoringFeatureGate.cjs',
     }),
   };
 }

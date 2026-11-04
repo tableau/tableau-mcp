@@ -24,9 +24,11 @@ import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUp
 import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
+import { getReloadExtensionsTool } from './api/reloadExtensions.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
+import { getSetDataSourcePageActiveTool } from './api/setDataSourcePageActive.js';
 import { getShowMeTool } from './api/showMe.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
@@ -300,7 +302,20 @@ const TOOL_CASES: Record<string, ToolCase> = {
   'save-workbook': {
     make: getSaveWorkbookTool,
     args: { filePath: '/a/Copy.twbx' },
-    clean: { message: 'Saved a copy to "/a/Copy.twbx".' },
+    clean: { message: 'Saved the workbook as "/a/Copy.twbx"; it is now the open document.' },
+  },
+  'set-data-source-page-active': {
+    make: getSetDataSourcePageActiveTool,
+    args: { isDataSourcePageActive: true },
+    clean: { isDataSourcePageActive: true, message: 'The Data Source page is active.' },
+  },
+  'reload-extensions': {
+    make: getReloadExtensionsTool,
+    args: { sheet: 'Sales' },
+    clean: {
+      sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
+      message: 'Requested reload of extensions for worksheet "Sales".',
+    },
   },
   'workbook-export-as': {
     make: getWorkbookExportAsTool,
@@ -403,6 +418,7 @@ function executorReturning(
       .mockResolvedValue(Ok({ storyboards: [{ id: 's1', name: 'Story', hidden: false }] })),
     getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: SORT_XML })),
     getWorkbook: vi.fn().mockResolvedValue(Ok({ title: 'Book1', unsavedChanges: false })),
+    getApp: vi.fn().mockResolvedValue(Ok({ isDataSourcePageActive: true })),
   };
   for (const method of applyBackedMethods()) {
     overrides[method] = vi.fn().mockResolvedValue(Ok(command));

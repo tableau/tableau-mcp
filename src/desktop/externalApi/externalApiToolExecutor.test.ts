@@ -6,10 +6,10 @@ import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { Provider } from '../../utils/provider.js';
 import {
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
-import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
@@ -17,7 +17,11 @@ import {
   MockOverride,
   startMockExternalApiServer,
 } from './mockExternalApiServer.js';
-import { ExternalApiInstance, InvokeDialogActionRequest } from './types.js';
+import {
+  ExternalApiInstance,
+  InvokeDialogActionRequest,
+  workbookDatasourceLogicalTableDataRoute,
+} from './types.js';
 
 vi.mock('../../logging/logger.js');
 
@@ -34,10 +38,13 @@ const instanceFor = (
 });
 
 const invokeDialogActionRequest: InvokeDialogActionRequest = {
+  requestId: 'request-1',
   dialog: {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 1,
   },
   action: { kind: 'button', label: 'Discard' },
 };
@@ -1311,6 +1318,44 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
     });
 
+    it('captures app screenshots into an encoded outputPath under read telemetry', async () => {
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        onRpc,
+      });
+      await executor.start();
+      const outputPath = '/tmp/tableau screenshot #1&b=2';
+
+      const result = await executor.captureAppScreenshot(outputPath, signal);
+
+      expect(result.unwrap()).toEqual({ filePaths: [`${outputPath}/ScreenShot_1.png`] });
+      const request = server.requests.at(-1);
+      expect(request?.method).toBe('GET');
+      expect(request?.path).toBe('/v0/app/screenshot');
+      expect(request?.searchParams).toEqual({ outputPath });
+      expect(onRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'read',
+          transportSuccess: true,
+          rescanCount: 0,
+        }),
+      );
+    });
+
+    it('surfaces an invalid screenshot outputPath as a canonical problem', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.captureAppScreenshot('relative/dir', signal);
+
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('invalid-query-parameter');
+      }
+    });
+
     it('gets a worksheet item by id', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -1434,6 +1479,18 @@ describe('ExternalApiToolExecutor', () => {
         call: (executor: ExternalApiToolExecutor) =>
           executor.resumeDashboardAutoUpdates('dash-exec', signal),
         path: '/v0/workbook/dashboards/dash-exec:resumeAutoUpdates',
+      },
+      {
+        label: 'reloads a worksheet extension',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.reloadWorksheetExtension('sheet-sales', signal),
+        path: '/v0/workbook/worksheets/sheet-sales:reloadExtension',
+      },
+      {
+        label: 'reloads dashboard extensions',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.reloadDashboardExtensions('dash-exec', signal),
+        path: '/v0/workbook/dashboards/dash-exec:reloadExtensions',
       },
     ])('$label via a bodyless POST to the per-sheet action route', async ({ call, path }) => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
@@ -1985,6 +2042,281 @@ describe('ExternalApiToolExecutor', () => {
     );
   });
 
+  describe('operation, capability and discovery endpoints', () => {
+    it('gets the capability matrix keyed on operationId', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getCapabilities(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().capabilities['refreshDatasourceData']).toEqual({
+        requiresServer: true,
+      });
+      expect(server.requests.at(-1)).toMatchObject({ method: 'GET', path: '/v0/capabilities' });
+    });
+
+    it('lists and gets operations without touching the internal poll path', async () => {
+      server.setOperation('op-list-1', {
+        poll: [
+          { id: 'op-list-1', kind: 'workbook.document.apply', state: 'RUNNING' },
+          { id: 'op-list-1', kind: 'workbook.document.apply', state: 'SUCCEEDED', result: {} },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const listed = await executor.listOperations(signal);
+      const fetched = await executor.getOperation('op-list-1', signal);
+
+      expect(listed.unwrap().operations.map((operation) => operation.id)).toEqual(['op-list-1']);
+      expect(fetched.unwrap()).toMatchObject({ id: 'op-list-1', state: 'RUNNING' });
+      expect(server.requests.map((request) => request.path)).toEqual([
+        '/v0/operations',
+        '/v0/operations/op-list-1',
+      ]);
+    });
+
+    it('maps an unknown operation id to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getOperation('op-missing', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
+    });
+
+    it('refuses an unsafe operation id without sending a request', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getOperation('..', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(server.requests).toHaveLength(0);
+    });
+  });
+
+  describe('datasource calculated-field validation', () => {
+    it('posts the formula and returns the validation outcome', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales])' },
+        signal,
+      );
+
+      expect(result.unwrap()).toEqual({
+        isValid: true,
+        errors: [],
+        dataType: 'real',
+        isAggregate: true,
+      });
+      const posted = server.requests.at(-1);
+      expect(posted).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook/datasources/wb-ds-superstore:validateCalculatedField',
+        contentType: 'application/json',
+      });
+      expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'SUM([Sales])' });
+    });
+
+    it('sends the caption and edited field name when given', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1', caption: 'Margin', fieldName: '[wb-ds-superstore].[Calculation_1]' },
+        signal,
+      );
+
+      expect(JSON.parse(server.requests.at(-1)?.body ?? '{}')).toEqual({
+        formula: '1',
+        caption: 'Margin',
+        fieldName: '[wb-ds-superstore].[Calculation_1]',
+      });
+    });
+
+    it('reports formula errors with their position', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales]' },
+        signal,
+      );
+
+      expect(result.unwrap()).toEqual({
+        isValid: false,
+        errors: [{ position: 11, length: 0, message: 'Unbalanced parentheses.' }],
+      });
+    });
+
+    it('maps an unknown datasource to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateDatasourceCalculatedField(
+        'missing',
+        { formula: '1' },
+        signal,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
+    });
+
+    it('polls a 202 to the validation result', async () => {
+      server.setOverride('POST /v0/workbook/datasources/wb-ds-superstore:validateCalculatedField', {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: '/v0/operations/op-validate', 'retry-after': '0' },
+        body: JSON.stringify({ id: 'op-validate', kind: 'calc.validate', state: 'RUNNING' }),
+      });
+      server.setOperation('op-validate', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-validate',
+            kind: 'calc.validate',
+            state: 'SUCCEEDED',
+            result: { isValid: true, errors: [] },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1' },
+        signal,
+      );
+
+      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+    });
+  });
+
+  describe('datasource logical tables', () => {
+    it('lists the logical tables of a datasource', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listDatasourceLogicalTables('wb-ds-superstore', signal);
+
+      expect(result.unwrap().tables).toEqual([
+        { id: 'lt-orders', caption: 'Orders' },
+        { id: 'lt-returns', caption: 'Returns' },
+      ]);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/datasources/wb-ds-superstore/logicalTables',
+      });
+    });
+
+    it('reads one logical table with maxRows and repeated column filters', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceLogicalTableData(
+        'wb-ds-superstore',
+        'lt-orders',
+        {
+          maxRows: 5,
+          columnsToIncludeByFieldName: ['[ds].[Region]', '[ds].[A, B]'],
+        },
+        signal,
+      );
+
+      expect(result.unwrap().columns?.map((column) => column.name)).toEqual([
+        'Region',
+        'Sales',
+        'Profit',
+      ]);
+      const request = server.requests.at(-1);
+      expect(request?.path).toBe(
+        '/v0/workbook/datasources/wb-ds-superstore/logicalTables/lt-orders/data',
+      );
+      expect(request?.searchParams).toMatchObject({ maxRows: '5' });
+      expect(
+        workbookDatasourceLogicalTableDataRoute('wb-ds-superstore', 'lt-orders', {
+          maxRows: 5,
+          columnsToIncludeByFieldName: ['[ds].[Region]', '[ds].[A, B]'],
+        }),
+      ).toBe(
+        '/v0/workbook/datasources/wb-ds-superstore/logicalTables/lt-orders/data?maxRows=5&columnsToIncludeByFieldName=%5Bds%5D.%5BRegion%5D&columnsToIncludeByFieldName=%5Bds%5D.%5BA%2C+B%5D',
+      );
+    });
+
+    it('maps an unknown logical table to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceLogicalTableData(
+        'wb-ds-superstore',
+        'missing',
+        {},
+        signal,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
+    });
+  });
+
+  describe('Data Source page', () => {
+    it.each([true, false])(
+      'sets the Data Source page active state to %s and the app info reports it',
+      async (isDataSourcePageActive) => {
+        const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+        await executor.start();
+
+        const result = await executor.toggleDataSourcePage(isDataSourcePageActive, signal);
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap().status).toBe('completed');
+        const posted = server.requests.at(-1);
+        expect(posted).toMatchObject({
+          method: 'POST',
+          path: '/v0/app:toggleDataSourcePage',
+          contentType: 'application/json',
+        });
+        expect(JSON.parse(posted?.body ?? '{}')).toEqual({ isDataSourcePageActive });
+        expect((await executor.getApp(signal)).unwrap().isDataSourcePageActive).toBe(
+          isDataSourcePageActive,
+        );
+      },
+    );
+
+    it('polls a 202 caused by a pending-extract dialog to completion', async () => {
+      server.setOverride('POST /v0/app:toggleDataSourcePage', {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: '/v0/operations/op-ds-page', 'retry-after': '0' },
+        body: JSON.stringify({
+          id: 'op-ds-page',
+          kind: 'app.toggleDataSourcePage',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('op-ds-page', {
+        retryAfterSeconds: 0,
+        poll: [{ id: 'op-ds-page', kind: 'app.toggleDataSourcePage', state: 'SUCCEEDED' }],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.toggleDataSourcePage(false, signal);
+
+      expect(result.unwrap().status).toBe('completed');
+    });
+  });
+
   describe('dialog endpoints', () => {
     it('lists active dialogs with every optional field preserved under read telemetry', async () => {
       const onRpc = vi.fn();
@@ -1997,11 +2329,17 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.getActiveDialogs(signal);
 
       expect(result.unwrap()).toEqual({
+        uiSnapshotAvailable: true,
+        recentActions: [],
         dialogs: [
           {
             objectName: 'saveChangesDialog',
             title: 'Save Changes',
             className: 'QMessageBox',
+            sessionId: 'dialog-session-1',
+            revision: 1,
+            family: 'qt',
+            status: 'active',
             messageText: 'Do you want to save changes to Regional Sales?',
             informativeText: 'Unsaved changes will be lost if you discard them.',
             detailedText: 'Workbook: Regional Sales',
@@ -2029,43 +2367,42 @@ describe('ExternalApiToolExecutor', () => {
       server.setOverride('GET /v0/app/dialogs', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ dialogs: [] }),
+        body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.getActiveDialogs(signal);
 
-      expect(result.unwrap()).toEqual({ dialogs: [] });
+      expect(result.unwrap()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
     });
 
     it.each([
-      ['no-active-dialog', { outcome: 'no-active-dialog', dialogs: [] }],
-      [
-        'dismissed',
-        {
-          outcome: 'dismissed',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [],
+      'dispatched-pending',
+      'completed',
+      'canceled',
+      'failed',
+      'expired',
+      'indeterminate',
+    ] as const)('returns the %s request status exactly once', async (outcome) => {
+      const response = {
+        outcome,
+        dialog: invokeDialogActionRequest.dialog,
+        status: {
+          sessionId: invokeDialogActionRequest.dialog.sessionId,
+          revision: invokeDialogActionRequest.dialog.revision,
+          requestId: invokeDialogActionRequest.requestId,
+          state: outcome === 'dispatched-pending' ? 'pending' : outcome,
+          effect: outcome === 'completed' ? 'dialog-dismissed' : 'none',
         },
-      ],
-      [
-        'action-invoked-dialog-remains',
-        {
-          outcome: 'action-invoked-dialog-remains',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [
-            {
-              ...invokeDialogActionRequest.dialog,
-              messageText: 'The click started validation.',
-              buttons: ['Discard'],
-            },
-          ],
-        },
-      ],
-    ] as const)('returns the %s success exactly once', async (_outcome, response) => {
+        uiSnapshotAvailable: outcome === 'completed',
+        dialogs: [],
+      };
+
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status: 200,
         contentType: 'application/json',
@@ -2180,12 +2517,15 @@ describe('ExternalApiToolExecutor', () => {
         // Session-fatal guidance leads: stop every command and read, restart Desktop.
         expect(error.error?.message).toContain('restart Tableau Desktop');
         expect(error.error?.message).toContain('including reads');
-        // Replay-safety core is kept: the first outcome is unknown, so the agent must not re-invoke
-        // the action (holds even after a restart in a new session).
+        // The first outcome stays unknown after a restart, so a new session cannot deduplicate it.
         expect(error.error?.message).toContain(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE);
         expect(error.error?.message).toContain('may already have been invoked');
         // But the get-active-dialogs read clause is dropped: a dead session forbids every read.
-        expect(error.error?.message).not.toContain('get-active-dialogs once for fresh inspection');
+        expect(error.error?.message).not.toContain('get-active-dialogs');
+        expect(error.error?.message).toContain(
+          'This failed session must not receive more commands or reads',
+        );
+        expect(error.error?.message).toContain('restart or session change');
         expect(error.error?.message).not.toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
       }
       expect(
@@ -2686,20 +3026,20 @@ describe('ExternalApiToolExecutor', () => {
       const discover = vi
         .fn()
         .mockReturnValueOnce([
-          { ...instanceFor(server, 'stale-token', '0.2.17'), instanceId: 'inst-capture' },
+          { ...instanceFor(server, 'stale-token', '0.2.28'), instanceId: 'inst-capture' },
         ])
         .mockReturnValue([
-          { ...instanceFor(server, 'valid-token', '0.2.17'), instanceId: 'inst-restarted' },
+          { ...instanceFor(server, 'valid-token', '0.2.28'), instanceId: 'inst-restarted' },
         ]);
       const executor = new ExternalApiToolExecutor({ pid: 999, discover });
 
-      const result = await captureWindowScreenshot({ executor, signal });
+      const result = await executor.captureAppScreenshot('/tmp/capture', signal);
 
       expect(result.isErr()).toBe(true);
       expect(discover).toHaveBeenCalledTimes(2);
       expect(
         server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          (request) => request.method === 'GET' && request.path === '/v0/app/screenshot',
         ),
       ).toHaveLength(1);
     });
@@ -2825,9 +3165,10 @@ describe('ExternalApiToolExecutor', () => {
             'Do not retry the originating operation until the dialog is handled and its cause is corrected',
           );
           expect(commandError.message).toContain('exact returned dialog identity');
-          expect(commandError.message).toContain('exact returned action');
+          expect(commandError.message).toContain('advertised action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
-          expect(commandError.message).toContain('action-invoked-dialog-remains');
+          expect(commandError.message).toContain('pending or indeterminate status');
+          expect(commandError.message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3176,10 +3517,11 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('Do not blindly retry the originating operation');
   expect(message).toContain('get-active-dialogs');
   expect(message).toContain('exact returned dialog identity');
-  expect(message).toContain('exact returned action');
-  expect(message).toContain('at most one invoke-dialog-action call');
+  expect(message).toContain('advertised action');
+  expect(message).toContain('invoke-dialog-action for one logical action');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
   expect(message).toContain('Do not guess or assume Cancel is safe');
-  expect(message).toContain('action-invoked-dialog-remains');
+  expect(message).toContain('pending or indeterminate status');
   expect(message).toContain('ask the user to handle the dialog');
   expect(message).toContain('list-instances');
 }
@@ -3188,10 +3530,12 @@ function expectIndeterminateDialogAction(message: string): void {
   expect(message).toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
   expect(message).toContain('invoke-dialog-action outcome is indeterminate');
   expect(message).toContain('action may already have been invoked');
-  expect(message).toContain('Do not call invoke-dialog-action again or click another action');
-  expect(message).toContain('get-active-dialogs once for fresh inspection only');
-  expect(message).toContain('result does not prove that the first click did not happen');
-  expect(message).toContain('Ask the user to handle any consequential choice');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
+  expect(message).toContain('replay only the identical request with the same requestId');
+  expect(message).toContain('Never use a new requestId');
+  expect(message).toContain('original sessionId/requestId');
+  expect(message).toContain('ask the user to handle any consequential choice');
+  expect(message).not.toContain('Do not call invoke-dialog-action again');
   expect(message).not.toContain('retry with that session');
   expect(message).not.toContain('at most one invoke-dialog-action call');
 }

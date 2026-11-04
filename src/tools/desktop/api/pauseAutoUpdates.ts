@@ -29,7 +29,7 @@ export const getPauseAutoUpdatesTool = (
     minApiVersion: '0.2.5',
     title,
     description:
-      'Pause automatic query execution for a worksheet or dashboard to batch edits before the next refresh. Resume with resume-auto-updates.',
+      'Pause automatic query execution for a worksheet, or for a dashboard and every worksheet it contains, to batch edits before the next refresh. Resume with resume-auto-updates.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

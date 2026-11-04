@@ -168,16 +168,27 @@ const numericEntityPreservingBuilderOptions = {
 };
 
 const parser = new XMLParser(parserOptions);
+const attributeWhitespaceNormalizingParser = new XMLParser({
+  ...parserOptions,
+  attributeValueProcessor: (_name: string, value: string) => value.replace(/[\t\n\r]/g, ' '),
+});
 const numericEntityPreservingBuilder = new XMLBuilder(numericEntityPreservingBuilderOptions);
 
-export function parseXML(xmlString: string): ParsedWorkbook {
+export function parseXML(
+  xmlString: string,
+  { normalizeAttributeWhitespace = false }: { normalizeAttributeWhitespace?: boolean } = {},
+): ParsedWorkbook {
   try {
     // Workbooks never carry a DOCTYPE, and its internal entities would amplify input into the raised limits above.
     if (xmlString.includes('<!DOCTYPE')) {
       throw new Error('DOCTYPE declarations are not allowed in workbook XML');
     }
     const { protectedXml, sentinel } = protectNumericEntities(xmlString);
-    const parsed = parser.parse(protectedXml) as ParsedWorkbook;
+    // Numeric references must stay protected until literal attribute whitespace is normalized.
+    const selectedParser = normalizeAttributeWhitespace
+      ? attributeWhitespaceNormalizingParser
+      : parser;
+    const parsed = selectedParser.parse(protectedXml) as ParsedWorkbook;
     decodeNumericEntitySentinels(parsed, sentinel);
     return parsed;
   } catch (error) {

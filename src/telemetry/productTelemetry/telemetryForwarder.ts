@@ -1,11 +1,8 @@
-import os from 'os';
-
 import { log } from '../../logging/logger';
 import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetryEndpoint';
 
 type ValidPropertyValueType = string | number | boolean;
 type PropertiesType = { [key: string]: ValidPropertyValueType };
-const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
 export type TelemetryEventType = 'tool_call' | 'tableau_mcp_event';
@@ -44,9 +41,7 @@ export function resolveTelemetryEnv(): TelemetryEnv {
 export type TableauTelemetryJsonEvent = {
   type: TelemetryEventType;
   host_timestamp: string;
-  host_name?: string;
   service_name: string;
-  pod?: string;
   properties: PropertiesType;
 };
 
@@ -77,13 +72,8 @@ class DirectTelemetryForwarder {
    *
    * @param eventType - The event type/name
    * @param properties - Key-value properties for the event
-   * @param options.includeHostName - `false` omits host_name: Desktop runs on the user's machine.
    */
-  send(
-    eventType: TelemetryEventType,
-    properties: PropertiesType,
-    options?: { includeHostName?: boolean },
-  ): void {
+  send(eventType: TelemetryEventType, properties: PropertiesType): void {
     if (!this.enabled) {
       return;
     }
@@ -93,8 +83,6 @@ class DirectTelemetryForwarder {
         type: eventType,
         host_timestamp: formatHostTimestamp(new Date()),
         service_name: SERVICE_NAME,
-        pod: this.pod,
-        ...(options?.includeHostName === false ? {} : { host_name: getDefaultHostName() }),
         properties: {
           ...properties,
           podname: this.pod,
@@ -162,10 +150,6 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
     });
   }
 }
-
-const getDefaultHostName = (): string => {
-  return os.hostname() ?? DEFAULT_HOST_NAME;
-};
 
 /**
  * Format: ISO 8601 (e.g., "2026-02-05T14:30:00.123Z")

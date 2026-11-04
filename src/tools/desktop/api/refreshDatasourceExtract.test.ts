@@ -25,7 +25,7 @@ function refreshPosts(
   server: MockExternalApiServer,
   datasourceId: string,
 ): Array<{ body: string }> {
-  const path = `/v0/datasources/${encodeURIComponent(datasourceId)}:refreshExtract`;
+  const path = `/v0/datasources/${datasourceId}:refreshExtract`;
   return server.requests.filter((r) => r.method === 'POST' && r.path === path);
 }
 
@@ -45,6 +45,17 @@ describe('refresh-datasource-extract tool', () => {
       const posted = refreshPosts(harness.server, 'ds-1');
       expect(posted).toHaveLength(1);
       expect(JSON.parse(posted[0].body)).toEqual({});
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('puts an already percent-encoded datasource id in the route verbatim', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({ datasourceId: 'My%20Data' });
+      expect(result.isError).toBeFalsy();
+      expect(refreshPosts(harness.server, 'My%20Data')).toHaveLength(1);
     } finally {
       await harness.close();
     }

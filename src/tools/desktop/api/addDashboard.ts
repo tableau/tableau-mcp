@@ -25,7 +25,8 @@ export const getAddDashboardTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'add-dashboard',
     minApiVersion: '0.2.6',
     title,
-    description: 'Add a blank dashboard to the open workbook.',
+    description:
+      'Add a blank dashboard to the open workbook. It becomes the active sheet; get its id from get-workbook-inventory.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

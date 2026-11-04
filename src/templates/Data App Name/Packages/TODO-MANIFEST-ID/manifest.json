@@ -1,6 +1,7 @@
 {
   "id": "TODO-MANIFEST-ID",
   "version": "TODO-MANIFEST-VERSION",
+  "manifestVersion": "0.1",
   "name": "TODO App Name",
   "author": "TODO Author Name",
   "requestedOrigins": ""

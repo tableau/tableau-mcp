@@ -148,6 +148,16 @@ const siteRoleUnavailableWarning = (retryAdvice: string): string =>
   'role could not be determined after multiple attempts. This is likely a transient error rather ' +
   `than a permissions problem. ${retryAdvice}`;
 
+// Appended to the initialize instructions when the caller's OAuth token lacks the scopes some tools
+// require, so those tools were omitted. Neutral by design: a stale connection should reconnect, but a
+// deliberately-limited one is working as intended — so the copy names the omitted tools as a fact and
+// offers reconnect without demanding it. Tool names, never scope strings, keep it user-facing.
+const buildMissingScopesNote = (omittedToolNames: string[]): string =>
+  "This Tableau connection doesn't include access to these tools: " +
+  `${omittedToolNames.join(', ')}. ` +
+  'If you expected them, reconnect Tableau to grant access. ' +
+  'If your organization limits Tableau access, no action is needed.';
+
 /**
  * Base `initialize` instructions for the web server. Admin guidance is not included here: it depends
  * on an async feature-gate check, so registerTools appends it via appendInstructions().
@@ -190,7 +200,10 @@ export class WebMcpServer extends Server {
     // No resources to register
   };
 
-  registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
+  registerTools = async (
+    tableauAuthInfo?: TableauAuthInfo,
+    grantedScopes?: ReadonlyArray<string>,
+  ): Promise<void> => {
     const config = getConfig();
 
     // Appended before tool filtering so any registration warnings follow the admin guidance.
@@ -206,7 +219,7 @@ export class WebMcpServer extends Server {
     } else {
       // Read once per pass so a mid-loop flag flip cannot split one session's tools.
       const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
-      for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
+      for (const tool of await this._getToolsToRegister(tableauAuthInfo, grantedScopes)) {
         await this._registerWebTool(tool, mcpAppsEnabled);
       }
     }
@@ -225,12 +238,15 @@ export class WebMcpServer extends Server {
   loadWebTools = (
     group: LoadableWebToolGroupName,
     tableauAuthInfo?: TableauAuthInfo,
+    grantedScopes?: ReadonlyArray<string>,
   ): Promise<LoadWebToolsResult> => {
     // Serialize loads: two overlapping calls for the same group would both pass
     // the loaded-set check and the second registerTool would throw on the
     // duplicate name. The chain never rejects (failures are surfaced on the
     // caller's promise, swallowed on the chain) so one bad load can't wedge it.
-    const run = this._loadWebToolsChain.then(() => this._loadWebToolsInner(group, tableauAuthInfo));
+    const run = this._loadWebToolsChain.then(() =>
+      this._loadWebToolsInner(group, tableauAuthInfo, grantedScopes),
+    );
     this._loadWebToolsChain = run.then(
       () => undefined,
       () => undefined,
@@ -243,6 +259,7 @@ export class WebMcpServer extends Server {
   private _loadWebToolsInner = async (
     group: LoadableWebToolGroupName,
     tableauAuthInfo?: TableauAuthInfo,
+    grantedScopes?: ReadonlyArray<string>,
   ): Promise<LoadWebToolsResult> => {
     const groupNames: readonly WebToolGroupName[] = group === 'all' ? webToolGroupNames : [group];
 
@@ -254,7 +271,11 @@ export class WebMcpServer extends Server {
       groupNames.flatMap((groupName) => [...webToolGroups[groupName]]),
     );
 
-    const collected = await this._collectToolsToRegister(tableauAuthInfo, RELOAD_ADVICE);
+    const collected = await this._collectToolsToRegister(
+      tableauAuthInfo,
+      RELOAD_ADVICE,
+      grantedScopes,
+    );
     const forRequested = (entries: CollectedMessage[]): string[] =>
       entries
         .filter((entry) =>
@@ -330,7 +351,11 @@ export class WebMcpServer extends Server {
             'The Tableau MCP server is temporarily unavailable. Please try again later.',
           );
         }
-        const result = await this.loadWebTools(args.group, getTableauAuthInfo(extra.authInfo));
+        const result = await this.loadWebTools(
+          args.group,
+          getTableauAuthInfo(extra.authInfo),
+          extra.authInfo?.scopes,
+        );
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       },
     );
@@ -341,7 +366,9 @@ export class WebMcpServer extends Server {
     mcpAppsEnabled: boolean,
   ): Promise<boolean> => {
     const config = getConfig();
-    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
+    const isKnownIncompatibleClient =
+      getClientDisplayName(this.clientId) === 'Claude' &&
+      !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
       args: typeof tool.paramsSchema,
@@ -407,10 +434,12 @@ export class WebMcpServer extends Server {
 
   protected _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
+    grantedScopes?: ReadonlyArray<string>,
   ): Promise<Array<WebTool<any>>> => {
     const { tools, warnings, notes } = await this._collectToolsToRegister(
       tableauAuthInfo,
       RECONNECT_ADVICE,
+      grantedScopes,
     );
     for (const { message } of [...warnings, ...notes]) {
       this.appendInstructions(message);
@@ -421,6 +450,7 @@ export class WebMcpServer extends Server {
   private _collectToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
     retryAdvice: string = RECONNECT_ADVICE,
+    grantedScopes?: ReadonlyArray<string>,
   ): Promise<CollectedTools> => {
     const config = getConfig();
     const warnings: CollectedMessage[] = [];
@@ -471,10 +501,38 @@ export class WebMcpServer extends Server {
     const toolsOmittedForRoleFetchFailure: string[] = [];
     const toolsOmittedFromUnmetConditions = new Map<RegistrationCondition, string[]>();
     const toolsOmittedForIndeterminateConditions = new Map<RegistrationCondition, string[]>();
+    // Tools hidden because the caller's OAuth token was not granted the scopes they require.
+    const toolsOmittedForMissingScopes: string[] = [];
+
+    // Omit tools the caller's token isn't authorized for, so we don't register an unusable tool: a tool
+    // whose MCP scopes aren't granted (no MCP-layer access) or whose required Tableau API scopes aren't
+    // granted (its REST calls would 403). An explicit, non-empty scope grant means we can tell what the
+    // caller is authorized for; an absent or empty list means the grant is unknown (PAT, stdio,
+    // X-Tableau-Auth passthrough, which carries scopes:[]) — assume full access and omit nothing.
+    // With enforceScopes off the operator opted out of scope-based access control, so the grant isn't
+    // authoritative — a caller can still present a non-empty grant that carries only API scopes and no
+    // MCP scopes (e.g. requesting just tableau:mcp_site_settings:read), which must not omit every tool.
+    // requiredMcpScopes already handles this: getRequiredMcpScopesForTool returns [] when enforcement is
+    // off, so an empty set never omits and the MCP check needs no separate gate. requiredApiScopes does
+    // NOT self-gate, so gate the API check explicitly to mirror request-time, which only enforces API
+    // scopes when enforceScopes AND advertiseApiScopes are on (see authMiddleware) — otherwise that
+    // API-only grant would omit every tool on its API scopes.
+    const hasExplicitScopeGrant = grantedScopes !== undefined && grantedScopes.length > 0;
+    const checkMcpScopes = hasExplicitScopeGrant;
+    const checkApiScopes =
+      hasExplicitScopeGrant && config.oauth.enforceScopes && config.oauth.advertiseApiScopes;
+    // Condition-probe scopes are only advertised when conditions are enforced (see getSupportedApiScopes),
+    // so only hold the caller to them in that same mode — otherwise we'd omit every conditional tool for a
+    // scope that was never offered. Omitting here (over letting the probe run) keeps the message honest: a
+    // missing probe scope reads as "you didn't grant this" rather than being mislabeled as "feature absent".
+    const checkConditionApiScopes = checkApiScopes && enforceRegistrationConditions;
+    const grantedScopeSet = new Set(grantedScopes ?? []);
 
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
+      // Combined registers Desktop's scaffold-data-app on this same server. Standalone web keeps its own.
+      if (!this.ownsMcpServer && tool.name === 'scaffold-data-app') continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {
@@ -488,6 +546,18 @@ export class WebMcpServer extends Server {
           }
           continue;
         }
+      }
+      // Scope omission runs before the registration-condition checks so we never spend REST calls
+      // probing conditions for a tool the caller's token already can't use — including the probe
+      // scopes themselves, so a tool is omitted up front rather than failing its condition check.
+      const missingScope =
+        (checkMcpScopes && tool.requiredMcpScopes.some((scope) => !grantedScopeSet.has(scope))) ||
+        (checkApiScopes && tool.requiredApiScopes.some((scope) => !grantedScopeSet.has(scope))) ||
+        (checkConditionApiScopes &&
+          tool.requiredConditionApiScopes.some((scope) => !grantedScopeSet.has(scope)));
+      if (missingScope) {
+        toolsOmittedForMissingScopes.push(tool.name);
+        continue;
       }
       if (enforceRegistrationConditions && tool.registrationConditions.length > 0) {
         const conditionCheckResult = await checkRegistrationConditions(
@@ -507,6 +577,23 @@ export class WebMcpServer extends Server {
         }
       }
       toolsToRegister.push(tool);
+    }
+
+    if (toolsOmittedForMissingScopes.length > 0) {
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          `${toolsOmittedForMissingScopes.length} tool(s) were omitted from this session because ` +
+          "the caller's access token lacks their required scopes: " +
+          `${toolsOmittedForMissingScopes.join(', ')}.`,
+      });
+      // A note, not a warning: the connection simply lacks these scopes — reconnect to grant them, or
+      // leave it if the limit is deliberate. Scope omissions stay out of transientlyOmittedToolNames.
+      notes.push({
+        message: buildMissingScopesNote(toolsOmittedForMissingScopes),
+        toolNames: toolsOmittedForMissingScopes,
+      });
     }
 
     if (toolsOmittedForRoleFetchFailure.length > 0) {

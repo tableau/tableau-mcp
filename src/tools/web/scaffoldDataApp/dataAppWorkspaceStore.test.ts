@@ -1,5 +1,6 @@
+import { DOMParser } from '@xmldom/xmldom';
 import { execFileSync } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -31,6 +32,8 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
 
+const productVersion = { value: '2026.3.2', build: '20263.26.1027.1340' };
+
 describe('createDataAppWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,10 +55,46 @@ describe('createDataAppWorkspace', () => {
       await buildTemplateZip();
     });
 
+    it('preserves Desktop compatibility metadata in the finalized workbook', async () => {
+      const result = await createDataAppWorkspace({
+        datappName: 'Desktop Compatibility',
+        allowedOrigins: [],
+        productVersion,
+        config: getConfig(),
+      });
+
+      invariant(result.isOk(), result.isErr() ? result.error.message : '');
+      const { filePath, postUnzip } = result.value;
+      invariant(filePath);
+      invariant(postUnzip);
+      const workbookPath = 'Data App Name/Data App Name.twb';
+      let xml = execFileSync('unzip', ['-p', filePath, workbookPath], { encoding: 'utf8' });
+      const edit = postUnzip.edits.find(({ file }) => file === workbookPath);
+      invariant(edit);
+      for (const { find, replace } of edit.replacements) {
+        xml = xml.split(find).join(replace);
+      }
+
+      const workbook = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
+      invariant(workbook);
+      expect.soft(workbook.getAttribute('source-build')).toBe('2026.3.2 (20263.26.1027.1340)');
+      const manifest = workbook.getElementsByTagName('document-format-change-manifest')[0];
+      invariant(manifest);
+      for (const declaration of [
+        'Extensions',
+        'VizExtensions',
+        '_.fcp.Packages.true...Packages',
+        '_.fcp.VizExtensionsDupEncodingUUID.true...VizExtensionsDupEncodingUUID',
+      ]) {
+        expect.soft(manifest.getElementsByTagName(declaration).length, declaration).toBe(1);
+      }
+    });
+
     it('serves the static, un-substituted template zip plus a postUnzip plan', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        productVersion,
         config: getConfig(),
       });
 
@@ -72,7 +111,9 @@ describe('createDataAppWorkspace', () => {
 
       // Local mode returns the exact same plan S3 mode does - the client always unzips and finalizes.
       invariant(value.postUnzip);
-      expect(value.postUnzip).toEqual(buildPostUnzipPlan(deriveIdentity('Sales Demo')));
+      expect(value.postUnzip).toEqual(
+        buildPostUnzipPlan(deriveIdentity('Sales Demo'), productVersion),
+      );
       expect(value.postUnzip.renames).toContainEqual({
         from: 'Data App Name/Packages/TODO-MANIFEST-ID',
         to: 'Data App Name/Packages/com.tableau.mcp.sales-demo',
@@ -129,6 +170,7 @@ describe('createDataAppWorkspace', () => {
         expect(JSON.parse(manifest)).toEqual({
           id: 'TODO-MANIFEST-ID',
           version: 'TODO-MANIFEST-VERSION',
+          manifestVersion: '0.1',
           name: 'TODO App Name',
           author: 'TODO Author Name',
           requestedOrigins: '',
@@ -146,6 +188,7 @@ describe('createDataAppWorkspace', () => {
         expect(JSON.parse(finalize(manifest, manifestPath))).toEqual({
           id: 'com.tableau.mcp.sales-demo',
           version: '1.0.0',
+          manifestVersion: '0.1',
           name: 'Sales Demo',
           author: 'Tableau MCP',
           requestedOrigins: '',
@@ -163,11 +206,22 @@ describe('createDataAppWorkspace', () => {
         // Vendored Extensions API library copied byte-for-byte (large binary).
         const libPath = join(pkgDir, 'content', 'src', 'tableau.extensions.1.latest.min.js');
         expect(existsSync(libPath)).toBe(true);
-        expect(statSync(libPath).size).toBe(291737);
+        expect(statSync(libPath).size).toBe(302125);
 
         // Starter app.js left untouched with its authoring marker.
         const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
         expect(appJs).toContain('AUTHOR YOUR APP HERE');
+
+        // Data/ ships empty except its placeholder, for datasource files the workbook embeds.
+        expect(readdirSync(join(root, 'Data'))).toEqual(['.gitkeep']);
+
+        // Resources/.agents/ ships the agent-docs README, which carries no identity tokens.
+        const agentsReadme = await readFile(
+          join(root, 'Resources', '.agents', 'README.md'),
+          'utf8',
+        );
+        expect(agentsReadme).toContain('# Resources/.agents/');
+        expect(agentsReadme).not.toContain('TODO');
       } finally {
         await rm(extractDir, { recursive: true, force: true });
       }
@@ -189,6 +243,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        productVersion,
         config: getConfig(),
       });
 
@@ -223,7 +278,13 @@ describe('createDataAppWorkspace', () => {
       expect(mocks.getSignedUrl).toHaveBeenCalledTimes(1);
 
       invariant(value.postUnzip);
-      expect(value.postUnzip.edits.length).toBeGreaterThan(0);
+      const workbookEdit = value.postUnzip.edits.find(
+        ({ file }) => file === 'Data App Name/Data App Name.twb',
+      );
+      expect(workbookEdit?.replacements).toContainEqual({
+        find: 'TODO-SOURCE-BUILD',
+        replace: '2026.3.2 (20263.26.1027.1340)',
+      });
       expect(value.postUnzip.renames).toContainEqual({
         from: 'Data App Name',
         to: 'Sales Demo',
@@ -236,6 +297,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        productVersion,
         config: getConfig(),
       });
 
@@ -251,6 +313,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        productVersion,
         config: getConfig(),
       });
 

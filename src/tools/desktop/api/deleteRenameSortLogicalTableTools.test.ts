@@ -581,30 +581,42 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
-  it('get-worksheet-underlying-data qualifies a bare column name with the datasource caption', async () => {
-    const harness = await startHarness(getWorksheetUnderlyingDataTool);
-    try {
-      const { result } = await run(harness, {
-        worksheet: WORKSHEET_NAME,
-        logicalTable: LOGICAL_TABLE_ID,
-        columns: ['Sales'],
-      });
-      expect(result.isError).toBeFalsy();
-      const got = harness.server.requests.filter(
-        (r) =>
-          r.method === 'GET' &&
-          r.path.startsWith(
-            `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables/${LOGICAL_TABLE_ID}/data`,
+  it.each([
+    ['0.2.24', '[Sample - Superstore].[Sales]'],
+    ['0.2.25', '[federated.abc].[Sales]'],
+  ])(
+    'get-worksheet-underlying-data on API %s qualifies a bare column name as %s',
+    async (apiVersion, expectedColumn) => {
+      const harness = await startHarness(getWorksheetUnderlyingDataTool, apiVersion);
+      try {
+        harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+          status: 200,
+          contentType: 'application/xml',
+          body: WORKSHEET_DOCUMENT_XML.replace(
+            '<datasource name="Sample - Superstore" />',
+            '<datasource caption="Sample - Superstore" name="federated.abc" />',
           ),
-      );
-      expect(got).toHaveLength(1);
-      expect(got[0].searchParams).toMatchObject({
-        columnsToIncludeByFieldName: '[Sample - Superstore].[Sales]',
-      });
-    } finally {
-      await harness.close();
-    }
-  });
+        });
+        const { result } = await run(harness, {
+          worksheet: WORKSHEET_NAME,
+          logicalTable: LOGICAL_TABLE_ID,
+          columns: ['Sales'],
+        });
+        expect(result.isError).toBeFalsy();
+        const got = harness.server.requests.filter(
+          (r) =>
+            r.method === 'GET' &&
+            r.path.startsWith(
+              `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables/${LOGICAL_TABLE_ID}/data`,
+            ),
+        );
+        expect(got).toHaveLength(1);
+        expect(got[0].searchParams).toMatchObject({ columnsToIncludeByFieldName: expectedColumn });
+      } finally {
+        await harness.close();
+      }
+    },
+  );
 
   it('delete-sheet refuses to delete the last remaining worksheet without POSTing', async () => {
     const deleteSheet = vi.fn();
@@ -650,6 +662,7 @@ async function run(
 
 async function startHarness(
   makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
+  apiVersion = '0.2.4',
 ): Promise<Harness> {
   const server = await startMockExternalApiServer();
   server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
@@ -657,7 +670,9 @@ async function startHarness(
     contentType: 'application/xml',
     body: WORKSHEET_DOCUMENT_XML,
   });
-  const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+  const executor = new ExternalApiToolExecutor({
+    discover: () => [instanceFor(server, apiVersion)],
+  });
   await executor.start();
   const tool = makeTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
@@ -736,12 +751,12 @@ async function expectMutationWaitsForApplyLock(
   }
 }
 
-function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
+function instanceFor(server: MockExternalApiServer, apiVersion: string): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-sheet-tools',
-    apiVersion: '0.2.4',
+    apiVersion,
   };
 }

@@ -22,6 +22,7 @@ on:
       - src/features/serverFeatureGate.ts
       - src/desktop/assets.ts
       - src/tools/web/scaffoldDataApp/dataAppWorkspaceStore.ts
+      - src/tools/web/scaffoldDataApp/templateZip.ts
       - src/templates/**
       - src/index*.ts
       - src/scripts/variants.ts

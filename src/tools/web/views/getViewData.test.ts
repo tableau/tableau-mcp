@@ -94,6 +94,7 @@ describe('getViewDataTool', () => {
     resetResourceAccessCheckerSingleton();
     RestApi.version = '3.29';
     RestApi.versionIsAtLeast = vi.fn().mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -140,6 +141,20 @@ describe('getViewDataTool', () => {
       viewId: mockView.id,
       viewFilters: { Year: '2024' },
     });
+  });
+
+  it('falls back to the legacy data endpoint on REST API 3.30 or later when view-all-data is off', async () => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    mocks.mockQueryViewData.mockResolvedValue(mockViewData);
+
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('view-all-data');
+    expect(mocks.mockGetViewAllData).not.toHaveBeenCalled();
+    expect(mocks.mockQueryViewData).toHaveBeenCalled();
   });
 
   it('uses allData and returns every parsed server response part on REST API 3.30 or later', async () => {

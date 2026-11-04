@@ -41,9 +41,10 @@ describe('listWorkbookDatasourcesTool', () => {
     const tool = getListWorkbookDatasourcesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('list-workbook-datasources');
-    expect(tool.description).toContain("workbook's OWN connected datasources");
+    expect(tool.description).toContain('including ones no sheet uses');
     expect(tool.description).toContain('isExtract');
-    expect(tool.description).toContain('published, non-federated');
+    expect(tool.description).toContain('percent-encoded');
+    expect(tool.description).toContain('signed in to its site');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,

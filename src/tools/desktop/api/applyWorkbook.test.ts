@@ -491,6 +491,68 @@ describe('applyWorkbookTool', () => {
     expect(result.content[0].text).toBe(new WorkbookXmlLoadFailedError(error.error).message);
   });
 
+  it('surfaces the sheets-removed refusal text and reports isError', async () => {
+    const message = "This apply would delete 1 sheet(s) that are in the open workbook: 'Sales'.";
+    const error = {
+      type: 'load-workbook-xml-error' as const,
+      error: { type: 'sheets-removed' as const, sheetNames: ['Sales'], message },
+    };
+
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(message);
+  });
+
+  it('refuses a cached calc edit that drops an unrelated sheet without a source sidecar', async () => {
+    const actual = await vi.importActual<typeof loadWorkbookXmlModule>(
+      '../../../desktop/wrappers/loadWorkbookXml.js',
+    );
+    vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockImplementation(actual.loadWorkbookXml);
+    const liveXml =
+      '<workbook><datasources><datasource name="ds">' +
+      '<column name="[Calculation]"><calculation class="tableau" formula="1"/></column>' +
+      '</datasource></datasources><worksheets>' +
+      '<worksheet name="Edited"><table/></worksheet>' +
+      '<worksheet name="Unrelated"><table/></worksheet></worksheets></workbook>';
+    const xml = liveXml
+      .replace('formula="1"', 'formula="2"')
+      .replace('<worksheet name="Unrelated"><table/></worksheet>', '');
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+      applyWorkbookDocument: vi.fn(),
+    });
+
+    try {
+      const result = await getToolResult({
+        session: '12345',
+        workbookXml: xml,
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+
+      expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedSourceHash: undefined, cachedLiveRelative: true }),
+      );
+      expect(cachePathModule.readContainedCacheTextFile).toHaveBeenCalledWith(
+        '/cache/synthetic-workbook.xml.meta.json',
+      );
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain("'Unrelated'");
+      expect(executor.getWorkbookDocument).toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockReset();
+    }
+  });
+
   it('reports actionable failure text when Desktop rejected the load', async () => {
     // Bug 1 (P0): apply must not lie. When loadWorkbookXml surfaces Desktop's actual
     // load rejection, the tool must return isError with that error text — never the

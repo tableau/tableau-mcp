@@ -9,6 +9,9 @@ import {
   EXTERNAL_API_ROUTES,
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
+  InvokeDialogActionRequest,
+  invokeDialogActionRequestSchema,
+  InvokeDialogActionResult,
   SHOW_ME_TYPES,
   type ShowMeOptionsResult,
 } from './types.js';
@@ -201,6 +204,10 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 1,
+    family: 'qt',
+    status: 'active',
     messageText: 'Do you want to save changes to Regional Sales?',
     informativeText: 'Unsaved changes will be lost if you discard them.',
     detailedText: 'Workbook: Regional Sales',
@@ -213,9 +220,6 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     ],
   },
 ];
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const readBody = (req: IncomingMessage): Promise<string> =>
   new Promise((resolve) => {
@@ -370,12 +374,17 @@ export async function startMockExternalApiServer(
     buttons: [...(dialog.buttons ?? [])],
     actions: dialog.actions?.map((action) => ({ ...action })),
   }));
+  const dialogRequests = new Map<
+    string,
+    { request: InvokeDialogActionRequest; result: InvokeDialogActionResult }
+  >();
   const workbookDatasources = options.workbookDatasources ?? DEFAULT_WORKBOOK_DATASOURCES;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
   const operations = new Map<string, MockOperation>();
   const operationCursors = new Map<string, number>();
   let isStartPageVisible = false;
+  let isDataSourcePageActive = false;
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
@@ -437,7 +446,27 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.health) {
-      sendJson(res, 200, { status: 'ok' });
+      sendJson(res, 200, { status: 'OK' });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.capabilities) {
+      sendJson(res, 200, {
+        capabilities: {
+          getHealth: { requiresServer: false },
+          getApp: { requiresServer: false },
+          refreshDatasourceData: { requiresServer: true },
+          refreshDatasourceExtract: { requiresServer: true },
+        },
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.oauthProtectedResource) {
+      sendJson(res, 200, {
+        resource: 'http://127.0.0.1',
+        bearer_methods_supported: ['header'],
+      });
       return;
     }
 
@@ -467,14 +496,36 @@ export async function startMockExternalApiServer(
         repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
         logLocation: '/Users/tableau/Library/Logs/Tableau',
         isStartPageVisible,
-        isDataSourcePageActive: false,
+        isDataSourcePageActive,
         isPresentationMode: false,
+        isCanvasMode: false,
       });
       return;
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
-      sendJson(res, 200, { dialogs });
+      sendJson(res, 200, {
+        dialogs,
+        uiSnapshotAvailable: true,
+        recentActions: [...dialogRequests.values()].map(({ result }) => result.status),
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.appScreenshot) {
+      const outputPath = searchParams['outputPath'] ?? '';
+      const segments = outputPath.split(/[\\/]/);
+      const isAbsolute = outputPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(outputPath);
+      if (
+        !isAbsolute ||
+        /[\\/]$/.test(outputPath) ||
+        segments.includes('.') ||
+        segments.includes('..')
+      ) {
+        sendProblem(res, 400, 'invalid-query-parameter', `Invalid outputPath: ${outputPath}`);
+        return;
+      }
+      sendJson(res, 200, { filePaths: [`${outputPath}/ScreenShot_1.png`] });
       return;
     }
 
@@ -503,76 +554,77 @@ export async function startMockExternalApiServer(
         return;
       }
 
-      const identity = isRecord(request) ? request.dialog : undefined;
-      const action = isRecord(request) ? request.action : undefined;
+      const parsed = invokeDialogActionRequestSchema.safeParse(request);
+      if (!parsed.success) {
+        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
+        return;
+      }
+      const { dialog: identity, requestId, action } = parsed.data;
+      const key = JSON.stringify([identity.sessionId, requestId]);
+      const previous = dialogRequests.get(key);
+      const respond = (code?: string): void => {
+        const canceled = action.kind === 'cancel';
+        const result: InvokeDialogActionResult = {
+          outcome: code ? 'failed' : canceled ? 'canceled' : 'completed',
+          dialog: identity,
+          status: {
+            sessionId: identity.sessionId,
+            revision: identity.revision,
+            requestId,
+            state: code ? 'failed' : canceled ? 'canceled' : 'completed',
+            effect: code ? 'none' : 'dialog-dismissed',
+            ...(code ? { code } : {}),
+          },
+          uiSnapshotAvailable: true,
+          dialogs: [...dialogs],
+        };
+        if (!previous) dialogRequests.set(key, { request: parsed.data, result });
+        sendJson(res, 200, result);
+      };
+      if (previous) {
+        if (JSON.stringify(previous.request) === JSON.stringify(parsed.data)) {
+          sendJson(res, 200, { ...previous.result, dialogs: [...dialogs] });
+        } else {
+          respond('dialog-request-conflict');
+        }
+        return;
+      }
+
+      const target = dialogs.find((dialog) => dialog.sessionId === identity.sessionId);
+      if (!target) {
+        respond('dialog-session-inactive');
+        return;
+      }
       if (
-        !isRecord(identity) ||
-        typeof identity.objectName !== 'string' ||
-        typeof identity.title !== 'string' ||
-        typeof identity.className !== 'string' ||
-        !isRecord(action)
+        target.revision !== identity.revision ||
+        target.objectName !== identity.objectName ||
+        target.title !== identity.title ||
+        target.className !== identity.className
       ) {
-        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
-        return;
-      }
-      const isButtonAction =
-        action.kind === 'button' && typeof action.label === 'string' && action.label.length > 0;
-      const isCloseAction = action.kind === 'close' && !Object.hasOwn(action, 'label');
-      if (!isButtonAction && !isCloseAction) {
-        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
+        respond('dialog-session-stale');
         return;
       }
 
-      if (dialogs.length === 0) {
-        sendJson(res, 200, { outcome: 'no-active-dialog', dialogs: [] });
-        return;
-      }
-
-      const matches = dialogs.filter(
-        (dialog) =>
-          dialog.objectName === identity.objectName &&
-          dialog.title === identity.title &&
-          dialog.className === identity.className,
-      );
-      if (matches.length === 0) {
-        sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
-        return;
-      }
-      if (matches.length > 1) {
-        sendProblem(
-          res,
-          409,
-          'dialog-ambiguous',
-          'More than one active dialog matched the request.',
-        );
-        return;
-      }
-
-      const actionMatches = (matches[0].actions ?? []).filter(
+      const actionMatches = (target.actions ?? []).filter(
         (candidate) =>
           candidate.kind === action.kind &&
-          (candidate.kind === 'close' || candidate.label === action.label),
+          (action.kind !== 'button' || candidate.label === action.label),
       );
       if (actionMatches.length === 0) {
-        sendProblem(res, 409, 'dialog-action-not-found', 'No visible dialog action matched.');
+        respond('dialog-action-unsupported');
         return;
       }
       if (actionMatches.length > 1) {
-        sendProblem(res, 409, 'dialog-action-ambiguous', 'More than one visible action matched.');
+        respond('dialog-action-ambiguous');
+        return;
+      }
+      if (actionMatches[0].enabled === false) {
+        respond('dialog-action-disabled');
         return;
       }
 
-      dialogs.splice(dialogs.indexOf(matches[0]), 1);
-      sendJson(res, 200, {
-        outcome: 'dismissed',
-        dialog: {
-          objectName: identity.objectName,
-          title: identity.title,
-          className: identity.className,
-        },
-        action,
-        dialogs,
-      });
+      dialogs.splice(dialogs.indexOf(target), 1);
+      respond();
       return;
     }
 
@@ -593,13 +645,18 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const findWorkbookDatasource = (encodedId: string): DatasourceItem | undefined => {
+      const datasourceId = decodeURIComponent(encodedId);
+      return workbookDatasources.find(
+        (candidate) =>
+          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
+      );
+    };
+
     const datasourceDocumentMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)\/document$/);
     if (datasourceDocumentMatch) {
       const datasourceId = decodeURIComponent(datasourceDocumentMatch[1]);
-      const known = workbookDatasources.some(
-        (datasource) =>
-          datasource.id !== undefined && decodeURIComponent(datasource.id) === datasourceId,
-      );
+      const known = findWorkbookDatasource(datasourceDocumentMatch[1]) !== undefined;
       if (method === 'GET') {
         if (!known) {
           sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
@@ -622,15 +679,110 @@ export async function startMockExternalApiServer(
       }
     }
 
+    const datasourceLogicalTablesMatch = path.match(
+      /^\/v0\/workbook\/datasources\/([^/]+)\/logicalTables$/,
+    );
+    if (method === 'GET' && datasourceLogicalTablesMatch) {
+      if (!findWorkbookDatasource(datasourceLogicalTablesMatch[1])) {
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceLogicalTablesMatch[1])}`,
+        );
+        return;
+      }
+      sendJson(res, 200, { tables: DEFAULT_LOGICAL_TABLES });
+      return;
+    }
+
+    const datasourceLogicalTableDataMatch = path.match(
+      /^\/v0\/workbook\/datasources\/([^/]+)\/logicalTables\/([^/]+)\/data$/,
+    );
+    if (method === 'GET' && datasourceLogicalTableDataMatch) {
+      if (!findWorkbookDatasource(datasourceLogicalTableDataMatch[1])) {
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceLogicalTableDataMatch[1])}`,
+        );
+        return;
+      }
+      const logicalTableId = decodeURIComponent(datasourceLogicalTableDataMatch[2]);
+      if (!DEFAULT_LOGICAL_TABLES.some((table) => table.id === logicalTableId)) {
+        sendProblem(
+          res,
+          404,
+          'logical-table-not-found',
+          `Logical table not found: ${logicalTableId}`,
+        );
+        return;
+      }
+      sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
+    const datasourceValidateCalculatedFieldMatch = path.match(
+      /^\/v0\/workbook\/datasources\/([^/]+):validateCalculatedField$/,
+    );
+    if (method === 'POST' && datasourceValidateCalculatedFieldMatch) {
+      if (!findWorkbookDatasource(datasourceValidateCalculatedFieldMatch[1])) {
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceValidateCalculatedFieldMatch[1])}`,
+        );
+        return;
+      }
+      let parsed: { formula?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.formula !== 'string' || parsed.formula.length === 0) {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'validateCalculatedField requires a non-empty string `formula`.',
+        );
+        return;
+      }
+      const isBalanced = parsed.formula.split('(').length === parsed.formula.split(')').length;
+      sendJson(
+        res,
+        200,
+        isBalanced
+          ? {
+              isValid: true,
+              errors: [],
+              dataType: 'real',
+              isAggregate: /^\s*SUM\(/i.test(parsed.formula),
+            }
+          : {
+              isValid: false,
+              errors: [
+                { position: parsed.formula.length, length: 0, message: 'Unbalanced parentheses.' },
+              ],
+            },
+      );
+      return;
+    }
+
     const datasourceMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)$/);
     if (method === 'GET' && datasourceMatch) {
-      const datasourceId = decodeURIComponent(datasourceMatch[1]);
-      const datasource = workbookDatasources.find(
-        (candidate) =>
-          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
-      );
+      const datasource = findWorkbookDatasource(datasourceMatch[1]);
       if (!datasource) {
-        sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+        sendProblem(
+          res,
+          404,
+          'datasource-not-found',
+          `Datasource not found: ${decodeURIComponent(datasourceMatch[1])}`,
+        );
         return;
       }
       sendJson(res, 200, datasource);
@@ -639,6 +791,11 @@ export async function startMockExternalApiServer(
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDocument) {
       sendXml(res, 200, workbookXml);
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookExtensions) {
+      sendJson(res, 200, { extensions: [] });
       return;
     }
 
@@ -918,7 +1075,7 @@ export async function startMockExternalApiServer(
         sendProblem(res, 400, 'invalid-request-body', 'Empty workbook document body.');
         return;
       }
-      sendJson(res, 200, { isValid: true, validationIssues: [] });
+      sendJson(res, 200, { isValid: true, issues: [] });
       return;
     }
 
@@ -1148,6 +1305,32 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const reloadExtensionMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+):reloadExtension$/,
+    );
+    if (method === 'POST' && reloadExtensionMatch) {
+      const worksheetId = decodeURIComponent(reloadExtensionMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendOperation(res, 'reload-worksheet-extension');
+      return;
+    }
+
+    const reloadExtensionsMatch = path.match(
+      /^\/v0\/workbook\/dashboards\/([^/]+):reloadExtensions$/,
+    );
+    if (method === 'POST' && reloadExtensionsMatch) {
+      const dashboardId = decodeURIComponent(reloadExtensionsMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendOperation(res, 'reload-dashboard-extensions');
+      return;
+    }
+
     const storyboardRefreshNowMatch = path.match(
       /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
     );
@@ -1232,6 +1415,28 @@ export async function startMockExternalApiServer(
       }
       isStartPageVisible = parsed.isStartPageVisible;
       sendJson(res, 200, { isStartPageVisible });
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.appToggleDataSourcePage) {
+      let parsed: { isDataSourcePageActive?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.isDataSourcePageActive !== 'boolean') {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'toggleDataSourcePage requires a boolean `isDataSourcePageActive`.',
+        );
+        return;
+      }
+      isDataSourcePageActive = parsed.isDataSourcePageActive;
+      sendOperation(res, 'toggle-data-source-page');
       return;
     }
 
@@ -1340,7 +1545,16 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '1.0' },
+        info: { title: 'Tableau External Client API', version: '0.2.31' },
+        paths: {
+          [EXTERNAL_API_ROUTES.health]: {
+            get: { operationId: 'getHealth', summary: 'Liveness probe' },
+          },
+          [EXTERNAL_API_ROUTES.app]: {
+            get: { operationId: 'getApp', summary: 'Get Tableau Desktop application info' },
+          },
+        },
+        components: {},
       });
       return;
     }

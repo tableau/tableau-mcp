@@ -400,24 +400,20 @@ describe('DesktopTool product telemetry', () => {
     });
 
     expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
-    expect(mockTelemetrySend).toHaveBeenCalledWith(
-      'tool_call',
-      {
-        tool_name: 'ask-user',
-        request_id: '2',
-        session_id: guid,
-        site_luid: '',
-        user_luid: '',
-        chat_id: '',
-        success: true,
-        error_code: '',
-        error_message: '',
-        oauth_client_id: '',
-        oauth_client_display_name: '',
-        auth_type: 'desktop',
-      },
-      { includeHostName: false },
-    );
+    expect(mockTelemetrySend).toHaveBeenCalledWith('tool_call', {
+      tool_name: 'ask-user',
+      request_id: '2',
+      session_id: guid,
+      site_luid: '',
+      user_luid: '',
+      chat_id: '',
+      success: true,
+      error_code: '',
+      error_message: '',
+      oauth_client_id: '',
+      oauth_client_display_name: '',
+      auth_type: 'desktop',
+    });
   });
 
   it('forwards the signed-in site and user LUID from config', async () => {
@@ -436,7 +432,6 @@ describe('DesktopTool product telemetry', () => {
         site_luid: '11111111-1111-1111-1111-111111111111',
         user_luid: '22222222-2222-2222-2222-222222222222',
       }),
-      { includeHostName: false },
     );
   });
 
@@ -450,7 +445,6 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ chat_id: 'chat-abc-123' }),
-      { includeHostName: false },
     );
   });
 
@@ -479,7 +473,7 @@ describe('DesktopTool product telemetry', () => {
     expect(result.content).toEqual([{ type: 'text', text: JSON.stringify({ ok: true }) }]);
   });
 
-  it('sends no host_name on Desktop tool calls', async () => {
+  it('sends no host_name or top-level pod on Desktop tool calls', async () => {
     const { exportedForTesting } = await vi.importActual<
       typeof import('../../telemetry/productTelemetry/telemetryForwarder.js')
     >('../../telemetry/productTelemetry/telemetryForwarder.js');
@@ -507,6 +501,7 @@ describe('DesktopTool product telemetry', () => {
       expect(body).not.toContain('sentinel-host');
       const [event] = JSON.parse(body) as Array<Record<string, unknown>>;
       expect(event).not.toHaveProperty('host_name');
+      expect(event).not.toHaveProperty('pod');
       expect(event).toHaveProperty('type', 'tool_call');
       expect(hostnameSpy).not.toHaveBeenCalled();
     } finally {
@@ -538,7 +533,6 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ session_id: '', success: true }),
-      { includeHostName: false },
     );
   });
 
@@ -563,7 +557,6 @@ describe('DesktopTool product telemetry', () => {
         error_code: '400',
         error_message: 'args-validation',
       }),
-      { includeHostName: false },
     );
   });
 
@@ -587,7 +580,6 @@ describe('DesktopTool product telemetry', () => {
         error_code: '400',
         error_message: 'args-validation',
       }),
-      { includeHostName: false },
     );
   });
 
@@ -607,7 +599,6 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
-      { includeHostName: false },
     );
   });
 
@@ -632,7 +623,6 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
-      { includeHostName: false },
     );
   });
 
@@ -664,7 +654,6 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
-      { includeHostName: false },
     );
 
     expect(loggerModule.log).toHaveBeenCalledWith(
