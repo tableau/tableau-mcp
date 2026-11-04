@@ -9,8 +9,13 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import {
   desktopStateSchema,
+  type DialogAction,
+  type DialogActionInvocation,
   dialogListSchema,
+  type InvokeDialogActionRequest,
+  type InvokeDialogActionResult,
   invokeDialogActionResultSchema,
+  type WindowInfo,
 } from '../../../src/desktop/externalApi/types.js';
 import { buildVariant } from '../build.js';
 import { McpClient } from '../mcpClient.js';
@@ -62,6 +67,81 @@ type ObservedRequest = {
   body: string;
 };
 
+const nativeCases: Array<{
+  family: string;
+  action: DialogActionInvocation;
+  capability: DialogAction;
+  effect: string;
+}> = [
+  {
+    family: 'file',
+    action: {
+      kind: 'save-file',
+      path: 'C:\\exports\\report.twb',
+      filterId: 'twb',
+      overwriteConfirmed: false,
+    },
+    capability: {
+      kind: 'save-file',
+      filters: [{ id: 'twb', label: 'Tableau Workbook', patterns: ['*.twb'] }],
+      defaultFilterId: 'twb',
+      overwriteConfirmationRequired: false,
+    },
+    effect: 'file-choice-returned',
+  },
+  {
+    family: 'file',
+    action: {
+      kind: 'choose-files',
+      paths: ['C:\\data\\a.csv', 'C:\\data\\b.csv'],
+      filterId: 'csv',
+    },
+    capability: {
+      kind: 'choose-files',
+      filters: [{ id: 'csv', label: 'CSV', patterns: ['*.csv'] }],
+      defaultFilterId: 'csv',
+      minimumPaths: 1,
+      maximumPaths: 4,
+    },
+    effect: 'file-choice-returned',
+  },
+  {
+    family: 'color',
+    action: { kind: 'choose-color', red: 12, green: 34, blue: 56, alpha: 78 },
+    capability: { kind: 'choose-color', alphaSupported: true },
+    effect: 'color-returned',
+  },
+  {
+    family: 'print',
+    action: {
+      kind: 'submit-print',
+      printerId: 'pdf-printer',
+      range: 'page-range',
+      sheetScope: 'active-sheet',
+      firstPage: 1,
+      lastPage: 2,
+      copies: 1,
+      collate: false,
+      exportSelection: false,
+      outputPath: 'C:\\exports\\report.pdf',
+    },
+    capability: {
+      kind: 'submit-print',
+      printers: [{ id: 'pdf-printer', label: 'Print to PDF' }],
+      ranges: ['all-pages', 'page-range'],
+      sheetScopes: ['active-sheet'],
+      minimumPage: 1,
+      maximumPage: 2,
+      minimumCopies: 1,
+      maximumCopies: 1,
+      supportsCollation: false,
+      supportsPrintToFile: true,
+      supportsExportSelection: false,
+    },
+    effect: 'print-prepared',
+  },
+];
+
 describe('get-desktop-state real stdio MCP boundary', () => {
   let client: McpClient | undefined;
   let targetServer: Server | undefined;
@@ -77,6 +157,15 @@ describe('get-desktop-state real stdio MCP boundary', () => {
   let dialogOpen: boolean;
   let abortedRequests: number;
   let requests: Array<ObservedRequest>;
+  let nativeScenario:
+    | {
+        dialog: WindowInfo;
+        request: InvokeDialogActionRequest;
+        result: InvokeDialogActionResult;
+        panelClosed: boolean;
+        callerFinished: boolean;
+      }
+    | undefined;
 
   beforeAll(async () => {
     await buildVariant('desktop');
@@ -154,6 +243,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     requests = [];
     acceptedToken = currentDiscoveryToken;
     refreshDiscoveryOnUnauthorized = undefined;
+    nativeScenario = undefined;
   });
 
   it('selects the exact requested PID among multiple live discovery candidates', async () => {
@@ -230,6 +320,117 @@ describe('get-desktop-state real stdio MCP boundary', () => {
       'GET /v0/app/dialogs',
     ]);
   });
+
+  it.each(nativeCases)(
+    'tracks $action.kind across the stdio boundary without treating $effect as caller completion',
+    async ({ family, action, capability, effect }) => {
+      const request: InvokeDialogActionRequest = {
+        dialog: { ...dialogIdentity, sessionId: `native-${action.kind}`, revision: 7 },
+        requestId: `native-request-${action.kind}`,
+        action,
+      };
+      const activeDialog: WindowInfo = {
+        ...request.dialog,
+        family,
+        status: 'active',
+        actions: [capability, { kind: 'cancel' }],
+      };
+      const pending: InvokeDialogActionResult = {
+        dialog: request.dialog,
+        outcome: 'dispatched-pending',
+        status: {
+          sessionId: request.dialog.sessionId,
+          revision: request.dialog.revision,
+          requestId: request.requestId,
+          state: 'pending',
+          effect: 'none',
+        },
+        uiSnapshotAvailable: false,
+        dialogs: [],
+      };
+      nativeScenario = {
+        dialog: activeDialog,
+        request,
+        result: pending,
+        panelClosed: false,
+        callerFinished: false,
+      };
+      const readDialogs = async (): Promise<ReturnType<typeof dialogListSchema.parse>> =>
+        await requireClient().callTool('get-active-dialogs', {
+          schema: dialogListSchema,
+          toolArgs: { session: SESSION },
+        });
+      expect((await readDialogs()).dialogs).toEqual([activeDialog]);
+      const invoke = async (): Promise<InvokeDialogActionResult> =>
+        await requireClient().callTool('invoke-dialog-action', {
+          schema: invokeDialogActionResultSchema,
+          toolArgs: { session: SESSION, ...request },
+        });
+      expect(await invoke()).toEqual(pending);
+      expect(await invoke()).toEqual(pending);
+      const posts = requests.filter(({ method }) => method === 'POST');
+      expect(posts).toHaveLength(2);
+      expect(posts.map(({ body }) => JSON.parse(body))).toEqual([request, request]);
+
+      nativeScenario.panelClosed = true;
+      nativeScenario.result = {
+        ...pending,
+        outcome: 'completed',
+        status: { ...pending.status, state: 'completed', effect },
+        uiSnapshotAvailable: true,
+      };
+      expect(await readDialogs()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [nativeScenario.result.status],
+      });
+      expect(await readState()).toMatchObject({ state: 'RUNNING', blockingWindows: [] });
+      nativeScenario.callerFinished = true;
+      expect(await readState()).toMatchObject({ state: 'IDLE', blockingWindows: [] });
+      expect(requests.filter(({ server }) => server === 'decoy')).toEqual([]);
+    },
+  );
+
+  it.each(['canceled', 'failed', 'indeterminate'])(
+    'preserves a native print %s outcome carried by HTTP 200 without retrying',
+    async (outcome) => {
+      const printCase = nativeCases.find(({ family }) => family === 'print')!;
+      const request = {
+        dialog: dialogIdentity,
+        requestId: `print-${outcome}`,
+        action: printCase.action,
+      };
+      const result: InvokeDialogActionResult = {
+        dialog: request.dialog,
+        outcome,
+        status: {
+          sessionId: request.dialog.sessionId,
+          revision: request.dialog.revision,
+          requestId: request.requestId,
+          state: outcome,
+          effect: outcome === 'indeterminate' ? 'indeterminate' : 'none',
+          ...(outcome === 'failed' ? { code: 'dialog-action-unsupported' } : {}),
+        },
+        uiSnapshotAvailable: false,
+        dialogs: [],
+      };
+      nativeScenario = {
+        dialog: { ...request.dialog, family: 'print', actions: [printCase.capability] },
+        request,
+        result,
+        panelClosed: false,
+        callerFinished: false,
+      };
+      expect(
+        await requireClient().callTool('invoke-dialog-action', {
+          schema: invokeDialogActionResultSchema,
+          toolArgs: { session: SESSION, ...request },
+        }),
+      ).toEqual(result);
+      expect(requests.filter(({ method }) => method === 'POST')).toHaveLength(1);
+      expect(requests.filter(({ server }) => server === 'decoy')).toEqual([]);
+    },
+  );
 
   it('rescans discovery once after 401 and retries with the refreshed token', async () => {
     acceptedToken = REFRESHED_TOKEN;
@@ -386,7 +587,15 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     }
 
     if (request.method === 'GET' && request.url === '/v0/app/state') {
-      if (mode === 'not-found') {
+      if (nativeScenario && !nativeScenario.callerFinished) {
+        sendJson(response, 200, {
+          state: 'RUNNING',
+          uiSnapshotAvailable: true,
+          activeActivities: ['EXECUTING'],
+          blockingWindows: nativeScenario.panelClosed ? [] : [nativeScenario.dialog],
+          progressWindows: [],
+        });
+      } else if (mode === 'not-found') {
         sendJson(response, 404, {
           type: 'problem',
           title: 'Not found',
@@ -419,6 +628,15 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     }
 
     if (request.method === 'GET' && request.url === '/v0/app/dialogs') {
+      if (nativeScenario) {
+        const submitted = requests.some(({ method }) => method === 'POST');
+        sendJson(response, 200, {
+          dialogs: nativeScenario.panelClosed ? [] : [nativeScenario.dialog],
+          uiSnapshotAvailable: true,
+          recentActions: submitted ? [nativeScenario.result.status] : [],
+        });
+        return;
+      }
       sendJson(response, 200, {
         dialogs: dialogOpen ? [dialog] : [],
         uiSnapshotAvailable: true,
@@ -429,6 +647,11 @@ describe('get-desktop-state real stdio MCP boundary', () => {
 
     if (request.method === 'POST' && request.url === '/v0/app:invokeDialogAction') {
       const parsed = JSON.parse(body) as { dialog: Record<string, unknown>; action: unknown };
+      if (nativeScenario) {
+        expect(parsed).toEqual(nativeScenario.request);
+        sendJson(response, 200, nativeScenario.result);
+        return;
+      }
       expect(parsed).toEqual({
         dialog: dialogIdentity,
         requestId: DIALOG_REQUEST_ID,
@@ -499,7 +722,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         tokenType: 'Bearer',
         token: args.token,
         applicationVersion: 'headless-fixture',
-        apiVersion: '0.2.26',
+        apiVersion: '0.2.31',
         startedAt: args.startedAt,
       }),
       'utf8',

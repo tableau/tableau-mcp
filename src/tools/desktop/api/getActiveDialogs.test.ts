@@ -61,7 +61,12 @@ describe('get-active-dialogs tool', () => {
     expect(tool.name).toBe('get-active-dialogs');
     expect(tool.minApiVersion).toBe('0.2.26');
     expect(tool.description).toContain('visible message and diagnostic text');
-    expect(tool.description).toContain('native panels advertise');
+    expect(tool.description).toContain('Native panels advertise');
+    expect(tool.description).toContain('act only when active/enabled');
+    expect(tool.description).toContain('overwriteConfirmed with user consent');
+    expect(tool.description).toContain('Respect advertised bounds/support flags');
+    expect(tool.description).toContain('print-prepared is not caller success');
+    expect(tool.description).toContain('verify the originating operation');
     expect(tool.description).toContain('uiSnapshotAvailable');
     expect(tool.description).toContain('recentActions');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
