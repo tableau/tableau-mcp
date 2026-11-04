@@ -419,9 +419,20 @@ export class ExternalApiToolExecutor {
     outputPath: string,
     signal: AbortSignal,
   ): Promise<Result<AppScreenshot, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(appScreenshotRoute(outputPath), appScreenshotSchema, signal),
-    );
+    let expectedInstanceId: string | undefined;
+    const result = await this.withRescan('read', async (http) => {
+      expectedInstanceId ??= http.instanceId;
+      if (http.instanceId !== expectedInstanceId) {
+        return Err({
+          type: 'instance-mismatch' as const,
+          expected: expectedInstanceId,
+          actual: http.instanceId,
+        });
+      }
+      return await http.getJson(appScreenshotRoute(outputPath), appScreenshotSchema, signal);
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
   }
 
   async getDesktopState(signal: AbortSignal): Promise<Result<DesktopState, ExecuteCommandError>> {

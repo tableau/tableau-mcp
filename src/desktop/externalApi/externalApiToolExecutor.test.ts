@@ -10,7 +10,6 @@ import {
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
-import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
@@ -3027,20 +3026,20 @@ describe('ExternalApiToolExecutor', () => {
       const discover = vi
         .fn()
         .mockReturnValueOnce([
-          { ...instanceFor(server, 'stale-token', '0.2.17'), instanceId: 'inst-capture' },
+          { ...instanceFor(server, 'stale-token', '0.2.28'), instanceId: 'inst-capture' },
         ])
         .mockReturnValue([
-          { ...instanceFor(server, 'valid-token', '0.2.17'), instanceId: 'inst-restarted' },
+          { ...instanceFor(server, 'valid-token', '0.2.28'), instanceId: 'inst-restarted' },
         ]);
       const executor = new ExternalApiToolExecutor({ pid: 999, discover });
 
-      const result = await captureWindowScreenshot({ executor, signal });
+      const result = await executor.captureAppScreenshot('/tmp/capture', signal);
 
       expect(result.isErr()).toBe(true);
       expect(discover).toHaveBeenCalledTimes(2);
       expect(
         server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          (request) => request.method === 'GET' && request.path === '/v0/app/screenshot',
         ),
       ).toHaveLength(1);
     });
