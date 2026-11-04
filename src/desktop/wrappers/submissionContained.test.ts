@@ -129,6 +129,36 @@ describe('submissionContainedInLive', () => {
     ).toBe(false);
   });
 
+  it('rejects a deleted run in a multi-run formatted-text', () => {
+    expect(
+      submissionContainedInLive(
+        '<formatted-text><run>First</run></formatted-text>',
+        '<formatted-text><run>First</run><run>Second</run></formatted-text>',
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects a trailing-space edit inside a run', () => {
+    expect(
+      submissionContainedInLive(
+        '<formatted-text><run>Hello</run><run>World</run></formatted-text>',
+        '<formatted-text><run>Hello </run><run>World</run></formatted-text>',
+      ),
+    ).toBe(false);
+  });
+
+  it('contains an identical multi-run list with exact whitespace', () => {
+    const xml = '<formatted-text><run>Hello </run><run> World</run></formatted-text>';
+    expect(submissionContainedInLive(xml, xml)).toBe(true);
+  });
+
+  it.each(['columns.xml', 'exec.xml', 'grid3.xml', 'rows-title.xml'])(
+    'contains the %s readback fixture against itself',
+    (name) => {
+      expect(submissionContainedInLive(fixture(name), fixture(name))).toBe(true);
+    },
+  );
+
   it('counts unparseable input as contained', () => {
     expect(submissionContainedInLive('<a><b></a>', liveWithPhone)).toBe(true);
   });
