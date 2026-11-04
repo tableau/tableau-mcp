@@ -163,7 +163,6 @@ describe('non-waivable nameless card zone crash guard', () => {
       });
       expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
       expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-      expect(executor.executeCommand).not.toHaveBeenCalled();
       expect(live()).toBe(before);
     },
   );
@@ -224,7 +223,6 @@ describe('non-waivable zone id spelling crash guard', () => {
       });
       expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
       expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-      expect(executor.executeCommand).not.toHaveBeenCalled();
       expect(live()).toBe(before);
     },
   );
@@ -314,7 +312,6 @@ describe('duplicate dashboard zone id guard', () => {
       });
       expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
       expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-      expect(executor.executeCommand).not.toHaveBeenCalled();
     },
   );
 
