@@ -120,6 +120,21 @@ after unzipping to finalize the workspace. Datasource wiring is never performed 
 either mode — it is the caller's responsibility, applied to the finalized workbook after this tool
 returns.
 
+## Allow network egress to the download host
+
+import StagedUploadEndpoints from '../../hosted-tableau-mcp/_staged-upload-endpoints.mdx';
+
+:::warning[Client configuration required]
+In S3 output mode the agent downloads the template from `s3URL`, and it later uploads the workbook
+the same way. If the agent runs in a sandbox with restricted network access, such as Claude's code
+execution environment, allow the S3 host for your pod or the download fails. In Claude, go to
+**Settings → Capabilities → Allow network egress** and add the host under **Additional allowed
+domains**. See [Popular Client Integrations](../../hosted-tableau-mcp/client-integrations.md) for
+client steps.
+:::
+
+<StagedUploadEndpoints />
+
 ## Example result (disk output)
 
 ```json
