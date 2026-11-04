@@ -56,6 +56,8 @@ Version is bumped automatically after merge. Select the bump this PR needs (defa
 - [ ] New and existing unit tests pass locally with my changes
 - [ ] I have documented any breaking changes in the PR description. For example, renaming a config
       environment variable or changing its default value.
+- [ ] This PR adds or changes OAuth scopes. If checked, list the new scopes in the release notes and
+      notify connector owners who maintain static scope lists before release.
 
 ## Contributor Agreement
 
