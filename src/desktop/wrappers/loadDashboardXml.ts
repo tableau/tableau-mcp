@@ -520,10 +520,17 @@ export async function loadDashboardXml({
         !submissionContainedInLive(checked.fragmentXml, checked.liveDocumentXml)
       ) {
         const before = checked.liveDocumentXml;
+        const pinnedInstanceId = checked.expectedInstanceId;
+        const instanceChanged = (value: { instanceId?: string }): boolean =>
+          pinnedInstanceId !== undefined &&
+          (value.instanceId ?? executor.desktopInstanceId) !== pinnedInstanceId;
         const changed = await pollReadback({
           read: () =>
             getDocumentForKind(kind, checked.id, executor as ExternalApiToolExecutor, signal),
-          settled: (value) => value.xml !== before,
+          settled: (value) => {
+            if (instanceChanged(value)) return false;
+            return value.xml !== before;
+          },
           signal,
         });
         if (!changed.ok) {
@@ -533,6 +540,14 @@ export async function loadDashboardXml({
             message: `Could not read the ${kind} back to confirm the apply changed it`,
             logger: 'dashboardCommands',
             data: { dashboardName: checked.name, error: changed.error },
+          });
+        } else if (!changed.settled && instanceChanged(changed.value)) {
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: {
+              type: 'verification-failed',
+              message: `Tableau accepted the ${kind} apply for "${checked.name}", but Desktop is now a different instance than the one the apply was sent to (it restarted or was reset). Changes may have been applied. Re-read the live ${kind} before retrying; do not blindly repeat the apply.`,
+            },
           });
         } else if (!changed.settled) {
           const flowHint =

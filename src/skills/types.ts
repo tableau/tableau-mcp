@@ -41,15 +41,20 @@ export type SkillEntry = z.infer<typeof SkillEntrySchema>;
 /**
  * `skills/list` request. The `method` literal is what the SDK routes on.
  */
-// TODO W-24225975: support `params.cursor` once pagination is implemented.
 export const SkillsListRequestSchema = z.object({
   method: z.literal('skills/list'),
-  params: z.object({}).passthrough().optional(),
+  params: z.object({ cursor: z.string().optional() }).passthrough().optional(),
 });
+
+// Defer params validation to the handler so a malformed cursor returns -32602 instead of -32603.
+export const SkillsListHandlerRequestSchema = SkillsListRequestSchema.omit({
+  params: true,
+}).passthrough();
 
 export const SkillsListResultSchema = z.object({
   resultType: z.literal('complete'),
   skills: z.array(SkillEntrySchema),
+  nextCursor: z.string().optional(), // omitted on the final page
 });
 
 export type SkillsListResult = z.infer<typeof SkillsListResultSchema>;

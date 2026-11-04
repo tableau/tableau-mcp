@@ -637,23 +637,33 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     signal: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((http) => http.getXml(worksheetDocumentRoute(worksheetId), signal));
+    return this.readExternalApi(async (http) => {
+      const result = await http.getXml(worksheetDocumentRoute(worksheetId), signal);
+      if (result.isErr()) return result;
+      return Ok({ ...result.value, instanceId: http.instanceId });
+    });
   }
 
   async getDashboardDocument(
     dashboardId: string,
     signal: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((http) => http.getXml(dashboardDocumentRoute(dashboardId), signal));
+    return this.readExternalApi(async (http) => {
+      const result = await http.getXml(dashboardDocumentRoute(dashboardId), signal);
+      if (result.isErr()) return result;
+      return Ok({ ...result.value, instanceId: http.instanceId });
+    });
   }
 
   async getStoryboardDocument(
     storyboardId: string,
     signal: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getXml(storyboardDocumentRoute(storyboardId), signal),
-    );
+    return this.readExternalApi(async (http) => {
+      const result = await http.getXml(storyboardDocumentRoute(storyboardId), signal);
+      if (result.isErr()) return result;
+      return Ok({ ...result.value, instanceId: http.instanceId });
+    });
   }
 
   async getWorksheetSummaryData(
