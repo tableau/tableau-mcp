@@ -13,10 +13,6 @@ import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { graphIdSchema } from './knowledgeToolUtils.js';
 
-// The knowledge service accepts node-scoped contexts only when TK_NODE_SEMANTIC_CONTEXT_ENABLED is
-// on; otherwise it answers 403 node_semantic_context_disabled. Flip to true once that is enabled.
-export const NODE_SCOPED_ENABLED = false;
-
 const statementInputSchema = z.object({
   statement: z.string().trim().min(1).max(10000),
   id: z.string().trim().min(1).max(512).nullable().optional(),
@@ -43,24 +39,11 @@ const statementsSchema = z
     'The statement text to store, one to 100 entries. Required for "create". For "update" it ' +
       "replaces the context's current statements; omit it to change only name or scope.",
   );
-const targetNodeIdSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(512)
-  .optional()
-  .describe(
-    'Not currently supported: node-scoped contexts are rejected, so do not set this. Use ' +
-      'isGlobal: true instead ("create" requires it). Intended meaning once supported: attach ' +
-      'the context to this exact node id (a field, data source, workbook, ...); mutually ' +
-      'exclusive with isGlobal.',
-  );
 const isGlobalSchema = z
   .boolean()
   .optional()
   .describe(
-    'true: a company-wide rule that applies to the whole graph rather than one node. Mutually ' +
-      'exclusive with targetNodeId. "create" currently requires isGlobal: true.',
+    'true: a company-wide rule that applies to the whole graph. "create" requires isGlobal: true.',
   );
 const nameSchema = z
   .string()
@@ -87,7 +70,6 @@ const paramsSchema = {
   graphId: optionalGraphIdSchema,
   contextId: contextIdSchema,
   statements: statementsSchema,
-  targetNodeId: targetNodeIdSchema,
   isGlobal: isGlobalSchema,
   name: nameSchema,
 };
@@ -98,8 +80,8 @@ const paramsSchema = {
 type ManageArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
 
 const FIELDS_BY_ACTION: Record<ManageArgs['action'], ReadonlyArray<keyof ManageArgs>> = {
-  create: ['statements', 'targetNodeId', 'isGlobal', 'name'],
-  update: ['contextId', 'statements', 'targetNodeId', 'isGlobal', 'name'],
+  create: ['statements', 'isGlobal', 'name'],
+  update: ['contextId', 'statements', 'isGlobal', 'name'],
   delete: ['contextId'],
 };
 const REQUIRED_BY_ACTION: Record<ManageArgs['action'], ReadonlyArray<keyof ManageArgs>> = {
@@ -169,10 +151,8 @@ happened.
                     const duplicate = findDuplicate(
                       await methods.listSemanticStatements({
                         graphId: args.graphId,
-                        nodeId: args.targetNodeId,
                       }),
                       args.statements!,
-                      args.targetNodeId,
                     );
                     if (duplicate) {
                       return {
@@ -188,7 +168,6 @@ happened.
                     const context = await methods.createSemanticStatements({
                       graphId: args.graphId,
                       statements: args.statements!,
-                      targetNodeId: args.targetNodeId,
                       isGlobal: args.isGlobal,
                       name: args.name,
                     });
@@ -199,7 +178,6 @@ happened.
                       graphId: args.graphId,
                       contextId: args.contextId!,
                       statements: args.statements,
-                      targetNodeId: args.targetNodeId,
                       isGlobal: args.isGlobal,
                       name: args.name,
                     });
@@ -252,18 +230,17 @@ function normalizeStatement(text: string): string {
 }
 
 /**
- * An existing customer-managed context in the same scope (same node, or graph-wide) that already
+ * An existing customer-managed context in the same scope (graph-wide) that already
  * holds every new statement. Read-only external contexts can't be updated, so they never count.
  */
 function findDuplicate(
   existing: SemanticContextNode[],
   statements: Array<{ statement: string }>,
-  targetNodeId: string | undefined,
 ): SemanticContextNode | undefined {
   const wanted = statements.map(({ statement }) => normalizeStatement(statement));
   return existing.find((context) => {
     if (context.type !== 'SEMANTIC_CONTEXT') return false;
-    if ((context.target_node_id ?? undefined) !== targetNodeId) return false;
+    if (context.target_node_id != null) return false;
     const stored = new Set(
       context.properties.statements.map((s) => normalizeStatement(s.statement)),
     );
@@ -273,8 +250,8 @@ function findDuplicate(
 
 /**
  * Pure per-action validation that the flat schema can no longer express structurally: which
- * params are allowed for the chosen action, which are required, and the targetNodeId/isGlobal
- * exclusivity + "at least one changed field" business rules. Returns a clear, actionable message
+ * params are allowed for the chosen action, which are required, and the isGlobal
+ * requirement on create and the "at least one changed field" rule. Returns a clear, actionable message
  * on failure, or null when args are valid.
  */
 export function validateArgs(args: ManageArgs): string | null {
@@ -295,35 +272,12 @@ export function validateArgs(args: ManageArgs): string | null {
     return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required when action is "${args.action}".`;
   }
 
-  if (!NODE_SCOPED_ENABLED && args.targetNodeId !== undefined) {
-    return `Node-scoped contexts (targetNodeId) are not supported yet. ${
-      args.action === 'create'
-        ? 'Create a global context with isGlobal: true instead.'
-        : 'Omit targetNodeId; set isGlobal: true to make the context global.'
-    }`;
-  }
-
-  if (args.action === 'create') {
-    if (!args.targetNodeId && args.isGlobal !== true) {
-      return NODE_SCOPED_ENABLED
-        ? 'create requires targetNodeId or isGlobal: true.'
-        : 'create requires isGlobal: true.';
-    }
-    if (args.targetNodeId && args.isGlobal === true) {
-      return 'create accepts targetNodeId or isGlobal: true, not both.';
-    }
+  if (args.action === 'create' && args.isGlobal !== true) {
+    return 'create requires isGlobal: true.';
   }
 
   if (args.action === 'update') {
-    if (args.targetNodeId && args.isGlobal === true) {
-      return 'update accepts targetNodeId or isGlobal: true, not both.';
-    }
-    if (
-      !args.statements &&
-      args.targetNodeId === undefined &&
-      args.isGlobal === undefined &&
-      args.name === undefined
-    ) {
+    if (!args.statements && args.isGlobal === undefined && args.name === undefined) {
       return 'update requires at least one changed field.';
     }
   }

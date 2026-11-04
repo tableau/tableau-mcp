@@ -139,25 +139,10 @@ describe('manageKnowledgeContextTool', () => {
     ).toBeNull();
   });
 
-  it('rejects node-scoped create while the service does not support it', () => {
-    expect(
-      validateArgs({
-        action: 'create',
-        statements: [{ statement: 'AOV = revenue / orders' }],
-        targetNodeId: 'field-1',
-      }),
-    ).toMatch(/Node-scoped contexts \(targetNodeId\) are not supported yet.*isGlobal: true/);
-  });
-
-  it('rejects node-scoped update while the service does not support it', () => {
-    expect(validateArgs({ action: 'update', contextId: 'ctx-1', targetNodeId: 'field-1' })).toMatch(
-      /Node-scoped contexts \(targetNodeId\) are not supported yet/,
+  it('requires isGlobal: true on create', () => {
+    expect(validateArgs({ action: 'create', statements: [{ statement: 'x' }] })).toBe(
+      'create requires isGlobal: true.',
     );
-  });
-
-  it('tells create without a scope to use isGlobal, not targetNodeId', () => {
-    const message = validateArgs({ action: 'create', statements: [{ statement: 'x' }] });
-    expect(message).toBe('create requires isGlobal: true.');
   });
 
   it('allows update to make a context global', () => {
@@ -199,7 +184,6 @@ describe('manageKnowledgeContextTool', () => {
     expect(mocks.createSemanticStatements).toHaveBeenCalledWith({
       graphId: undefined,
       statements,
-      targetNodeId: undefined,
       isGlobal: true,
       name: 'AOV',
     });
@@ -215,7 +199,6 @@ describe('manageKnowledgeContextTool', () => {
       graphId: undefined,
       contextId: 'ctx-1',
       statements,
-      targetNodeId: undefined,
       isGlobal: undefined,
       name: undefined,
     });
