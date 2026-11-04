@@ -735,6 +735,8 @@ const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
   },
 );
 const dialogColorChannelSchema = z.number().int().min(0).max(255);
+// Desktop accepts only signed 32-bit integers for print values; OpenAPI omits this maximum.
+const dialogPrintIntegerSchema = z.number().int().max(2_147_483_647);
 
 /** Only caller-selected input fields belong on the wire; descriptors are read-only. */
 export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
@@ -779,9 +781,9 @@ export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
       printerId: dialogInputStringSchema,
       range: z.enum(['all-pages', 'page-range', 'current-page', 'selection']),
       sheetScope: z.enum(['entire-workbook', 'active-sheet', 'selected-sheets']),
-      firstPage: z.number().int().min(0),
-      lastPage: z.number().int().min(0),
-      copies: z.number().int().min(1),
+      firstPage: dialogPrintIntegerSchema.min(0),
+      lastPage: dialogPrintIntegerSchema.min(0),
+      copies: dialogPrintIntegerSchema.min(1),
       collate: z.boolean(),
       exportSelection: z.boolean(),
       outputPath: dialogNonemptyInputStringSchema.optional(),
