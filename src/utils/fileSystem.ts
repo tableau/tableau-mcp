@@ -2,6 +2,7 @@ import {
   closeSync,
   fstatSync,
   lstatSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readSync,
@@ -17,6 +18,7 @@ export interface FileSystem {
   realpath(path: string): string;
   stat(path: string): Stats;
   readdir(path: string): string[];
+  mkdtemp(prefix: string): string;
   open(path: string, flags: number): number;
   fstat(fd: number): Stats;
   /** Returns at most maxBytes + 1 so callers can detect an oversized or growing file. */
@@ -31,6 +33,7 @@ export const NODE_FILE_SYSTEM: FileSystem = {
   realpath: realpathSync,
   stat: statSync,
   readdir: (path) => readdirSync(path),
+  mkdtemp: (prefix) => mkdtempSync(prefix),
   open: openSync,
   fstat: fstatSync,
   read: (fd, maxBytes) => {

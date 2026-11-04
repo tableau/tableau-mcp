@@ -30,6 +30,7 @@ describe('resolveDatasourceRef', () => {
     expect(result.unwrap()).toEqual({
       id: 'shared-value',
       name: 'Resolved by id',
+      caption: 'Resolved by id',
       resolvedSession: 'resolved-999',
     });
     expect(sessionResolution.resolveSession).toHaveBeenCalledWith('requested-session');
@@ -53,11 +54,12 @@ describe('resolveDatasourceRef', () => {
     expect(result.unwrap()).toEqual({
       id: 'profit-id',
       name: 'Profit',
+      caption: 'Profit',
       resolvedSession: 'resolved-999',
     });
   });
 
-  it('uses the generic resolver single entity-decoding behavior', async () => {
+  it('resolves an entity-escaped internal name', async () => {
     const { extra } = harnessFor([
       { id: 'sales-profit-id', name: 'Sales & Profit' },
       { id: 'other-id', name: 'Other' },
@@ -72,11 +74,100 @@ describe('resolveDatasourceRef', () => {
     expect(result.unwrap()).toEqual({
       id: 'sales-profit-id',
       name: 'Sales & Profit',
+      caption: 'Sales & Profit',
       resolvedSession: 'resolved-999',
     });
   });
 
-  it('returns the existing ambiguity error and makes no granular datasource call', async () => {
+  it('resolves a unique caption when the internal name differs', async () => {
+    const { extra } = harnessFor([
+      { id: 'federated.0abc', name: 'federated.0abc', caption: 'Sample - Superstore' },
+      { id: 'federated.1def', name: 'federated.1def', caption: 'Quota Targets' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Sample - Superstore',
+      extra,
+    });
+
+    expect(result.unwrap()).toEqual({
+      id: 'federated.0abc',
+      name: 'federated.0abc',
+      caption: 'Sample - Superstore',
+      resolvedSession: 'resolved-999',
+    });
+  });
+
+  it('prefers an internal name over another datasource caption', async () => {
+    const { extra } = harnessFor([
+      { id: 'by-caption-id', name: 'federated.0abc', caption: 'Sales' },
+      { id: 'by-name-id', name: 'Sales', caption: 'Sales Extract' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Sales',
+      extra,
+    });
+
+    expect(result.unwrap()).toMatchObject({ id: 'by-name-id', name: 'Sales' });
+  });
+
+  it('rejects a caption shared by two datasources and lists their ids', async () => {
+    const { executor, extra } = harnessFor([
+      { id: 'federated.0abc', name: 'federated.0abc', caption: 'Orders' },
+      { id: 'federated.1def', name: 'federated.1def', caption: 'Orders' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Orders',
+      extra,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(result.unwrapErr()).toMatchObject({ type: 'args-validation' });
+    expect(result.unwrapErr().message).toContain('matched multiple datasources');
+    expect(result.unwrapErr().message).toContain(
+      'Orders (federated.0abc), Orders (federated.1def)',
+    );
+    expectNoGranularCall(executor);
+  });
+
+  it('resolves an entity-escaped caption', async () => {
+    const { extra } = harnessFor([
+      { id: 'federated.0abc', name: 'federated.0abc', caption: 'Sales & Profit' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Sales &amp; Profit',
+      extra,
+    });
+
+    expect(result.unwrap()).toMatchObject({ id: 'federated.0abc', caption: 'Sales & Profit' });
+  });
+
+  it('lists captions with their ids when nothing matches', async () => {
+    const { extra } = harnessFor([
+      { id: 'federated.0abc', name: 'federated.0abc', caption: 'Sample - Superstore' },
+      { id: 'Parameters', name: 'Parameters', caption: 'Parameters' },
+    ]);
+
+    const result = await resolveDatasourceRef({
+      session: undefined,
+      datasourceName: 'Superstore',
+      extra,
+    });
+
+    expect(result.unwrapErr().message).toBe(
+      'Datasource "Superstore" was not found. Available datasources: ' +
+        'Sample - Superstore (federated.0abc), Parameters (Parameters)',
+    );
+  });
+
+  it('rejects an internal name shared by two datasources and makes no granular datasource call', async () => {
     const { executor, extra } = harnessFor([
       { id: 'first-id', name: 'Duplicate' },
       { id: 'second-id', name: 'Duplicate' },
@@ -95,7 +186,7 @@ describe('resolveDatasourceRef', () => {
     expectNoGranularCall(executor);
   });
 
-  it('returns the existing not-found error and makes no granular datasource call', async () => {
+  it('rejects an unknown datasource and makes no granular datasource call', async () => {
     const { executor, extra } = harnessFor([{ id: 'sales-id', name: 'Sales' }]);
 
     const result = await resolveDatasourceRef({
