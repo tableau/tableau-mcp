@@ -71,7 +71,7 @@ export const getInvokeDialogActionTool = (
     minApiVersion: DIALOG_SESSION_MIN_API_VERSION,
     title,
     description:
-      'Use get-active-dialogs context and exact identity. Never guess; act only with user intent. Reuse requestId; poll recentActions for pending status.',
+      'Use get-active-dialogs context and exact identity. Never guess; act only with user intent. Reuse requestId; poll recentActions; verify caller completion.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
