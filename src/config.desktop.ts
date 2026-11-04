@@ -51,9 +51,6 @@ export class Config extends BaseConfig {
    */
   userAgentPrefix: string | undefined;
 
-  /** Optional directory holding the Desktop command-param and codegen registry JSON files. */
-  commandsRegistryDir: string | undefined;
-
   /**
    * Session id (Desktop pid) the launching Tableau Desktop pinned via
    * `TABLEAU_DESKTOP_SESSION_ID`. When set, every session-scoped tool defaults to
@@ -129,7 +126,6 @@ export class Config extends BaseConfig {
       INLINE_IMAGE_MAX_BYTES: inlineImageMaxBytes,
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
-      TABLEAU_COMMANDS_REGISTRY_DIR: commandsRegistryDir,
       TABLEAU_USER_AGENT_PREFIX: userAgentPrefix,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
@@ -145,7 +141,6 @@ export class Config extends BaseConfig {
     }
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
-    this.commandsRegistryDir = commandsRegistryDir?.trim() || undefined;
     this.userAgentPrefix = parseUserAgentPrefix(userAgentPrefix);
     this.desktopSessionId =
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
