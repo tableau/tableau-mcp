@@ -1,7 +1,8 @@
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { UnknownError } from '../errors/mcpToolError.js';
+import { TenantUnavailableError } from '../errors/mcpToolError.js';
+import { log } from '../logging/logger.js';
 
 export type TenantLuids = { siteLuid: string; userLuid: string };
 export type TenantIdentitySource = { getSiteLuid: () => string; getUserLuid: () => string };
@@ -20,13 +21,22 @@ function isValidTenantLuids(siteLuid: string, userLuid: string): boolean {
  * PAT/UAT/direct-trust sessions only have them after `useRestApi` has signed in.
  * Returns an error (fail closed) rather than producing an unscoped key.
  */
-export function getTenantLuids(extra: TenantIdentitySource): Result<TenantLuids, UnknownError> {
+export function getTenantLuids(
+  extra: TenantIdentitySource,
+): Result<TenantLuids, TenantUnavailableError> {
   const siteLuid = extra.getSiteLuid();
   const userLuid = extra.getUserLuid();
   if (!isValidTenantLuids(siteLuid, userLuid)) {
-    return new UnknownError(
-      'Unable to determine the signed-in Tableau site and user for blob storage.',
-    ).toErr();
+    // The offending values are on the log line's site_luid/user_luid fields.
+    log(
+      {
+        message: 'Session site/user LUID is missing or not a UUID; refusing to build a blob key.',
+        level: 'error',
+        logger: 'tool',
+      },
+      extra,
+    );
+    return new TenantUnavailableError().toErr();
   }
   return new Ok({ siteLuid, userLuid });
 }

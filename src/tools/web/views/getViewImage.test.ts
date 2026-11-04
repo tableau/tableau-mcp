@@ -370,7 +370,7 @@ describe('getViewImageTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain(
-        'Unable to determine the signed-in Tableau site and user',
+        "couldn't determine the signed-in Tableau site and user",
       );
       expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
     });

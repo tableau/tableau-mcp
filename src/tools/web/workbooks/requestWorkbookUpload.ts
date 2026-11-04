@@ -62,10 +62,13 @@ export const getRequestWorkbookUploadTool = (
           const config = extra.config.bucketS3;
 
           // Non-OAuth publish signs in as the configured user, not the OAuth token user, so key by that.
-          const sessionTenant = getTenantLuids(extra);
-          if (extra.config.auth === 'oauth' && sessionTenant.isOk()) {
+          if (extra.config.auth === 'oauth') {
+            const tenant = getTenantLuids(extra);
+            if (tenant.isErr()) {
+              return tenant;
+            }
             return new Ok(
-              await requestStagedWorkbookUpload({ fileName, config, tenant: sessionTenant.value }),
+              await requestStagedWorkbookUpload({ fileName, config, tenant: tenant.value }),
             );
           }
 
