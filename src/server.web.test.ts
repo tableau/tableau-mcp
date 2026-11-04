@@ -8,7 +8,11 @@ import { SiteRole } from './sdks/tableau/types/user.js';
 import { buildWebInstructions, serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
+import {
+  getConditionApiScopesForTool,
+  getRequiredApiScopesForTool,
+  getRequiredMcpScopesForTool,
+} from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
@@ -156,6 +160,8 @@ describe('server', () => {
       callback: vi.fn().mockResolvedValue({ content: [] }),
       disabled: false,
       requiredApiScopes: [],
+      requiredMcpScopes: [],
+      requiredConditionApiScopes: [],
       minRequiredRole: SiteRole.VIEWER,
       registrationConditions: [],
       logAndExecute: vi.fn(),
@@ -213,6 +219,11 @@ describe('server', () => {
       ].sort();
       const mapScopes = [...getConditionApiScopesForTool(tool.name)].sort();
       expect(mapScopes, `condition scope mismatch for ${tool.name}`).toEqual(expectedScopes);
+      // The instance field (used by scope-based tool omission) must carry the same probe scopes.
+      expect(
+        [...tool.requiredConditionApiScopes].sort(),
+        `requiredConditionApiScopes mismatch for ${tool.name}`,
+      ).toEqual(expectedScopes);
     }
   });
 
@@ -410,6 +421,258 @@ describe('server', () => {
         expect(registered.sort()).toEqual([...publishingNames].sort());
       },
     );
+  });
+
+  describe('scope omission', () => {
+    const bearerAuth: TableauAuthInfo = {
+      type: 'Bearer',
+      username: 'user@example.com',
+      userId: 'test-user-id',
+      server: 'https://tableau.example.com',
+      siteId: 'test-site-id',
+      siteName: 'test-site',
+      raw: 'test-token',
+    };
+    // list-datasources and query-datasource share MCP scope tableau:mcp:datasource:read; their API
+    // scopes differ (query-datasource additionally needs viz_data_service:read), so a grant scoped to
+    // list-datasources' API scopes covers list-datasources but not query-datasource.
+    const mcpScopes = (tool: WebToolName): string[] => [...getRequiredMcpScopesForTool(tool)];
+    const apiScopes = (tool: WebToolName): string[] => [...getRequiredApiScopesForTool(tool)];
+    const allScopes = (tool: WebToolName): string[] => [...mcpScopes(tool), ...apiScopes(tool)];
+    const registeredNames = (server: WebMcpServer): string[] =>
+      vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]);
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_TOOLS', 'list-datasources,query-datasource');
+    });
+
+    it('omits a tool whose required API scope is not granted', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      // Covers list-datasources (MCP + API) and query-datasource's shared MCP scope, but not its
+      // viz_data_service:read API scope.
+      await server.registerTools(bearerAuth, allScopes('list-datasources'));
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).not.toContain('query-datasource');
+    });
+
+    it('omits a tool whose required MCP scope is not granted, even when its API scopes are', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      // All API scopes for both tools, but NOT the shared tableau:mcp:datasource:read MCP scope.
+      await server.registerTools(bearerAuth, [
+        ...apiScopes('list-datasources'),
+        ...apiScopes('query-datasource'),
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).not.toContain('list-datasources');
+      expect(registered).not.toContain('query-datasource');
+    });
+
+    it('registers a tool when the grant covers all of its required MCP and API scopes', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('list-datasources'),
+        ...allScopes('query-datasource'),
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+    });
+
+    it('registers a tool whose optional API scope is not granted (optional scopes never gate registration)', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'publish-workbook');
+      const server = getServer();
+      // publish-workbook declares tableau:permissions:read as an OPTIONAL api scope (read by a
+      // separate REST session after publishing). The grant of everything it REQUIRES does not carry
+      // that scope...
+      const grant = allScopes('publish-workbook');
+      expect(grant).not.toContain('tableau:permissions:read');
+      // ...and the tool must still register: optional scopes are advertised, never required, so a
+      // token missing one never causes omission.
+      await server.registerTools(bearerAuth, grant);
+      expect(registeredNames(server)).toContain('publish-workbook');
+    });
+
+    it('omits nothing when no explicit scope grant is present (e.g. PAT, stdio, passthrough)', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      // No grantedScopes argument: the grant is unknown, so assume full access.
+      await server.registerTools(bearerAuth);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+    });
+
+    it('omits nothing when enforceScopes is off, even for a non-empty grant with no MCP scopes', async () => {
+      // enforceScopes off: the operator opted out of scope-based access control, so the grant is not
+      // an authoritative authorization signal. A caller can still present a non-empty grant that carries
+      // only API scopes and no MCP scopes (here, just tableau:mcp_site_settings:read) — which must NOT
+      // omit every tool. The MCP check passes because requiredMcpScopes is [] when enforcement is off
+      // (getRequiredMcpScopesForTool); the API check is gated off explicitly. Mirrors request-time
+      // enforcement (authMiddleware).
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      await server.registerTools(bearerAuth, ['tableau:mcp_site_settings:read']);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+    });
+
+    it('omits nothing and adds no missing-scopes note under strict scope match with a full grant', async () => {
+      // Strict ON guarantees a full grant upstream (the gate rejects anything short), so discovery
+      // omits nothing. server.web.ts has no strict branch — this pins that a full grant produces an
+      // empty omission set and no missing-scopes note, regardless of the strict toggle.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true'); // strict is on by default
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('list-datasources'),
+        ...allScopes('query-datasource'),
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+      expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
+    });
+
+    it('omits unusable tools and adds the missing-scopes note under non-strict with a subset grant', async () => {
+      // Strict OFF: a subset grant is accepted and discovery degrades gracefully — the tool the grant
+      // cannot cover is omitted and the note is pushed. This is the existing behavior the subset
+      // mode relies on; pinned here as a regression against the strict toggle.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
+      const server = getServer();
+      // Covers list-datasources fully but not query-datasource's extra viz_data_service:read scope.
+      await server.registerTools(bearerAuth, allScopes('list-datasources'));
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).not.toContain('query-datasource');
+      expect(getInstructions(server)).toContain("doesn't include access to these tools");
+    });
+
+    it('still enforces MCP scopes but not API scopes when API scopes are not advertised', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
+      const server = getServer();
+      // Only the shared MCP scope, no API scopes at all: both tools register because the API scope
+      // check is skipped when API scopes are not advertised.
+      await server.registerTools(bearerAuth, mcpScopes('list-datasources'));
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).toContain('query-datasource');
+    });
+
+    it('adds an initialization note when tools are omitted for missing scopes', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.mocked(McpServer).mockClear();
+      const server = getServer();
+      const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
+        | { instructions?: string }
+        | undefined;
+      const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
+      sdkServer._instructions = constructorOptions?.instructions;
+      await server.registerTools(bearerAuth, allScopes('list-datasources'));
+      expect(sdkServer._instructions).toContain("doesn't include access to these tools");
+      expect(sdkServer._instructions).toContain('reconnect Tableau');
+    });
+
+    it('names omitted tools neutrally in the initialize instructions', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'list-datasources,query-datasource');
+      const server = getServer();
+      // Subset grant covers list-datasources but not query-datasource (its extra viz_data_service:read
+      // scope), so only query-datasource is named.
+      await server.registerTools(bearerAuth, allScopes('list-datasources'));
+      const instructions = getInstructions(server);
+      expect(instructions).toContain("doesn't include access to these tools: query-datasource.");
+      // Neutral: no imperative that misfires for a deliberately-limited connection.
+      expect(instructions).not.toContain('you must');
+      // Internal plumbing must never leak into user copy.
+      expect(instructions).not.toMatch(/tableau:mcp:/);
+    });
+
+    it('adds no scope-omission note when nothing is omitted for scopes', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('list-datasources'),
+        ...allScopes('query-datasource'),
+      ]);
+      expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
+    });
+
+    it('read-only grant registers the read tool and omits the write tool (G6, ADVERTISE_API_SCOPES=true)', async () => {
+      // Regression guard: a read-only token lists read tools but not write tools. download-workbook is
+      // read; publish-workbook is write. Grant covers the reader (incl. its API scopes) + mandatory,
+      // but not the writer's scopes — so the writer is omitted at registration.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'download-workbook,publish-workbook');
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        ...allScopes('download-workbook'),
+        'tableau:mcp_site_settings:read',
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).toContain('download-workbook');
+      expect(registered).not.toContain('publish-workbook');
+      expect(getInstructions(server)).toContain("doesn't include access to these tools");
+    });
+
+    // createMockConditionalTool declares RequiresPulse, whose probe scope is
+    // tableau:insight_definitions_metrics:read (its requiredConditionApiScopes). Its MCP/API scopes
+    // are empty, so only the condition-scope clause can omit it.
+    const probeScope = 'tableau:insight_definitions_metrics:read';
+
+    it('omits a conditional tool when its probe scope is not granted, without running the condition check', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'mock-conditional-tool');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (name: string) => name === 'enforce-registration-conditions',
+      );
+      const server = getServer();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+      // A non-empty grant that omits the probe scope: the tool is hidden up front, so the probe
+      // (which would 4xx and be mislabeled as the feature being absent) never runs.
+      await server.registerTools(bearerAuth, ['tableau:mcp:datasource:read']);
+
+      expect(registeredNames(server)).not.toContain('mock-conditional-tool');
+      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+      expect(getInstructions(server)).toContain("doesn't include access to these tools");
+    });
+
+    it('does not hold the caller to probe scopes when registration conditions are not enforced', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'mock-conditional-tool');
+      // enforce-registration-conditions off (beforeEach default): probe scopes are not advertised, so
+      // the grant would never carry them — omitting on them would wrongly hide every conditional tool.
+      const server = getServer();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+      await server.registerTools(bearerAuth, ['tableau:mcp:datasource:read']);
+
+      expect(registeredNames(server)).toContain('mock-conditional-tool');
+    });
+
+    it('runs the condition check when the probe scope is granted', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'mock-conditional-tool');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (name: string) => name === 'enforce-registration-conditions',
+      );
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+      const server = getServer();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+      // Probe scope granted: the tool is not pre-omitted, so its availability is decided by the probe.
+      await server.registerTools(bearerAuth, [probeScope]);
+
+      expect(registeredNames(server)).toContain('mock-conditional-tool');
+      expect(mocks.mockCheckRegistrationConditions).toHaveBeenCalled();
+    });
   });
 
   const readFlowToolNames = [
@@ -1163,6 +1426,8 @@ describe('server', () => {
       minRequiredRole: SiteRole.SITE_ADMINISTRATOR_EXPLORER,
       registrationConditions: [],
       requiredApiScopes: [],
+      requiredMcpScopes: [],
+      requiredConditionApiScopes: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
     } as unknown as WebTool<any>;
@@ -1187,6 +1452,9 @@ describe('server', () => {
       minRequiredRole: SiteRole.VIEWER,
       registrationConditions: ['RequiresPulse'],
       requiredApiScopes: [],
+      requiredMcpScopes: [],
+      // The probe scope RequiresPulse needs, so condition-scope omission has something to check.
+      requiredConditionApiScopes: ['tableau:insight_definitions_metrics:read'],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
     } as unknown as WebTool<any>;
@@ -1710,6 +1978,17 @@ describe('server', () => {
       expect(getInstructions(server)).not.toContain(
         'could not be confirmed as available. The site may not have Tableau Knowledge',
       );
+    });
+
+    it('does not check Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is off', async () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
+
+      const { registered } = await registerKnowledgeTools();
+
+      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+      expect(registered).toEqual(knowledgeToolNames);
     });
 
     it('does not check Knowledge availability when KNOWLEDGE_TOOLS_ENABLED is unset and enforce-registration-conditions is off', async () => {

@@ -60,3 +60,13 @@ export function buildPermissionErrorMessage(target: AuthTarget = {}): string {
 export const OAUTH_AUTH_CHALLENGE_GUIDANCE =
   'This 401 means the request reached a Tableau MCP server whose session is missing, invalid, or ' +
   'expired — re-authenticate. A 401 is an authentication problem, not a missing feature.';
+
+/**
+ * Guidance appended to an insufficient_scope 403 (the token is valid but lacks the scopes a tool
+ * requires). Distinct from OAUTH_AUTH_CHALLENGE_GUIDANCE (a 401 authentication problem) and from
+ * buildPermissionErrorMessage (a downstream Tableau REST 403 about site role / permission).
+ */
+export const OAUTH_INSUFFICIENT_SCOPE_GUIDANCE =
+  'This 403 means your token is valid but lacks the scopes this tool requires. Reconnect Tableau ' +
+  'and grant the listed scopes to use it. If your organization limits Tableau access, this tool ' +
+  'may be intentionally unavailable.';

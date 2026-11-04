@@ -717,6 +717,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
+      disableStrictScopeMatch: false,
       external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -738,6 +739,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
+        disableStrictScopeMatch: false,
         external: null,
         ...defaultOAuthTimeoutMs,
       });
@@ -1121,6 +1123,42 @@ describe('Config', () => {
           'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
         );
       });
+    });
+
+    describe('DISABLE_STRICT_SCOPE_MATCH', () => {
+      it('defaults disableStrictScopeMatch to false', () => {
+        const config = new Config();
+        expect(config.oauth.disableStrictScopeMatch).toBe(false);
+      });
+
+      it('sets disableStrictScopeMatch to true when DISABLE_STRICT_SCOPE_MATCH is "true"', () => {
+        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
+        const config = new Config();
+        expect(config.oauth.disableStrictScopeMatch).toBe(true);
+      });
+
+      it('treats any non-"true" DISABLE_STRICT_SCOPE_MATCH as false', () => {
+        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'yes');
+        const config = new Config();
+        expect(config.oauth.disableStrictScopeMatch).toBe(false);
+      });
+    });
+
+    // Scope defaults (enforced, not advertised, site settings on) must boot: requiring the
+    // site-settings scope with API scopes unadvertised once made this config refuse to start.
+    it('starts the embedded authz server with the default scope settings', () => {
+      vi.stubEnv('OAUTH_ISSUER', 'https://example.com');
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', 'path/to/private.pem');
+      vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+
+      const config = new Config();
+      expect(config.oauth).toMatchObject({
+        embeddedAuthzServer: true,
+        enforceScopes: true,
+        advertiseApiScopes: false,
+        disableStrictScopeMatch: false,
+      });
+      expect(config.enableMcpSiteSettings).toBe(true);
     });
   });
 
