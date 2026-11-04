@@ -186,6 +186,69 @@ describe('apply Desktop accepted but did not change', () => {
     expect(postApplyReads()).toBe(0);
   });
 
+  it('runs the readback and fails when Desktop ignores a zone deletion', async () => {
+    const { executor, postApplyReads } = setup([live]);
+    const result = await run(executor, flow([{ id: '2', y: 0, h: 50000 }]));
+    expect(result.isErr()).toBe(true);
+    expect((result.unwrapErr() as { error: { type: string } }).error.type).toBe(
+      'verification-failed',
+    );
+    expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);
+  });
+
+  it('runs the readback and fails when Desktop ignores deleting every child zone', async () => {
+    const { executor, postApplyReads } = setup([live]);
+    const result = await run(
+      executor,
+      "<dashboard name='D'><zones><zone id='1' type-v2='layout-flow' param='vert'/></zones><simple-id uuid='dash-1'/></dashboard>",
+    );
+    expect(result.isErr()).toBe(true);
+    expect((result.unwrapErr() as { error: { type: string } }).error.type).toBe(
+      'verification-failed',
+    );
+    expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);
+  });
+
+  it('runs the readback and fails when Desktop ignores a text clear', async () => {
+    const withText = live.replace(
+      /<formatted-text\/>/,
+      '<formatted-text><run>First</run></formatted-text>',
+    );
+    const cleared = live;
+    const { executor, postApplyReads } = setup([withText], 'dashboard', withText);
+    const result = await run(executor, cleared);
+    expect(result.isErr()).toBe(true);
+    expect((result.unwrapErr() as { error: { type: string } }).error.type).toBe(
+      'verification-failed',
+    );
+    expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);
+  });
+
+  it('fails when the post-apply read comes from a different Desktop instance', async () => {
+    let applied = false;
+    let reads = 0;
+    const read = vi.fn().mockImplementation(async () => {
+      if (!applied) return Ok({ xml: live });
+      reads++;
+      return Ok({ xml: moved, instanceId: 'two' });
+    });
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'one',
+      listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
+      getDashboardDocument: read,
+      applyDashboardDocument: vi.fn().mockImplementation(async () => {
+        applied = true;
+        return Ok({ ...applyOk.value, warnings: [] });
+      }),
+    });
+    const result = await run(executor, moved);
+    expect(result.isErr()).toBe(true);
+    const error = (result.unwrapErr() as { error: { type: string; message: string } }).error;
+    expect(error.type).toBe('verification-failed');
+    expect(error.message).toContain('different instance');
+    expect(reads).toBeGreaterThan(0);
+  });
+
   it('does not fail an apply that landed when the readback errors', async () => {
     const { executor, postApplyReads } = setup(['error']);
     const result = await run(executor, moved);
