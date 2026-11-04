@@ -151,7 +151,7 @@ export const getGetDatasourceMetadataTool = (
     minRequiredRole: SiteRole.VIEWER,
     description: new Provider(
       () =>
-        'Retrieve full metadata for relevant fields. On the first call, use fieldNames when exact field captions are known, or search when looking for fields by caption or description. Only omit both selectors when the entire field catalog is needed. Selectors filter fields only; datasource descriptions, parameters and model relationships are unchanged. Inspect mcp.resultInfo for matching counts and unknown field names.\n' +
+        'Retrieve metadata for all or selected fields. Use fieldNames for known exact captions, or search for a targeted caption/description lookup. Search is literal: related fields and formula dependencies may not match. For broad discovery or uncertain terminology, omit selectors; fetch referenced fields when needed. Selectors filter fields only; datasource descriptions, parameters and model relationships are unchanged. Inspect mcp.resultInfo for matching counts and unknown field names.\n' +
         getResultForTableauVersion({
           productVersion,
           mappings: {

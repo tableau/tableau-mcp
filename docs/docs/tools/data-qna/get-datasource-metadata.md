@@ -76,6 +76,9 @@ For example, use `fieldNames: ["Sales", "Order Date"]` for known fields, or `sea
 discover fields whose captions or descriptions contain that text. Selected fields retain their full
 metadata, including formulas and descriptions. Empty field groups are omitted.
 
+Search is literal, so related fields and formula dependencies may not match. For broad discovery
+or uncertain terminology, omit selectors; fetch referenced fields when needed.
+
 When either selector is supplied, `mcp.resultInfo` reports `totalFields` before selection,
 `matchedFields` after both selectors, and `unknownFieldNames` for requested captions absent from the
 datasource. A known caption excluded by `search` is not an unknown name. No matches produces empty
