@@ -39,8 +39,8 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: 'failed-command',
-          kind: 'command.invoke',
+          id: 'failed-undo',
+          kind: 'tabdoc:undo',
           state: 'FAILED',
           error: { code: 'operation-failed', message: 'Internal Error', tableauErrorCode },
         }),

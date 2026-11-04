@@ -2611,7 +2611,7 @@ describe('ExternalApiToolExecutor', () => {
         'retry-after': '0',
         'x-tableau-operation-id': operationId,
       },
-      body: JSON.stringify({ id: operationId, kind: 'command.invoke', state: 'RUNNING' }),
+      body: JSON.stringify({ id: operationId, kind: 'tabdoc:undo', state: 'RUNNING' }),
     });
 
     it('polls a 202 undo to completed and parses the polled result', async () => {
@@ -2619,8 +2619,8 @@ describe('ExternalApiToolExecutor', () => {
       server.setOperation('op-x', {
         retryAfterSeconds: 0,
         poll: [
-          { id: 'op-x', kind: 'tabdoc:sort', state: 'RUNNING' },
-          { id: 'op-x', kind: 'tabdoc:sort', state: 'SUCCEEDED', result: { sorted: true } },
+          { id: 'op-x', kind: 'tabdoc:undo', state: 'RUNNING' },
+          { id: 'op-x', kind: 'tabdoc:undo', state: 'SUCCEEDED', result: { undone: true } },
         ],
       });
       const onRpc = vi.fn();
@@ -2634,7 +2634,7 @@ describe('ExternalApiToolExecutor', () => {
 
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().status).toBe('completed');
-      expect(result.unwrap().result).toEqual({ sorted: true });
+      expect(result.unwrap().result).toEqual({ undone: true });
       expect(onRpc).toHaveBeenCalledOnce();
       expect(onRpc).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2651,7 +2651,7 @@ describe('ExternalApiToolExecutor', () => {
         poll: [
           {
             id: 'op-user',
-            kind: 'tabui:open-bookmark',
+            kind: 'tabdoc:undo',
             state: 'AWAITING_USER',
             blockingWindows: [
               {
@@ -2703,7 +2703,7 @@ describe('ExternalApiToolExecutor', () => {
     it('reports a still-running operation as running, never completed', async () => {
       server.setOverride('POST /v0/workbook:undo', accepted202('op-run'));
       server.setOperation('op-run', {
-        poll: [{ id: 'op-run', kind: 'tabdoc:sort', state: 'RUNNING' }],
+        poll: [{ id: 'op-run', kind: 'tabdoc:undo', state: 'RUNNING' }],
       });
       const executor = new ExternalApiToolExecutor({
         discover: () => [instanceFor(server)],
@@ -2745,7 +2745,7 @@ describe('ExternalApiToolExecutor', () => {
         poll: [
           {
             id: 'op-progress',
-            kind: 'tabdoc:sort',
+            kind: 'tabdoc:undo',
             state: 'RUNNING',
             progressWindows: [
               { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
@@ -2775,7 +2775,7 @@ describe('ExternalApiToolExecutor', () => {
     it('maps a CANCELLED terminal operation to a command-failed error', async () => {
       server.setOverride('POST /v0/workbook:undo', accepted202('op-cancel'));
       server.setOperation('op-cancel', {
-        poll: [{ id: 'op-cancel', kind: 'tabdoc:sort', state: 'CANCELLED' }],
+        poll: [{ id: 'op-cancel', kind: 'tabdoc:undo', state: 'CANCELLED' }],
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

@@ -99,8 +99,8 @@ Configured via `AUTH` env var (see `src/config.ts`):
 - Instances are found via per-instance discovery files
   (`src/desktop/externalApi/discovery.ts`); sessions resolve to an
   `ExternalApiToolExecutor` through `SessionManager`
-- Wrappers around API calls (workbook read gateway, XML load/apply, command
-  guard, read harness) live in `src/desktop/wrappers/`
+- Wrappers around API calls (workbook read gateway, XML load/apply,
+  read harness) live in `src/desktop/wrappers/`
 
 ### Tool Architecture
 

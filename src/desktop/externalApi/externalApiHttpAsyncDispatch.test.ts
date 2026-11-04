@@ -30,7 +30,7 @@ const accepted202 = (operationId: string): MockOverride => ({
     'retry-after': '0',
     'x-tableau-operation-id': operationId,
   },
-  body: JSON.stringify({ id: operationId, kind: 'command.invoke', state: 'RUNNING' }),
+  body: JSON.stringify({ id: operationId, kind: 'tabdoc:undo', state: 'RUNNING' }),
 });
 
 describe('ExternalApiHttp async dispatch (0.2.0)', () => {
@@ -48,19 +48,19 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
 
   describe('write path', () => {
     it('polls a 202 undo to a terminal SUCCEEDED and unwraps its result', async () => {
-      server.setOverride('POST /v0/workbook:undo', accepted202('op-invoke-1'));
-      server.setOperation('op-invoke-1', {
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-undo-1'));
+      server.setOperation('op-undo-1', {
         retryAfterSeconds: 0,
         poll: [
-          { id: 'op-invoke-1', kind: 'tabdoc:sort', state: 'RUNNING' },
+          { id: 'op-undo-1', kind: 'tabdoc:undo', state: 'RUNNING' },
           {
-            id: 'op-invoke-1',
-            kind: 'tabdoc:sort',
+            id: 'op-undo-1',
+            kind: 'tabdoc:undo',
             state: 'SUCCEEDED',
             createdAt: '2026-07-30T10:00:00Z',
             updatedAt: '2026-07-30T10:00:02Z',
             completedAt: '2026-07-30T10:00:02Z',
-            result: { sorted: true },
+            result: { undone: true },
           },
         ],
       });
@@ -69,9 +69,9 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       expect(result.isOk()).toBe(true);
       const envelope = result.unwrap();
       expect(envelope.state).toBe('SUCCEEDED');
-      expect(envelope.result).toEqual({ sorted: true });
+      expect(envelope.result).toEqual({ undone: true });
 
-      const polls = server.requests.filter((r) => r.path === '/v0/operations/op-invoke-1');
+      const polls = server.requests.filter((r) => r.path === '/v0/operations/op-undo-1');
       expect(polls.length).toBeGreaterThanOrEqual(2);
     });
 
@@ -95,7 +95,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         poll: [
           {
             id: 'op-fail-1',
-            kind: 'tabdoc:sort',
+            kind: 'tabdoc:undo',
             state: 'FAILED',
             error: { code: 'operation-failed', message: 'nope' },
           },
@@ -113,7 +113,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         poll: [
           {
             id: 'op-user-1',
-            kind: 'tabui:open-bookmark',
+            kind: 'tabdoc:undo',
             state: 'AWAITING_USER',
             blockingWindows: [
               { objectName: 'msgbox', title: 'Save Changes?', className: 'QMessageBox' },
@@ -139,7 +139,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         poll: [
           {
             id: 'op-user-2',
-            kind: 'tabui:open-bookmark',
+            kind: 'tabdoc:undo',
             state: 'RUNNING',
             blockingWindows: [
               { objectName: 'msgbox', title: 'Discard changes?', className: 'QMessageBox' },
@@ -166,7 +166,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         poll: [
           {
             id: 'op-progress-1',
-            kind: 'tabdoc:sort',
+            kind: 'tabdoc:undo',
             state: 'RUNNING',
             progressWindows: [
               { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
@@ -174,9 +174,9 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
           },
           {
             id: 'op-progress-1',
-            kind: 'tabdoc:sort',
+            kind: 'tabdoc:undo',
             state: 'SUCCEEDED',
-            result: { sorted: true },
+            result: { undone: true },
           },
         ],
       });
@@ -192,7 +192,7 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         poll: [
           {
             id: 'op-progress-2',
-            kind: 'tabdoc:sort',
+            kind: 'tabdoc:undo',
             state: 'RUNNING',
             progressWindows: [
               { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
@@ -238,10 +238,10 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
           'retry-after': '1',
           'x-tableau-operation-id': 'op-slow',
         },
-        body: JSON.stringify({ id: 'op-slow', kind: 'tabdoc:sort', state: 'RUNNING' }),
+        body: JSON.stringify({ id: 'op-slow', kind: 'tabdoc:undo', state: 'RUNNING' }),
       });
       server.setOperation('op-slow', {
-        poll: [{ id: 'op-slow', kind: 'tabdoc:sort', state: 'SUCCEEDED' }],
+        poll: [{ id: 'op-slow', kind: 'tabdoc:undo', state: 'SUCCEEDED' }],
       });
 
       const start = Date.now();

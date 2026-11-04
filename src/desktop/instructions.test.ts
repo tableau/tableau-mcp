@@ -89,8 +89,6 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('ships a compact command census for the common semantic path', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('Command census:');
-    expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
-    expect(rendered).not.toContain('tabdoc:goto-sheet');
     expect(rendered).toContain('activate-sheet');
   });
 

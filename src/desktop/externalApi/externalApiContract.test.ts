@@ -1196,18 +1196,18 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('parses a SUCCEEDED Operation result object and serialize-degradation warning', () => {
+    it('parses a SUCCEEDED Operation result object and a warning', () => {
       const parsed = operationEnvelopeSchema.safeParse({
         id: 'op-1',
-        kind: 'command.invoke',
+        kind: 'tabdoc:undo',
         state: 'SUCCEEDED',
         createdAt: '2026-07-20T10:00:00Z',
         updatedAt: '2026-07-20T10:00:02Z',
-        result: { outputParam: 'value' },
+        result: { undone: true },
         warnings: [
           {
-            code: 'output-serialization-failed',
-            message: 'Command output could not be serialized.',
+            code: 'partial',
+            message: 'one sheet skipped',
             target: 'result',
           },
         ],

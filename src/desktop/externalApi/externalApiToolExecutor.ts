@@ -664,7 +664,7 @@ export class ExternalApiToolExecutor {
   async toggleDataSourcePage(
     isDataSourcePageActive: boolean,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) =>
         http.postJsonEnvelope(
@@ -739,7 +739,7 @@ export class ExternalApiToolExecutor {
     xml: string,
     signal: AbortSignal,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(EXTERNAL_API_ROUTES.workbookDocument, xml, signal),
       'apply-workbook-document',
@@ -751,7 +751,7 @@ export class ExternalApiToolExecutor {
     datasourceId: string,
     xml: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(workbookDatasourceDocumentRoute(datasourceId), xml, signal),
       'apply-datasource-document',
@@ -763,7 +763,7 @@ export class ExternalApiToolExecutor {
     xml: string,
     signal: AbortSignal,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(worksheetDocumentRoute(worksheetId), xml, signal),
       'apply-worksheet-document',
@@ -776,7 +776,7 @@ export class ExternalApiToolExecutor {
     xml: string,
     signal: AbortSignal,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     const validation = runAlwaysBlockingValidation(xml, 'dashboard');
     if (!validation.valid) {
       return Err({
@@ -802,7 +802,7 @@ export class ExternalApiToolExecutor {
     xml: string,
     signal: AbortSignal,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(storyboardDocumentRoute(storyboardId), xml, signal),
       'apply-storyboard-document',
@@ -810,18 +810,14 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async undo(
-    signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  async undo(signal: AbortSignal): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo, signal),
       'undo',
     );
   }
 
-  async redo(
-    signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  async redo(signal: AbortSignal): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookRedo, signal),
       'redo',
@@ -832,7 +828,7 @@ export class ExternalApiToolExecutor {
     sheet: SheetRef,
     signal: AbortSignal,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(sheetActionRoute(sheet, 'delete'), signal),
       'delete-sheet',
@@ -844,7 +840,7 @@ export class ExternalApiToolExecutor {
     sheet: SheetRef,
     name: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(sheetActionRoute(sheet, 'rename'), { name }, signal),
       'rename-sheet',
@@ -855,7 +851,7 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     sort: WorksheetSort,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(worksheetSortRoute(worksheetId), sort, signal),
       'sort-worksheet',
@@ -867,7 +863,7 @@ export class ExternalApiToolExecutor {
     request: WorksheetShowMeRequest,
     signal: AbortSignal,
     expectedInstanceId?: string,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(worksheetShowMeRoute(worksheetId), request, signal),
       'show-me-worksheet',
@@ -878,7 +874,7 @@ export class ExternalApiToolExecutor {
   async goToSheet(
     sheetId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) =>
         http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookGoToSheet, { id: sheetId }, signal),
@@ -889,7 +885,7 @@ export class ExternalApiToolExecutor {
   async pauseWorksheetAutoUpdates(
     worksheetId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetPauseAutoUpdatesRoute(worksheetId), signal),
       'pause-worksheet-auto-updates',
@@ -899,7 +895,7 @@ export class ExternalApiToolExecutor {
   async resumeWorksheetAutoUpdates(
     worksheetId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetResumeAutoUpdatesRoute(worksheetId), signal),
       'resume-worksheet-auto-updates',
@@ -909,7 +905,7 @@ export class ExternalApiToolExecutor {
   async refreshWorksheetNow(
     worksheetId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetRefreshNowRoute(worksheetId), signal),
       'refresh-worksheet-now',
@@ -919,7 +915,7 @@ export class ExternalApiToolExecutor {
   async reloadWorksheetExtension(
     worksheetId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetReloadExtensionRoute(worksheetId), signal),
       'reload-worksheet-extension',
@@ -929,7 +925,7 @@ export class ExternalApiToolExecutor {
   async reloadDashboardExtensions(
     dashboardId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(dashboardReloadExtensionsRoute(dashboardId), signal),
       'reload-dashboard-extensions',
@@ -940,10 +936,7 @@ export class ExternalApiToolExecutor {
     storyboardId: string,
     signal: AbortSignal,
   ): Promise<
-    Result<
-      ExecuteCommandResult<undefined> & { parsedResult?: StoryboardRefreshOutcome },
-      ExecuteCommandError
-    >
+    Result<ExecuteCommandResult & { parsedResult?: StoryboardRefreshOutcome }, ExecuteCommandError>
   > {
     const result = await this.applyDocument(
       (http) => http.postEnvelope(storyboardRefreshNowRoute(storyboardId), signal),
@@ -974,10 +967,7 @@ export class ExternalApiToolExecutor {
     dashboardId: string,
     signal: AbortSignal,
   ): Promise<
-    Result<
-      ExecuteCommandResult<undefined> & { parsedResult?: DashboardRefreshOutcome },
-      ExecuteCommandError
-    >
+    Result<ExecuteCommandResult & { parsedResult?: DashboardRefreshOutcome }, ExecuteCommandError>
   > {
     const result = await this.applyDocument(
       (http) => http.postEnvelope(dashboardRefreshNowRoute(dashboardId), signal),
@@ -1007,7 +997,7 @@ export class ExternalApiToolExecutor {
   async pauseDashboardAutoUpdates(
     dashboardId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(dashboardPauseAutoUpdatesRoute(dashboardId), signal),
       'pause-dashboard-auto-updates',
@@ -1017,7 +1007,7 @@ export class ExternalApiToolExecutor {
   async resumeDashboardAutoUpdates(
     dashboardId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(dashboardResumeAutoUpdatesRoute(dashboardId), signal),
       'resume-dashboard-auto-updates',
@@ -1027,7 +1017,7 @@ export class ExternalApiToolExecutor {
   async openFile(
     filePath: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.appOpenFile, { filePath }, signal),
       'open-workbook-file',
@@ -1037,7 +1027,7 @@ export class ExternalApiToolExecutor {
   async saveWorkbook(
     filePath: string | undefined,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) =>
         http.postJsonEnvelope(
@@ -1052,7 +1042,7 @@ export class ExternalApiToolExecutor {
   async exportWorkbookAs(
     request: ExportAsWorkbookRequest,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookExportAs, request, signal),
       'export-workbook-as',
@@ -1062,7 +1052,7 @@ export class ExternalApiToolExecutor {
   async refreshDatasourceData(
     datasourceId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(datasourceRefreshDataRoute(datasourceId), signal),
       'datasource-refresh-data',
@@ -1073,7 +1063,7 @@ export class ExternalApiToolExecutor {
     datasourceId: string,
     request: RefreshExtractRequest,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(datasourceRefreshExtractRoute(datasourceId), request, signal),
       'datasource-refresh-extract',
@@ -1083,7 +1073,7 @@ export class ExternalApiToolExecutor {
   async addWorksheet(
     index: number | undefined,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(workbookWorksheetsNewRoute(index), signal),
       'new-worksheet',
@@ -1093,7 +1083,7 @@ export class ExternalApiToolExecutor {
   async addDashboard(
     index: number | undefined,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(workbookDashboardsNewRoute(index), signal),
       'new-dashboard',
@@ -1103,7 +1093,7 @@ export class ExternalApiToolExecutor {
   async addStoryboard(
     index: number | undefined,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(workbookStoryboardsNewRoute(index), signal),
       'new-storyboard',
@@ -1120,7 +1110,7 @@ export class ExternalApiToolExecutor {
     call: (http: ExternalApiHttp) => Promise<Result<OperationEnvelope, ExternalApiError>>,
     command: string,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
     const outcomeResult = await this.withRescan('document_apply', async (http) => {
       if (
         options?.expectedInstanceId !== undefined &&

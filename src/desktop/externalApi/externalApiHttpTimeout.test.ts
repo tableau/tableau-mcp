@@ -33,7 +33,7 @@ describe('ExternalApiHttp request deadline', () => {
         new Response(
           JSON.stringify({
             id: 'op-1',
-            kind: 'command.invoke',
+            kind: 'tabdoc:undo',
             state: 'SUCCEEDED',
           }),
           { status: 200 },
