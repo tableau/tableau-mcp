@@ -40,8 +40,6 @@ export const desktopToolNames = [
   'remove-field',
   'resolve-field',
   'search-workbook-fields',
-  'search-commands',
-  'execute-tableau-command',
   'ask-user',
   'tableau-begin-episode',
   'tableau-end-episode',

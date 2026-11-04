@@ -6,6 +6,7 @@ import { lookup } from 'mime-types';
 import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../logging/logger.js';
+import { decodeCursor, encodeCursor } from './cursor.js';
 import {
   type SkillEntry as SkillData,
   SkillFrontmatterSchema,
@@ -24,13 +25,16 @@ export type SkillFile = {
  * `getSkillRegistry`). The accessor methods close over the immutable, pre-sorted data.
  */
 export type SkillRegistry = {
-  list: () => { skills: SkillData[] };
+  list: (cursor?: string) => { skills: SkillData[]; nextCursor?: string };
   get: (uri: string) => SkillData | undefined;
   files: () => SkillFile[];
 };
 
 const SKILL_MANIFEST = 'SKILL.md';
 const LOGGER = 'skills';
+
+/** Maximum number of whole skill entries returned by one `skills/list` page. */
+export const MAX_SKILLS_PAGE_SIZE = 30;
 
 // Use mime-types to find the file type for a file path; `lookup` returns `false`
 // for unknown/extensionless files, so fall back to a binary type.
@@ -108,7 +112,12 @@ function byUriAsc(a: { uri: string }, b: { uri: string }): number {
 function makeRegistry(sortedEntries: SkillData[], fileEntries: SkillFile[]): SkillRegistry {
   const byUri = new Map<string, SkillData>(sortedEntries.map((e) => [e.uri, e]));
   return {
-    list: () => ({ skills: sortedEntries }),
+    list: (cursor) => {
+      const offset = cursor === undefined ? 0 : decodeCursor(cursor, sortedEntries.length);
+      const end = offset + MAX_SKILLS_PAGE_SIZE;
+      const skills = sortedEntries.slice(offset, end);
+      return end < sortedEntries.length ? { skills, nextCursor: encodeCursor(end) } : { skills };
+    },
     get: (uri: string) => byUri.get(uri),
     files: () => fileEntries,
   };

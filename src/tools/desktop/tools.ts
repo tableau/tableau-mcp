@@ -9,7 +9,6 @@ import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
-import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
@@ -87,7 +86,6 @@ import { getWriteCachedXmlTool } from './local/cache/writeCachedXml.js';
 import { getBeginEpisodeTool, getEndEpisodeTool } from './local/episodeTools.js';
 import { getReadKnowledgeResourceTool } from './local/knowledge/readKnowledgeResource.js';
 import { getSearchKnowledgeTool } from './local/knowledge/searchKnowledge.js';
-import { getSearchCommandsTool } from './local/search/searchCommands.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
@@ -145,8 +143,6 @@ export const desktopToolFactories = [
   getRemoveFieldTool,
   getResolveFieldTool,
   getSearchWorkbookFieldsTool,
-  getSearchCommandsTool,
-  getExecuteTableauCommandTool,
   getAskUserTool,
   getBindTemplateTool,
   getRunDashboardBatchTool,
