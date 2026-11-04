@@ -5,7 +5,7 @@ import path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { readDataAsset } from '../assets.js';
-import { searchWorkbookSchema } from './searchLibrary.js';
+import { searchWorkbookSchema } from './workbookSearch.js';
 
 afterEach(() => {
   vi.resetModules();
@@ -139,7 +139,7 @@ describe('searchWorkbookSchema', () => {
     vi.stubEnv('WORKBOOK_XSD_PATH', `PRIVATE_MARKER_${'x'.repeat(70 * 1024)}`);
     vi.resetModules();
 
-    const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+    const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
     let message = '';
     try {
       isolatedSearch({ elementType: 'anything' });
@@ -161,7 +161,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       expect(() => isolatedSearch({ enumType: 'PrimitiveType-ST' })).toThrow(
         /Workbook XSD is not valid XML/,
       );
@@ -181,7 +181,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       expect(() => isolatedSearch({ elementType: 'broken' })).toThrow(
         /Workbook XSD is not valid XML/,
       );
@@ -202,7 +202,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ elementType: 'anything' });
@@ -231,7 +231,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ elementType: 'anything' });
@@ -256,7 +256,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ elementType: 'anything' });
@@ -281,7 +281,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ elementType: 'anything' });
@@ -310,7 +310,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ enumType: 'Oversized-ST' });
@@ -336,7 +336,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ enumType: privateName });
@@ -367,7 +367,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ enumType: 'Target-ST', expandRefs: true });
@@ -393,7 +393,7 @@ describe('searchWorkbookSchema', () => {
     vi.resetModules();
 
     try {
-      const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
+      const { searchWorkbookSchema: isolatedSearch } = await import('./workbookSearch.js');
       let message = '';
       try {
         isolatedSearch({ enumType: 'First-ST', elementType: 'Second-CT' });

@@ -32,13 +32,7 @@ type SessionEventBase = EventBase & {
 };
 
 export type DesktopRpcOperation = 'read' | 'command' | 'document_apply';
-export const TOOL_PROFILE_NAMES = [
-  'dynamic-authoring',
-  'demo',
-  'spec-loop',
-  'full',
-  'combined-lean',
-] as const;
+export const TOOL_PROFILE_NAMES = ['dynamic-authoring', 'demo', 'full', 'combined-lean'] as const;
 export type ToolSchemaProfile = (typeof TOOL_PROFILE_NAMES)[number];
 export type BatchApplyOutcome =
   | 'succeeded'
