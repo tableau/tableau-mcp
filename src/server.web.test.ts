@@ -1078,27 +1078,21 @@ describe('server', () => {
     expect(result.contents[0]._meta).toEqual({
       ui: {
         csp: {
-          connectDomains: expect.arrayContaining([
-            'https://*.online.tableau.com',
-            'https://*.tableau.com',
+          connectDomains: [
             'https://my-tableau-server.com',
             'https://*.custom.com',
             'https://other.com',
-          ]),
-          resourceDomains: expect.arrayContaining([
-            'https://*.online.tableau.com',
-            'https://*.tableau.com',
+          ],
+          resourceDomains: [
             'https://my-tableau-server.com',
             'https://*.custom.com',
             'https://other.com',
-          ]),
-          frameDomains: expect.arrayContaining([
-            'https://*.online.tableau.com',
-            'https://*.tableau.com',
+          ],
+          frameDomains: [
             'https://my-tableau-server.com',
             'https://*.custom.com',
             'https://other.com',
-          ]),
+          ],
         },
       },
     });
