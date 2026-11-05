@@ -84,11 +84,14 @@ tool model:
   honor `config.maxRequestTimeoutMs` (`MAX_REQUEST_TIMEOUT_MS`, default
   10 min, min 5s) via an `AbortSignal`, not a shorter hardcoded timeout.
 - Security/privacy: never route the signed `cabuCtx` cookie value through
-  the LLM/tool-call arguments — it is carried only in an in-process state
-  map, keyed by `conversationId`, inside the CABU tool module. Raw axios
-  calls must still go through `createGuardedZodios`'s route-safety guard
-  (confirmed to install on `client.axios` directly, so it covers raw
-  `_apiClient.axios.post/get` calls too).
+  the LLM/tool-call arguments. Per the Phase 0 spike (see Implementation
+  notes), the cookie is not needed at all — CES's Redis-backed
+  conversation-context store carries continuity server-side, keyed by
+  `conversationId` alone — so there is nothing to capture, store, or
+  replay anywhere in the CABU tool module. Raw axios calls must still go
+  through `createGuardedZodios`'s route-safety guard (confirmed to install
+  on `client.axios` directly, so it covers raw `_apiClient.axios.post/get`
+  calls too).
 - UX/API behavior: tool descriptions must tell the model to source LUIDs via
   `list-datasources`/`search-content` and to thread `nextParentLuid` into
   follow-up `cabu-ask` calls.
@@ -156,16 +159,21 @@ access) not yet having been run — see Open questions.
   `TableauApiScope` (`src/server/oauth/scopes.ts`) or the separate
   `JwtScopes` union (`src/restApiInstance.ts`) — it must be added as new
   code in both places, not just referenced.
-- Cookie-state strategy defaults to Phase 0 plan option (b) (in-process
-  `Map<conversationId, {cookies, utteranceArgs}>`) since the Phase 0 spike
-  (PAT acquisition, cookie-dependency test) has not been run yet. This
-  degrades gracefully regardless of the eventual Redis-primary flag state.
+- Cookie-state strategy: the Phase 0 spike (two independent sub-conversations
+  against the demo site's PDS, each turn using a fresh PAT sign-in to
+  simulate tableau-mcp's fresh-HTTP-client-per-tool-call isolation, asking a
+  turn-2 question answerable only by carrying turn-1's context forward) found
+  that replaying the `cabuCtx` cookie makes no observable difference: the
+  no-cookie scenario produced the same correctly-context-dependent answer as
+  the cookie-replayed scenario. The demo cell's Redis-backed conversation
+  context store carries continuity server-side, keyed by `conversationId`
+  alone. The implementation therefore does not capture, store, or replay any
+  cookie anywhere — `cabuMethods.ts`'s three CABU calls take no cookie
+  parameter, and there is no per-conversation state of any kind in the MCP
+  process.
 
 ## Open questions / conflicts
 
-- Phase 0 de-risking spike (demo-site PAT from Seb/Manish; whether turn 2
-  needs the `cabuCtx` cookie) has not been run. Building Phase 1 against the
-  safe-default cookie-dependent strategy in the meantime.
 - Timeline mismatch: Seb said "cabu MCP for 266", Tara said "GA in
   November", epic says 264.4 — not yet confirmed with Tara.
 - Scope: PDS vs. workbook priority, and one-tool-vs-two, are both raised as

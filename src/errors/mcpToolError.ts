@@ -407,22 +407,6 @@ export class DataAppTemplateUnavailableError extends McpToolError {
   }
 }
 
-/**
- * `cabu-ask` was called with a `conversationId` that `cabu-start-conversation` never created, or
- * one whose in-process state (the `cabuCtx` cookie) has expired (30 minutes of inactivity -- see
- * `cabuConversationStore.ts`). There is no server-side way to recover a conversation's cookie once
- * this process has evicted it, so the only remedy is starting over.
- */
-export class CabuConversationNotFoundError extends McpToolError {
-  constructor(conversationId: string) {
-    super({
-      type: 'cabu-conversation-not-found',
-      message: `No active CABU conversation found for conversationId "${conversationId}". It may have expired (conversations expire after 30 minutes of inactivity) or never existed. Start a new conversation with cabu-start-conversation.`,
-      statusCode: 409,
-    });
-  }
-}
-
 /** A CABU turn's SSE stream reported a CES-side `error` event (`error_code`/`error_details`). */
 export class CabuResponseError extends McpToolError {
   constructor(errorCode?: string, errorDetails?: string) {

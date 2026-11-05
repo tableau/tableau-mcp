@@ -5,7 +5,6 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getCabuConversationStore } from './cabuConversationStore.js';
 import { getCabuStartConversationTool } from './cabuStartConversation.js';
 import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
@@ -31,7 +30,6 @@ beforeEach(() => {
 describe('cabuStartConversationTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getCabuConversationStore().clear();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -44,12 +42,9 @@ describe('cabuStartConversationTool', () => {
 
   it('starts a conversation and returns a conversationId plus an opaque utteranceArgs token', async () => {
     mocks.mockStartConversation.mockResolvedValue({
-      response: {
-        conversationId: 'conversation-1',
-        scope: 'tenant-123',
-        datasources: [{ datasourceLuid: '11111111-1111-1111-1111-111111111111' }],
-      },
-      cookies: ['cabuCtx=abc123; Path=/'],
+      conversationId: 'conversation-1',
+      scope: 'tenant-123',
+      datasources: [{ datasourceLuid: '11111111-1111-1111-1111-111111111111' }],
     });
 
     const result = await getToolResult({ datasourceLuid: '11111111-1111-1111-1111-111111111111' });
@@ -72,24 +67,8 @@ describe('cabuStartConversationTool', () => {
     });
   });
 
-  it('seeds the conversation store with the minted cookies, keyed by conversationId', async () => {
-    mocks.mockStartConversation.mockResolvedValue({
-      response: { conversationId: 'conversation-2', scope: 'tenant-123', datasources: [] },
-      cookies: ['cabuCtx=xyz789; Path=/'],
-    });
-
-    await getToolResult({ datasourceLuid: '11111111-1111-1111-1111-111111111111' });
-
-    expect(getCabuConversationStore().get('conversation-2')).toMatchObject({
-      cookies: ['cabuCtx=xyz789; Path=/'],
-    });
-  });
-
   it('returns a clear error when CES does not return a conversationId', async () => {
-    mocks.mockStartConversation.mockResolvedValue({
-      response: { scope: 'tenant-123', datasources: [] },
-      cookies: [],
-    });
+    mocks.mockStartConversation.mockResolvedValue({ scope: 'tenant-123', datasources: [] });
 
     const result = await getToolResult({ datasourceLuid: '11111111-1111-1111-1111-111111111111' });
 

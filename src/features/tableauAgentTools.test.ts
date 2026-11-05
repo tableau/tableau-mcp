@@ -24,9 +24,9 @@ describe('isTableauAgentToolsEnabled', () => {
         async (name: string) => name === 'tableau-agent-tools' && flag,
       );
 
-      await expect(
-        isTableauAgentToolsEnabled({ tableauAgentToolsEnabled: env }),
-      ).resolves.toBe(expected);
+      await expect(isTableauAgentToolsEnabled({ tableauAgentToolsEnabled: env })).resolves.toBe(
+        expected,
+      );
     },
   );
 

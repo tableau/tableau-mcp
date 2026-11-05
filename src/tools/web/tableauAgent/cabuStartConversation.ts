@@ -8,7 +8,6 @@ import { Localization } from '../../../sdks/tableau/types/cabu.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
-import { getCabuConversationStore } from './cabuConversationStore.js';
 import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const paramsSchema = {
@@ -56,7 +55,7 @@ Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of
             ...extra,
             jwtScopes: cabuStartConversationTool.requiredApiScopes,
             callback: async (restApi) => {
-              const { response, cookies } = await restApi.cabuMethods.startConversation({
+              const response = await restApi.cabuMethods.startConversation({
                 dashboardDatasources: [{ datasourceLuid }],
                 embedded: false,
               });
@@ -73,8 +72,6 @@ Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of
                 localization: DEFAULT_LOCALIZATION,
                 embedded: false,
               });
-
-              getCabuConversationStore().set(response.conversationId, { cookies, utteranceArgs });
 
               return new Ok({ conversationId: response.conversationId, utteranceArgs });
             },

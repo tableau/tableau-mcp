@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import {
   ArgsValidationError,
-  CabuConversationNotFoundError,
   CabuResponseError,
   CabuStreamIncompleteError,
   UnknownError,
@@ -16,7 +15,6 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { WebTool } from '../tool.js';
 import { buildCabuAnswer, CabuAnswer } from './cabuAnswer.js';
-import { getCabuConversationStore } from './cabuConversationStore.js';
 import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const paramsSchema = {
@@ -70,28 +68,18 @@ Returns the answer text, any datatables (rendered as truncated markdown), a data
             return new ArgsValidationError(getExceptionMessage(error)).toErr();
           }
 
-          const stored = getCabuConversationStore().get(conversationId);
-          if (!stored) {
-            return new CabuConversationNotFoundError(conversationId).toErr();
-          }
-
           return await useRestApi({
             ...extra,
             jwtScopes: cabuAskTool.requiredApiScopes,
             callback: async (restApi) => {
-              const { response: utteranceResponse, cookies: cookiesAfterAsk } =
-                await restApi.cabuMethods.askUtterance(
-                  conversationId,
-                  {
-                    utterance: { content: question, source: 'user' },
-                    localization: decoded.localization,
-                    scope: decoded.scope,
-                    datasources: decoded.datasources,
-                    parentLuid,
-                    embedded: decoded.embedded,
-                  },
-                  stored.cookies,
-                );
+              const utteranceResponse = await restApi.cabuMethods.askUtterance(conversationId, {
+                utterance: { content: question, source: 'user' },
+                localization: decoded.localization,
+                scope: decoded.scope,
+                datasources: decoded.datasources,
+                parentLuid,
+                embedded: decoded.embedded,
+              });
 
               if (!utteranceResponse.utteranceId) {
                 return new UnknownError(
@@ -99,17 +87,9 @@ Returns the answer text, any datatables (rendered as truncated markdown), a data
                 ).toErr();
               }
 
-              // Persist the refreshed cookies before reading the stream, so a failed/aborted
-              // stream read never loses the freshest cookie -- see cabuConversationStore.ts.
-              getCabuConversationStore().set(conversationId, {
-                cookies: cookiesAfterAsk,
-                utteranceArgs,
-              });
-
               const streamResult = await restApi.cabuMethods.streamUtterance(
                 conversationId,
                 utteranceResponse.utteranceId,
-                cookiesAfterAsk,
               );
 
               if (streamResult.status === 'error') {
