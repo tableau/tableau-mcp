@@ -1,8 +1,4 @@
-import {
-  objectFromShape,
-  safeParse,
-  ZodRawShapeCompat,
-} from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { AnySchema, safeParse } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../restApiInstance.js';
@@ -136,7 +132,7 @@ describe('manageKnowledgeContextTool', () => {
     // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
     // flat raw shape this tool now uses does not have that problem.
     const paramsSchema = await Provider.from(getTool().paramsSchema);
-    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const jsonSchema = advertisedInputSchema(paramsSchema as AnySchema);
     const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
 
     expect(properties).toBeTruthy();
@@ -145,8 +141,7 @@ describe('manageKnowledgeContextTool', () => {
   });
 
   it('enforces the one-to-100 statement array bound at the schema level', async () => {
-    const paramsSchema = await Provider.from(getTool().paramsSchema);
-    const objectSchema = objectFromShape(paramsSchema as ZodRawShapeCompat);
+    const objectSchema = (await Provider.from(getTool().paramsSchema)) as AnySchema;
 
     expect(
       safeParse(objectSchema, { action: 'create', statements: [], isGlobal: true }).success,
@@ -158,6 +153,22 @@ describe('manageKnowledgeContextTool', () => {
         isGlobal: true,
       }).success,
     ).toBe(true);
+  });
+
+  it('rejects unknown keys instead of silently dropping them', async () => {
+    const objectSchema = (await Provider.from(getTool().paramsSchema)) as AnySchema;
+
+    expect(
+      safeParse(objectSchema, {
+        action: 'create',
+        statements: [{ statement: 'AOV = revenue / orders' }],
+        isGlobal: true,
+        unknownKey: 'x',
+      }).success,
+    ).toBe(false);
+    expect(
+      safeParse(objectSchema, { action: 'update', contextId: 'ctx-1', unknownKey: 'x' }).success,
+    ).toBe(false);
   });
 
   it('rejects params irrelevant to, or missing for, the chosen mutation action', () => {
@@ -175,6 +186,16 @@ describe('manageKnowledgeContextTool', () => {
         isGlobal: true,
       }),
     ).toBeNull();
+  });
+
+  it('requires isGlobal: true on create', () => {
+    expect(validateArgs({ action: 'create', statements: [{ statement: 'x' }] })).toBe(
+      'create requires isGlobal: true.',
+    );
+  });
+
+  it('allows update to make a context global', () => {
+    expect(validateArgs({ action: 'update', contextId: 'ctx-1', isGlobal: true })).toBeNull();
   });
 
   it('uses mutation annotations and requires the Knowledge write and read scopes', async () => {
@@ -212,7 +233,6 @@ describe('manageKnowledgeContextTool', () => {
     expect(mocks.createSemanticStatements).toHaveBeenCalledWith({
       graphId: undefined,
       statements,
-      targetNodeId: undefined,
       isGlobal: true,
       name: 'AOV',
     });
@@ -228,7 +248,6 @@ describe('manageKnowledgeContextTool', () => {
       graphId: undefined,
       contextId: 'ctx-1',
       statements,
-      targetNodeId: undefined,
       isGlobal: undefined,
       name: undefined,
     });
