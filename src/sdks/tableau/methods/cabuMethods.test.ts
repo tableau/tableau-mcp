@@ -50,6 +50,43 @@ describe('CabuMethods.startConversation', () => {
       { headers: { Authorization: 'Bearer token' } },
     );
   });
+
+  it('parses a response whose datasource entries carry explicit nulls for workbook-only fields (PDS-only conversation)', async () => {
+    const cabuMethods = makeMethods();
+    const post = vi.fn().mockResolvedValue({
+      data: {
+        conversationId: 'conv-1',
+        scope: 'tenant-1',
+        datasources: [
+          {
+            sdmName: 'Superstore',
+            workbookDatasourceId: null,
+            datasourceLuid: 'ds-1',
+            datasourceName: null,
+            vdsDatasourceLuid: null,
+          },
+        ],
+        b3TraceId: 'trace-1',
+      },
+      headers: {},
+    });
+    // @ts-expect-error - Replacing the Axios client for transport configuration coverage.
+    cabuMethods._apiClient.axios.post = post;
+
+    const result = await cabuMethods.startConversation({
+      dashboardDatasources: [{ datasourceLuid: 'ds-1' }],
+    });
+
+    expect(result.datasources).toEqual([
+      {
+        sdmName: 'Superstore',
+        workbookDatasourceId: null,
+        datasourceLuid: 'ds-1',
+        datasourceName: null,
+        vdsDatasourceLuid: null,
+      },
+    ]);
+  });
 });
 
 describe('CabuMethods.askUtterance', () => {

@@ -23,13 +23,18 @@ export const dashboardDatasourceMetadataSchema = z
   .partial();
 export type DashboardDatasourceMetadata = z.infer<typeof dashboardDatasourceMetadataSchema>;
 
+// `workbookDatasourceId`, `datasourceName`, and `vdsDatasourceLuid` come back as explicit `null`
+// (not omitted) for a PDS-only (non-workbook-embedded) conversation -- confirmed against a live
+// CES response via the Phase 2 MCP Inspector smoke test. `.nullable()` is required in addition to
+// the `.partial()` below: Zod's `.optional()` accepts a missing/`undefined` field, not an explicit
+// `null`.
 export const datasourceEntrySchema = z
   .object({
     sdmName: z.string(),
-    workbookDatasourceId: z.string(),
+    workbookDatasourceId: z.string().nullable(),
     datasourceLuid: z.string(),
-    datasourceName: z.string(),
-    vdsDatasourceLuid: z.string(),
+    datasourceName: z.string().nullable(),
+    vdsDatasourceLuid: z.string().nullable(),
   })
   .partial();
 export type DatasourceEntry = z.infer<typeof datasourceEntrySchema>;
