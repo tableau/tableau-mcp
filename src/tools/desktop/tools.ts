@@ -8,6 +8,7 @@ import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
+import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
@@ -107,6 +108,7 @@ export const desktopToolFactories = [
   getSetDataSourcePageActiveTool,
   getSaveWorkbookTool,
   getWorkbookExportAsTool,
+  getCloseWorkbookTool,
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
