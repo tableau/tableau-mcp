@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.31), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.32), derived from
  * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
@@ -46,6 +46,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
+  workbookClose: '/v0/workbook:close',
   workbookExportAs: '/v0/workbook:exportAs',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
