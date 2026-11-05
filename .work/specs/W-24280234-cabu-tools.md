@@ -36,25 +36,29 @@ tool model:
 
 ## Acceptance criteria
 
-- [ ] A `cabu-start-conversation` tool starts a CABU conversation against a
+- [x] A `cabu-start-conversation` tool starts a CABU conversation against a
       PDS (published datasource) and returns a `conversationId` plus an
       opaque `utteranceArgs` token carrying the invariant per-conversation
       fields.
-- [ ] A `cabu-ask` tool sends an utterance, drains the SSE stream to
+- [x] A `cabu-ask` tool sends an utterance, drains the SSE stream to
       `complete`, and returns an assembled answer (response text, any
       datatables as truncated markdown, a `dataDetails` summary, and
       `nextParentLuid` for threading the next question).
-- [ ] Turn 2+ demonstrably uses prior-turn context (e.g. "now just the West
+- [x] Turn 2+ demonstrably uses prior-turn context (e.g. "now just the West
       region" correctly narrows the prior answer) in a live 3-turn
       conversation run through Claude Code/Desktop against a real CABU-
-      enabled Tableau Cloud site.
-- [ ] CES-side errors (`error_code`/`error_details` on the `error` SSE event,
+      enabled Tableau Cloud site. Run 2026-11-05 via headless `claude -p`
+      against `tableauagent1`/test-dataplane1 — see
+      `.work/reports/W-24280234-phase2-cabu-demo.md`.
+- [x] CES-side errors (`error_code`/`error_details` on the `error` SSE event,
       and non-2xx from the two POSTs) surface as clear tool errors, not raw
-      stack traces.
-- [ ] Both tools are off by default (new `tableau-agent` tool group, gated
+      stack traces. (`CabuResponseError`, `CabuStreamIncompleteError` in
+      `src/errors/mcpToolError.ts`.)
+- [x] Both tools are off by default (new `tableau-agent` tool group, gated
       like other optional groups) so existing tableau-mcp users are
-      unaffected.
-- [ ] Unit tests cover request-body construction, SSE parsing (multi-line
+      unaffected. (`TABLEAU_AGENT_TOOLS_ENABLED` in `src/config.ts`; group
+      defined in `src/tools/web/toolName.ts`.)
+- [x] Unit tests cover request-body construction, SSE parsing (multi-line
       `data:`, `error` event, missing terminal `complete`, timeout),
       answer assembly, `utteranceArgs` round-trip, and `parentLuid`
       threading.
