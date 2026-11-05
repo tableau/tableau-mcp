@@ -101,6 +101,7 @@ export function makeExecutorMock(
     redo: vi.fn(),
     openFile: vi.fn(),
     saveWorkbook: vi.fn(),
+    closeWorkbook: vi.fn(),
     exportWorkbookAs: vi.fn(),
     refreshDatasourceData: vi.fn(),
     refreshDatasourceExtract: vi.fn(),
