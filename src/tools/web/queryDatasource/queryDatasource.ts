@@ -58,7 +58,7 @@ const paramsSchema = {
     .boolean()
     .optional()
     .describe(
-      "Requires Tableau 2025.3 or later. Set true to query using exact fieldName and parameterName values from get-datasource-metadata. Use this for duplicate display names, choosing the intended logical table. Use internal names consistently for existing fields and parameters, including bracketed references inside calculation expressions; do not invent names. A new ad hoc calculation's fieldCaption remains a caller-chosen output label. Omit or set false to use display captions.",
+      "Set true to query using exact fieldName and parameterName values from get-datasource-metadata. Use this for duplicate display names, choosing the intended logical table. Use internal names consistently for existing fields and parameters, including bracketed references inside calculation expressions; do not invent names. A new ad hoc calculation's fieldCaption remains a caller-chosen output label. Omit or set false to use display captions.",
     ),
   limit: z
     .number()
