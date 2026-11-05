@@ -200,11 +200,12 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
+              const tenant: TenantIdentitySource = extra;
               const resolvedWorkbookInput = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
-                tenant: extra,
+                tenant,
               });
               if (resolvedWorkbookInput.isErr()) {
                 return resolvedWorkbookInput;

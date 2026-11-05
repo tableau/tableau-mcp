@@ -105,10 +105,11 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              const tenantSource: TenantIdentitySource = extra;
               const resolvedDatasourceInput = await loadDatasourceFile(
                 input,
                 extra.config.bucketS3,
-                extra,
+                tenantSource,
               );
               if (resolvedDatasourceInput.isErr()) {
                 return resolvedDatasourceInput;
@@ -160,7 +161,7 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
 };
 
 type DatasourceInput =
-  | { source: 'local'; datasourceFilePath: string }
+  | { source: 'filePath'; datasourceFilePath: string }
   | { source: 'staged'; datasourceUploadId: string };
 
 function validateDatasourceInput({
@@ -191,7 +192,7 @@ function validateDatasourceInput({
         'datasourceFilePath is only supported when staged S3 uploads are not configured. Call request-datasource-upload first and pass datasourceUploadId.',
       );
     }
-    return { source: 'local', datasourceFilePath };
+    return { source: 'filePath', datasourceFilePath };
   }
 
   if (!datasourceUploadId) {
@@ -212,7 +213,7 @@ async function loadDatasourceFile(
   config: BucketS3Config,
   tenantSource: TenantIdentitySource,
 ): Promise<Result<ResolvedDatasource, McpToolError>> {
-  if (input.source === 'local') {
+  if (input.source === 'filePath') {
     return new Ok(await resolveLocalDatasourceFile(input.datasourceFilePath));
   }
   const tenant = getTenantLuids(tenantSource);
