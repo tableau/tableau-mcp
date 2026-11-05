@@ -14,6 +14,16 @@ the query and visualization into, and a JSON `manifest.json` (see
 This tool only **scaffolds and names** the app — it does not wire a datasource, author query
 logic, build, publish, or embed data. Those remain separate steps.
 
+On the **Desktop** and **combined** servers the same tool name registers a different
+implementation. Pass `session`, `datappName`, `worksheetId` (External API worksheet id), and
+`datasourceId` (External API datasource id). Set
+[`TABLEAU_DATA_APP_WORKSPACE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_data_app_workspace_dir)
+to an absolute workspace root first. A successful result includes `packageId`, `sourceDir`,
+`worksheetFile`, `extensionsDatasourceId` (Extensions API id stamped into the starter
+`BOUND_DATASOURCE_ID`), `worksheetId`, and `worksheetName` (live sheet name). Apply the fragment
+with `apply-worksheet`, passing `worksheetId` as `worksheetName`. The rest of this page documents
+the web contract.
+
 :::warning[Disabled by Default]
 This tool is gated behind the `data-apps` feature flag, which defaults to `false` in
 `features.json`. It is unavailable unless an administrator enables `data-apps`. See
@@ -69,6 +79,7 @@ The extension package ships a JSON manifest at `Packages/<package id>/manifest.j
 {
   "id": "com.tableau.mcp.sales-demo",
   "version": "1.0.0",
+  "manifestVersion": "0.1",
   "name": "Sales Demo",
   "author": "Tableau MCP",
   "requestedOrigins": ""
@@ -90,17 +101,6 @@ It also includes `requestedOrigins`: the path of the finalized `manifest.json` (
 unzip directory, after `postUnzip`) and instructions for declaring the app's external origins in
 it. See [Package manifest](#package-manifest).
 
-It also includes `wiring`: the connection values for the Tableau site this session is signed in
-to, which every published datasource wired into the app needs. They come from the server's own
-configuration and the session's site, so no other tool call is needed to learn them.
-
-- **`server`**: the Tableau host only, with no scheme or port (for example
-  `10ax.online.tableau.com`).
-- **`site`**: the site's content URL, which can differ from its display name. `""` for the Default
-  site.
-- **`channel`**: `https` or `http`, from the server URL.
-- **`port`**: the server URL's port, or `443`/`80` when it uses the default for its channel.
-
 The result is a single object. Both output modes return the same static, un-substituted template
 zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping — they
 differ only in transport, never in when substitution happens (always client-side, after unzipping):
@@ -118,7 +118,22 @@ differ only in transport, never in when substitution happens (always client-side
 In both cases, `postUnzip` describes the literal find/replace edits and path renames to apply
 after unzipping to finalize the workspace. Datasource wiring is never performed by this tool in
 either mode — it is the caller's responsibility, applied to the finalized workbook after this tool
-returns, using the values in `wiring`.
+returns.
+
+## Allow network egress to the download host
+
+import StagedUploadEndpoints from '../../hosted-tableau-mcp/_staged-upload-endpoints.mdx';
+
+:::warning[Client configuration required]
+In S3 output mode the agent downloads the template from `s3URL`, and it later uploads the workbook
+the same way. If the agent runs in a sandbox with restricted network access, such as Claude's code
+execution environment, allow the S3 host for your pod or the download fails. In Claude, go to
+**Settings → Capabilities → Allow network egress** and add the host under **Additional allowed
+domains**. See [Popular Client Integrations](../../hosted-tableau-mcp/client-integrations.md) for
+client steps.
+:::
+
+<StagedUploadEndpoints />
 
 ## Example result (disk output)
 
@@ -130,12 +145,6 @@ returns, using the values in `wiring`.
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
     "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
-  },
-  "wiring": {
-    "server": "10ax.online.tableau.com",
-    "site": "mcp-test",
-    "channel": "https",
-    "port": 443
   },
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
@@ -187,12 +196,6 @@ returns, using the values in `wiring`.
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
     "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
-  },
-  "wiring": {
-    "server": "10ax.online.tableau.com",
-    "site": "mcp-test",
-    "channel": "https",
-    "port": 443
   },
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",

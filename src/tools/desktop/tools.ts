@@ -9,7 +9,6 @@ import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
-import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
@@ -18,6 +17,7 @@ import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
+import { getDatasourceUnderlyingDataTool } from './api/getDatasourceUnderlyingData.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
@@ -26,12 +26,14 @@ import { getGetSheetInfoTool } from './api/getSheetInfo.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
 import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
 import { getSummaryDataTool } from './api/getSummaryData.js';
+import { getWorkbookExtensionsTool } from './api/getWorkbookExtensions.js';
 import { getWorkbookInventoryTool } from './api/getWorkbookInventory.js';
 import { getGetWorkbookXmlTool } from './api/getWorkbookXml.js';
 import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
 import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
+import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListOperationsTool } from './api/listOperations.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
@@ -60,6 +62,7 @@ import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
 import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { getBindTemplateTool } from './authoring/binder/bindTemplate.js';
 import { getListTemplatesTool } from './authoring/binder/listTemplates.js';
+import { getScaffoldDataAppTool } from './authoring/dataApps/scaffoldDataApp.js';
 import { getAuthorActionTool } from './authoring/datasource/authorAction.js';
 import { getAuthorCalcTool } from './authoring/datasource/authorCalc.js';
 import { getAuthorParameterTool } from './authoring/datasource/authorParameter.js';
@@ -83,7 +86,6 @@ import { getWriteCachedXmlTool } from './local/cache/writeCachedXml.js';
 import { getBeginEpisodeTool, getEndEpisodeTool } from './local/episodeTools.js';
 import { getReadKnowledgeResourceTool } from './local/knowledge/readKnowledgeResource.js';
 import { getSearchKnowledgeTool } from './local/knowledge/searchKnowledge.js';
-import { getSearchCommandsTool } from './local/search/searchCommands.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
@@ -112,6 +114,8 @@ export const desktopToolFactories = [
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
+  getWorkbookExtensionsTool,
+  getScaffoldDataAppTool,
   getShowMeOptionsTool,
   getListDashboardsTool,
   getListStoryboardsTool,
@@ -139,8 +143,6 @@ export const desktopToolFactories = [
   getRemoveFieldTool,
   getResolveFieldTool,
   getSearchWorkbookFieldsTool,
-  getSearchCommandsTool,
-  getExecuteTableauCommandTool,
   getAskUserTool,
   getBindTemplateTool,
   getRunDashboardBatchTool,
@@ -158,6 +160,8 @@ export const desktopToolFactories = [
   getSummaryDataTool,
   getListWorksheetLogicalTablesTool,
   getWorksheetUnderlyingDataTool,
+  getListDatasourceLogicalTablesTool,
+  getDatasourceUnderlyingDataTool,
   getCaptureWindowScreenshotTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,

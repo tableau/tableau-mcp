@@ -6,10 +6,10 @@ import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { Provider } from '../../utils/provider.js';
 import {
+  DIALOG_REQUEST_TRACKING_GUIDANCE,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
-import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
@@ -17,7 +17,11 @@ import {
   MockOverride,
   startMockExternalApiServer,
 } from './mockExternalApiServer.js';
-import { ExternalApiInstance, InvokeDialogActionRequest } from './types.js';
+import {
+  ExternalApiInstance,
+  InvokeDialogActionRequest,
+  workbookDatasourceLogicalTableDataRoute,
+} from './types.js';
 
 vi.mock('../../logging/logger.js');
 
@@ -34,10 +38,13 @@ const instanceFor = (
 });
 
 const invokeDialogActionRequest: InvokeDialogActionRequest = {
+  requestId: 'request-1',
   dialog: {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 1,
   },
   action: { kind: 'button', label: 'Discard' },
 };
@@ -97,11 +104,7 @@ describe('ExternalApiToolExecutor', () => {
       await executor.start();
       expect(executor.isAvailable()).toBe(false);
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
@@ -909,363 +912,6 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
-  describe('executeCommand routing', () => {
-    it.each([
-      {
-        caseName: 'take-all-screenshots command',
-        namespace: 'tabui' as const,
-        command: 'take-all-screenshots\0ignored',
-        apiVersion: '0.2.14',
-      },
-      {
-        caseName: 'take-active-widget-screenshot command',
-        namespace: 'tabui' as const,
-        command: 'take-active-widget-screenshot\0ignored',
-        apiVersion: '0.2.14',
-      },
-      {
-        caseName: 'namespace',
-        namespace: 'tabui\0ignored' as 'tabui',
-        command: 'take-all-screenshots',
-        apiVersion: '0.2.15',
-      },
-    ])(
-      'rejects a NUL-containing $caseName before POST',
-      async ({ namespace, command, apiVersion }) => {
-        const executor = new ExternalApiToolExecutor({
-          discover: () => [instanceFor(server, 'valid-token', apiVersion)],
-        });
-        await executor.start();
-
-        const result = await executor.executeCommand({ namespace, command, signal });
-
-        expect(result.isErr()).toBe(true);
-        const error = result.unwrapErr();
-        expect(error.type).toBe('command-failed');
-        if (error.type === 'command-failed') {
-          expect(error.error).toEqual({
-            code: 'invalid-command',
-            message: expect.stringContaining('NUL'),
-            recoverable: false,
-          });
-        }
-        expect(
-          server.requests.filter(
-            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-          ),
-        ).toHaveLength(0);
-      },
-    );
-
-    it.each([
-      ['take-all-screenshots', '0.2.14'],
-      ['take-active-widget-screenshot', '0.2.14'],
-      ['take-all-screenshots', '0.2.15'],
-      ['take-active-widget-screenshot', '0.2.15'],
-      ['take-all-screenshots', '0.2.16'],
-      ['take-active-widget-screenshot', '0.2.16'],
-      ['take-all-screenshots', undefined],
-      ['take-active-widget-screenshot', undefined],
-      ['take-all-screenshots', '0.2'],
-      ['take-active-widget-screenshot', '0.2.015'],
-      ['take-all-screenshots', '0.2.15-preview'],
-      ['take-active-widget-screenshot', ' 0.2.15'],
-      ['take-all-screenshots', '0.2.15.0'],
-      ['take-active-widget-screenshot', '0.2.15\n'],
-      ['take-active-widget-screenshot', '9007199254740992.2.15'],
-    ])(
-      'blocks tabui:%s on unsafe API version %s before sending the command',
-      async (command, apiVersion) => {
-        const executor = new ExternalApiToolExecutor({
-          discover: () => [{ ...instanceFor(server, 'valid-token'), apiVersion }],
-        });
-        await executor.start();
-
-        const result = await executor.executeCommand({ namespace: 'tabui', command, signal });
-
-        expect(result.isErr()).toBe(true);
-        const error = result.unwrapErr();
-        expect(error.type).toBe('command-failed');
-        if (error.type === 'command-failed') {
-          expect(error.error?.code).toBe('screenshot-command-blocked');
-          expect(error.error?.message).toContain('Upgrade Tableau Desktop');
-          expect(error.error?.message).toContain('capture other applications');
-          expect(error.error?.recoverable).toBe(false);
-        }
-        expect(
-          server.requests.filter(
-            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-          ),
-        ).toHaveLength(0);
-      },
-    );
-
-    it.each([
-      ['take-all-screenshots', '0.2.17'],
-      ['take-active-widget-screenshot', '0.2.18'],
-    ])('allows tabui:%s on safe API version %s', async (command, apiVersion) => {
-      const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', apiVersion)],
-      });
-      await executor.start();
-
-      const result = await executor.executeCommand({ namespace: 'tabui', command, signal });
-
-      expect(result.isOk()).toBe(true);
-      expect(
-        server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-        ),
-      ).toHaveLength(1);
-    });
-
-    it('preserves non-screenshot tabui commands on older API versions', async () => {
-      const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.14')],
-      });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'open-bookmark',
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(server.requests.at(-1)).toMatchObject({
-        method: 'POST',
-        path: '/v0/app:invokeCommand',
-      });
-    });
-
-    it('checks the pinned instance version rather than another newer instance', async () => {
-      const executor = new ExternalApiToolExecutor({
-        pid: 999,
-        discover: () => [
-          { ...instanceFor(server, 'valid-token', '0.2.15'), pid: 111 },
-          instanceFor(server, 'valid-token', '0.2.14'),
-        ],
-      });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'take-all-screenshots',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('command-failed');
-      if (error.type === 'command-failed') {
-        expect(error.error?.code).toBe('screenshot-command-blocked');
-      }
-      expect(
-        server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-        ),
-      ).toHaveLength(0);
-    });
-
-    it('routes any other command to POST /v0/app:invokeCommand', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        args: { steps: 1 },
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().status).toBe('completed');
-      expect(result.unwrap().result).toMatchObject({ namespace: 'tabdoc', command: 'undo' });
-
-      const last = server.requests.at(-1);
-      expect(last?.method).toBe('POST');
-      expect(last?.path).toBe('/v0/app:invokeCommand');
-    });
-
-    it('maps a failed operation envelope to a command-failed error', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'fail-op',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('command-failed');
-      if (error.type === 'command-failed') {
-        expect(error.error?.code).toBe('operation-failed');
-      }
-    });
-
-    it('carries Operation warnings from a succeeded invokeCommand envelope', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'op-warn-1',
-          kind: 'command.invoke',
-          state: 'SUCCEEDED',
-          result: { ok: true },
-          warnings: [
-            {
-              code: 'output-serialization-failed',
-              message: 'Command output could not be serialized.',
-            },
-          ],
-        }),
-      });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().warnings).toEqual([
-        {
-          code: 'output-serialization-failed',
-          message: 'Command output could not be serialized.',
-        },
-      ]);
-    });
-
-    it('preserves the current Operation tableauErrorCode in the public diagnostic', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'op-fail-current',
-          kind: 'command.invoke',
-          state: 'FAILED',
-          error: {
-            code: 'operation-failed',
-            message: 'Desktop reported the real failure',
-            tableauErrorCode: '7A1775A4',
-          },
-        }),
-      });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('command-failed');
-      if (error.type === 'command-failed') {
-        expect(error.error?.message).toBe('Desktop reported the real failure');
-        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('7A1775A4');
-      }
-    });
-
-    it('preserves failed Operation message and tableau-error-code extension', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'op-fail-1',
-          kind: 'command.invoke',
-          state: 'FAILED',
-          error: {
-            code: 'operation-failed',
-            message: 'Desktop reported the real failure',
-            'tableau-error-code': '0x1234',
-          },
-        }),
-      });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('command-failed');
-      if (error.type === 'command-failed') {
-        expect(error.error?.message).toBe('Desktop reported the real failure');
-        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('0x1234');
-      }
-    });
-
-    it('treats missing result on a 0.1.0 succeeded invokeCommand as silent success', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'op-010-1',
-          kind: 'command.invoke',
-          state: 'SUCCEEDED',
-        }),
-      });
-      const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.1.0')],
-      });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().result).toBeUndefined();
-      expect(result.unwrap().warnings).toBeUndefined();
-    });
-
-    it('maps a command-not-found problem to a command-failed error', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'missing-command',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      if (error.type === 'command-failed') {
-        expect(error.error?.code).toBe('command-not-found');
-      } else {
-        throw new Error(`expected command-failed, got ${error.type}`);
-      }
-    });
-
-    it('returns an error when no instance is available', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr().type).toBe('unknown');
-    });
-  });
-
   describe('first-class read endpoints', () => {
     it('gets the API root', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
@@ -1309,6 +955,44 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().datasources?.[0]?.id).toBe('wb-ds-superstore');
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
+    });
+
+    it('captures app screenshots into an encoded outputPath under read telemetry', async () => {
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        onRpc,
+      });
+      await executor.start();
+      const outputPath = '/tmp/tableau screenshot #1&b=2';
+
+      const result = await executor.captureAppScreenshot(outputPath, signal);
+
+      expect(result.unwrap()).toEqual({ filePaths: [`${outputPath}/ScreenShot_1.png`] });
+      const request = server.requests.at(-1);
+      expect(request?.method).toBe('GET');
+      expect(request?.path).toBe('/v0/app/screenshot');
+      expect(request?.searchParams).toEqual({ outputPath });
+      expect(onRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'read',
+          transportSuccess: true,
+          rescanCount: 0,
+        }),
+      );
+    });
+
+    it('surfaces an invalid screenshot outputPath as a canonical problem', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.captureAppScreenshot('relative/dir', signal);
+
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('invalid-query-parameter');
+      }
     });
 
     it('gets a worksheet item by id', async () => {
@@ -2053,34 +1737,56 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
-  describe('worksheet calculated-field validation', () => {
-    it('posts only the formula and returns the validation outcome', async () => {
+  describe('datasource calculated-field validation', () => {
+    it('posts the formula and returns the validation outcome', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales])',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales])' },
         signal,
       );
 
-      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+      expect(result.unwrap()).toEqual({
+        isValid: true,
+        errors: [],
+        dataType: 'real',
+        isAggregate: true,
+      });
       const posted = server.requests.at(-1);
       expect(posted).toMatchObject({
         method: 'POST',
-        path: '/v0/workbook/worksheets/sheet-sales:validateCalculatedField',
+        path: '/v0/workbook/datasources/wb-ds-superstore:validateCalculatedField',
         contentType: 'application/json',
       });
       expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'SUM([Sales])' });
+    });
+
+    it('sends the caption and edited field name when given', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1', caption: 'Margin', fieldName: '[wb-ds-superstore].[Calculation_1]' },
+        signal,
+      );
+
+      expect(JSON.parse(server.requests.at(-1)?.body ?? '{}')).toEqual({
+        formula: '1',
+        caption: 'Margin',
+        fieldName: '[wb-ds-superstore].[Calculation_1]',
+      });
     });
 
     it('reports formula errors with their position', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField(
-        'sheet-sales',
-        'SUM([Sales]',
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: 'SUM([Sales]' },
         signal,
       );
 
@@ -2090,18 +1796,22 @@ describe('ExternalApiToolExecutor', () => {
       });
     });
 
-    it('maps an unknown worksheet to a command failure', async () => {
+    it('maps an unknown datasource to a command failure', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('missing', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'missing',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr().type).toBe('command-failed');
     });
 
     it('polls a 202 to the validation result', async () => {
-      server.setOverride('POST /v0/workbook/worksheets/sheet-sales:validateCalculatedField', {
+      server.setOverride('POST /v0/workbook/datasources/wb-ds-superstore:validateCalculatedField', {
         status: 202,
         contentType: 'application/json',
         headers: { location: '/v0/operations/op-validate', 'retry-after': '0' },
@@ -2121,9 +1831,80 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.validateWorksheetCalculatedField('sheet-sales', '1', signal);
+      const result = await executor.validateDatasourceCalculatedField(
+        'wb-ds-superstore',
+        { formula: '1' },
+        signal,
+      );
 
       expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+    });
+  });
+
+  describe('datasource logical tables', () => {
+    it('lists the logical tables of a datasource', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listDatasourceLogicalTables('wb-ds-superstore', signal);
+
+      expect(result.unwrap().tables).toEqual([
+        { id: 'lt-orders', caption: 'Orders' },
+        { id: 'lt-returns', caption: 'Returns' },
+      ]);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/datasources/wb-ds-superstore/logicalTables',
+      });
+    });
+
+    it('reads one logical table with maxRows and repeated column filters', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceLogicalTableData(
+        'wb-ds-superstore',
+        'lt-orders',
+        {
+          maxRows: 5,
+          columnsToIncludeByFieldName: ['[ds].[Region]', '[ds].[A, B]'],
+        },
+        signal,
+      );
+
+      expect(result.unwrap().columns?.map((column) => column.name)).toEqual([
+        'Region',
+        'Sales',
+        'Profit',
+      ]);
+      const request = server.requests.at(-1);
+      expect(request?.path).toBe(
+        '/v0/workbook/datasources/wb-ds-superstore/logicalTables/lt-orders/data',
+      );
+      expect(request?.searchParams).toMatchObject({ maxRows: '5' });
+      expect(
+        workbookDatasourceLogicalTableDataRoute('wb-ds-superstore', 'lt-orders', {
+          maxRows: 5,
+          columnsToIncludeByFieldName: ['[ds].[Region]', '[ds].[A, B]'],
+        }),
+      ).toBe(
+        '/v0/workbook/datasources/wb-ds-superstore/logicalTables/lt-orders/data?maxRows=5&columnsToIncludeByFieldName=%5Bds%5D.%5BRegion%5D&columnsToIncludeByFieldName=%5Bds%5D.%5BA%2C+B%5D',
+      );
+    });
+
+    it('maps an unknown logical table to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceLogicalTableData(
+        'wb-ds-superstore',
+        'missing',
+        {},
+        signal,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
     });
   });
 
@@ -2187,11 +1968,17 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.getActiveDialogs(signal);
 
       expect(result.unwrap()).toEqual({
+        uiSnapshotAvailable: true,
+        recentActions: [],
         dialogs: [
           {
             objectName: 'saveChangesDialog',
             title: 'Save Changes',
             className: 'QMessageBox',
+            sessionId: 'dialog-session-1',
+            revision: 1,
+            family: 'qt',
+            status: 'active',
             messageText: 'Do you want to save changes to Regional Sales?',
             informativeText: 'Unsaved changes will be lost if you discard them.',
             detailedText: 'Workbook: Regional Sales',
@@ -2219,43 +2006,42 @@ describe('ExternalApiToolExecutor', () => {
       server.setOverride('GET /v0/app/dialogs', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ dialogs: [] }),
+        body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.getActiveDialogs(signal);
 
-      expect(result.unwrap()).toEqual({ dialogs: [] });
+      expect(result.unwrap()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
     });
 
     it.each([
-      ['no-active-dialog', { outcome: 'no-active-dialog', dialogs: [] }],
-      [
-        'dismissed',
-        {
-          outcome: 'dismissed',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [],
+      'dispatched-pending',
+      'completed',
+      'canceled',
+      'failed',
+      'expired',
+      'indeterminate',
+    ] as const)('returns the %s request status exactly once', async (outcome) => {
+      const response = {
+        outcome,
+        dialog: invokeDialogActionRequest.dialog,
+        status: {
+          sessionId: invokeDialogActionRequest.dialog.sessionId,
+          revision: invokeDialogActionRequest.dialog.revision,
+          requestId: invokeDialogActionRequest.requestId,
+          state: outcome === 'dispatched-pending' ? 'pending' : outcome,
+          effect: outcome === 'completed' ? 'dialog-dismissed' : 'none',
         },
-      ],
-      [
-        'action-invoked-dialog-remains',
-        {
-          outcome: 'action-invoked-dialog-remains',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [
-            {
-              ...invokeDialogActionRequest.dialog,
-              messageText: 'The click started validation.',
-              buttons: ['Discard'],
-            },
-          ],
-        },
-      ],
-    ] as const)('returns the %s success exactly once', async (_outcome, response) => {
+        uiSnapshotAvailable: outcome === 'completed',
+        dialogs: [],
+      };
+
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status: 200,
         contentType: 'application/json',
@@ -2370,12 +2156,15 @@ describe('ExternalApiToolExecutor', () => {
         // Session-fatal guidance leads: stop every command and read, restart Desktop.
         expect(error.error?.message).toContain('restart Tableau Desktop');
         expect(error.error?.message).toContain('including reads');
-        // Replay-safety core is kept: the first outcome is unknown, so the agent must not re-invoke
-        // the action (holds even after a restart in a new session).
+        // The first outcome stays unknown after a restart, so a new session cannot deduplicate it.
         expect(error.error?.message).toContain(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE);
         expect(error.error?.message).toContain('may already have been invoked');
         // But the get-active-dialogs read clause is dropped: a dead session forbids every read.
-        expect(error.error?.message).not.toContain('get-active-dialogs once for fresh inspection');
+        expect(error.error?.message).not.toContain('get-active-dialogs');
+        expect(error.error?.message).toContain(
+          'This failed session must not receive more commands or reads',
+        );
+        expect(error.error?.message).toContain('restart or session change');
         expect(error.error?.message).not.toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
       }
       expect(
@@ -2614,11 +2403,7 @@ describe('ExternalApiToolExecutor', () => {
       });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.unwrapErr().type).toBe('command-timed-out');
       expect(discover).toHaveBeenCalledTimes(1);
@@ -2633,11 +2418,7 @@ describe('ExternalApiToolExecutor', () => {
       await executor.start();
       const controller = new AbortController();
 
-      const pending = executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal: controller.signal,
-      });
+      const pending = executor.undo(controller.signal);
       controller.abort();
       const result = await pending;
 
@@ -2647,69 +2428,6 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('401 rescan-once', () => {
-    it.each([
-      ['take-all-screenshots', '0.2.14'],
-      ['take-all-screenshots', undefined],
-      ['take-all-screenshots', '0.2.15'],
-      ['take-all-screenshots', '0.2.16'],
-      ['take-active-widget-screenshot', '0.2.15'],
-      ['take-active-widget-screenshot', '0.2.16'],
-    ])(
-      'blocks tabui:%s retry when a 401 rescan selects API %s',
-      async (command, rescannedApiVersion) => {
-        const discover = vi
-          .fn()
-          .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.17')])
-          .mockReturnValue([
-            { ...instanceFor(server, 'valid-token'), apiVersion: rescannedApiVersion },
-          ]);
-        const executor = new ExternalApiToolExecutor({ discover });
-        await executor.start();
-
-        const result = await executor.executeCommand({
-          namespace: 'tabui',
-          command,
-          signal,
-        });
-
-        expect(result.isErr()).toBe(true);
-        const error = result.unwrapErr();
-        expect(error.type).toBe('command-failed');
-        if (error.type === 'command-failed') {
-          expect(error.error?.code).toBe('screenshot-command-blocked');
-        }
-        expect(discover).toHaveBeenCalledTimes(2);
-        expect(
-          server.requests.filter(
-            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-          ),
-        ).toHaveLength(1);
-      },
-    );
-
-    it('retries a screenshot once when both pre- and post-401 instances are safe', async () => {
-      const discover = vi
-        .fn()
-        .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.17')])
-        .mockReturnValue([instanceFor(server, 'valid-token', '0.2.17')]);
-      const executor = new ExternalApiToolExecutor({ discover });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'take-active-widget-screenshot',
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(discover).toHaveBeenCalledTimes(2);
-      expect(
-        server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-        ),
-      ).toHaveLength(2);
-    });
-
     it('emits one logical RPC event across a successful read', async () => {
       const onRpc = vi.fn();
       const executor = new ExternalApiToolExecutor({
@@ -2829,67 +2547,31 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       // start() + one rescan = 2 discover calls, no infinite loop.
       expect(discover).toHaveBeenCalledTimes(2);
     });
 
-    it('does not retry invokeCommand when a 401 rescan changes instance identity at the same pid', async () => {
-      const discover = vi
-        .fn()
-        .mockReturnValueOnce([
-          { ...instanceFor(server, 'stale-token'), instanceId: 'inst-expected' },
-        ])
-        .mockReturnValue([{ ...instanceFor(server, 'valid-token'), instanceId: 'inst-restarted' }]);
-      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'apply-theme',
-        expectedInstanceId: 'inst-expected',
-        signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      expect(
-        server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
-        ),
-      ).toHaveLength(1);
-      expect(discover).toHaveBeenCalledTimes(2);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('unknown');
-      if (error.type === 'unknown') {
-        expect(String(error.error)).toContain('inst-expected');
-        expect(String(error.error)).toContain('inst-restarted');
-      }
-    });
-
     it('does not retry a cold screenshot capture when a 401 rescan finds a new instance with the same pid', async () => {
       const discover = vi
         .fn()
         .mockReturnValueOnce([
-          { ...instanceFor(server, 'stale-token', '0.2.17'), instanceId: 'inst-capture' },
+          { ...instanceFor(server, 'stale-token', '0.2.28'), instanceId: 'inst-capture' },
         ])
         .mockReturnValue([
-          { ...instanceFor(server, 'valid-token', '0.2.17'), instanceId: 'inst-restarted' },
+          { ...instanceFor(server, 'valid-token', '0.2.28'), instanceId: 'inst-restarted' },
         ]);
       const executor = new ExternalApiToolExecutor({ pid: 999, discover });
 
-      const result = await captureWindowScreenshot({ executor, signal });
+      const result = await executor.captureAppScreenshot('/tmp/capture', signal);
 
       expect(result.isErr()).toBe(true);
       expect(discover).toHaveBeenCalledTimes(2);
       expect(
         server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          (request) => request.method === 'GET' && request.path === '/v0/app/screenshot',
         ),
       ).toHaveLength(1);
     });
@@ -2929,16 +2611,16 @@ describe('ExternalApiToolExecutor', () => {
         'retry-after': '0',
         'x-tableau-operation-id': operationId,
       },
-      body: JSON.stringify({ id: operationId, kind: 'command.invoke', state: 'RUNNING' }),
+      body: JSON.stringify({ id: operationId, kind: 'tabdoc:undo', state: 'RUNNING' }),
     });
 
-    it('polls a 202 invokeCommand to completed and parses the polled result', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-x'));
+    it('polls a 202 undo to completed and parses the polled result', async () => {
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-x'));
       server.setOperation('op-x', {
         retryAfterSeconds: 0,
         poll: [
-          { id: 'op-x', kind: 'tabdoc:sort', state: 'RUNNING' },
-          { id: 'op-x', kind: 'tabdoc:sort', state: 'SUCCEEDED', result: { sorted: true } },
+          { id: 'op-x', kind: 'tabdoc:undo', state: 'RUNNING' },
+          { id: 'op-x', kind: 'tabdoc:undo', state: 'SUCCEEDED', result: { undone: true } },
         ],
       });
       const onRpc = vi.fn();
@@ -2948,19 +2630,15 @@ describe('ExternalApiToolExecutor', () => {
       });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'sort',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().status).toBe('completed');
-      expect(result.unwrap().result).toEqual({ sorted: true });
+      expect(result.unwrap().result).toEqual({ undone: true });
       expect(onRpc).toHaveBeenCalledOnce();
       expect(onRpc).toHaveBeenCalledWith(
         expect.objectContaining({
-          operation: 'command',
+          operation: 'document_apply',
           transportSuccess: true,
           rescanCount: 0,
         }),
@@ -2968,12 +2646,12 @@ describe('ExternalApiToolExecutor', () => {
     });
 
     it('maps awaiting-user to exact dialog-tool guidance without an originating-operation retry', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-user'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-user'));
       server.setOperation('op-user', {
         poll: [
           {
             id: 'op-user',
-            kind: 'tabui:open-bookmark',
+            kind: 'tabdoc:undo',
             state: 'AWAITING_USER',
             blockingWindows: [
               {
@@ -2990,16 +2668,12 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'open-bookmark',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       expect(
         server.requests.filter(
-          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          (request) => request.method === 'POST' && request.path === '/v0/workbook:undo',
         ),
       ).toHaveLength(1);
       const error = result.unwrapErr();
@@ -3015,9 +2689,10 @@ describe('ExternalApiToolExecutor', () => {
             'Do not retry the originating operation until the dialog is handled and its cause is corrected',
           );
           expect(commandError.message).toContain('exact returned dialog identity');
-          expect(commandError.message).toContain('exact returned action');
+          expect(commandError.message).toContain('advertised action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
-          expect(commandError.message).toContain('action-invoked-dialog-remains');
+          expect(commandError.message).toContain('pending or indeterminate status');
+          expect(commandError.message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3026,9 +2701,9 @@ describe('ExternalApiToolExecutor', () => {
     });
 
     it('reports a still-running operation as running, never completed', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-run'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-run'));
       server.setOperation('op-run', {
-        poll: [{ id: 'op-run', kind: 'tabdoc:sort', state: 'RUNNING' }],
+        poll: [{ id: 'op-run', kind: 'tabdoc:undo', state: 'RUNNING' }],
       });
       const executor = new ExternalApiToolExecutor({
         discover: () => [instanceFor(server)],
@@ -3036,11 +2711,7 @@ describe('ExternalApiToolExecutor', () => {
       });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'sort',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
@@ -3052,16 +2723,12 @@ describe('ExternalApiToolExecutor', () => {
     });
 
     it('maps an expired operation to bounded dialog recovery', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-expired'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-expired'));
       // No operation is registered, so the poll returns operation-not-found.
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'sort',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
@@ -3073,12 +2740,12 @@ describe('ExternalApiToolExecutor', () => {
     });
 
     it('reports a poll-timeout behind a self-clearing progress dialog without blocking-dialog guidance', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-progress'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-progress'));
       server.setOperation('op-progress', {
         poll: [
           {
             id: 'op-progress',
-            kind: 'tabdoc:sort',
+            kind: 'tabdoc:undo',
             state: 'RUNNING',
             progressWindows: [
               { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
@@ -3092,11 +2759,7 @@ describe('ExternalApiToolExecutor', () => {
       });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'sort',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();
@@ -3110,18 +2773,14 @@ describe('ExternalApiToolExecutor', () => {
     });
 
     it('maps a CANCELLED terminal operation to a command-failed error', async () => {
-      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-cancel'));
+      server.setOverride('POST /v0/workbook:undo', accepted202('op-cancel'));
       server.setOperation('op-cancel', {
-        poll: [{ id: 'op-cancel', kind: 'tabdoc:sort', state: 'CANCELLED' }],
+        poll: [{ id: 'op-cancel', kind: 'tabdoc:undo', state: 'CANCELLED' }],
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'sort',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr().type).toBe('command-failed');
@@ -3366,10 +3025,11 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('Do not blindly retry the originating operation');
   expect(message).toContain('get-active-dialogs');
   expect(message).toContain('exact returned dialog identity');
-  expect(message).toContain('exact returned action');
-  expect(message).toContain('at most one invoke-dialog-action call');
+  expect(message).toContain('advertised action');
+  expect(message).toContain('invoke-dialog-action for one logical action');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
   expect(message).toContain('Do not guess or assume Cancel is safe');
-  expect(message).toContain('action-invoked-dialog-remains');
+  expect(message).toContain('pending or indeterminate status');
   expect(message).toContain('ask the user to handle the dialog');
   expect(message).toContain('list-instances');
 }
@@ -3378,10 +3038,12 @@ function expectIndeterminateDialogAction(message: string): void {
   expect(message).toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
   expect(message).toContain('invoke-dialog-action outcome is indeterminate');
   expect(message).toContain('action may already have been invoked');
-  expect(message).toContain('Do not call invoke-dialog-action again or click another action');
-  expect(message).toContain('get-active-dialogs once for fresh inspection only');
-  expect(message).toContain('result does not prove that the first click did not happen');
-  expect(message).toContain('Ask the user to handle any consequential choice');
+  expect(message).toContain(DIALOG_REQUEST_TRACKING_GUIDANCE);
+  expect(message).toContain('replay only the identical request with the same requestId');
+  expect(message).toContain('Never use a new requestId');
+  expect(message).toContain('original sessionId/requestId');
+  expect(message).toContain('ask the user to handle any consequential choice');
+  expect(message).not.toContain('Do not call invoke-dialog-action again');
   expect(message).not.toContain('retry with that session');
   expect(message).not.toContain('at most one invoke-dialog-action call');
 }

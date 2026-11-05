@@ -491,11 +491,20 @@ describe('checkRegistrationConditions', () => {
 });
 
 describe('getUnmetConditionInstructions', () => {
-  it('explains that Knowledge requires Tableau+', async () => {
+  it('explains that Knowledge is unavailable without blaming a missing Tableau+ entitlement', async () => {
     const message = getUnmetConditionInstructions('RequiresKnowledge');
 
     expect(message).toContain('Tableau Knowledge');
-    expect(message).toContain('Tableau+');
+    expect(message).toContain(
+      'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as available.',
+    );
+    expect(message).toContain('The site may not have Tableau Knowledge, or the check was denied.');
+    expect(message).toContain(
+      'explain that Tableau Knowledge is not available in this session and suggest they contact ' +
+        'their Tableau administrator.',
+    );
+    // A 401/403 probe on an entitled site lands here too, so the note must not assert a missing entitlement.
+    expect(message).not.toContain('Tableau+');
   });
 
   it('explains that Pulse is not available and points at Cloud setup guidance', async () => {
@@ -507,11 +516,14 @@ describe('getUnmetConditionInstructions', () => {
     expect(message).toContain('https://help.tableau.com/current/online/en-us/pulse_set_up.htm');
   });
 
-  it('explains that AI insights require the Tableau+ entitlement', async () => {
+  it('explains that the Tableau+ entitlement could not be confirmed, without claiming the site lacks it', async () => {
     const message = getUnmetConditionInstructions('RequiresPulsePremium');
 
     expect(message).toContain('Tableau+');
-    expect(message).toContain('insight');
+    expect(message).toContain('could not be confirmed');
+    expect(message).toContain('the check was denied');
+    expect(message).toContain('contact their Tableau administrator');
+    expect(message).not.toContain('does not have the Tableau+ entitlement');
   });
 
   it('describes a missing condition check as an unimplemented check, without a reconnect suggestion', async () => {

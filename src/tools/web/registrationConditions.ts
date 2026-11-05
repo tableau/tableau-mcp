@@ -176,10 +176,12 @@ function unmet(
  * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
+  // Kept generic: the probe cannot tell a site without Knowledge from a denied check.
   RequiresKnowledge:
     'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as ' +
-    'available. If the user asks for Knowledge context, explain that the feature requires ' +
-    'Tableau+ and suggest they contact their Tableau administrator.',
+    'available. The site may not have Tableau Knowledge, or the check was denied. If the user ' +
+    'asks for Knowledge context, explain that Tableau Knowledge is not available in this session ' +
+    'and suggest they contact their Tableau administrator.',
   // Kept generic: Pulse can be unavailable for several reasons (Tableau Server, site setting
   // off, or a user-level preference), and the probe cannot distinguish them cleanly enough to
   // name a single cause here.
@@ -188,11 +190,13 @@ const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
     'Do not offer Pulse metrics or insights; if the user asks for them, explain that Pulse is ' +
     'not available and suggest they contact their Tableau administrator. For setup guidance ' +
     'on Tableau Cloud, see https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
+  // Kept generic: the probe cannot tell a site without Tableau+ from a denied check.
   RequiresPulsePremium:
-    'NOTE: AI-powered Tableau Pulse insight tools were omitted from this session because this ' +
-    'site does not have the Tableau+ entitlement those insights require. Basic Pulse metric ' +
-    'tools may still be available. Do not offer AI-generated Pulse insights or briefs; if the ' +
-    'user asks for them, explain that the feature requires Tableau+.',
+    'NOTE: AI-powered Tableau Pulse insight tools were omitted from this session because the ' +
+    'Tableau+ entitlement could not be confirmed. The site may not have Tableau+, or the check ' +
+    'was denied. Basic Pulse metric tools may still be available. Do not offer AI-generated ' +
+    'Pulse insights or briefs; if the user asks for them, explain that they are not available ' +
+    'in this session and suggest they contact their Tableau administrator.',
   // Developer-facing only: reached when a RegistrationCondition is declared on a tool but has
   // no corresponding case in checkRegistrationConditions. Reconnecting cannot help.
   MissingConditionCheck:

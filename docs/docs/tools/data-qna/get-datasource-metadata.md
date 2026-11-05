@@ -65,6 +65,30 @@ workbook — pass the embedded data source's `datasourceLuid` (e.g. a connection
   [tool scoping](../../configuration/mcp-config/tool-scoping.md#embedded-data-sources) is enabled,
   also pass [`workbookLuid`](#workbookluid).
 
+## Optional field selectors
+
+- `fieldNames`: a nonempty array of exact, case-sensitive **field captions**. All duplicate-caption
+  matches are returned. These are captions, not VDS internal field names.
+- `search`: a nonblank, case-insensitive substring of a field's caption or description. Leading and
+  trailing whitespace is trimmed. With `fieldNames`, both conditions must match.
+
+For example, use `fieldNames: ["Sales", "Order Date"]` for known fields, or `search: "revenue"` to
+discover fields whose captions or descriptions contain that text. Selected fields retain their full
+metadata, including formulas and descriptions. Empty field groups are omitted.
+
+Search is literal, so related fields and formula dependencies may not match. For broad discovery
+or uncertain terminology, omit selectors; fetch referenced fields when needed.
+
+When either selector is supplied, `mcp.resultInfo` reports `totalFields` before selection,
+`matchedFields` after both selectors, and `unknownFieldNames` for requested captions absent from the
+datasource. A known caption excluded by `search` is not an unknown name. No matches produces empty
+`fieldGroups`.
+
+Selectors only affect fields. Parameters, datasource descriptions and model relationships are
+returned unchanged. Filtering happens after upstream metadata is fetched; it reduces tool output,
+not upstream requests. There is no response-size cap. Omit both selectors for the existing full
+response without `mcp.resultInfo`.
+
 ## Response shape
 
 Top-level keys are returned in this order:
@@ -73,6 +97,7 @@ Top-level keys are returned in this order:
 2. `datasourceModel` (optional)
 3. `fieldGroups`
 4. `parameters`
+5. `mcp` (only when a field selector is supplied)
 
 `datasourceModel` is available on Tableau versions that support the VDS `get-datasource-model`
 endpoint (2025.3+). On older versions, it is omitted.

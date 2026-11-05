@@ -82,6 +82,8 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   PENDING_DELETION_MAX_AGE_DAYS: string | undefined;
   FLOW_READ_TOOLS_ENABLED: string | undefined;
   FLOW_WRITE_TOOLS_ENABLED: string | undefined;
+  KNOWLEDGE_TOOLS_ENABLED: string | undefined;
+  KNOWLEDGE_WRITE_TOOLS_ENABLED: string | undefined;
   INSIGHTS_TOOLS_ENABLED: string | undefined;
   ADMIN_GATE_CACHE_TTL_MINUTES: string | undefined;
   STALE_CONTENT_MIN_AGE_DAYS: string | undefined;
@@ -99,7 +101,6 @@ export interface ProcessEnvDesktop extends ProcessEnvBase {
   IMAGE_EXPORT_TIMEOUT_MS: string | undefined;
   TABLEAU_DESKTOP_CALL_TIMEOUT_MS: string | undefined;
   TABLEAU_EXTERNAL_API_DISCOVERY_DIR: string | undefined;
-  TABLEAU_COMMANDS_REGISTRY_DIR: string | undefined;
   TABLEAU_USER_AGENT_PREFIX: string | undefined;
   TABLEAU_KNOWLEDGE_DIR: string | undefined;
   TEMPLATES_DIR: string | undefined;

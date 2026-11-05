@@ -9,6 +9,8 @@ import {
   dashboardListSchema,
   dashboardRoute,
   datasourceListSchema,
+  dataTableSchema,
+  DialogRequestStatus,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   InvokeDialogActionRequest,
@@ -21,7 +23,6 @@ import {
   storyboardItemSchema,
   storyboardListSchema,
   storyboardRoute,
-  summaryDataSchema,
   validationResultSchema,
   workbookInventorySchema,
   worksheetDocumentRoute,
@@ -43,20 +44,31 @@ const makeInstance = (baseUrl: string, token = 'valid-token'): ExternalApiInstan
   apiVersion: '1.0',
 });
 
-const invokeBody = (
-  namespace: string,
-  command: string,
-  parameters: Record<string, unknown> = {},
-): Record<string, unknown> => ({ namespace, command, parameters });
-
 const invokeDialogActionRequest: InvokeDialogActionRequest = {
+  requestId: 'request-1',
   dialog: {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-1',
+    revision: 1,
   },
   action: { kind: 'button', label: 'Discard' },
 };
+
+function dialogStatus(
+  request: InvokeDialogActionRequest,
+  state = 'completed',
+  effect = 'dialog-dismissed',
+): DialogRequestStatus {
+  return {
+    sessionId: request.dialog.sessionId,
+    revision: request.dialog.revision,
+    requestId: request.requestId,
+    state,
+    effect,
+  };
+}
 
 describe('ExternalApiHttp', () => {
   let server: MockExternalApiServer;
@@ -188,23 +200,6 @@ describe('ExternalApiHttp', () => {
     }
   });
 
-  it('invokes a command and surfaces the operation envelope result and state', async () => {
-    const result = await http.postJsonEnvelope(
-      EXTERNAL_API_ROUTES.invokeCommand,
-      invokeBody('tabdoc', 'undo', { steps: 1 }),
-    );
-    expect(result.isOk()).toBe(true);
-    const envelope = result.unwrap();
-    expect(envelope.state).toBe('succeeded');
-    expect(envelope.result).toEqual({
-      namespace: 'tabdoc',
-      command: 'undo',
-      echoedParameters: { steps: 1 },
-    });
-    expect(envelope.createdAt).toBe('2026-07-07T10:00:00Z');
-    expect(envelope.completedAt).toBe('2026-07-07T10:00:01Z');
-  });
-
   describe('start-page visibility contract', () => {
     it('pins the route and requires a boolean visibility result', () => {
       expect(EXTERNAL_API_ROUTES.appToggleStartPage).toBe('/v0/app:toggleStartPage');
@@ -282,34 +277,6 @@ describe('ExternalApiHttp', () => {
         code: 'operation-failed',
       });
     });
-  });
-
-  it('maps a command-not-found problem', async () => {
-    const result = await http.postJsonEnvelope(
-      EXTERNAL_API_ROUTES.invokeCommand,
-      invokeBody('tabdoc', 'missing-command'),
-    );
-    expect(result.isErr()).toBe(true);
-    const error = result.unwrapErr();
-    if (error.type === 'problem') {
-      expect(error.status).toBe(404);
-      expect(error.code).toBe('command-not-found');
-    } else {
-      throw new Error(`expected problem error, got ${error.type}`);
-    }
-  });
-
-  it('maps an invalid-command-parameter problem', async () => {
-    const result = await http.postJsonEnvelope(
-      EXTERNAL_API_ROUTES.invokeCommand,
-      invokeBody('tabdoc', 'bad-param', { nope: true }),
-    );
-    const error = result.unwrapErr();
-    if (error.type === 'problem') {
-      expect(error.code).toBe('invalid-command-parameter');
-    } else {
-      throw new Error(`expected problem error, got ${error.type}`);
-    }
   });
 
   it('gets the API root from GET /v0/', async () => {
@@ -639,7 +606,7 @@ describe('ExternalApiHttp', () => {
       columnsToIncludeByFieldName: ['Sales', 'Profit'],
     });
 
-    const result = await http.getJson(route, summaryDataSchema, new AbortController().signal);
+    const result = await http.getJson(route, dataTableSchema, new AbortController().signal);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
@@ -772,7 +739,7 @@ describe('ExternalApiHttp', () => {
       columnsToIncludeByFieldName: ['Region, State', 'Sales'],
     });
 
-    const result = await http.getJson(route, summaryDataSchema, new AbortController().signal);
+    const result = await http.getJson(route, dataTableSchema, new AbortController().signal);
 
     expect(result.isOk()).toBe(true);
     const query = new URL(route, 'http://localhost').searchParams;
@@ -866,7 +833,7 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toEqual({ isValid: true, validationIssues: [] });
+    expect(result.unwrap()).toEqual({ isValid: true, issues: [] });
 
     const last = server.requests.at(-1);
     expect(last?.method).toBe('POST');
@@ -877,10 +844,13 @@ describe('ExternalApiHttp', () => {
 
   it('posts exact dialog identity and action as JSON and parses the direct result', async () => {
     const exactRequest: InvokeDialogActionRequest = {
+      requestId: 'exact-request-1',
       dialog: {
         objectName: ' save-dialog ',
         title: 'Save “Regional Sales”?',
         className: 'QMessageBox',
+        sessionId: 'exact-dialog-session',
+        revision: 2,
       },
       action: { kind: 'button', label: ' &Discard ' },
     };
@@ -888,9 +858,10 @@ describe('ExternalApiHttp', () => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        outcome: 'dismissed',
+        outcome: 'completed',
         dialog: exactRequest.dialog,
-        action: exactRequest.action,
+        status: dialogStatus(exactRequest),
+        uiSnapshotAvailable: true,
         dialogs: [],
       }),
     });
@@ -902,9 +873,10 @@ describe('ExternalApiHttp', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
-      outcome: 'dismissed',
+      outcome: 'completed',
       dialog: exactRequest.dialog,
-      action: exactRequest.action,
+      status: dialogStatus(exactRequest),
+      uiSnapshotAvailable: true,
       dialogs: [],
     });
     const posted = server.requests.at(-1);
@@ -914,7 +886,7 @@ describe('ExternalApiHttp', () => {
     expect(posted?.body).toBe(JSON.stringify(exactRequest));
   });
 
-  it('preserves all fields in an action-invoked-dialog-remains response', async () => {
+  it('preserves all fields in a dispatched-pending response', async () => {
     const remainingDialog = {
       ...invokeDialogActionRequest.dialog,
       messageText: ' Save this workbook? ',
@@ -934,9 +906,10 @@ describe('ExternalApiHttp', () => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        outcome: 'action-invoked-dialog-remains',
+        outcome: 'dispatched-pending',
         dialog: invokeDialogActionRequest.dialog,
-        action: invokeDialogActionRequest.action,
+        status: dialogStatus(invokeDialogActionRequest, 'pending', 'none'),
+        uiSnapshotAvailable: true,
         dialogs: [remainingDialog],
         responseExtension: true,
       }),
@@ -949,9 +922,10 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.unwrap()).toEqual({
-      outcome: 'action-invoked-dialog-remains',
+      outcome: 'dispatched-pending',
       dialog: invokeDialogActionRequest.dialog,
-      action: invokeDialogActionRequest.action,
+      status: dialogStatus(invokeDialogActionRequest, 'pending', 'none'),
+      uiSnapshotAvailable: true,
       dialogs: [remainingDialog],
       responseExtension: true,
     });

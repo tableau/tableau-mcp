@@ -68,6 +68,8 @@ A comma-separated list of loggers to enable.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
+  The Desktop server starts every name with `desktop-mcp-`, e.g.
+  `desktop-mcp-2025-10-15T22-00-00-000Z.log`.
 - Each line in the log file is a JSON object with a timestamp and additional properties:
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
@@ -91,7 +93,8 @@ The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_logge
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
 - The server will attempt to create the directory if it does not exist.
-- There is no cleanup of old log files. The server will continue to create log files indefinitely.
+- The web server never deletes old log files.
+- The Desktop server deletes its own `desktop-mcp-*.log` files older than 14 days when it starts.
 
 <hr />
 
@@ -224,7 +227,6 @@ server ignores `TOOL_PROFILE`. On the combined server, only `combined-lean` chan
 - Unset or `dynamic-authoring`: the Desktop server registers a lean native authoring subset.
 - `full`: every Desktop tool.
 - `demo`: the demo subset. Experimental; it may change or be removed in a minor release.
-- `spec-loop`: the spec-loop subset. Experimental; it may change or be removed in a minor release.
 - `combined-lean`: the full Desktop surface, and the Web tools load on demand (see below).
 - Any other value logs a warning and uses the default (`dynamic-authoring`) set.
 
@@ -517,6 +519,14 @@ set).
 
 <hr />
 
+## `TABLEAU_DATA_APP_WORKSPACE_DIR`
+
+Desktop only. Absolute directory where `scaffold-data-app` writes durable data-app package trees.
+Relative or unset values are ignored; the tool then fails with an actionable error instead of
+writing relative to the process working directory.
+
+<hr />
+
 ## `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID`
 
 Desktop only. Set by the launcher (Tableau Desktop and its agent), not by hand. They are sent as
@@ -607,6 +617,53 @@ called again with that token, after the user approves the preview.
 | unset or `true` | `false` | read-only flow tools |
 | `false` | unset or `true` | mutating flow tools |
 | `false` | `false` | none |
+
+<hr />
+
+## `KNOWLEDGE_TOOLS_ENABLED`
+
+Controls the read-only Tableau Knowledge tools. They are disabled by default.
+
+- Default: unset, which leaves the read-only Knowledge tools disabled
+- Set to `true` to enable them. Any other value is treated as unset
+- Set to `false` to disable them
+- When `true`, the tools appear only on sites where Tableau Knowledge is available. The server
+  checks this when it registers tools, as it does for other site-dependent tools. If the site
+  rejects the check (for example, the request isn't authorized), the tools are left out as
+  unavailable. If the check fails with a temporary error, they are left out with a warning that the
+  error is likely transient
+- When enabled, registers:
+  - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
+  - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)
+- When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is
+  neither advertised nor accepted
+- The mutating Knowledge tool is controlled by
+  [`KNOWLEDGE_WRITE_TOOLS_ENABLED`](#knowledge_write_tools_enabled), and also needs this setting on
+
+<hr />
+
+## `KNOWLEDGE_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** Tableau Knowledge tool. It is disabled by default. Changes are
+shared with everyone and every agent that uses the Knowledge graph.
+
+- Default: unset, which leaves the mutating Knowledge tool disabled
+- Set to `true` to enable it. Any other value is treated as unset
+- Set to `false` to disable it
+- Unlike the flow settings, this one does not stand alone: the tool is registered only when the
+  read-only Knowledge tools are also enabled (see
+  [`KNOWLEDGE_TOOLS_ENABLED`](#knowledge_tools_enabled))
+- When enabled, registers:
+  - [`manage-knowledge-context`](../../tools/knowledge/manage-knowledge-context.md)
+- When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is neither
+  advertised nor accepted, and the `tableau:knowledge:write` REST API scope is not advertised
+- The tool requires the Creator site role or higher
+
+| `KNOWLEDGE_TOOLS_ENABLED` | `KNOWLEDGE_WRITE_TOOLS_ENABLED` | Registered Knowledge tools |
+| --- | --- | --- |
+| `true` | `true` | read-only and mutating Knowledge tools |
+| `true` | unset or `false` | read-only Knowledge tools |
+| unset or `false` | any value | none |
 
 <hr />
 
@@ -891,7 +948,6 @@ used (it is not raised to the minimum). A value above a clamp is lowered to the 
 | `TABLEAU_DESKTOP_SESSION_ID`                                                                                    | none                                                                                                                                                                                                                       | must be digits only (a Desktop pid)      | Pins the Desktop instance session-scoped tools default to. The agent can still target another open Desktop. Anything that is not a pid is ignored.                                                                                                                               | spawner     |
 | `TABLEAU_USER_AGENT_PREFIX`                                                                                     | none                                                                                                                                                                                                                       | a single `name/version` product token; anything else is ignored| Product token the launcher puts at the front of the External Client API `User-Agent`, ahead of `tableau-desktop-mcp/<version>`. Desktop attributes each call to the leading token. Tableau Agent sets `tableau-agent/<version>`.                                                 | spawner     |
 | `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`                                                                            | OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if unset), `~/Library/Application Support` on macOS, `$XDG_DATA_HOME` (else `~/.local/share`) on Linux. Two folders are searched, in order: `<root>/Tableau/Tableau/ExternalApi`, then `<root>/Tableau/ExternalApi` |                                          | Directory searched for running Desktop instances. When set, it is the only directory searched.                                                                                                                                                                                   | dev/test    |
-| `TABLEAU_COMMANDS_REGISTRY_DIR`                                                                                 | none                                                                                                                                                                                                                       | blank is treated as unset                | Directory with the Desktop command and parameter registry JSON files. Without it the commands reference is unavailable.                                                                                                                                                          | spawner     |
 | `TABLEAU_KNOWLEDGE_DIR`                                                                                         | none (the knowledge corpus is empty)                                                                                                                                                                                       |                                          | Knowledge roots served as `expertise://` resources. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows). Earlier roots win on a name collision.                                                                                           | spawner     |
 | `TEMPLATES_DIR`                                                                                                 | the bundled `templates` directory                                                                                                                                                                                          |                                          | Replaces the whole template catalog with this directory.                                                                                                                                                                                                                         | dev/test    |
 | `TABLEAU_REPOSITORY_DIR`                                                                                        | none                                                                                                                                                                                                                       |                                          | Adds three external template folders under this directory, in order: `Tableau Agent/templates/.vendored/overridable`, `Bookmarks`, then `Tableau Agent/templates`. A later folder overrides a bundled or earlier template with the same name. Ignored when `TEMPLATES_DIR` is set. | spawner     |

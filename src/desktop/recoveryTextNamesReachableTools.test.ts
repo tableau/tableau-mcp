@@ -24,8 +24,6 @@ const ALLOWED: Readonly<Record<string, string>> = {
     'READ_TOOL_BY_KIND is a lookup keyed by artifact kind; the workbook and dashboard rows are only ever read for artifacts that off-profile tools produce',
   'desktop/knowledge/index.ts':
     'QUERY_TOOL_JARGON is a search stop-word list used to clean an incoming query — it is never rendered to the agent',
-  'desktop/binder/binder.ts':
-    'APPLY_INSTRUCTION describes the tableau-* template chain for full-profile callers and is dropped on the served auto-apply path. Owned by the binder branches — revisit there, not here',
   'desktop/route/route-state.ts':
     'BindRecoveryProposalContext stores the legacy bind-template tool name as structured puppetry state; it is not rendered as recovery guidance',
 };
@@ -166,7 +164,7 @@ function toolNameToModule(): Map<string, string> {
   return map;
 }
 
-// Scope: the default dynamic-authoring profile only. demo, spec-loop and full serve sets that
+// Scope: the default dynamic-authoring profile only. demo and full serve sets that
 // cannot satisfy a strict check (their text legitimately names tools across profiles).
 describe('recovery text names only tools the caller actually has', () => {
   // The class: an error string that names a tool absent from the profile it ships in
@@ -209,7 +207,7 @@ describe('recovery text names only tools the caller actually has', () => {
   });
 
   it('recognizes underscore spellings as registered tool names', () => {
-    expect(toolNamesNamedIn("'execute_tableau_command'")).toContain('execute-tableau-command');
+    expect(toolNamesNamedIn("'list_templates'")).toContain('list-templates');
   });
 
   it('keeps scanning after an apostrophe inside a string', () => {

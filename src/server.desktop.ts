@@ -68,27 +68,9 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
 ]);
 
 /**
- * Minimal tool set that drives Tableau through execute-tableau-command alone, selected by
- * TOOL_PROFILE=spec-loop. Charts, calcs and dashboards all go through that one tool, with no XML
- * authoring tools, templates, or bind-template. The rest is discovery and readback tools so the
- * model can observe state. get-worksheet-xml is in every profile so existing sheets can be
- * inspected and edited before any authoring attempt. Experimental: it may change or be removed
- * in a minor release.
- */
-export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
-  'execute-tableau-command',
-  'list-instances',
-  'list-available-fields',
-  'get-worksheet-xml',
-  'list-worksheets',
-  'list-dashboards',
-]);
-
-/**
  * The default tool set, used when TOOL_PROFILE is unset or `dynamic-authoring`. It is the lean
- * native authoring surface: the spec-loop tools, the author-* tools (calcs, sets, parameters,
- * actions), format-worksheets, ask-user, and search-commands for finding the
- * execute-tableau-command dialect. It adds bind-template for single-view asks, the guarded
+ * native authoring surface: the author-* tools (calcs, sets, parameters, actions),
+ * format-worksheets, ask-user, bind-template for single-view asks, the guarded
  * template artifact fallback, and refine-worksheet for top-N and sort edits in place. It also
  * includes the two knowledge tools (search-knowledge and read-knowledge-resource), because the
  * instructions tell the model to consult the expertise library before authoring and these are
@@ -124,8 +106,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'apply-storyboard',
     'apply-workbook',
     'run-dashboard-batch',
-    'execute-tableau-command',
-    'search-commands',
     // Atomic navigation fallback: switch the workbook active window directly.
     'activate-sheet',
     'delete-sheet',
@@ -146,6 +126,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'refresh-storyboard-auto-updates',
     'refresh-dashboard-auto-updates',
     'reload-extensions',
+    'get-workbook-extensions',
+    'scaffold-data-app',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
     'undo-workbook',
@@ -170,6 +152,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
+    'list-datasource-logical-tables',
+    'get-datasource-underlying-data',
     'capture-window-screenshot',
     'get-workbook-inventory',
     'list-workbook-datasources',
@@ -195,7 +179,6 @@ export const ALWAYS_LOAD_TOOL_NAMES: ReadonlySet<DesktopToolName> = new Set<Desk
   'rename-sheet',
   'read-knowledge-resource',
   'run-dashboard-batch',
-  'search-commands',
   'get-dashboard-xml',
   'invoke-dialog-action',
   'search-knowledge',
@@ -207,8 +190,8 @@ function getDesktopToolMeta(name: DesktopToolName): { _meta?: Record<string, unk
 
 /**
  * Select the tools to register for a TOOL_PROFILE value (already trimmed and lowercased by
- * Config). Unset or `dynamic-authoring` gives the default lean set. `demo` and `spec-loop` give
- * their named subsets. `full` and `combined-lean` give every Desktop tool (the lean half of
+ * Config). Unset or `dynamic-authoring` gives the default lean set. `demo` gives its named
+ * subset. `full` and `combined-lean` give every Desktop tool (the lean half of
  * `combined-lean` is the Web side, handled by WebMcpServer). Any other value logs a warning and
  * gives the default set. Pure apart from that warning, so it can be unit-tested without the
  * server or env.
@@ -222,9 +205,6 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   }
   if (profile === 'demo') {
     return tools.filter((tool) => DEMO_TOOL_PROFILE.has(tool.name));
-  }
-  if (profile === 'spec-loop') {
-    return tools.filter((tool) => SPEC_LOOP_TOOL_PROFILE.has(tool.name));
   }
   if (profile === 'full' || profile === 'combined-lean') {
     return tools;
@@ -290,7 +270,7 @@ export { DATA_ROOT, RESOURCES_ROOT };
 
 // Default (unpinned) routing guidance sent at initialize, so clients without a skill still
 // get routing for the template fast path. The server builds per-session text at connect time,
-// and demo and spec-loop get different text. Generated from the typed route table so route
+// and demo gets different text. Generated from the typed route table so route
 // edits are pinned by tests instead of drifting as prose.
 export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: false });
 

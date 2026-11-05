@@ -692,6 +692,24 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  KNOWLEDGE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable read-only Tableau Knowledge MCP tools',
+    description:
+      'Set to "true" to enable query-knowledge-context and inspect-knowledge-context, or "false" to disable them. When "true", the tools appear only on sites where Tableau Knowledge is available, which is checked when tools register.',
+    required: false,
+    sensitive: false,
+  },
+  KNOWLEDGE_WRITE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable content-mutating Tableau Knowledge MCP tools',
+    description:
+      'Set to "true" to enable manage-knowledge-context, or "false" to disable it. The tool also requires the read-only Knowledge tools to be enabled.',
+    required: false,
+    sensitive: false,
+  },
   INSIGHTS_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',

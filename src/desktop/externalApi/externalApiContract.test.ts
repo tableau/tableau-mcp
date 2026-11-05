@@ -7,6 +7,8 @@ import { startMockExternalApiServer } from './mockExternalApiServer.js';
 import {
   apiRootSchema,
   appInfoSchema,
+  appScreenshotRoute,
+  appScreenshotSchema,
   capabilityMatrixSchema,
   dashboardItemSchema,
   dashboardListSchema,
@@ -15,10 +17,13 @@ import {
   dashboardRefreshTargetSchema,
   datasourceItemSchema,
   datasourceListSchema,
+  dataTableSchema,
   desktopStateSchema,
+  dialogActionInvocationSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
+  dialogRequestStatusSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
   imageResultSchema,
@@ -38,12 +43,13 @@ import {
   showMeWorksheetSchema,
   storyboardItemSchema,
   storyboardListSchema,
-  summaryDataSchema,
+  ValidateCalculatedFieldRequest,
   validateCalculatedFieldResponseSchema,
   validationResultSchema,
   windowInfoSchema,
   workbookDiagnosticsSchema,
   workbookInventorySchema,
+  workbookValidationIssueSchema,
   worksheetDiagnosticsSchema,
   worksheetInvalidFieldSchema,
   worksheetItemSchema,
@@ -132,7 +138,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
     'isStartPageVisible',
     'isDataSourcePageActive',
     'isPresentationMode',
-    'isFocusMode',
+    'isCanvasMode',
   ],
   DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
   DashboardList: ['dashboards'],
@@ -153,16 +159,17 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
   StoryboardList: ['storyboards'],
   WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
-  SummaryData: ['columns', 'rows'],
+  DataTable: ['columns', 'rows'],
   LogicalTableItem: ['id', 'caption'],
   LogicalTableList: ['tables'],
-  ValidationResult: ['validationIssues'],
+  ValidationResult: ['issues'],
   ImageExport: ['effectiveMimeType', 'width', 'height'],
+  WindowInfo: ['sessionId', 'revision', 'family', 'status'],
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.25 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.25');
+  it('tracks the 0.2.31 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.31');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -252,7 +259,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['StoryboardItem', storyboardItemSchema],
       ['StoryboardList', storyboardListSchema],
       ['WorkbookInventory', workbookInventorySchema],
-      ['SummaryData', summaryDataSchema],
+      ['DataTable', dataTableSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
       ['ShowMeWorksheet', showMeWorksheetSchema],
@@ -260,6 +267,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
+      ['WorkbookValidationIssue', workbookValidationIssueSchema],
       ['ImageExport', imageResultSchema],
       ['OperationList', operationListSchema],
       ['ValidateCalculatedFieldResponse', validateCalculatedFieldResponseSchema],
@@ -291,7 +299,7 @@ describe('external client API contract (captured openapi fixture)', () => {
           'isStartPageVisible',
           'isDataSourcePageActive',
           'isPresentationMode',
-          'isFocusMode',
+          'isCanvasMode',
         ],
         DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
         DashboardList: ['dashboards'],
@@ -312,11 +320,12 @@ describe('external client API contract (captured openapi fixture)', () => {
         StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
         StoryboardList: ['storyboards'],
         WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
-        SummaryData: ['columns', 'rows'],
+        DataTable: ['columns', 'rows'],
         LogicalTableItem: ['id', 'caption'],
         LogicalTableList: ['tables'],
-        ValidationResult: ['validationIssues'],
+        ValidationResult: ['issues'],
         ImageExport: ['effectiveMimeType', 'width', 'height'],
+        WindowInfo: ['sessionId', 'revision', 'family', 'status'],
       });
       for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
         const component = specSchema(name);
@@ -394,7 +403,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(extras.sort()).toEqual(['detail', 'type']);
     });
 
-    it('PROBLEM_CODES equals the spec x-extensible-enum exactly', () => {
+    it('PROBLEM_CODES equals the spec x-extensible-enum', () => {
       expect([...PROBLEM_CODES].sort()).toEqual(
         [...(problem.properties?.code?.['x-extensible-enum'] ?? [])].sort(),
       );
@@ -412,116 +421,100 @@ describe('external client API contract (captured openapi fixture)', () => {
 
   describe('dialog contracts', () => {
     it.each([
+      ['DialogAction', dialogActionSchema],
       ['DialogIdentity', dialogIdentitySchema],
       ['DialogList', dialogListSchema],
+      ['DialogRequestStatus', dialogRequestStatusSchema],
       ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
-    ] as const)('%s properties and required set match exactly', (name, schema) => {
+      ['InvokeDialogActionResult', invokeDialogActionResultSchema],
+    ] as const)('%s properties and required set match the producer', (name, schema) => {
       const component = specSchema(name);
       expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
       expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
     });
 
-    it('reuses WindowInfo for every dialog snapshot', () => {
-      const dialogList = specSchema('DialogList');
-      const dismissResult = specSchema('InvokeDialogActionResult');
-
-      expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      for (const outcome of dismissResult.oneOf ?? []) {
-        expect(outcome.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
+    it('matches every advertised invocation branch and its required input fields', () => {
+      const branches = specSchema('DialogActionInvocation').oneOf ?? [];
+      expect(dialogActionInvocationSchema.options).toHaveLength(branches.length);
+      for (const branch of branches) {
+        const kind = branch.properties?.kind?.const;
+        const schema = dialogActionInvocationSchema.options.find(
+          (option) => option.shape.kind.value === kind,
+        );
+        expect(schema, String(kind)).toBeDefined();
+        if (!schema) throw new Error(`Missing invocation schema for ${String(kind)}`);
+        expect(declaredKeys(schema).sort()).toEqual(Object.keys(branch.properties ?? {}).sort());
+        expect(requiredKeys(schema).sort()).toEqual([...(branch.required ?? [])].sort());
+        expect(schema._def.unknownKeys).toBe('strict');
       }
     });
 
-    it('documents bounded detailed text and its truncation marker', () => {
-      const windowInfo = specSchema('WindowInfo');
-
-      expect(windowInfo.properties?.detailedText?.maxLength).toBe(1024 * 1024);
-      expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
-    });
-
-    it('models exact labeled button and semantic close actions', () => {
-      const variants = specSchema('DialogAction').oneOf ?? [];
-      const byKind = Object.fromEntries(
-        variants.map((variant) => [variant.properties?.kind?.const, variant]),
+    it('uses shared snapshots and status schemas without echoing selection payloads', () => {
+      expect(specSchema('InvokeDialogActionRequest').properties?.action?.$ref).toBe(
+        '#/components/schemas/DialogActionInvocation',
       );
-
-      expect(byKind.button.required?.sort()).toEqual(['kind', 'label']);
-      expect(byKind.button.properties?.label?.minLength).toBe(1);
-      expect(byKind.close.required).toEqual(['kind']);
-      expect(byKind.close.properties?.label).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'unknown' }).success).toBe(false);
-    });
-
-    it('requires an exact returned action in requests and invoked responses', () => {
-      const request = specSchema('InvokeDialogActionRequest');
-      const outcomes = specSchema('InvokeDialogActionResult').oneOf ?? [];
-
-      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: '' },
-        }).success,
-      ).toBe(false);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: ' ' },
-        }).success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: 'dialog', title: 'Save' },
-          action: { kind: 'button', label: 'Discard' },
-        }).success,
-      ).toBe(false);
-      for (const outcome of outcomes.filter(
-        (candidate) => candidate.properties?.outcome?.const !== 'no-active-dialog',
-      )) {
-        expect(outcome.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-        expect(outcome.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
+      expect(specSchema('InvokeDialogActionResult').properties?.status?.$ref).toBe(
+        '#/components/schemas/DialogRequestStatus',
+      );
+      expect(specSchema('DialogList').properties?.recentActions?.items?.$ref).toBe(
+        '#/components/schemas/DialogRequestStatus',
+      );
+      for (const name of ['DialogList', 'InvokeDialogActionResult']) {
+        expect(specSchema(name).properties?.dialogs?.items?.$ref).toBe(
+          '#/components/schemas/WindowInfo',
+        );
       }
+      expect(declaredKeys(invokeDialogActionResultSchema)).not.toContain('action');
+      expect(specSchema('WindowInfo').properties?.detailedText?.maxLength).toBe(1024 * 1024);
+      expect(specSchema('WindowInfo').properties?.detailedTextTruncated?.type).toBe('boolean');
     });
 
-    it('models the exact three outcome branches and their required fields', () => {
-      const outcomeSchemas = specSchema('InvokeDialogActionResult').oneOf ?? [];
-      const requiredByOutcome = Object.fromEntries(
-        outcomeSchemas.map((outcome) => [
-          outcome.properties?.outcome?.const,
-          [...(outcome.required ?? [])].sort(),
-        ]),
-      );
-
-      expect(requiredByOutcome).toEqual({
-        'no-active-dialog': ['dialogs', 'outcome'],
-        dismissed: ['action', 'dialog', 'dialogs', 'outcome'],
-        'action-invoked-dialog-remains': ['action', 'dialog', 'dialogs', 'outcome'],
-      });
-
+    it('accepts future read capabilities and statuses without accepting unknown write actions', () => {
       expect(
-        invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
-          .success,
+        dialogActionSchema.safeParse({ kind: 'future-action', enabled: true, future: 1 }).success,
       ).toBe(true);
+      expect(dialogActionInvocationSchema.safeParse({ kind: 'future-action' }).success).toBe(false);
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'dismissed',
-          dialog: { objectName: 'dialog', title: 'Save', className: 'QMessageBox' },
-          action: { kind: 'button', label: 'Discard' },
-          dialogs: [],
+        dialogRequestStatusSchema.safeParse({
+          sessionId: 's',
+          revision: 1,
+          requestId: 'r',
+          state: 'future-state',
+          effect: 'future-effect',
         }).success,
       ).toBe(true);
+    });
+
+    it('rejects the obsolete result that cannot identify or track the request', () => {
       expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'action-invoked-dialog-remains',
-          dialogs: [],
-        }).success,
+        invokeDialogActionResultSchema.safeParse({ outcome: 'dismissed', dialogs: [] }).success,
       ).toBe(false);
     });
+
+    it.each(['firstPage', 'lastPage', 'copies'])(
+      'bounds native print %s to the producer signed 32-bit parser',
+      (field) => {
+        const action = {
+          kind: 'submit-print',
+          printerId: 'printer-id',
+          range: 'all-pages',
+          sheetScope: 'active-sheet',
+          firstPage: 0,
+          lastPage: 0,
+          copies: 1,
+        };
+        const validAction = { ...action, collate: false, exportSelection: false };
+        expect(
+          dialogActionInvocationSchema.safeParse({ ...validAction, [field]: 2_147_483_647 })
+            .success,
+        ).toBe(true);
+        for (const value of [2_147_483_648, Number.MAX_SAFE_INTEGER, 1.5]) {
+          expect(
+            dialogActionInvocationSchema.safeParse({ ...validAction, [field]: value }).success,
+          ).toBe(false);
+        }
+      },
+    );
   });
 
   describe('app-state contract', () => {
@@ -601,6 +594,7 @@ describe('external client API contract (captured openapi fixture)', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
+      EXTERNAL_API_ROUTES.appScreenshot,
       EXTERNAL_API_ROUTES.appDialogs,
       EXTERNAL_API_ROUTES.appState,
       EXTERNAL_API_ROUTES.appInvokeDialogAction,
@@ -659,23 +653,21 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.oauthProtectedResource,
       EXTERNAL_API_ROUTES.appToggleDataSourcePage,
       EXTERNAL_API_ROUTES.capabilities,
-      EXTERNAL_API_ROUTES.worksheetValidateCalculatedField,
+      EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
+      EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables,
+      EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
       EXTERNAL_API_ROUTES.worksheetReloadExtension,
       EXTERNAL_API_ROUTES.dashboardReloadExtensions,
     ])('spec documents %s', (route) => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
 
-    it('has a route constant for every spec path and only the hidden invokeCommand beyond it', () => {
+    it('has a route constant for every spec path', () => {
       const constants = Object.values(EXTERNAL_API_ROUTES);
       expect(
         Object.keys(spec.paths).filter((route) => !constants.includes(route as never)),
       ).toEqual([]);
-      expect(
-        constants.filter(
-          (route) => !(route in spec.paths) && route !== EXTERNAL_API_ROUTES.invokeCommand,
-        ),
-      ).toEqual([]);
+      expect(constants.filter((route) => !(route in spec.paths))).toEqual([]);
     });
 
     it('serves every spec operation from the mock server', async () => {
@@ -701,12 +693,18 @@ describe('external client API contract (captured openapi fixture)', () => {
       }
     });
 
+    it('documents getWorkbookExtensions at 0.2.27', () => {
+      const item = spec.paths[EXTERNAL_API_ROUTES.workbookExtensions] as {
+        get?: { operationId?: string };
+      };
+      expect(item.get?.operationId).toBe('getWorkbookExtensions');
+    });
+
     it('documents the new 0.2.25 operations by operationId', () => {
       const operationIds = Object.fromEntries(
         [
           EXTERNAL_API_ROUTES.appToggleDataSourcePage,
           EXTERNAL_API_ROUTES.capabilities,
-          EXTERNAL_API_ROUTES.worksheetValidateCalculatedField,
           EXTERNAL_API_ROUTES.worksheetReloadExtension,
           EXTERNAL_API_ROUTES.dashboardReloadExtensions,
         ].map((route) => {
@@ -718,10 +716,41 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(operationIds).toEqual({
         [EXTERNAL_API_ROUTES.appToggleDataSourcePage]: 'toggleDataSourcePage',
         [EXTERNAL_API_ROUTES.capabilities]: 'getCapabilities',
-        [EXTERNAL_API_ROUTES.worksheetValidateCalculatedField]: 'validateWorksheetCalculatedField',
         [EXTERNAL_API_ROUTES.worksheetReloadExtension]: 'reloadWorksheetExtension',
         [EXTERNAL_API_ROUTES.dashboardReloadExtensions]: 'reloadDashboardExtensions',
       });
+    });
+
+    it('documents the 0.2.30 and 0.2.31 datasource operations by operationId', () => {
+      const operationIds = Object.fromEntries(
+        [
+          EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField,
+          EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables,
+          EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
+        ].map((route) => {
+          const item = spec.paths[route] as Record<string, { operationId?: string }>;
+          return [route, (item.get ?? item.post)?.operationId];
+        }),
+      );
+
+      expect(operationIds).toEqual({
+        [EXTERNAL_API_ROUTES.workbookDatasourceValidateCalculatedField]:
+          'validateDatasourceCalculatedField',
+        [EXTERNAL_API_ROUTES.workbookDatasourceLogicalTables]: 'listDatasourceLogicalTables',
+        [EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData]: 'getDatasourceLogicalTableData',
+      });
+    });
+
+    it('matches the calculated-field validation request body', () => {
+      const request = specSchema('ValidateCalculatedFieldRequest');
+      const sent: Record<keyof ValidateCalculatedFieldRequest, true> = {
+        formula: true,
+        caption: true,
+        fieldName: true,
+      };
+
+      expect(Object.keys(request.properties ?? {}).sort()).toEqual(Object.keys(sent).sort());
+      expect(request.required).toEqual(['formula']);
     });
 
     it('requires an explicit target state for the Data Source page', () => {
@@ -823,10 +852,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
     });
 
-    it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
-      expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
-    });
-
     it('documents the dialog routes with their exact request and response schemas', () => {
       const paths = spec.paths as Record<
         string,
@@ -860,9 +885,43 @@ describe('external client API contract (captured openapi fixture)', () => {
           'application/json'
         ]?.schema?.$ref,
       ).toBe('#/components/schemas/InvokeDialogActionResult');
+    });
+
+    it('documents the app screenshot read with an absolute outputPath and AppScreenshot response', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.appScreenshot] as {
+        get?: {
+          operationId?: string;
+          parameters?: Array<{ name?: string; in?: string; required?: boolean; $ref?: string }>;
+          responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+        };
+        post?: unknown;
+      };
+      const appScreenshot = specSchema('AppScreenshot');
+
+      expect(Object.keys(pathItem)).toEqual(['get']);
+      expect(pathItem.get?.operationId).toBe('getAppScreenshot');
       expect(
-        Object.keys(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses ?? {}),
-      ).toContain('409');
+        pathItem.get?.parameters?.find((parameter) => parameter.name === 'outputPath'),
+      ).toMatchObject({
+        in: 'query',
+        required: true,
+      });
+      expect(pathItem.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/AppScreenshot',
+      );
+      expect(Object.keys(pathItem.get?.responses ?? {})).toContain('400');
+      expect(declaredKeys(appScreenshotSchema)).toEqual(
+        Object.keys(appScreenshot.properties ?? {}),
+      );
+      expect(requiredKeys(appScreenshotSchema)).toEqual(appScreenshot.required);
+      expect(appScreenshot.properties?.filePaths?.items?.type).toBe('string');
+      expect(appScreenshotRoute('C:/tmp/shots dir')).toBe(
+        '/v0/app/screenshot?outputPath=C%3A%2Ftmp%2Fshots%20dir',
+      );
+      expect(
+        appScreenshotSchema.safeParse({ filePaths: ['C:/tmp/shots/ScreenShot_1.png'] }).success,
+      ).toBe(true);
+      expect(appScreenshotSchema.safeParse({}).success).toBe(false);
     });
 
     it('documents the app-state read with the shared AppState response', () => {
@@ -1162,18 +1221,18 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('parses a SUCCEEDED Operation result object and serialize-degradation warning', () => {
+    it('parses a SUCCEEDED Operation result object and a warning', () => {
       const parsed = operationEnvelopeSchema.safeParse({
         id: 'op-1',
-        kind: 'command.invoke',
+        kind: 'tabdoc:undo',
         state: 'SUCCEEDED',
         createdAt: '2026-07-20T10:00:00Z',
         updatedAt: '2026-07-20T10:00:02Z',
-        result: { outputParam: 'value' },
+        result: { undone: true },
         warnings: [
           {
-            code: 'output-serialization-failed',
-            message: 'Command output could not be serialized.',
+            code: 'partial',
+            message: 'one sheet skipped',
             target: 'result',
           },
         ],
