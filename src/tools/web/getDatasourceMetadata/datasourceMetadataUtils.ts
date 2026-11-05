@@ -106,6 +106,15 @@ export const fieldsResultSchema = z.object({
   datasourceModel: datasourceModelSchema.optional(),
   fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
+  mcp: z
+    .object({
+      resultInfo: z.object({
+        totalFields: z.number(),
+        matchedFields: z.number(),
+        unknownFieldNames: z.array(z.string()),
+      }),
+    })
+    .optional(),
 });
 
 type Parameter = z.infer<typeof parameterSchema>;

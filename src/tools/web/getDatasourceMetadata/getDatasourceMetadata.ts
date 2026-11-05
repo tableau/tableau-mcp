@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import {
   ArgsValidationError,
@@ -23,6 +24,7 @@ import { ToolRules, WebTool } from '../tool.js';
 import {
   combineFields,
   DatasourceType,
+  FieldsResult,
   simplifyReadMetadataResult,
 } from './datasourceMetadataUtils.js';
 
@@ -94,6 +96,19 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
 
 const paramsSchema = {
   datasourceLuid: luidSchema,
+  fieldNames: z
+    .array(z.string().nonempty())
+    .nonempty()
+    .optional()
+    .describe('Exact, case-sensitive field captions. Returns all matches for duplicate captions.'),
+  search: z
+    .string()
+    .trim()
+    .nonempty()
+    .optional()
+    .describe(
+      'Case-insensitive substring of field caption or description; combined with fieldNames using AND.',
+    ),
   workbookLuid: luidSchema
     .optional()
     .describe(
@@ -134,14 +149,16 @@ export const getGetDatasourceMetadataTool = (
     server,
     name: 'get-datasource-metadata',
     minRequiredRole: SiteRole.VIEWER,
-    description: new Provider(() =>
-      getResultForTableauVersion({
-        productVersion,
-        mappings: {
-          '2026.3.0': getDatasourceMetadataToolDescription20263,
-          default: getDatasourceMetadataToolDescription,
-        },
-      }),
+    description: new Provider(
+      () =>
+        'Retrieve metadata for all or selected fields. Use fieldNames for known exact captions, or search for a targeted caption/description lookup. Search is literal: related fields and formula dependencies may not match. For broad discovery or uncertain terminology, omit selectors; fetch referenced fields when needed. Selectors filter fields only; datasource descriptions, parameters and model relationships are unchanged. Inspect mcp.resultInfo for matching counts and unknown field names.\n' +
+        getResultForTableauVersion({
+          productVersion,
+          mappings: {
+            '2026.3.0': getDatasourceMetadataToolDescription20263,
+            default: getDatasourceMetadataToolDescription,
+          },
+        }),
     ),
     paramsSchema,
     annotations: {
@@ -151,12 +168,15 @@ export const getGetDatasourceMetadataTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid, workbookLuid }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, workbookLuid, fieldNames, search },
+      extra,
+    ): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
       return await getDatasourceMetadataTool.logAndExecute({
         extra,
-        args: { datasourceLuid, workbookLuid },
+        args: { datasourceLuid, workbookLuid, fieldNames, search },
         callback: async () => {
           if (!datasourceLuid) {
             return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
@@ -257,7 +277,7 @@ export const getGetDatasourceMetadataTool = (
         constrainSuccessResult: (fields) => {
           return {
             type: 'success',
-            result: fields,
+            result: selectFields(fields, fieldNames, search),
           };
         },
       });
@@ -266,6 +286,38 @@ export const getGetDatasourceMetadataTool = (
 
   return getDatasourceMetadataTool;
 };
+
+function selectFields(source: FieldsResult, fieldNames?: string[], search?: string): FieldsResult {
+  if (!fieldNames && search === undefined) return source;
+
+  const fields = source.fieldGroups.flatMap((group) => group.fields);
+  const availableNames = new Set(fields.map((field) => field.name));
+  const selectedNames = fieldNames ? new Set(fieldNames) : undefined;
+  const term = search?.toLowerCase();
+  const fieldGroups = source.fieldGroups
+    .map((group) => ({
+      ...group,
+      fields: group.fields.filter(
+        (field) =>
+          (!selectedNames || selectedNames.has(field.name ?? '')) &&
+          (term === undefined ||
+            [field.name, field.description].some((value) => value?.toLowerCase().includes(term))),
+      ),
+    }))
+    .filter((group) => group.fields.length > 0);
+
+  return {
+    ...source,
+    fieldGroups,
+    mcp: {
+      resultInfo: {
+        totalFields: fields.length,
+        matchedFields: fieldGroups.reduce((count, group) => count + group.fields.length, 0),
+        unknownFieldNames: [...(selectedNames ?? [])].filter((name) => !availableNames.has(name)),
+      },
+    },
+  };
+}
 
 // A publishedDatasources match (Metadata API) is authoritative and free. Otherwise probe the REST
 // Query Data Source endpoint and classify on the returned shape: WBDS-enabled servers return
