@@ -712,6 +712,14 @@ export class WebMcpServer extends Server {
     // Allow configured CSP domains
     const cspDomains = config.cspAllowedDomains;
 
+    // The app loads the Embedding API from, and only embeds views on, this origin. Delivered in the
+    // resource HTML (not the tool result) so model-influenced data can't redirect it.
+    const serverOriginMeta = `<meta name="tableau-server-origin" content="${
+      config.server
+        ? new URL(config.server).origin.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
+        : ''
+    }">`;
+
     registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
       this.mcpServer,
@@ -733,7 +741,8 @@ export class WebMcpServer extends Server {
             {
               uri: resourceUri,
               mimeType: RESOURCE_MIME_TYPE,
-              text: htmlContent,
+              // First `<head>` precedes any inlined bundle script; a replacer fn avoids `$` patterns.
+              text: htmlContent.replace('<head>', () => `<head>${serverOriginMeta}`),
               _meta: {
                 ui: {
                   csp: {

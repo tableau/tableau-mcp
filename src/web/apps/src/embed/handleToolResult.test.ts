@@ -41,6 +41,12 @@ describe('handleToolResult', () => {
     main.appendChild(vizStage);
     document.body.appendChild(main);
 
+    // Trusted origin the server injects into the app resource HTML
+    const originMeta = document.createElement('meta');
+    originMeta.name = 'tableau-server-origin';
+    originMeta.content = 'https://prod-uswest-c.online.tableau.com';
+    document.head.appendChild(originMeta);
+
     // Create mock app
     mockApp = {
       getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
@@ -56,6 +62,7 @@ describe('handleToolResult', () => {
 
   afterEach(() => {
     document.body.replaceChildren();
+    document.head.replaceChildren();
     vi.restoreAllMocks();
   });
 
@@ -251,6 +258,39 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['the view url origin differs from the trusted origin', 'https://evil.example.com'],
+    ['no trusted origin was injected', undefined],
+  ])('should show error UI without loading the embedding API when %s', async (_, origin) => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="tableau-server-origin"]');
+    if (origin) {
+      meta!.content = origin;
+    } else {
+      meta!.remove();
+    }
+
+    const validResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            url: 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view',
+          }),
+        },
+      ],
+    };
+
+    await handleToolResult(mockApp, validResult);
+
+    const errorElement = document.querySelector('#tableauVizContainer .mcp-app-error');
+    expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
+      'The visualization failed to load.',
+    );
+    expect(vi.mocked(loadTableauEmbeddingApi)).not.toHaveBeenCalled();
+    expect(vi.mocked(callGetEmbedTokenTool)).not.toHaveBeenCalled();
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+  });
+
   it('should show error UI when token minting fails', async () => {
     const validResult: CallToolResult = {
       content: [
@@ -357,6 +397,11 @@ describe('handleToolResult', () => {
 
     // Assert NO error UI displayed
     expect(container?.querySelector('.mcp-app-error')).toBeNull();
+
+    // Embedding API comes from the trusted origin, not one parsed from the tool result
+    expect(vi.mocked(loadTableauEmbeddingApi)).toHaveBeenCalledWith(
+      'https://prod-uswest-c.online.tableau.com',
+    );
 
     // Assert embedTableauViz WAS called once
     expect(vi.mocked(embedTableauViz)).toHaveBeenCalledTimes(1);

@@ -1,7 +1,8 @@
 /**
  * Loads the Tableau Embedding API script from the Tableau server
+ * @param serverOrigin - The trusted Tableau server origin (never derive it from tool-result data)
  */
-export function loadTableauEmbeddingApi(viewUrl: string): Promise<void> {
+export function loadTableauEmbeddingApi(serverOrigin: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // Check if custom elements are available (may be blocked in sandboxed iframes)
     if (!('customElements' in window)) {
@@ -15,8 +16,6 @@ export function loadTableauEmbeddingApi(viewUrl: string): Promise<void> {
       return;
     }
 
-    // Derive embedding API URL from the view URL
-    const serverOrigin = new URL(viewUrl).origin;
     const embeddingApiUrl = `${serverOrigin}/javascripts/api/tableau.embedding.3.latest.min.js`;
 
     const script = document.createElement('script');
