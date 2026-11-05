@@ -82,6 +82,7 @@ export const desktopToolNames = [
   'set-data-source-page-active',
   'save-workbook',
   'workbook-export-as',
+  'close-workbook',
   'add-worksheet',
   'add-dashboard',
   'add-storyboard',
