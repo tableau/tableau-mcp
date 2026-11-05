@@ -1412,6 +1412,11 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookClose) {
+      sendOperation(res, 'close-workbook');
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookExportAs) {
       let parsed: { format?: unknown; filePath?: unknown; targetVersion?: unknown };
       try {
@@ -1501,7 +1506,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.31' },
+        info: { title: 'Tableau External Client API', version: '0.2.32' },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },

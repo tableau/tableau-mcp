@@ -1039,6 +1039,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async closeWorkbook(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookClose, signal),
+      'close-workbook',
+    );
+  }
+
   async exportWorkbookAs(
     request: ExportAsWorkbookRequest,
     signal: AbortSignal,
