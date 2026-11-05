@@ -397,7 +397,7 @@ const envVars = {
     type: 'string',
     title: 'HTTP Host',
     description:
-      'The network interface address the HTTP server binds to. Defaults to all interfaces.',
+      'The network interface address the HTTP server binds to. Defaults to all interfaces, except in the Desktop web profile, which defaults to 127.0.0.1.',
     required: false,
     sensitive: false,
   },
