@@ -26,7 +26,7 @@ describe('close-workbook tool', () => {
   it('declares a 0.2.32 destructive tool', () => {
     const tool = getCloseWorkbookTool(new DesktopMcpServer());
     expect(tool.minApiVersion).toBe('0.2.32');
-    expect(tool.annotations?.destructiveHint).toBe(true);
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
   it('POSTs /v0/workbook:close with no body and reports success', async () => {
