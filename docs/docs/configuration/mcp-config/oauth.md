@@ -438,10 +438,18 @@ spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 ### `SESSION_STORE_PROVIDER`
 
-The session store provider to use for the embedded OAuth authorization server's session state
-(pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
-Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
-enabled (the default; see [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above).
+The session store provider for short-lived server state:
+
+- The embedded OAuth authorization server's state (pending authorizations, authorization codes,
+  refresh tokens, and OAuth client registrations), when [`AUTH`](env-vars#auth) is `oauth` with the
+  embedded authorization server enabled (the default; see
+  [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above)
+- The single-use proof that a two-phase mutation tool's preview ran (see
+  [`MUTATION_PREVIEW_TTL_MINUTES`](env-vars#mutation_preview_ttl_minutes)), for any `AUTH`
+
+Use `custom` whenever more than one server process handles requests (multiple replicas behind a
+load balancer, or `DISABLE_SESSION_MANAGEMENT=true` across replicas). With `memory`, a confirmed
+call that reaches a different process than its preview is rejected and must be previewed again.
 
 - Default: `memory`
 - Possible values:

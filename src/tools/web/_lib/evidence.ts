@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { ExpiringMap } from '../../../utils/expiringMap.js';
+import { createNamespacedStore } from '../../../sessionStore/init.js';
+import type { SessionStore } from '../../../sessionStore/sessionStore.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
 import { WebToolName } from '../toolName.js';
@@ -130,42 +131,9 @@ export class TagEvidence implements EvidenceStrategy<MutationTarget> {
   }
 }
 
-// Lazy-initialized registry of server-generated single-use confirmation nonces, keyed
-// `${siteId}:${userLuid}:${tool}:${targetId}`. Copied from adminGate.ts's getCache() pattern
-// (parseNumber + milliseconds.fromMinutes + ExpiringMap) to avoid a module-level parseNumber call.
-//
-// DURABILITY CAVEAT: this is in-memory, so it is NOT durable across a server restart and is NOT
-// shared across multiple instances. The consequence is asymmetric and safe: a lost/absent nonce can
-// only cause a confirm to be REJECTED (the caller must re-preview), never wrongly ALLOWED. It is
-// therefore strictly more friction and preserves the no-bypass guarantee. Contrast TagEvidence,
-// whose proof lives in durable Tableau server-side state.
-let nonceCache: ExpiringMap<string, string> | null = null;
-
-function getCache(): ExpiringMap<string, string> {
-  if (!nonceCache) {
-    const ttlMinutes = parseNumber(process.env.MUTATION_PREVIEW_TTL_MINUTES, {
-      defaultValue: 5,
-      minValue: 1,
-      maxValue: 60 * 24, // 24 hours
-    });
-    nonceCache = new ExpiringMap<string, string>({
-      defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
-    });
-  }
-  return nonceCache;
-}
-
-function nonceKey(ctx: EvidenceContext): string {
-  // Fold the optional parameter fingerprint into the key so a nonce is valid only for a confirm that
-  // carries the same caller-controlled parameters that were previewed. `binding` is a non-secret hash
-  // (see EvidenceContext.binding); an empty segment when absent keeps keys stable for taggable/no-arg
-  // targets like deletes.
-  return `${ctx.siteId}:${ctx.userLuid}:${ctx.tool}:${ctx.target.id}:${ctx.binding ?? ''}`;
-}
-
 /**
  * The preview→confirm approval window, in milliseconds, from MUTATION_PREVIEW_TTL_MINUTES (default
- * 5, min 1, max 24h) — the same bound RegistryEvidence's nonce cache uses. Exported so a preview
+ * 5, min 1, max 24h) — the same bound RegistryEvidence's nonce store uses. Exported so a preview
  * tool can compute and surface the absolute expiry (`expiresAtMs`) to its UI without duplicating
  * the parse/bounds logic.
  */
@@ -178,21 +146,48 @@ export function getMutationPreviewTtlMs(): number {
   return milliseconds.fromMinutes(ttlMinutes);
 }
 
-// Lazy-initialized registry of in-iframe human approvals, keyed identically to the nonce cache
-// (`${siteId}:${userLuid}:${tool}:${targetId}`) but storing only PRESENCE — there is no secret to
-// transport. Kept separate from `nonceCache` so the two strategies never collide on a key. Same
-// DURABILITY CAVEAT applies: in-memory, so a lost entry can only force a re-preview (reject), never
-// wrongly allow.
-let approvalCache: ExpiringMap<string, true> | null = null;
+// Preview proof lives in the configured session store, so with a shared custom store a confirm
+// verifies on whichever replica it reaches. Each entry holds its own expiry, checked on verify, so a
+// provider that does not apply the namespace TTL still cannot extend the approval window. With the
+// default memory store the proof stays process-local: a confirm reaching another process (or after a
+// restart) is rejected and the caller re-previews. It can only reject, never wrongly allow.
+type PreviewProofStore = SessionStore<number>;
 
-function getApprovalCache(): ExpiringMap<string, true> {
-  if (!approvalCache) {
-    approvalCache = new ExpiringMap<string, true>({
-      defaultExpirationTimeMs: getMutationPreviewTtlMs(),
-    });
+const proofStores = new Map<string, PreviewProofStore>();
+
+function getProofStore(namespace: string): PreviewProofStore {
+  let store = proofStores.get(namespace);
+  if (!store) {
+    // Memoized: on the memory provider every createNamespacedStore call returns a fresh store.
+    store = createNamespacedStore<number>(namespace, { ttlMs: getMutationPreviewTtlMs() });
+    proofStores.set(namespace, store);
   }
-  return approvalCache;
+  return store;
 }
+
+/** For tests: drop memoized stores so the next use binds to the current session store provider. */
+export function resetPreviewProofStores(): void {
+  proofStores.clear();
+}
+
+function proofKey(fields: ReadonlyArray<string>): string {
+  // JSON keeps a delimiter inside one field from shifting into the next; hashing bounds key length
+  // and keeps raw ids and nonces out of a shared backend.
+  return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
+}
+
+async function recordProof(namespace: string, key: string): Promise<void> {
+  await getProofStore(namespace).set(key, Date.now() + getMutationPreviewTtlMs());
+}
+
+async function consumeProof(namespace: string, key: string): Promise<boolean> {
+  // consume() is atomic in the store contract, so of two concurrent confirms only one sees the entry.
+  const expiresAtMs = await getProofStore(namespace).consume(key);
+  return typeof expiresAtMs === 'number' && expiresAtMs > Date.now();
+}
+
+const NONCE_NAMESPACE = 'mutation-confirmation-nonces-v1';
+const APPROVAL_NAMESPACE = 'mutation-app-approvals-v1';
 
 /**
  * AppApprovalEvidence — proof that a human approved the mutation by a gesture inside a rendered
@@ -231,24 +226,18 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
   }
 
   private approvalKey(ctx: EvidenceContext): string {
-    // Fold the optional parameter fingerprint into the key (mirrors RegistryEvidence's nonceKey) so an
-    // approval minted for parameter set A cannot satisfy a confirm carrying parameter set B. An empty
-    // segment when `binding` is absent keeps keys stable for payload-free targets like the deletes.
-    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}:${ctx.binding ?? ''}`;
+    // The binding keeps an approval minted for parameter set A from satisfying a confirm carrying
+    // parameter set B. An empty binding keeps keys stable for payload-free targets like the deletes.
+    return proofKey([ctx.siteId, ctx.userLuid, this.namespace, ctx.target.id, ctx.binding ?? '']);
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
-    getApprovalCache().set(this.approvalKey(ctx), true);
+    await recordProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    const key = this.approvalKey(ctx);
-    if (!getApprovalCache().get(key)) {
-      return false;
-    }
-    // Single-use: consume the approval so it cannot be replayed.
-    getApprovalCache().delete(key);
-    return true;
+    // Single-use: consuming the approval means it cannot be replayed.
+    return consumeProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
@@ -261,34 +250,35 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
  * RegistryEvidence — server-generated single-use confirmation nonce, for mutations whose target has
  * no durable taggable state (e.g. extract refresh tasks).
  *
- * `establish` generates a fresh nonce via crypto.randomUUID() and stores it under a key scoped to
- * site + user + tool + target; the preview text echoes the nonce so the caller can supply it on
- * confirm. `verify` checks the supplied nonce matches the stored one AND deletes it (single-use), so
- * a nonce can never be replayed. The nonce is server-generated and unguessable, so — like the tag —
- * it cannot be fabricated by computing a value.
+ * `establish` generates a fresh nonce via crypto.randomUUID() and records it in the session store
+ * under a key scoped to site + user + tool + target + binding; the preview text echoes the nonce so
+ * the caller can supply it on confirm. `verify` atomically consumes that exact entry, so a nonce works
+ * once, only for what was previewed, and a wrong guess never disturbs a real one. The nonce is
+ * server-generated and unguessable, so — like the tag — it cannot be fabricated by computing a value.
  *
- * See the DURABILITY CAVEAT on the registry cache above: this can only reject, never wrongly allow.
+ * See the store note above: this can only reject, never wrongly allow.
  */
 export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
   // The nonce minted by the most recent establish(), so the caller (preview branch) can surface it
   // in the response text. NEVER write this into the audit record.
   private lastNonce?: string;
 
+  private static key(ctx: EvidenceContext, nonce: string): string {
+    return proofKey([ctx.siteId, ctx.userLuid, ctx.tool, ctx.target.id, ctx.binding ?? '', nonce]);
+  }
+
   async establish(ctx: EvidenceContext): Promise<void> {
     const nonce = randomUUID();
-    getCache().set(nonceKey(ctx), nonce);
+    this.lastNonce = undefined;
+    await recordProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx, nonce));
     this.lastNonce = nonce;
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    const key = nonceKey(ctx);
-    const stored = getCache().get(key);
-    if (!stored || !ctx.confirmationToken || stored !== ctx.confirmationToken) {
+    if (!ctx.confirmationToken) {
       return false;
     }
-    // Single-use: consume the nonce so it cannot be replayed.
-    getCache().delete(key);
-    return true;
+    return consumeProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx, ctx.confirmationToken));
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
