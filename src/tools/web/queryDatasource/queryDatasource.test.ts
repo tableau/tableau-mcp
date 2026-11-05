@@ -158,6 +158,45 @@ describe('queryDatasourceTool', () => {
     },
   );
 
+  it('forwards internal field and parameter references in calculations with a caller-chosen label', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(
+      Ok({
+        data: [{ fieldCaption: 'Staffing Cost', fieldName: 'staffing_cost', dataType: 'REAL' }],
+        extraData: {
+          parameters: [
+            {
+              parameterCaption: 'Multiplier',
+              parameterName: 'Parameter 1',
+              parameterType: 'ANY_VALUE',
+              dataType: 'REAL',
+              value: 1,
+            },
+          ],
+        },
+      }),
+    );
+    mocks.mockQueryDatasource.mockResolvedValue(Ok({ data: [{ 'Adjusted staffing cost': 200 }] }));
+    const query: Query = {
+      fields: [
+        {
+          fieldCaption: 'Adjusted staffing cost',
+          calculation: 'SUM([staffing_cost]) * [Parameter 1]',
+        },
+      ],
+      parameters: [{ parameterCaption: 'Parameter 1', value: 2 }],
+    };
+
+    const result = await getToolResult({ query, interpretFieldCaptionsAsFieldNames: true });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query,
+        options: expect.objectContaining({ interpretFieldCaptionsAsFieldNames: true }),
+      }),
+    );
+  });
+
   it.each([
     [{ value: '2025.2.9', build: '20252.25.1001.1200' }, false],
     [testProductVersion2025_3, true],
