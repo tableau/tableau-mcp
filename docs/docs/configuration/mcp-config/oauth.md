@@ -466,6 +466,12 @@ interface. `consume` must be implemented as a truly atomic operation against the
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
 Redis, or a transaction for a relational store).
 
+For confirms to work across replicas, the provider also needs to:
+
+- Point every replica at the same backend
+- Apply the TTL passed to `configureNamespace`, or expire keys on its own, so unconfirmed previews don't pile up
+- Allow keys under the `flow-mutation-confirmations-v1:` prefix
+
 :::
 
 <hr />

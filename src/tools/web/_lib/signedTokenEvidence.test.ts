@@ -106,6 +106,14 @@ describe('SignedTokenEvidence', () => {
     expect(await verify({ ...ctx, confirmationToken: second })).toBe(true);
   });
 
+  it('only accepts the latest preview, and a stale token does not burn it', async () => {
+    const ctx = makeCtx();
+    const first = await mint(ctx);
+    const second = await mint(ctx);
+    expect(await verify({ ...ctx, confirmationToken: first })).toBe(false);
+    expect(await verify({ ...ctx, confirmationToken: second })).toBe(true);
+  });
+
   it('keeps the token out of the audit descriptor', async () => {
     const evidence = new SignedTokenEvidence();
     await evidence.establish(makeCtx());
@@ -239,7 +247,9 @@ describe('SignedTokenEvidence signing key', () => {
     const mod = await replica(sharedKey);
     vi.spyOn(backend, 'set').mockRejectedValue(new Error('store unavailable'));
     const evidence = new mod.SignedTokenEvidence();
-    await expect(evidence.establish(makeCtx())).rejects.toThrow('store unavailable');
+    await expect(evidence.establish(makeCtx())).rejects.toThrow(
+      'confirmation store is unavailable',
+    );
     expect(evidence.getEstablishedNonce()).toBeUndefined();
   });
 
@@ -248,10 +258,14 @@ describe('SignedTokenEvidence signing key', () => {
     const ctx = makeCtx();
     const evidence = new mod.SignedTokenEvidence();
     await evidence.establish(ctx);
-    vi.spyOn(backend, 'consume').mockRejectedValue(new Error('store unavailable'));
-    await expect(
-      evidence.verify({ ...ctx, confirmationToken: evidence.getEstablishedNonce() }),
-    ).rejects.toThrow('store unavailable');
+    vi.spyOn(backend, 'consume').mockRejectedValue(new Error('redis 10.0.0.1:6379 refused'));
+    const rejection = evidence.verify({
+      ...ctx,
+      confirmationToken: evidence.getEstablishedNonce(),
+    });
+    await expect(rejection).rejects.toThrow('confirmation store is unavailable');
+    // The backend's own error text never reaches the client.
+    await expect(rejection).rejects.not.toThrow('10.0.0.1');
   });
 
   it('rejects a token that expires while consumption is pending', async () => {
@@ -269,9 +283,14 @@ describe('SignedTokenEvidence signing key', () => {
     ).toBe(false);
   });
 
-  it('does not interoperate without a shared key', async () => {
+  it('interoperates across replicas when no OAuth key is configured', async () => {
     const none = { jwePrivateKey: '', jwePrivateKeyPath: '' };
-    expect(await crossVerifies(await replica(none), await replica(none))).toBe(false);
+    expect(await crossVerifies(await replica(none), await replica(none))).toBe(true);
+  });
+
+  it('does not interoperate between replicas with different keys', async () => {
+    const other = { jwePrivateKey: PEM.replace('abc', 'xyz'), jwePrivateKeyPath: '' };
+    expect(await crossVerifies(await replica(sharedKey), await replica(other))).toBe(false);
   });
 
   it('fails rather than using a random key when the configured key file is unreadable', async () => {

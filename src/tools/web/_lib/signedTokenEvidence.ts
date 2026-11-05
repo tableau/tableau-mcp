@@ -1,7 +1,9 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { getConfig } from '../../../config.js';
+import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { createNamespacedStore } from '../../../sessionStore/init.js';
 import { SessionStore } from '../../../sessionStore/sessionStore.js';
 import { EvidenceContext, EvidenceStrategy, getMutationPreviewTtlMs } from './evidence.js';
@@ -9,9 +11,10 @@ import { MutationTarget } from './mutationGuard.js';
 
 let signingKey: Buffer | null = null;
 
-// Replicas must share the key, so derive it from the OAuth JWE private key they already share. The
-// derivation keeps that key from signing anything directly. Without a configured key each process
-// signs with its own random key, so preview and confirm must reach the same process.
+// The store entry is what proves a preview ran; the signature only lets a forged or mismatched token
+// be rejected before the store is touched. So replicas need the same key, but it need not be secret.
+// Derive it from the OAuth JWE private key when one is configured, and otherwise from a fixed label,
+// so deployments without embedded OAuth still confirm across replicas.
 function getSigningKey(): Buffer {
   if (!signingKey) {
     const { oauth } = getConfig();
@@ -23,19 +26,41 @@ function getSigningKey(): Buffer {
     if ((oauth.jwePrivateKey || oauth.jwePrivateKeyPath) && !pem.trim()) {
       throw new Error('Configured OAuth JWE private key is empty');
     }
-    signingKey = pem
-      ? createHmac('sha256', pem).update('mutation-confirmation-token-v1').digest()
-      : randomBytes(32);
+    signingKey = createHmac('sha256', pem || 'tableau-mcp')
+      .update('mutation-confirmation-token-v1')
+      .digest();
   }
   return signingKey;
 }
 
-let pending: SessionStore<true> | null = null;
+let pending: SessionStore<string> | null = null;
 
-function getPending(): SessionStore<true> {
-  return (pending ??= createNamespacedStore<true>('flow-mutation-confirmations-v1', {
+function getPending(): SessionStore<string> {
+  return (pending ??= createNamespacedStore<string>('flow-mutation-confirmations-v1', {
     ttlMs: getMutationPreviewTtlMs(),
   }));
+}
+
+// One pending preview per scope, so a new preview replaces the last and one approval means one run.
+function scopeKey({ siteId, userLuid, tool, target, binding = '' }: EvidenceContext): string {
+  return createHash('sha256')
+    .update(JSON.stringify([siteId, userLuid, tool, target.id, binding]))
+    .digest('hex');
+}
+
+// Store failures surface as a fixed message so backend details (hosts, ports) never reach a client.
+async function withStore<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    log({
+      message: 'Flow confirmation store operation failed',
+      level: 'error',
+      logger: 'mutation-guard',
+      data: error,
+    });
+    throw new EvidenceStoreUnavailableError();
+  }
 }
 
 function sign(ctx: EvidenceContext, expiresAtMs: number, nonce: string): string {
@@ -49,10 +74,11 @@ function sign(ctx: EvidenceContext, expiresAtMs: number, nonce: string): string 
 /**
  * Signed preview evidence with atomic single-use consumption through the configured session store.
  * The token is `<expiresAtMs>-<nonce>-<hmac>`; the HMAC covers site, user, tool, target, binding,
- * expiry and nonce. Only its signature is stored, never the raw confirmation token.
+ * expiry and nonce. Only its signature is stored, never the raw confirmation token, and only the
+ * latest preview of a given request can be confirmed.
  *
- * Replicas need both a shared signing key and a shared session store with atomic consume(). With
- * the memory provider, a confirmation routed to another process is safely rejected.
+ * Replicas need a shared session store with atomic consume(). With the memory provider, a
+ * confirmation routed to another process is safely rejected.
  */
 export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
   private lastNonce?: string;
@@ -63,7 +89,7 @@ export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
     const nonce = randomBytes(16).toString('hex');
     const signature = sign(ctx, expiresAtMs, nonce);
     this.lastNonce = undefined;
-    await getPending().set(signature, true);
+    await withStore(() => getPending().set(scopeKey(ctx), signature));
     this.lastNonce = `${expiresAtMs}-${nonce}-${signature}`;
   }
 
@@ -87,9 +113,15 @@ export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
       return false;
     }
 
-    // Never recreate a missing entry at confirm time: absent, evicted or consumed proof rejects.
-    const consumed = await getPending().consume(signature);
-    return consumed === true && expiresAtMs > Date.now();
+    // Never recreate a missing entry at confirm time: absent, evicted, consumed or superseded proof
+    // rejects. The read keeps a stale token from burning the latest preview; the atomic consume is
+    // what decides which of two racing confirms wins.
+    const key = scopeKey(ctx);
+    if ((await withStore(() => getPending().get(key))) !== signature) {
+      return false;
+    }
+    const pendingSignature: unknown = await withStore(() => getPending().consume(key));
+    return pendingSignature === signature && expiresAtMs > Date.now();
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
