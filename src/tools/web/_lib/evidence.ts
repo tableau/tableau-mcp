@@ -1,5 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 
+import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { createNamespacedStore } from '../../../sessionStore/init.js';
 import type { SessionStore } from '../../../sessionStore/sessionStore.js';
@@ -147,11 +149,13 @@ export function getMutationPreviewTtlMs(): number {
 }
 
 // Preview proof lives in the configured session store, so with a shared custom store a confirm
-// verifies on whichever replica it reaches. Each entry holds its own expiry, checked on verify, so a
-// provider that does not apply the namespace TTL still cannot extend the approval window. With the
-// default memory store the proof stays process-local: a confirm reaching another process (or after a
-// restart) is rejected and the caller re-previews. It can only reject, never wrongly allow.
-type PreviewProofStore = SessionStore<number>;
+// verifies on whichever replica it reaches. With the default memory store it stays process-local: a
+// confirm reaching another process (or after a restart) is rejected and the caller re-previews.
+//
+// Each scope holds one entry, so a new preview replaces the last one and only the latest token works.
+// The entry is a string carrying its own expiry, which survives any provider's serialization and
+// keeps a provider that ignores the namespace TTL from stretching the approval window.
+type PreviewProofStore = SessionStore<string>;
 
 const proofStores = new Map<string, PreviewProofStore>();
 
@@ -159,32 +163,66 @@ function getProofStore(namespace: string): PreviewProofStore {
   let store = proofStores.get(namespace);
   if (!store) {
     // Memoized: on the memory provider every createNamespacedStore call returns a fresh store.
-    store = createNamespacedStore<number>(namespace, { ttlMs: getMutationPreviewTtlMs() });
+    store = createNamespacedStore<string>(namespace, { ttlMs: getMutationPreviewTtlMs() });
     proofStores.set(namespace, store);
   }
   return store;
 }
 
-/** For tests: drop memoized stores so the next use binds to the current session store provider. */
-export function resetPreviewProofStores(): void {
-  proofStores.clear();
-}
-
-function proofKey(fields: ReadonlyArray<string>): string {
+function sha256(fields: ReadonlyArray<string>): string {
   // JSON keeps a delimiter inside one field from shifting into the next; hashing bounds key length
   // and keeps raw ids and nonces out of a shared backend.
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 
-async function recordProof(namespace: string, key: string): Promise<void> {
-  await getProofStore(namespace).set(key, Date.now() + getMutationPreviewTtlMs());
+// Store failures surface as a fixed message so backend details (hosts, ports) never reach a client.
+async function withStore<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    log({
+      message: 'Preview evidence store operation failed',
+      level: 'error',
+      logger: 'mutation-guard',
+      data: error,
+    });
+    throw new EvidenceStoreUnavailableError();
+  }
 }
 
-async function consumeProof(namespace: string, key: string): Promise<boolean> {
-  // consume() is atomic in the store contract, so of two concurrent confirms only one sees the entry.
-  const expiresAtMs = await getProofStore(namespace).consume(key);
-  return typeof expiresAtMs === 'number' && expiresAtMs > Date.now();
+async function recordProof(namespace: string, key: string, secret = ''): Promise<void> {
+  const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
+  await withStore(() => getProofStore(namespace).set(key, `${expiresAtMs}.${secret}`));
 }
+
+function matchesProof(stored: unknown, secret: string): boolean {
+  if (typeof stored !== 'string') {
+    return false;
+  }
+  const dot = stored.indexOf('.');
+  const expiry = stored.slice(0, dot);
+  const expected = Buffer.from(stored.slice(dot + 1));
+  const actual = Buffer.from(secret);
+  return (
+    dot > 0 &&
+    /^\d+$/.test(expiry) &&
+    Number(expiry) > Date.now() &&
+    expected.length === actual.length &&
+    timingSafeEqual(expected, actual)
+  );
+}
+
+async function consumeProof(namespace: string, key: string, secret = ''): Promise<boolean> {
+  const store = getProofStore(namespace);
+  // The read keeps a stale token from burning the latest preview. The atomic consume decides which
+  // of two racing confirms wins: only one sees the entry.
+  if (!matchesProof(await withStore(() => store.get(key)), secret)) {
+    return false;
+  }
+  return matchesProof(await withStore(() => store.consume(key)), secret);
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NONCE_NAMESPACE = 'mutation-confirmation-nonces-v1';
 const APPROVAL_NAMESPACE = 'mutation-app-approvals-v1';
@@ -228,7 +266,7 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
   private approvalKey(ctx: EvidenceContext): string {
     // The binding keeps an approval minted for parameter set A from satisfying a confirm carrying
     // parameter set B. An empty binding keeps keys stable for payload-free targets like the deletes.
-    return proofKey([ctx.siteId, ctx.userLuid, this.namespace, ctx.target.id, ctx.binding ?? '']);
+    return sha256([ctx.siteId, ctx.userLuid, this.namespace, ctx.target.id, ctx.binding ?? '']);
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
@@ -250,11 +288,12 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
  * RegistryEvidence — server-generated single-use confirmation nonce, for mutations whose target has
  * no durable taggable state (e.g. extract refresh tasks).
  *
- * `establish` generates a fresh nonce via crypto.randomUUID() and records it in the session store
- * under a key scoped to site + user + tool + target + binding; the preview text echoes the nonce so
- * the caller can supply it on confirm. `verify` atomically consumes that exact entry, so a nonce works
- * once, only for what was previewed, and a wrong guess never disturbs a real one. The nonce is
- * server-generated and unguessable, so — like the tag — it cannot be fabricated by computing a value.
+ * `establish` generates a fresh nonce via crypto.randomUUID() and records its hash in the session
+ * store under a key scoped to site + user + tool + target + binding, replacing any earlier preview;
+ * the preview text echoes the nonce so the caller can supply it on confirm. `verify` atomically
+ * consumes that entry and checks the nonce, so a token works once, only for the latest preview of
+ * exactly what was previewed. The nonce is server-generated and unguessable, so — like the tag — it
+ * cannot be fabricated by computing a value.
  *
  * See the store note above: this can only reject, never wrongly allow.
  */
@@ -263,22 +302,28 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
   // in the response text. NEVER write this into the audit record.
   private lastNonce?: string;
 
-  private static key(ctx: EvidenceContext, nonce: string): string {
-    return proofKey([ctx.siteId, ctx.userLuid, ctx.tool, ctx.target.id, ctx.binding ?? '', nonce]);
+  private static key(ctx: EvidenceContext): string {
+    return sha256([ctx.siteId, ctx.userLuid, ctx.tool, ctx.target.id, ctx.binding ?? '']);
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
     const nonce = randomUUID();
     this.lastNonce = undefined;
-    await recordProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx, nonce));
+    await recordProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx), sha256([nonce]));
     this.lastNonce = nonce;
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    if (!ctx.confirmationToken) {
+    // Anything that isn't a nonce we could have minted is rejected without touching the store, so
+    // junk input can't burn a pending preview.
+    if (!ctx.confirmationToken || !UUID_PATTERN.test(ctx.confirmationToken)) {
       return false;
     }
-    return consumeProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx, ctx.confirmationToken));
+    return consumeProof(
+      NONCE_NAMESPACE,
+      RegistryEvidence.key(ctx),
+      sha256([ctx.confirmationToken]),
+    );
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {

@@ -1,7 +1,10 @@
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
-import { ContentNotStaleError } from '../../../errors/mcpToolError.js';
+import {
+  ContentNotStaleError,
+  EvidenceStoreUnavailableError,
+} from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -138,6 +141,23 @@ describe('guardMutation', () => {
     expect(record.result).toBe('denied');
     expect(record.denyReason).toBe('preview-not-run');
     expect(record.phase).toBe('confirm');
+  });
+
+  it('on confirm, a store outage denies with its own reason and one DENIED audit', async () => {
+    const evidence = makeEvidence({
+      verify: vi.fn().mockRejectedValue(new EvidenceStoreUnavailableError()),
+    });
+    const result = await run({ phase: 'confirm', evidence, confirmationToken: 'token' });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.type).toBe('evidence-store-unavailable');
+    }
+
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    const record = auditRecordSchema.parse(audits[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('evidence-store-unavailable');
   });
 
   it('on a model-visible preview-confirm tool (no previewTool), the denial says to re-run with confirm omitted', async () => {

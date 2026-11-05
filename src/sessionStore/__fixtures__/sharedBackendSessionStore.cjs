@@ -12,7 +12,8 @@ class SharedBackendSessionStore {
   }
 
   set(key, value) {
-    this.map.set(key, value);
+    // Opt-in: store values as text, like a provider over plain Redis SET/GET.
+    this.map.set(key, globalThis.__sharedSessionStoresText ? String(value) : value);
     return Promise.resolve();
   }
 
@@ -22,6 +23,9 @@ class SharedBackendSessionStore {
   }
 
   consume(key) {
+    if (globalThis.__sharedSessionStoreDown) {
+      return Promise.reject(new Error('store down'));
+    }
     const value = this.map.get(key);
     this.map.delete(key);
     return Promise.resolve(value);

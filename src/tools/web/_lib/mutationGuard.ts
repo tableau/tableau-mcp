@@ -178,7 +178,25 @@ export async function guardMutation<TTarget>({
   // (4) Confirm phase of a preview→confirm tool: verify the evidence against live state. A
   // precomputed or forged confirmation fails here, uniformly with #414's tag gate.
   if (phase === 'confirm' && mode === 'preview-confirm') {
-    const verified = await evidence.verify(evidenceCtx);
+    let verified: boolean;
+    try {
+      verified = await evidence.verify(evidenceCtx);
+    } catch (error) {
+      emitAuditRecord({
+        actor,
+        tool,
+        action,
+        phase,
+        target,
+        confirmationEvidence: evidenceDescriptor,
+        result: 'denied',
+        denyReason: 'evidence-store-unavailable',
+      });
+      if (error instanceof McpToolError) {
+        return error.toErr();
+      }
+      throw error;
+    }
     if (!verified) {
       emitAuditRecord({
         actor,
