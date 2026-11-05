@@ -264,12 +264,24 @@ describe('initializeWebRuntime', () => {
       vi.useRealTimers();
     }
   });
-  it('fails startup before registering handlers when the KV provider cannot initialize', async () => {
-    vi.mocked(initializeKeyValueStore).mockImplementationOnce(() => {
-      throw new Error('KV load failed');
-    });
-    await expect(initializeWebRuntime(config)).rejects.toThrow('KV load failed');
-    expect(getTableauServerInfo).not.toHaveBeenCalled();
-    expect(processOnceSpy).not.toHaveBeenCalled();
+
+  it('warns when stateless HTTP runs on the memory session store', async () => {
+    await initializeWebRuntime({
+      ...config,
+      disableSessionManagement: true,
+      sessionStore: { provider: 'memory' },
+    } as Config);
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({ logger: 'startup', level: 'warning' }),
+    );
+  });
+
+  it('does not warn when stateless HTTP has a custom session store', async () => {
+    await initializeWebRuntime({
+      ...config,
+      disableSessionManagement: true,
+      sessionStore: { provider: 'custom', providerConfig: { module: 'x' } },
+    } as Config);
+    expect(log).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
   });
 });

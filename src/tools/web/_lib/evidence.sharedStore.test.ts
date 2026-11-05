@@ -16,6 +16,8 @@ vi.mock('../../../config.js', () => ({ getConfig: () => config }));
 
 declare global {
   var __sharedSessionBackend: Map<string, unknown> | undefined;
+  var __sharedSessionStoresText: boolean | undefined;
+  var __sharedSessionStoreDown: boolean | undefined;
 }
 
 type EvidenceModule = typeof import('./evidence.js');
@@ -48,6 +50,46 @@ describe('preview evidence across replicas sharing a custom session store', () =
   afterEach(() => {
     vi.useRealTimers();
     globalThis.__sharedSessionBackend = undefined;
+    globalThis.__sharedSessionStoresText = undefined;
+    globalThis.__sharedSessionStoreDown = undefined;
+  });
+
+  it('works with a provider that stores values as text', async () => {
+    globalThis.__sharedSessionStoresText = true;
+    const a = await startReplica();
+    const b = await startReplica();
+
+    const preview = new a.RegistryEvidence();
+    await preview.establish(makeCtx());
+    const confirmationToken = preview.getEstablishedNonce();
+
+    await expect(new b.RegistryEvidence().verify(makeCtx({ confirmationToken }))).resolves.toBe(
+      true,
+    );
+  });
+
+  it('rejects a token that is not a nonce it could have minted', async () => {
+    const a = await startReplica();
+    await new a.RegistryEvidence().establish(makeCtx());
+
+    for (const confirmationToken of ['', 'yes', '../../x', 'a'.repeat(5000)]) {
+      await expect(new a.RegistryEvidence().verify(makeCtx({ confirmationToken }))).resolves.toBe(
+        false,
+      );
+    }
+  });
+
+  it('fails closed when the store errors on confirm', async () => {
+    const a = await startReplica();
+    const preview = new a.RegistryEvidence();
+    await preview.establish(makeCtx());
+    const confirmationToken = preview.getEstablishedNonce();
+
+    globalThis.__sharedSessionStoreDown = true;
+    const rejection = new a.RegistryEvidence().verify(makeCtx({ confirmationToken }));
+    await expect(rejection).rejects.toThrow('confirmation store is unavailable');
+    // The backend's own error text never reaches the client.
+    await expect(rejection).rejects.not.toThrow('store down');
   });
 
   it('confirms a RegistryEvidence nonce on a different replica, exactly once', async () => {
@@ -110,7 +152,7 @@ describe('preview evidence across replicas sharing a custom session store', () =
     ).resolves.toBe(true);
   });
 
-  it('keeps an earlier pending nonce valid after a second preview of the same target', async () => {
+  it('only accepts the latest preview of the same target', async () => {
     const a = await startReplica();
     const b = await startReplica();
 
@@ -119,11 +161,29 @@ describe('preview evidence across replicas sharing a custom session store', () =
     const second = new b.RegistryEvidence();
     await second.establish(makeCtx());
 
+    // One approval, one run: the superseded token can't start a second one, or burn the latest.
     await expect(
       new a.RegistryEvidence().verify(makeCtx({ confirmationToken: first.getEstablishedNonce() })),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     await expect(
-      new b.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
+      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
+    ).resolves.toBe(true);
+  });
+
+  it('a wrong nonce for the right target does not burn the pending preview', async () => {
+    const a = await startReplica();
+    const preview = new a.RegistryEvidence();
+    await preview.establish(makeCtx());
+
+    await expect(
+      new a.RegistryEvidence().verify(
+        makeCtx({ confirmationToken: '00000000-0000-4000-8000-000000000000' }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      new a.RegistryEvidence().verify(
+        makeCtx({ confirmationToken: preview.getEstablishedNonce() }),
+      ),
     ).resolves.toBe(true);
   });
 
@@ -184,8 +244,8 @@ describe('preview evidence across replicas sharing a custom session store', () =
     const entries = [...globalThis.__sharedSessionBackend!.entries()];
     expect(entries).toHaveLength(1);
     const [key, value] = entries[0];
-    expect(key).not.toContain(preview.getEstablishedNonce());
     expect(key).not.toContain('flow-1');
-    expect(typeof value).toBe('number');
+    expect(`${key}${String(value)}`).not.toContain(preview.getEstablishedNonce());
+    expect(value).toMatch(/^\d+\.[0-9a-f]{64}$/);
   });
 });
