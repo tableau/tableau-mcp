@@ -121,6 +121,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'set-data-source-page-active',
     'save-workbook',
     'workbook-export-as',
+    'close-workbook',
     'pause-auto-updates',
     'refresh-auto-updates',
     'refresh-storyboard-auto-updates',
