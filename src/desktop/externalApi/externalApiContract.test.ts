@@ -168,8 +168,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.32 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.32');
+  it('tracks the 0.2.33 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.33');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -659,6 +659,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
       EXTERNAL_API_ROUTES.worksheetReloadExtension,
       EXTERNAL_API_ROUTES.dashboardReloadExtensions,
+      EXTERNAL_API_ROUTES.workspaceExtensionReload,
     ])('spec documents %s', (route) => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
@@ -720,6 +721,15 @@ describe('external client API contract (captured openapi fixture)', () => {
         [EXTERNAL_API_ROUTES.worksheetReloadExtension]: 'reloadWorksheetExtension',
         [EXTERNAL_API_ROUTES.dashboardReloadExtensions]: 'reloadDashboardExtensions',
       });
+    });
+
+    it('documents the 0.2.33 workspace extension reload operation without a request body', () => {
+      const item = spec.paths[EXTERNAL_API_ROUTES.workspaceExtensionReload] as {
+        post?: { operationId?: string; requestBody?: unknown; responses?: Record<string, unknown> };
+      };
+      expect(item.post?.operationId).toBe('reloadWorkspaceExtension');
+      expect(item.post?.requestBody).toBeUndefined();
+      expect(item.post?.responses).toHaveProperty('202');
     });
 
     it('documents the 0.2.30 and 0.2.31 datasource operations by operationId', () => {

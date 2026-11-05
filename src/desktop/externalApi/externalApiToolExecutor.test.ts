@@ -1131,6 +1131,12 @@ describe('ExternalApiToolExecutor', () => {
           executor.reloadDashboardExtensions('dash-exec', signal),
         path: '/v0/workbook/dashboards/dash-exec:reloadExtensions',
       },
+      {
+        label: 'reloads a workspace extension',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.reloadWorkspaceExtension('com.example.extension', signal),
+        path: '/v0/workspace/extensions/com.example.extension:reload',
+      },
     ])('$label via a bodyless POST to the per-sheet action route', async ({ call, path }) => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

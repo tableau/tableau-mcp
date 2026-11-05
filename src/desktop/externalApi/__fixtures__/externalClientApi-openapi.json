@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.32",
+    "version": "0.2.33",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -4821,6 +4821,74 @@
                 }
               }
             }
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workspace/extensions/{id}:reload": {
+      "post": {
+        "summary": "Reload a workspace extension",
+        "description": "Makes a new or changed workspace extension from the repository Packages folder show up in the Extensions menu and toolbar, and reloads any of its pages that are open, without opening any. It also removes from Desktop, with their pages, menu items and toolbar buttons, any Packages workspace extensions that are no longer in the folder. The extension is selected by the id attribute of the workspace-extension element in its .trex file, not the package id. The request has no body and is accepted as an operation; poll the operation for the outcome. A failure, such as a disabled extension or one that is not in the repository Packages folder, comes back as a FAILED operation.",
+        "operationId": "reloadWorkspaceExtension",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The id attribute of the workspace-extension element in the extension's .trex file, not the package id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Makes a new or changed workspace extension from the repository Packages folder show up in the Extensions menu and toolbar, and reloads any of its pages that are open, without opening any. It also removes from Desktop, with their pages, menu items and toolbar buttons, any Packages workspace extensions that are no longer in the folder. The extension is selected by the id attribute of the workspace-extension element in its .trex file, not the package id. The request has no body and is accepted as an operation; poll the operation for the outcome. A failure, such as a disabled extension or one that is not in the repository Packages folder, comes back as a FAILED operation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"

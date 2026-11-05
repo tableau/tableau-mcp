@@ -80,6 +80,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
+  workspaceExtensionReload: '/v0/workspace/extensions/{id}:reload',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   operations: '/v0/operations',
@@ -445,6 +446,10 @@ export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
 
 export function worksheetReloadExtensionRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:reloadExtension`;
+}
+
+export function workspaceExtensionReloadRoute(workspaceExtensionId: string): string {
+  return `/v0/workspace/extensions/${seg(workspaceExtensionId)}:reload`;
 }
 
 export function worksheetRefreshNowRoute(worksheetId: string): string {

@@ -143,6 +143,7 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
+  workspaceExtensionReloadRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -929,6 +930,16 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(dashboardReloadExtensionsRoute(dashboardId), signal),
       'reload-dashboard-extensions',
+    );
+  }
+
+  async reloadWorkspaceExtension(
+    workspaceExtensionId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(workspaceExtensionReloadRoute(workspaceExtensionId), signal),
+      'reload-workspace-extension',
     );
   }
 

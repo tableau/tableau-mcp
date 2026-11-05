@@ -127,6 +127,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'refresh-storyboard-auto-updates',
     'refresh-dashboard-auto-updates',
     'reload-extensions',
+    'reload-workspace-extension',
     'get-workbook-extensions',
     'scaffold-data-app',
     'resume-auto-updates',

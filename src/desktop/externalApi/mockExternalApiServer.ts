@@ -1287,6 +1287,14 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const reloadWorkspaceExtensionMatch = path.match(
+      /^\/v0\/workspace\/extensions\/([^/]+):reload$/,
+    );
+    if (method === 'POST' && reloadWorkspaceExtensionMatch) {
+      sendOperation(res, 'reload-workspace-extension');
+      return;
+    }
+
     const storyboardRefreshNowMatch = path.match(
       /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
     );

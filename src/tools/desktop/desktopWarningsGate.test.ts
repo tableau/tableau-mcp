@@ -26,6 +26,7 @@ import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
+import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -321,6 +322,14 @@ const TOOL_CASES: Record<string, ToolCase> = {
     clean: {
       sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
       message: 'Requested reload of extensions for worksheet "Sales".',
+    },
+  },
+  'reload-workspace-extension': {
+    make: getReloadWorkspaceExtensionTool,
+    args: { extensionId: 'com.example.extension' },
+    clean: {
+      extensionId: 'com.example.extension',
+      message: 'Reloaded workspace extension "com.example.extension".',
     },
   },
   'workbook-export-as': {

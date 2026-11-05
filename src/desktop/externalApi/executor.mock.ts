@@ -118,6 +118,7 @@ export function makeExecutorMock(
     refreshWorksheetNow: vi.fn(),
     reloadWorksheetExtension: vi.fn(),
     reloadDashboardExtensions: vi.fn(),
+    reloadWorkspaceExtension: vi.fn(),
     refreshStoryboardNow: vi.fn(),
     refreshDashboardNow: vi.fn(),
     pauseDashboardAutoUpdates: vi.fn(),
