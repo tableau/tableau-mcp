@@ -66,7 +66,9 @@ export const getRequestDatasourceUploadTool = (
 
           const config = extra.config.bucketS3;
 
-          // Non-OAuth publish signs in as the configured user, not the OAuth token user, so key by that.
+          // Non-OAuth modes (PAT/UAT/direct-trust) have no LUIDs until REST sign-in, which populates
+          // them for getTenantLuids. Publish signs in as the same configured user, so the staged key
+          // matches. Costs one sign-in/sign-out per request; OAuth reads LUIDs from the token.
           if (extra.config.auth === 'oauth') {
             const tenant = getTenantLuids(extra);
             if (tenant.isErr()) {
