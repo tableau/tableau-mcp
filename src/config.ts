@@ -105,6 +105,7 @@ export class Config extends BaseConfig {
   flowWriteToolsEnabled: boolean | undefined;
   knowledgeToolsEnabled: boolean | undefined;
   knowledgeWriteToolsEnabled: boolean | undefined;
+  tableauAgentToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
   bucketS3: {
@@ -187,6 +188,7 @@ export class Config extends BaseConfig {
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       KNOWLEDGE_TOOLS_ENABLED: knowledgeToolsEnabled,
       KNOWLEDGE_WRITE_TOOLS_ENABLED: knowledgeWriteToolsEnabled,
+      TABLEAU_AGENT_TOOLS_ENABLED: tableauAgentToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       MCP_S3_BUCKET: bucketS3Bucket,
@@ -415,6 +417,10 @@ export class Config extends BaseConfig {
     this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
     this.knowledgeToolsEnabled = parseOptionalBoolean(knowledgeToolsEnabled);
     this.knowledgeWriteToolsEnabled = parseOptionalBoolean(knowledgeWriteToolsEnabled);
+    // CABU (Tableau Agent dashboard/datasource Q&A) tools are demo/experimental and off by
+    // default; set TABLEAU_AGENT_TOOLS_ENABLED=true to register them, following the same
+    // config-override-first, then-feature-flag pattern as the flow/knowledge tool gates above.
+    this.tableauAgentToolsEnabled = parseOptionalBoolean(tableauAgentToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.

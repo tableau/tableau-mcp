@@ -406,3 +406,53 @@ export class DataAppTemplateUnavailableError extends McpToolError {
     super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
   }
 }
+
+/**
+ * `cabu-ask` was called with a `conversationId` that `cabu-start-conversation` never created, or
+ * one whose in-process state (the `cabuCtx` cookie) has expired (30 minutes of inactivity -- see
+ * `cabuConversationStore.ts`). There is no server-side way to recover a conversation's cookie once
+ * this process has evicted it, so the only remedy is starting over.
+ */
+export class CabuConversationNotFoundError extends McpToolError {
+  constructor(conversationId: string) {
+    super({
+      type: 'cabu-conversation-not-found',
+      message: `No active CABU conversation found for conversationId "${conversationId}". It may have expired (conversations expire after 30 minutes of inactivity) or never existed. Start a new conversation with cabu-start-conversation.`,
+      statusCode: 409,
+    });
+  }
+}
+
+/** A CABU turn's SSE stream reported a CES-side `error` event (`error_code`/`error_details`). */
+export class CabuResponseError extends McpToolError {
+  constructor(errorCode?: string, errorDetails?: string) {
+    super({
+      type: 'cabu-response-error',
+      message: [
+        'CABU could not answer this question.',
+        errorCode ? `Error code: ${errorCode}.` : undefined,
+        errorDetails,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      statusCode: 502,
+      internalError: errorCode,
+      internalErrorDetails: errorDetails,
+    });
+  }
+}
+
+/**
+ * A CABU turn's SSE stream ended without ever emitting a terminal `complete` or `error` event --
+ * e.g. a dropped connection. There is no protocol error to report, just an unconfirmed answer.
+ */
+export class CabuStreamIncompleteError extends McpToolError {
+  constructor() {
+    super({
+      type: 'cabu-stream-incomplete',
+      message:
+        'The CABU response stream ended before completing. The answer is unconfirmed; try asking again.',
+      statusCode: 504,
+    });
+  }
+}
