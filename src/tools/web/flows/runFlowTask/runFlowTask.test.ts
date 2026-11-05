@@ -33,6 +33,7 @@ vi.mock('../../../../config.js', () => ({
     flowWriteToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    sessionStore: { provider: 'memory' },
   })),
 }));
 

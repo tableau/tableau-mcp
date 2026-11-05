@@ -126,6 +126,7 @@ vi.mock('../../../config.js', () => ({
     pendingDeletionMaxAgeDays: 30,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    sessionStore: { provider: 'memory' },
   })),
 }));
 

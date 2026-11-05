@@ -29,9 +29,9 @@
  * elicitation handshake (or the app-only confirmation tool described in confirm.ts) is tracked as
  * follow-up.
  *
- * RegistryEvidence's nonce store is in-memory (see the DURABILITY CAVEAT in evidence.ts): it is not
- * durable across restart / multi-instance, but it can only ever reject (never wrongly allow), so the
- * no-bypass guarantee holds.
+ * RegistryEvidence and AppApprovalEvidence keep their proof in the configured session store (see
+ * evidence.ts). With a shared custom store a confirm verifies on any replica; with the default
+ * memory store a lost proof can only reject (never wrongly allow), so the no-bypass guarantee holds.
  */
 import { Ok, Result } from 'ts-results-es';
 
