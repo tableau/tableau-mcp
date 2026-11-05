@@ -96,11 +96,9 @@ function worksheetXml(args: {
   const caption = escapeXml(args.caption);
   const url = escapeXml(unzippedPackageSrcUrl(args.sourceDir));
   const instanceId = randomBytes(16).toString('hex').toUpperCase();
-  const datasourceElement = `<datasource caption='${caption}' name='${datasource}' />`;
   return (
     `<worksheet name='${name}'>` +
-    `<datasources>${datasourceElement}</datasources>` +
-    `<table><view><datasources>${datasourceElement}</datasources>` +
+    `<table><view><datasources><datasource caption='${caption}' name='${datasource}' /></datasources>` +
     "<aggregation value='true' /></view><style />" +
     "<panes><pane><view><breakdown value='auto' /></view>" +
     "<mark class='VizExtension' />" +

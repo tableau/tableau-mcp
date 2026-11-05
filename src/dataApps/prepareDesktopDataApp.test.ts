@@ -57,11 +57,11 @@ describe('prepareDesktopDataApp', () => {
     expect(result.value.packageId).toMatch(/^com\.tableau\.mcp\.sales-demo\.[0-9a-f]+$/);
     expect(result.value.sourceDir.startsWith(workspace)).toBe(true);
     const xml = await readFile(result.value.worksheetFile, 'utf8');
-    const datasourceElement = "<datasource caption='One Hundred Percent' name='100%' />";
     expect(xml).toContain("name='Sheet 1'");
     expect(xml).toContain(
-      `<datasources>${datasourceElement}</datasources><table><view><datasources>${datasourceElement}</datasources>`,
+      "<table><view><datasources><datasource caption='One Hundred Percent' name='100%' /></datasources>",
     );
+    expect(xml).not.toMatch(/<worksheet[^>]*><datasources>/);
     expect(xml).toContain('tableauunzippedpackagesrc:///');
     expect(xml).toContain("<simple-id uuid='{SHEET-GUID-1}' />");
     expect(xml).toContain(result.value.sourceDir.replace(/\\/g, '/'));
@@ -89,9 +89,9 @@ describe('prepareDesktopDataApp', () => {
 
     expect(result.value.worksheetName).toBe('Sheet 1');
     const xml = await readFile(result.value.worksheetFile, 'utf8');
-    expect(xml).toMatch(/^<worksheet name='Sheet 1'><datasources>/);
+    expect(xml).toMatch(/^<worksheet name='Sheet 1'><table><view><datasources>/);
     expect(xml).not.toContain("name='Sales Demo'");
-    expect(xml.match(/name='Sales West'/g)).toHaveLength(2);
+    expect(xml.match(/name='Sales West'/g)).toHaveLength(1);
 
     const apply = vi
       .fn()
