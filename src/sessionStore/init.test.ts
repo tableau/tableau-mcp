@@ -6,7 +6,10 @@ vi.mock('../config.js', () => ({
   })),
 }));
 
+vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
+
 import { getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import {
   connectSessionStore,
   createNamespacedStore,
@@ -65,6 +68,34 @@ describe('SessionStore init', () => {
       // namespace share the one loaded provider, whereas the memory path returns fresh instances.
       const second = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await expect(second.get('key')).resolves.toBe('value');
+    });
+
+    it('warns at load when a custom provider lacks compareAndDelete', () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: { provider: 'custom', providerConfig: { module: FAKE_STORE_MODULE } },
+      } as any);
+
+      initializeSessionStore();
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringMatching(/does not implement compareAndDelete/),
+        }),
+      );
+    });
+
+    it('does not warn when a custom provider implements compareAndDelete', () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: {
+            module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs',
+          },
+        },
+      } as any);
+
+      initializeSessionStore();
+      expect(log).not.toHaveBeenCalled();
     });
 
     it('throws when the custom module is missing "module"', () => {
@@ -181,6 +212,30 @@ describe('SessionStore init', () => {
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
+      expect(store.compareAndDelete).toBeUndefined();
+    });
+
+    it('prefixes atomic compare-and-delete keys and preserves the provider receiver', async () => {
+      globalThis.__sharedSessionBackend = new Map();
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: {
+            module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs',
+          },
+        },
+      } as any);
+      const a = createNamespacedStore<string>('alpha', { ttlMs: 10000 });
+      const b = createNamespacedStore<string>('beta', { ttlMs: 10000 });
+      await a.set('key', 'preview');
+      await b.set('key', 'preview');
+
+      await expect(a.compareAndDelete!('key', 'stale')).resolves.toBe(false);
+      await expect(a.get('key')).resolves.toBe('preview');
+      await expect(a.compareAndDelete!('key', 'preview')).resolves.toBe(true);
+      await expect(a.get('key')).resolves.toBeUndefined();
+      await expect(b.get('key')).resolves.toBe('preview');
+      globalThis.__sharedSessionBackend = undefined;
     });
   });
 

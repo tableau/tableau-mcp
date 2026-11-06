@@ -47,6 +47,38 @@ describe('InMemorySessionStore', () => {
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
+  it('compareAndDelete preserves a different value and removes a matching value once', async () => {
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
+    await store.set('key', 'new-preview');
+
+    await expect(store.compareAndDelete('key', 'old-preview')).resolves.toBe(false);
+    await expect(store.get('key')).resolves.toBe('new-preview');
+    await expect(store.compareAndDelete('key', 'new-preview')).resolves.toBe(true);
+    await expect(store.compareAndDelete('key', 'new-preview')).resolves.toBe(false);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
+
+  it('compareAndDelete lets only one concurrent caller remove a matching value', async () => {
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
+    await store.set('key', 'preview');
+
+    const results = await Promise.all([
+      store.compareAndDelete('key', 'preview'),
+      store.compareAndDelete('key', 'preview'),
+    ]);
+    expect(results).toEqual([true, false]);
+  });
+
+  it('a mismatched compareAndDelete preserves the expiry timer', async () => {
+    const store = new InMemorySessionStore<string>({ ttlMs: 1000 });
+    await store.set('key', 'preview');
+
+    await expect(store.compareAndDelete('key', 'other')).resolves.toBe(false);
+    vi.advanceTimersByTime(1000);
+    await expect(store.compareAndDelete('key', 'preview')).resolves.toBe(false);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
+
   it('evicts the oldest key when constructed with maxSize', async () => {
     const store = new InMemorySessionStore<number>({ ttlMs: 10000, maxSize: 2 });
     await store.set('a', 1);

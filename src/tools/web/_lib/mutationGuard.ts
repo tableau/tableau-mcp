@@ -29,9 +29,9 @@
  * elicitation handshake (or the app-only confirmation tool described in confirm.ts) is tracked as
  * follow-up.
  *
- * RegistryEvidence's nonce store is in-memory (see the DURABILITY CAVEAT in evidence.ts): it is not
- * durable across restart / multi-instance, but it can only ever reject (never wrongly allow), so the
- * no-bypass guarantee holds.
+ * RegistryEvidence and AppApprovalEvidence keep their proof in the configured session store (see
+ * evidence.ts). With a shared custom store a confirm verifies on any replica; with the default
+ * memory store a lost proof can only reject (never wrongly allow), so the no-bypass guarantee holds.
  */
 import { Ok, Result } from 'ts-results-es';
 
@@ -178,7 +178,25 @@ export async function guardMutation<TTarget>({
   // (4) Confirm phase of a preview→confirm tool: verify the evidence against live state. A
   // precomputed or forged confirmation fails here, uniformly with #414's tag gate.
   if (phase === 'confirm' && mode === 'preview-confirm') {
-    const verified = await evidence.verify(evidenceCtx);
+    let verified: boolean;
+    try {
+      verified = await evidence.verify(evidenceCtx);
+    } catch (error) {
+      emitAuditRecord({
+        actor,
+        tool,
+        action,
+        phase,
+        target,
+        confirmationEvidence: evidenceDescriptor,
+        result: 'denied',
+        denyReason: error instanceof McpToolError ? error.type : 'evidence-verification-failed',
+      });
+      if (error instanceof McpToolError) {
+        return error.toErr();
+      }
+      throw error;
+    }
     if (!verified) {
       emitAuditRecord({
         actor,
@@ -228,7 +246,24 @@ export async function guardMutation<TTarget>({
 
   // (5) Preview phase: establish the server-side proof the confirm phase will verify.
   if (phase === 'preview') {
-    await evidence.establish(evidenceCtx);
+    try {
+      await evidence.establish(evidenceCtx);
+    } catch (error) {
+      if (!(error instanceof McpToolError)) {
+        throw error;
+      }
+      emitAuditRecord({
+        actor,
+        tool,
+        action,
+        phase,
+        target,
+        confirmationEvidence: evidenceDescriptor,
+        result: 'denied',
+        denyReason: error.type,
+      });
+      return error.toErr();
+    }
   }
 
   // (6) Allowed: on a PREVIEW, emit the single terminal 'allowed' record — nothing mutates, so the

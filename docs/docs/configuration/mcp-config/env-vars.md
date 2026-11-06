@@ -719,6 +719,10 @@ the preview.
 Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
 time between preview and confirmation.
 
+Preview tokens are kept in the session store. When more than one server process handles requests,
+set [`SESSION_STORE_PROVIDER`](oauth#session_store_provider) to `custom` so a confirmed call can
+reach any replica. Otherwise it is rejected unless it lands on the process that ran the preview.
+
 <hr />
 
 ## `STALE_CONTENT_MIN_AGE_DAYS`
