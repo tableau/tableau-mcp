@@ -5,7 +5,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetCustomViewDataTool } from './getCustomViewData.js';
 import { mockCustomView } from './mockCustomView.js';
 import { mockView } from './mockView.js';
@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
   mockGetView: vi.fn(),
   mockGetCustomViewData: vi.fn(),
-  mockUploadCsvToS3: vi.fn(),
+  mockUploadBufferToS3: vi.fn(),
   mockLog: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
@@ -36,9 +36,9 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../uploadDataToS3.js', async (importActual) => ({
-  ...(await importActual<typeof import('../uploadDataToS3.js')>()),
-  uploadCsvToS3: mocks.mockUploadCsvToS3,
+vi.mock('../s3Client.js', async (importActual) => ({
+  ...(await importActual<typeof import('../s3Client.js')>()),
+  uploadBufferToS3: mocks.mockUploadBufferToS3,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -150,7 +150,7 @@ describe('getCustomViewDataTool', () => {
 
     it('should return a resource_link (no inline CSV) when MCP_S3_BUCKET is configured', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
+      mocks.mockUploadBufferToS3.mockResolvedValue('https://s3.example.com/signed-url');
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
 
@@ -166,13 +166,18 @@ describe('getCustomViewDataTool', () => {
       // No Slack _meta block is emitted for CSV data.
       expect(result._meta).toBeUndefined();
 
-      expect(mocks.mockUploadCsvToS3).toHaveBeenCalledWith(mockCsv, {
-        resourceId: mockCustomView.id,
-        config: expect.objectContaining({
+      expect(mocks.mockUploadBufferToS3).toHaveBeenCalledWith(
+        Buffer.from(mockCsv, 'utf-8'),
+        expect.objectContaining({
+          key: expect.stringMatching(
+            new RegExp(
+              `^custom-view-data/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/${mockCustomView.id}/[0-9a-f-]{36}\\.csv$`,
+            ),
+          ),
+          contentType: 'text/csv; charset=utf-8',
           bucket: 'tableau-data',
-          keyPrefix: 'custom-view-data/',
         }),
-      });
+      );
     });
 
     it('should return inline CSV when MCP_S3_BUCKET is not configured', async () => {
@@ -181,12 +186,12 @@ describe('getCustomViewDataTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(JSON.stringify(mockCsv));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
     });
 
     it('should fall back to inline CSV and warn when the S3 upload fails', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      mocks.mockUploadCsvToS3.mockRejectedValue(new Error('access denied'));
+      mocks.mockUploadBufferToS3.mockRejectedValue(new Error('access denied'));
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
 
@@ -210,7 +215,7 @@ describe('getCustomViewDataTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(JSON.stringify(mockCsv));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
     });
   });
 });

@@ -18,7 +18,7 @@ import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import invariant from '../../utils/invariant.js';
 import { WebTool } from './tool.js';
-import { getMockRequestHandlerExtra } from './toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from './toolContext.mock.js';
 
 // Mock for product telemetry - tracks calls to send()
 const mockTelemetrySend = vi.hoisted(() => vi.fn());
@@ -419,8 +419,8 @@ describe('Tool', () => {
           tool_name: 'get-datasource-metadata',
           request_id: '2',
           session_id: '',
-          site_luid: 'test-site-luid',
-          user_luid: 'test-user-luid',
+          site_luid: MOCK_SITE_LUID,
+          user_luid: MOCK_USER_LUID,
           success: true,
           error_code: '',
           error_message: '',
@@ -727,8 +727,8 @@ describe('Tool', () => {
       expect(mockRecordToolCall).toHaveBeenCalledTimes(1);
       expect(mockRecordToolCall).toHaveBeenCalledWith({
         toolName: 'get-datasource-metadata',
-        siteLuid: 'test-site-luid',
-        userLuid: 'test-user-luid',
+        siteLuid: MOCK_SITE_LUID,
+        userLuid: MOCK_USER_LUID,
         success: true,
         errorCode: '',
         oauthClientId: 'https://claude.ai/client',
