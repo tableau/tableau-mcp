@@ -1,20 +1,26 @@
 import { randomUUID } from 'node:crypto';
 
-import { BucketS3Config, uploadBufferToS3 } from './s3Client.js';
+import { TenantLuids } from '../../blobStorage/tenantKey.js';
+import { BucketS3Config, buildTenantS3Key, uploadBufferToS3 } from './s3Client.js';
 
 // CSV is uploaded as UTF-8 text. The charset is spelled out so clients that
 // honor it decode the presigned object correctly.
 const CSV_CONTENT_TYPE = 'text/csv; charset=utf-8';
 
 /**
- * Builds the S3 object key for a view's CSV data. The key namespaces objects
- * under the configured prefix and the source resource id (view or custom view
- * LUID), with a random UUID to avoid collisions between concurrent exports of
- * the same resource.
+ * Builds the S3 object key for a view's CSV data:
+ * `<keyPrefix>/<keyPrefixSegment>/<siteLuid>/<userLuid>/<resourceId>/<uuid>.csv`.
+ * The resource id is the view or custom view LUID, and the random UUID avoids
+ * collisions between concurrent exports of the same resource. Throws if the
+ * tenant LUIDs aren't safe key segments, so an unscoped key is never built.
  */
-export function buildDataS3Key(keyPrefix: string, resourceId: string): string {
-  const normalizedPrefix = keyPrefix.replace(/^\/+/, '').replace(/\/*$/, '/');
-  return `${normalizedPrefix}${resourceId}/${randomUUID()}.csv`;
+export function buildDataS3Key(
+  keyPrefix: string,
+  tenant: TenantLuids,
+  keyPrefixSegment: string,
+  resourceId: string,
+): string {
+  return buildTenantS3Key(keyPrefix, tenant, keyPrefixSegment, `${resourceId}/${randomUUID()}.csv`);
 }
 
 /**
@@ -30,13 +36,17 @@ export async function uploadCsvToS3(
   {
     resourceId,
     config,
+    keyPrefixSegment,
+    tenant,
   }: {
     resourceId: string;
     config: BucketS3Config;
+    keyPrefixSegment: string;
+    tenant: TenantLuids;
   },
 ): Promise<string> {
   const buffer = Buffer.from(csv, 'utf-8');
-  const key = buildDataS3Key(config.keyPrefix, resourceId);
+  const key = buildDataS3Key(config.keyPrefix, tenant, keyPrefixSegment, resourceId);
 
   return await uploadBufferToS3(buffer, {
     key,
