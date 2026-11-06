@@ -1062,7 +1062,7 @@ describe('server', () => {
     const readCallback = registerAppResourceCall[4]; // 5th arg (0-indexed)
 
     // Mock readFile to return test HTML content
-    mocks.mockReadFile.mockResolvedValueOnce('<html><body>Test App UI</body></html>');
+    mocks.mockReadFile.mockResolvedValueOnce('<html><head></head><body>Test App UI</body></html>');
 
     const result = await readCallback();
 
@@ -1071,32 +1071,28 @@ describe('server', () => {
       'utf-8',
     );
     expect(mocks.mockReadSeaAssetText).not.toHaveBeenCalled();
-    expect(result.contents[0].text).toBe('<html><body>Test App UI</body></html>');
+    expect(result.contents[0].text).toBe(
+      '<html><head><meta name="tableau-server-origin" content="https://my-tableau-server.com"></head><body>Test App UI</body></html>',
+    );
 
     expect(result.contents[0]._meta).toEqual({
       ui: {
         csp: {
-          connectDomains: expect.arrayContaining([
-            'https://*.online.tableau.com',
-            'https://*.tableau.com',
+          connectDomains: [
             'https://my-tableau-server.com',
             'https://*.custom.com',
             'https://other.com',
-          ]),
-          resourceDomains: expect.arrayContaining([
-            'https://*.online.tableau.com',
-            'https://*.tableau.com',
+          ],
+          resourceDomains: [
             'https://my-tableau-server.com',
             'https://*.custom.com',
             'https://other.com',
-          ]),
-          frameDomains: expect.arrayContaining([
-            'https://*.online.tableau.com',
-            'https://*.tableau.com',
+          ],
+          frameDomains: [
             'https://my-tableau-server.com',
             'https://*.custom.com',
             'https://other.com',
-          ]),
+          ],
         },
       },
     });

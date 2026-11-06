@@ -1177,11 +1177,7 @@ describe('Config', () => {
   describe('CSP allowed domains', () => {
     it('should use default CSP domains when CSP_ALLOWED_DOMAINS is not set', () => {
       const config = new Config();
-      expect(config.cspAllowedDomains).toEqual([
-        'https://*.online.tableau.com',
-        'https://*.tableau.com',
-        'https://my-tableau-server.com',
-      ]);
+      expect(config.cspAllowedDomains).toEqual(['https://my-tableau-server.com']);
     });
 
     it('should parse custom CSP domains when CSP_ALLOWED_DOMAINS is set', () => {
@@ -1189,8 +1185,6 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.cspAllowedDomains).toEqual([
-        'https://*.online.tableau.com',
-        'https://*.tableau.com',
         'https://my-tableau-server.com',
         'https://*.example.com',
         'https://test.com',

@@ -565,13 +565,11 @@ export class Config extends BaseConfig {
 
     this.server = server ?? '';
 
-    // Configure CSP domains with serverOrigin in defaults
+    // Default to the configured server origin only: embed URLs and the Embedding API script are
+    // derived from it, and broad wildcards like *.tableau.com include attacker-writable hosts
+    // (e.g. public.tableau.com) that become token exfiltration targets.
     const serverOrigin = this.server ? new URL(this.server).origin : '';
-    const defaultDomains = [
-      'https://*.online.tableau.com',
-      'https://*.tableau.com',
-      ...(serverOrigin ? [serverOrigin] : []),
-    ];
+    const defaultDomains = serverOrigin ? [serverOrigin] : [];
     const customDomains = cspAllowedDomains
       ? cspAllowedDomains.split(',').map((d) => d.trim())
       : [];

@@ -59,9 +59,23 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
+  // Injected by the server into the resource HTML, so the tool result can't steer the embed (and
+  // its JWT) to another origin.
+  const serverOrigin = document.querySelector<HTMLMetaElement>(
+    'meta[name="tableau-server-origin"]',
+  )?.content;
+  if (!serverOrigin || new URL(viewUrl).origin !== serverOrigin) {
+    showError(
+      'EMBED_LOAD_ERROR',
+      new Error('View URL origin does not match the configured Tableau server'),
+      app,
+    );
+    return;
+  }
+
   // Embedding API load failure
   try {
-    await loadTableauEmbeddingApi(viewUrl);
+    await loadTableauEmbeddingApi(serverOrigin);
   } catch (e) {
     showError('EMBED_LOAD_ERROR', e, app);
     return;
