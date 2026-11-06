@@ -1,3 +1,4 @@
+import type { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import { BucketS3Config } from '../s3Client.js';
 import {
   buildStagedUploadS3Key,
@@ -36,37 +37,48 @@ export type RequestWorkbookUploadResult = {
 export async function requestStagedWorkbookUpload({
   fileName,
   config,
+  tenant,
 }: {
   fileName: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
 }): Promise<RequestWorkbookUploadResult> {
-  const { uploadId, ...rest } = await requestStagedUpload({ kind: workbookKind, fileName, config });
+  const { uploadId, ...rest } = await requestStagedUpload({
+    kind: workbookKind,
+    fileName,
+    config,
+    tenant,
+  });
   return { workbookUploadId: uploadId, ...rest };
 }
 
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
   config,
+  tenant,
   maxBytes,
 }: {
   workbookUploadId: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedWorkbook> {
   return await resolveStagedUpload({
     kind: workbookKind,
     uploadId: workbookUploadId,
     config,
+    tenant,
     maxBytes,
   });
 }
 
 export function buildWorkbookUploadS3Key(
   keyPrefix: string,
+  tenant: TenantLuids,
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
-  return buildStagedUploadS3Key(workbookKind, keyPrefix, workbookUploadId, fileType);
+  return buildStagedUploadS3Key(workbookKind, keyPrefix, tenant, workbookUploadId, fileType);
 }
 
 export function getWorkbookFileType(fileName: string): WorkbookFileType | undefined {
