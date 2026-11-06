@@ -78,6 +78,7 @@ export const desktopToolNames = [
   'read-knowledge-resource',
   'search-knowledge',
   'open-file',
+  'list-saved-datasources',
   'set-start-page-visibility',
   'set-data-source-page-active',
   'save-workbook',
