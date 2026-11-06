@@ -22,6 +22,7 @@ export type PendingAuthorization = {
   tableauClientId: string;
   tableauCodeVerifier: string;
   scopes: string[];
+  expiresAt: number;
 };
 
 export type ClientCredentials = {
