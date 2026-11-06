@@ -168,8 +168,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.31 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.31');
+  it('tracks the 0.2.32 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.32');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -490,6 +490,31 @@ describe('external client API contract (captured openapi fixture)', () => {
         invokeDialogActionResultSchema.safeParse({ outcome: 'dismissed', dialogs: [] }).success,
       ).toBe(false);
     });
+
+    it.each(['firstPage', 'lastPage', 'copies'])(
+      'bounds native print %s to the producer signed 32-bit parser',
+      (field) => {
+        const action = {
+          kind: 'submit-print',
+          printerId: 'printer-id',
+          range: 'all-pages',
+          sheetScope: 'active-sheet',
+          firstPage: 0,
+          lastPage: 0,
+          copies: 1,
+        };
+        const validAction = { ...action, collate: false, exportSelection: false };
+        expect(
+          dialogActionInvocationSchema.safeParse({ ...validAction, [field]: 2_147_483_647 })
+            .success,
+        ).toBe(true);
+        for (const value of [2_147_483_648, Number.MAX_SAFE_INTEGER, 1.5]) {
+          expect(
+            dialogActionInvocationSchema.safeParse({ ...validAction, [field]: value }).success,
+          ).toBe(false);
+        }
+      },
+    );
   });
 
   describe('app-state contract', () => {
@@ -619,6 +644,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.storyboardImage,
       EXTERNAL_API_ROUTES.appOpenFile,
       EXTERNAL_API_ROUTES.workbookSave,
+      EXTERNAL_API_ROUTES.workbookClose,
       EXTERNAL_API_ROUTES.workbookWorksheetsNew,
       EXTERNAL_API_ROUTES.workbookDashboardsNew,
       EXTERNAL_API_ROUTES.workbookStoryboardsNew,
@@ -637,16 +663,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
 
-    it('has a route constant for every spec path and only the hidden invokeCommand beyond it', () => {
+    it('has a route constant for every spec path', () => {
       const constants = Object.values(EXTERNAL_API_ROUTES);
       expect(
         Object.keys(spec.paths).filter((route) => !constants.includes(route as never)),
       ).toEqual([]);
-      expect(
-        constants.filter(
-          (route) => !(route in spec.paths) && route !== EXTERNAL_API_ROUTES.invokeCommand,
-        ),
-      ).toEqual([]);
+      expect(constants.filter((route) => !(route in spec.paths))).toEqual([]);
     });
 
     it('serves every spec operation from the mock server', async () => {
@@ -829,10 +851,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(specSchema('Operation').properties?.diagnostics?.$ref).toBe(
         '#/components/schemas/WorkbookDiagnostics',
       );
-    });
-
-    it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
-      expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
 
     it('documents the dialog routes with their exact request and response schemas', () => {
@@ -1204,18 +1222,18 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('parses a SUCCEEDED Operation result object and serialize-degradation warning', () => {
+    it('parses a SUCCEEDED Operation result object and a warning', () => {
       const parsed = operationEnvelopeSchema.safeParse({
         id: 'op-1',
-        kind: 'command.invoke',
+        kind: 'tabdoc:undo',
         state: 'SUCCEEDED',
         createdAt: '2026-07-20T10:00:00Z',
         updatedAt: '2026-07-20T10:00:02Z',
-        result: { outputParam: 'value' },
+        result: { undone: true },
         warnings: [
           {
-            code: 'output-serialization-failed',
-            message: 'Command output could not be serialized.',
+            code: 'partial',
+            message: 'one sheet skipped',
             target: 'result',
           },
         ],

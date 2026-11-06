@@ -46,6 +46,7 @@ export class Config extends BaseConfig {
   server: string;
   sslKey: string;
   sslCert: string;
+  httpHost: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
   siteName: string;
@@ -87,6 +88,7 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    disableStrictScopeMatch: boolean;
     external: {
       discovery: boolean;
       usernameClaimName: string;
@@ -125,6 +127,7 @@ export class Config extends BaseConfig {
       TRANSPORT: transport,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
+      HTTP_HOST: httpHost,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
@@ -163,6 +166,7 @@ export class Config extends BaseConfig {
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
       ADVERTISE_API_SCOPES: advertiseApiScopes,
+      DISABLE_STRICT_SCOPE_MATCH: disableStrictScopeMatch,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -199,6 +203,8 @@ export class Config extends BaseConfig {
 
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
+    // Empty means listen on all interfaces (the Node default).
+    this.httpHost = httpHost?.trim() ?? '';
     this.httpPort = parseNumber(cleansedVars[httpPortEnvVarName?.trim() || 'PORT'], {
       defaultValue: 3927,
       minValue: 1,
@@ -304,6 +310,7 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      disableStrictScopeMatch: disableStrictScopeMatch === 'true',
       external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
         ? {
             discovery: oauthExternalDiscovery === 'true',

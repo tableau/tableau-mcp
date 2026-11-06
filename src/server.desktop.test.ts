@@ -27,7 +27,6 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
-  SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -260,7 +259,7 @@ describe('desktop tools/list serialized surface', () => {
     // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
     // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
     // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(10_062);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(10_014);
   });
 });
 
@@ -406,7 +405,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   const allTools = (): Array<DesktopTool<any>> =>
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
-  it.each(['', 'dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean'])(
+  it.each(['', 'dynamic-authoring', 'demo', 'full', 'combined-lean'])(
     'keeps field listing and the repair read registered in profile "%s"',
     (profile) => {
       const names = selectToolsForProfile(allTools(), profile).map((tool) => tool.name);
@@ -464,29 +463,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     }
   });
 
-  it('every spec-loop-profile name is a real desktop tool name', () => {
-    for (const name of SPEC_LOOP_TOOL_PROFILE) {
-      expect(desktopToolNames).toContain(name);
-    }
-  });
-
-  it('TOOL_PROFILE=spec-loop registers exactly the 6-tool set — command loop plus gated repair read', () => {
-    const selected = selectToolsForProfile(allTools(), 'spec-loop');
-    expect(new Set(selected.map((t) => t.name))).toEqual(SPEC_LOOP_TOOL_PROFILE);
-    // XML authoring and template tools remain absent; the universal gated
-    // get-worksheet-xml repair read is asserted by the profile-wide test above.
-    for (const banished of [
-      'get-workbook-xml',
-      'apply-workbook',
-      'apply-worksheet',
-      'bind-template',
-    ]) {
-      expect(selected.map((t) => t.name)).not.toContain(banished);
-    }
-    // execute-tableau-command is the one load-bearing tool — it must survive.
-    expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
-  });
-
   it.each(['', 'dynamic-authoring'])(
     'TOOL_PROFILE=%j registers exactly the 87-tool modern surface with scoped XML fallbacks',
     (profile) => {
@@ -494,7 +470,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
       expect(selected).toHaveLength(87);
       // The full dynamic dialect, semantically named — every author-* verb present,
-      // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
+      // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
       for (const verb of [
         'author-calc',
@@ -506,7 +482,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'format-dashboard-zones',
         'compose-story',
         'ask-user',
-        'search-commands',
         'list-templates',
         'bind-template',
         'build-worksheets-from-templates',
@@ -560,6 +535,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'set-data-source-page-active',
         'save-workbook',
         'workbook-export-as',
+        'close-workbook',
         'refresh-auto-updates',
         'refresh-dashboard-auto-updates',
         'refresh-storyboard-auto-updates',
@@ -609,9 +585,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
       'set-start-page-visibility',
     );
     expect(selectToolsForProfile(tools, 'demo').map((tool) => tool.name)).not.toContain(
-      'set-start-page-visibility',
-    );
-    expect(selectToolsForProfile(tools, 'spec-loop').map((tool) => tool.name)).not.toContain(
       'set-start-page-visibility',
     );
   });
@@ -742,7 +715,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         }),
       );
       const message = String(logSpy.mock.calls.at(-1)?.[0].message);
-      for (const valid of ['dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean']) {
+      for (const valid of ['dynamic-authoring', 'demo', 'full', 'combined-lean']) {
         expect(message).toContain(valid);
       }
     },
@@ -838,12 +811,14 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('refresh-dashboard-auto-updates')).toBe('0.2.19');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');
     expect(floors.get('open-file')).toBe('0.2.6');
+    expect(floors.get('list-saved-datasources')).toBe('0.2.6');
     expect(floors.get('save-workbook')).toBe('0.2.6');
     expect(floors.get('add-worksheet')).toBe('0.2.6');
     expect(floors.get('add-dashboard')).toBe('0.2.6');
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
+    expect(floors.get('close-workbook')).toBe('0.2.32');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
@@ -923,6 +898,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
 
     for (const dropped of [
       'open-file',
+      'list-saved-datasources',
       'save-workbook',
       'add-worksheet',
       'add-dashboard',

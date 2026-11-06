@@ -227,7 +227,6 @@ server ignores `TOOL_PROFILE`. On the combined server, only `combined-lean` chan
 - Unset or `dynamic-authoring`: the Desktop server registers a lean native authoring subset.
 - `full`: every Desktop tool.
 - `demo`: the demo subset. Experimental; it may change or be removed in a minor release.
-- `spec-loop`: the spec-loop subset. Experimental; it may change or be removed in a minor release.
 - `combined-lean`: the full Desktop surface, and the Web tools load on demand (see below).
 - Any other value logs a warning and uses the default (`dynamic-authoring`) set.
 
@@ -628,10 +627,11 @@ Controls the read-only Tableau Knowledge tools. They are disabled by default.
 - Default: unset, which leaves the read-only Knowledge tools disabled
 - Set to `true` to enable them. Any other value is treated as unset
 - Set to `false` to disable them
-- When `true`, the server checks whether Tableau Knowledge is available on the site when it
-  registers tools. The tools appear only on sites where it is. If the site rejects the check (for
-  example, the request isn't authorized), the tools are left out as unavailable. If the check fails
-  with a temporary error, they are left out with a warning that the error is likely transient
+- When `true`, the tools appear only on sites where Tableau Knowledge is available. The server
+  checks this when it registers tools, as it does for other site-dependent tools. If the site
+  rejects the check (for example, the request isn't authorized), the tools are left out as
+  unavailable. If the check fails with a temporary error, they are left out with a warning that the
+  error is likely transient
 - When enabled, registers:
   - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
   - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)
@@ -882,17 +882,25 @@ AWS_DEFAULT_REGION=us-east-1
 
 ## `MCP_IMAGE_PREFIX`
 
-The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
-view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
-normalized automatically.
+The base key prefix (folder path) under which objects are stored in the bucket. Each tool appends
+its own segment to this base, so objects are namespaced per tool. Slashes are normalized
+automatically.
 
 - Default: unset (empty). When unset, each tool uses only its own segment.
 - Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-  `custom-view-images/`.
-- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
-  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
-  and `custom-view-images/...` respectively.
+  `custom-view-images/`, `get-view-data` → `view-data/`, `get-custom-view-data` →
+  `custom-view-data/`, `download-workbook` → `workbook-files/`, `request-workbook-upload` →
+  `workbook-uploads/`, `request-datasource-upload` → `datasource-uploads/`.
+- Objects are tenant-scoped: the caller's Tableau site and user LUIDs follow the tool segment, as
+  `<base><tool-segment><siteLuid>/<userLuid>/<rest>`. For example, with `MCP_IMAGE_PREFIX=tableau/`,
+  a view image is keyed as `tableau/view-images/<siteLuid>/<userLuid>/<viewId>/<uuid>.png`. Unset,
+  it is keyed as `view-images/<siteLuid>/<userLuid>/<viewId>/<uuid>.png`. Prefix-based lifecycle or
+  scanning rules on a tool segment keep matching.
+- The LUIDs come from the authenticated session, never from tool input. A request whose session has
+  no valid site or user LUID returns an error instead of writing an unscoped object. A staged upload
+  can be published only by the user who requested it.
+- The data app template that `scaffold-data-app` writes is the exception: it is keyed as
+  `<base>data-app-templates/` without tenant LUIDs.
 - Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**
@@ -948,7 +956,6 @@ used (it is not raised to the minimum). A value above a clamp is lowered to the 
 | `TABLEAU_DESKTOP_SESSION_ID`                                                                                    | none                                                                                                                                                                                                                       | must be digits only (a Desktop pid)      | Pins the Desktop instance session-scoped tools default to. The agent can still target another open Desktop. Anything that is not a pid is ignored.                                                                                                                               | spawner     |
 | `TABLEAU_USER_AGENT_PREFIX`                                                                                     | none                                                                                                                                                                                                                       | a single `name/version` product token; anything else is ignored| Product token the launcher puts at the front of the External Client API `User-Agent`, ahead of `tableau-desktop-mcp/<version>`. Desktop attributes each call to the leading token. Tableau Agent sets `tableau-agent/<version>`.                                                 | spawner     |
 | `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`                                                                            | OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if unset), `~/Library/Application Support` on macOS, `$XDG_DATA_HOME` (else `~/.local/share`) on Linux. Two folders are searched, in order: `<root>/Tableau/Tableau/ExternalApi`, then `<root>/Tableau/ExternalApi` |                                          | Directory searched for running Desktop instances. When set, it is the only directory searched.                                                                                                                                                                                   | dev/test    |
-| `TABLEAU_COMMANDS_REGISTRY_DIR`                                                                                 | none                                                                                                                                                                                                                       | blank is treated as unset                | Directory with the Desktop command and parameter registry JSON files. Without it the commands reference is unavailable.                                                                                                                                                          | spawner     |
 | `TABLEAU_KNOWLEDGE_DIR`                                                                                         | none (the knowledge corpus is empty)                                                                                                                                                                                       |                                          | Knowledge roots served as `expertise://` resources. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows). Earlier roots win on a name collision.                                                                                           | spawner     |
 | `TEMPLATES_DIR`                                                                                                 | the bundled `templates` directory                                                                                                                                                                                          |                                          | Replaces the whole template catalog with this directory.                                                                                                                                                                                                                         | dev/test    |
 | `TABLEAU_REPOSITORY_DIR`                                                                                        | none                                                                                                                                                                                                                       |                                          | Adds three external template folders under this directory, in order: `Tableau Agent/templates/.vendored/overridable`, `Bookmarks`, then `Tableau Agent/templates`. A later folder overrides a bundled or earlier template with the same name. Ignored when `TEMPLATES_DIR` is set. | spawner     |

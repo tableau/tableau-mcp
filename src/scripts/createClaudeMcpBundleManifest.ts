@@ -392,6 +392,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  HTTP_HOST: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'HTTP Host',
+    description:
+      'The network interface address the HTTP server binds to. Defaults to all interfaces, except in the Desktop web profile, which defaults to 127.0.0.1.',
+    required: false,
+    sensitive: false,
+  },
   CORS_ORIGIN_CONFIG: {
     includeInUserConfig: false,
     type: 'string',
@@ -697,7 +706,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable read-only Tableau Knowledge MCP tools',
     description:
-      'Set to "true" to enable query-knowledge-context and inspect-knowledge-context, or "false" to disable them. When "true", the tools appear only on sites where Tableau Knowledge is available.',
+      'Set to "true" to enable query-knowledge-context and inspect-knowledge-context, or "false" to disable them. When "true", the tools appear only on sites where Tableau Knowledge is available, which is checked when tools register.',
     required: false,
     sensitive: false,
   },

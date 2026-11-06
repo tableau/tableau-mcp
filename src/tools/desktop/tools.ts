@@ -8,8 +8,8 @@ import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
+import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
-import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
@@ -37,6 +37,7 @@ import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListOperationsTool } from './api/listOperations.js';
+import { getListSavedDatasourcesTool } from './api/listSavedDatasources.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
@@ -87,7 +88,6 @@ import { getWriteCachedXmlTool } from './local/cache/writeCachedXml.js';
 import { getBeginEpisodeTool, getEndEpisodeTool } from './local/episodeTools.js';
 import { getReadKnowledgeResourceTool } from './local/knowledge/readKnowledgeResource.js';
 import { getSearchKnowledgeTool } from './local/knowledge/searchKnowledge.js';
-import { getSearchCommandsTool } from './local/search/searchCommands.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
@@ -105,10 +105,12 @@ export const desktopToolFactories = [
   getUndoWorkbookTool,
   getRedoWorkbookTool,
   getOpenFileTool,
+  getListSavedDatasourcesTool,
   getSetStartPageVisibilityTool,
   getSetDataSourcePageActiveTool,
   getSaveWorkbookTool,
   getWorkbookExportAsTool,
+  getCloseWorkbookTool,
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
@@ -145,8 +147,6 @@ export const desktopToolFactories = [
   getRemoveFieldTool,
   getResolveFieldTool,
   getSearchWorkbookFieldsTool,
-  getSearchCommandsTool,
-  getExecuteTableauCommandTool,
   getAskUserTool,
   getBindTemplateTool,
   getRunDashboardBatchTool,

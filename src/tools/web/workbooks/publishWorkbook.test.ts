@@ -10,7 +10,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { mockWorkbook } from './mockWorkbook.js';
 import { getPublishWorkbookTool } from './publishWorkbook.js';
 
@@ -326,6 +326,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -567,12 +568,25 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.twb',
       workbook: Buffer.from('<workbook source="new" />'),
     });
+  });
+
+  it('fails closed without reading the staged upload when the session has no valid tenant LUIDs', async () => {
+    const result = await getToolResult(validArgs, { extraOverrides: { _userLuid: 'not-a-luid' } });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "couldn't determine the signed-in Tableau site and user",
+    );
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('validates and publishes a local workbook file path', async () => {
@@ -901,6 +915,7 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
+      'tableau:mcp_site_settings:read',
     ]);
 
     mocks.useRestApiCalls.length = 0;
@@ -911,6 +926,7 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
+      'tableau:mcp_site_settings:read',
     ]);
     expect(mocks.useRestApiCalls[1]?.jwtScopes).toEqual(['tableau:permissions:read']);
     expect(mocks.useRestApiCalls).toHaveLength(2);
@@ -954,6 +970,7 @@ describe('publishWorkbookTool', () => {
             'tableau:workbooks:create',
             'tableau:file_uploads:create',
             'tableau:projects:read',
+            'tableau:mcp_site_settings:read',
           ],
         },
         { jwtScopes: ['tableau:permissions:read'] },
@@ -1125,8 +1142,10 @@ describe('publishWorkbookTool', () => {
         expect(response.permissions).toEqual([]);
         expect(response.permissionsNote).toBeUndefined();
       } else {
+        // Optional scope withheld: the read is skipped (consent boundary), not attempted-and-failed,
+        // so the note names the missing scope rather than reporting a retrieval failure.
         expect(response.permissions).toBeUndefined();
-        expect(response.permissionsNote).toContain('could not be retrieved');
+        expect(response.permissionsNote).toContain('was not granted');
         expect(response).not.toHaveProperty('permissionsMessage');
       }
     },
@@ -1347,7 +1366,7 @@ async function getToolResult(
     personalSpace?: boolean;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
+  options: Parameters<typeof getMockExtra>[0] = {},
 ): Promise<CallToolResult> {
   const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -1367,11 +1386,13 @@ async function getToolResult(
 function getMockExtra({
   boundedProjectIds = null,
   bucketS3Enabled = true,
+  extraOverrides = {},
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
+  extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
+  const extra = getMockRequestHandlerExtra(extraOverrides);
   return {
     ...extra,
     getConfigWithOverrides: vi.fn().mockResolvedValue({

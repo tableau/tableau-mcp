@@ -18,7 +18,6 @@ describe('listWorksheets', () => {
     };
     const executor = makeExecutorMock({
       listWorksheets: vi.fn().mockResolvedValue(Ok({ worksheets: [worksheet] })),
-      executeCommand: vi.fn(),
     });
 
     const result = await listWorksheets({ executor, signal });
@@ -28,7 +27,6 @@ describe('listWorksheets', () => {
       count: 1,
       worksheets: [worksheet],
     });
-    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('falls back to the External API whole-document read when the first-class route is missing', async () => {

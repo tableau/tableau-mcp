@@ -139,9 +139,6 @@ export async function getToolResult({
 }> {
   const documents = [initialXml, initialXml, readbackXml ?? initialXml];
   let readCount = 0;
-  const executeCommand = vi
-    .fn()
-    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
   const getWorkbookDocument = vi.fn(async () => {
     return new Ok({
       xml: documents[Math.min(readCount++, documents.length - 1)],
@@ -155,7 +152,6 @@ export async function getToolResult({
   const extra = {
     ...getMockRequestHandlerExtra(),
     getExecutor: vi.fn().mockResolvedValue({
-      executeCommand,
       getWorkbookDocument,
       applyWorkbookDocument,
     }),

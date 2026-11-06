@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -199,11 +200,17 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
-              const resolvedWorkbookFile = await resolveWorkbookInput({
+              const tenant: TenantIdentitySource = extra;
+              const resolvedWorkbookInput = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
+                tenant,
               });
+              if (resolvedWorkbookInput.isErr()) {
+                return resolvedWorkbookInput;
+              }
+              const resolvedWorkbookFile = resolvedWorkbookInput.value;
               const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -279,17 +286,31 @@ export const getPublishWorkbookTool = (
             return result;
           }
           const published = result.value;
+
+          // The permissions read is OPTIONAL: it bypasses the tool's mandatory-scope middleware
+          // check (the scope is not in requiredApiScopes), so honor the same OAuth consent boundary
+          // here. When the caller didn't grant the optional scope, skipping the read is the expected
+          // path — not a failure. Log it and return the published workbook so a withheld optional
+          // scope never breaks an already-completed publish.
+          const optionalScopeWithheld =
+            (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
+            extra.config.oauth.enforceScopes &&
+            extra.config.oauth.advertiseApiScopes &&
+            !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+          if (optionalScopeWithheld) {
+            log({
+              message: `publish-workbook: optional scope ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE} not granted; skipping the workbook permissions read and returning the published workbook`,
+              level: 'info',
+              logger: 'publish-workbook',
+            });
+            return new Ok({
+              ...published,
+              permissionsNote: `Published successfully, but the workbook permission rules were not retrieved because the optional ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE} scope was not granted.`,
+            });
+          }
+
+          // Best-effort: a permissions-read failure must not fail an already-completed publish.
           try {
-            // The optional read bypasses the tool's mandatory-scope middleware check.
-            // Honor the same OAuth consent boundary before minting its REST credentials.
-            if (
-              (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
-              extra.config.oauth.enforceScopes &&
-              extra.config.oauth.advertiseApiScopes &&
-              !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
-            ) {
-              throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
-            }
             const permissions = await useRestApi({
               ...extra,
               jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
@@ -385,11 +406,13 @@ async function resolveWorkbookInput({
   config,
   workbookUploadId,
   workbookFilePath,
+  tenant,
 }: {
   config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
   workbookFilePath?: string;
-}): Promise<ResolvedWorkbook> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ResolvedWorkbook, McpToolError>> {
   if (workbookUploadId && workbookFilePath) {
     throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
   }
@@ -400,7 +423,7 @@ async function resolveWorkbookInput({
         'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
-    return await resolveLocalWorkbookFile(workbookFilePath);
+    return new Ok(await resolveLocalWorkbookFile(workbookFilePath));
   }
 
   if (!workbookUploadId) {
@@ -413,10 +436,13 @@ async function resolveWorkbookInput({
       'MCP_S3_BUCKET must be configured before publishing staged workbook uploads.',
     );
   }
-  return await resolveStagedWorkbookUpload({
-    workbookUploadId,
-    config,
-  });
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  return new Ok(
+    await resolveStagedWorkbookUpload({ workbookUploadId, config, tenant: tenantLuids.value }),
+  );
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
