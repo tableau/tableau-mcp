@@ -190,7 +190,7 @@ export async function guardMutation<TTarget>({
         target,
         confirmationEvidence: evidenceDescriptor,
         result: 'denied',
-        denyReason: 'evidence-store-unavailable',
+        denyReason: error instanceof McpToolError ? error.type : 'evidence-verification-failed',
       });
       if (error instanceof McpToolError) {
         return error.toErr();

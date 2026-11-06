@@ -4,12 +4,13 @@ import type { MockedFunction } from 'vitest';
 import {
   ContentNotStaleError,
   EvidenceStoreUnavailableError,
+  McpToolError,
 } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { auditRecordSchema } from './auditRecord.js';
-import { EvidenceStrategy, NoEvidence, RegistryEvidence } from './evidence.js';
+import { EvidenceStrategy, NoEvidence, RegistryEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
 
 const mocks = vi.hoisted(() => ({
@@ -158,6 +159,39 @@ describe('guardMutation', () => {
     const record = auditRecordSchema.parse(audits[0]);
     expect(record.result).toBe('denied');
     expect(record.denyReason).toBe('evidence-store-unavailable');
+  });
+
+  it('preserves the denial reason of a typed evidence error', async () => {
+    const error = new McpToolError({
+      type: 'tableau-service-unavailable',
+      message: 'Tableau is unavailable',
+      statusCode: 503,
+    });
+    const evidence = makeEvidence({ verify: vi.fn().mockRejectedValue(error) });
+    const result = await run({ phase: 'confirm', evidence });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toBe(error);
+    }
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    expect(auditRecordSchema.parse(audits[0]).denyReason).toBe(error.type);
+  });
+
+  it('does not label a failed Tableau tag lookup as a session-store outage', async () => {
+    const error = new Error('Tableau tag lookup failed');
+    const restApi = {
+      ...makeRestApi(),
+      datasourcesMethods: { queryDatasource: vi.fn().mockRejectedValue(error) },
+    } as unknown as RestApi;
+    const evidence = new TagEvidence({ cleanupDate: '2026-11-06', kind: 'datasource' });
+
+    await expect(run({ phase: 'confirm', restApi, evidence })).rejects.toBe(error);
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    const record = auditRecordSchema.parse(audits[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('evidence-verification-failed');
   });
 
   it('on a model-visible preview-confirm tool (no previewTool), the denial says to re-run with confirm omitted', async () => {
