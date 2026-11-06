@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 import type { SessionStore } from './sessionStore.js';
@@ -164,6 +165,17 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
 
     // Validate the provider implements SessionStore interface
     validateSessionStore(provider);
+    // Optional so OAuth-only providers keep loading, but mutation previews fail closed without it.
+    if (typeof provider.compareAndDelete !== 'function') {
+      log({
+        message:
+          `Custom session store provider "${modulePath}" does not implement compareAndDelete. ` +
+          'OAuth works, but previews of tools that change content will fail until the provider ' +
+          'adds it as one atomic backend operation.',
+        level: 'warning',
+        logger: 'startup',
+      });
+    }
     return provider;
   } catch (error) {
     // Provide helpful error message with common issues
