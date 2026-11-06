@@ -210,8 +210,8 @@ export function readResourceAsset(relPath: string): string | null {
 // Ordered by precedence: earlier roots win on a slug collision. tab-agent-south owns what
 // each root physically is (protected/user-content/overridable); this file never learns those
 // names, it just merges whatever ordered list it's handed.
-function externalKnowledgeRoots(): string[] {
-  const raw = getDesktopConfig().knowledgeDir;
+function externalExpertiseRoots(): string[] {
+  const raw = getDesktopConfig().expertiseDir;
   if (!raw) {
     return [];
   }
@@ -250,10 +250,10 @@ function walkMarkdownSlugs(root: string): string[] {
   return slugs;
 }
 
-export function listKnowledgeSlugs(): string[] {
-  // Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). With no root
+export function listExpertiseSlugs(): string[] {
+  // Expertise is served only from external roots (TABLEAU_EXPERTISE_DIR). With no root
   // configured the corpus is simply empty -- the desktop build no longer bundles one.
-  const externalRoots = externalKnowledgeRoots();
+  const externalRoots = externalExpertiseRoots();
   if (externalRoots.length === 0) {
     return [];
   }
@@ -266,18 +266,18 @@ export function listKnowledgeSlugs(): string[] {
   return [...slugs].sort();
 }
 
-function isSafeKnowledgeSlug(slug: string): boolean {
+function isSafeExpertiseSlug(slug: string): boolean {
   if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) {
     return false;
   }
   return !slug.split('/').some((part) => part.length === 0 || isHiddenName(part));
 }
 
-export function readKnowledgeBySlug(slug: string): string | null {
-  if (!isSafeKnowledgeSlug(slug)) {
+export function readExpertiseBySlug(slug: string): string | null {
+  if (!isSafeExpertiseSlug(slug)) {
     return null;
   }
-  const externalRoots = externalKnowledgeRoots();
+  const externalRoots = externalExpertiseRoots();
   if (externalRoots.length === 0) {
     return null;
   }
@@ -291,7 +291,7 @@ export function readKnowledgeBySlug(slug: string): string | null {
   return null;
 }
 
-export function getConfiguredKnowledgeDir(): string {
-  const externalRoots = externalKnowledgeRoots();
+export function getConfiguredExpertiseDir(): string {
+  const externalRoots = externalExpertiseRoots();
   return externalRoots.length > 0 ? externalRoots.join(delimiter) : '';
 }

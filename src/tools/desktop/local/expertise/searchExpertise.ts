@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { searchKnowledgeWithFallback } from '../../../../desktop/knowledge/index.js';
+import { searchExpertiseWithFallback } from '../../../../desktop/expertise/index.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 
@@ -11,13 +11,13 @@ const paramsSchema = {
   limit: z.number().int().positive().optional().describe('Max results (default 5)'),
 };
 
-const toolTitle = 'Search Knowledge';
-export const getSearchKnowledgeTool = (
+const toolTitle = 'Search Expertise';
+export const getSearchExpertiseTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
   const tool = new DesktopTool({
     server,
-    name: 'search-knowledge',
+    name: 'search-expertise',
     title: toolTitle,
     description:
       "Find expertise by concept, not tool name. When topHitBody is present, it is the full module; no follow-up read is needed. Otherwise read the top hit's mustReadUri.",
@@ -33,7 +33,7 @@ export const getSearchKnowledgeTool = (
         extra,
         args: { query, limit },
         callback: async () => {
-          return new Ok(searchKnowledgeWithFallback(query, limit));
+          return new Ok(searchExpertiseWithFallback(query, limit));
         },
         getSuccessResult: (result) => ({
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],

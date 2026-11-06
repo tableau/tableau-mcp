@@ -4,11 +4,11 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getSearchKnowledgeTool } from './searchKnowledge.js';
+import { getSearchExpertiseTool } from './searchExpertise.js';
 
-vi.mock('../../../../desktop/knowledge/index.js');
+vi.mock('../../../../desktop/expertise/index.js');
 
-import { searchKnowledgeWithFallback } from '../../../../desktop/knowledge/index.js';
+import { searchExpertiseWithFallback } from '../../../../desktop/expertise/index.js';
 import * as loggerModule from '../../../../logging/logger.js';
 
 const TOP_HIT = {
@@ -26,20 +26,20 @@ beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
-describe('searchKnowledgeTool', () => {
+describe('searchExpertiseTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(searchKnowledgeWithFallback).mockReturnValue({ hits: [TOP_HIT] });
+    vi.mocked(searchExpertiseWithFallback).mockReturnValue({ hits: [TOP_HIT] });
   });
 
   it('tells callers to skip the targeted read when the top body is present', async () => {
-    const tool = getSearchKnowledgeTool(new DesktopMcpServer());
+    const tool = getSearchExpertiseTool(new DesktopMcpServer());
     const description = await Provider.from(tool.description);
 
     expect(description).toContain(
       'When topHitBody is present, it is the full module; no follow-up read is needed.',
     );
-    expect(description).not.toContain('read-knowledge-resource');
+    expect(description).not.toContain('read-expertise-resource');
   });
 
   it('returns the top hit read requirement', async () => {
@@ -54,9 +54,9 @@ describe('searchKnowledgeTool', () => {
   });
 
   it('returns an explicit asset-root error when the search index is empty', async () => {
-    vi.mocked(searchKnowledgeWithFallback).mockImplementation(() => {
+    vi.mocked(searchExpertiseWithFallback).mockImplementation(() => {
       throw new Error(
-        'Knowledge corpus is empty; expected assets under /app/resources/desktop/knowledge',
+        'Expertise corpus is empty; expected assets under /app/resources/desktop/expertise',
       );
     });
 
@@ -64,12 +64,12 @@ describe('searchKnowledgeTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('/app/resources/desktop/knowledge');
+    expect(result.content[0].text).toContain('/app/resources/desktop/expertise');
   });
 });
 
 async function getResult(): Promise<CallToolResult> {
-  const tool = getSearchKnowledgeTool(new DesktopMcpServer());
+  const tool = getSearchExpertiseTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     { query: 'pie chart of countries', limit: 3 },

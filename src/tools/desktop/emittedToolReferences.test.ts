@@ -322,7 +322,7 @@ const PREFIXED_ALLOWED_TOKENS = new Set([
 ]);
 const PREFIXED_ALLOWED_FILES = new Set([
   // QUERY_TOOL_JARGON is a search stop-word list, never rendered.
-  'src/desktop/knowledge/index.ts',
+  'src/desktop/expertise/index.ts',
 ]);
 
 const scannedCandidates = sourceFiles().flatMap((fullPath) => {
