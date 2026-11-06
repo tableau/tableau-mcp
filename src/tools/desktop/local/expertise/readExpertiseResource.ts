@@ -3,9 +3,9 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
-  readKnowledgeResource,
-  readKnowledgeSections,
-} from '../../../../desktop/knowledge/index.js';
+  readExpertiseResource,
+  readExpertiseSections,
+} from '../../../../desktop/expertise/index.js';
 import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
@@ -15,14 +15,14 @@ const paramsSchema = {
 };
 
 const toolTitle = 'Reading authoring guide';
-export const getReadKnowledgeResourceTool = (
+export const getReadExpertiseResourceTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
   const tool = new DesktopTool({
     server,
-    name: 'read-knowledge-resource',
+    name: 'read-expertise-resource',
     title: toolTitle,
-    description: 'Read expertise by URI; search-knowledge finds URIs.',
+    description: 'Read expertise by URI; search-expertise finds URIs.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -35,7 +35,7 @@ export const getReadKnowledgeResourceTool = (
         extra,
         args: { uri },
         callback: async () => {
-          const content = readKnowledgeResource(uri);
+          const content = readExpertiseResource(uri);
           if (content === null) {
             // A bad #section is a different mistake from a bad module — name the sections
             // this module actually has rather than sending the agent back to the URI list.
@@ -43,14 +43,14 @@ export const getReadKnowledgeResourceTool = (
             const sections =
               hash === -1
                 ? []
-                : readKnowledgeSections(uri.slice('expertise://tableau/'.length, hash));
+                : readExpertiseSections(uri.slice('expertise://tableau/'.length, hash));
             if (sections.length > 0) {
               return new ArgsValidationError(
                 `No section "${uri.slice(hash + 1)}" in ${uri.slice(0, hash)}.\n\nSections: ${sections.join(', ')}`,
               ).toErr();
             }
             return new ArgsValidationError(
-              `Resource not found: ${uri}\n\nUse search-knowledge to find available resource URIs.`,
+              `Resource not found: ${uri}\n\nUse search-expertise to find available resource URIs.`,
             ).toErr();
           }
           return new Ok(content);

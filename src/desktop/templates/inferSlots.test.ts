@@ -703,7 +703,7 @@ describe('inferFromBookmark — communicative role', () => {
 // (a) still resolve the wrapped measure to its base (not drop it as kind: unknown), (b) attach
 // a table-calc fact to that measure, and (c) for ABSOLUTE addressing, upgrade the addressing
 // dimension slots to required with a tablecalc-* role — RELATIVE addressing names no dimension
-// and must leave the dims alone. Modelled on the confirmed XML in the table-calcs knowledge doc.
+// and must leave the dims alone. Modelled on the confirmed XML in the table-calcs expertise doc.
 describe('inferFromBookmark — table-calc semantics as a first-class slot fact', () => {
   // Running Total, Compute Using = Table (across) → ordering-type="Rows", positional. Names no
   // dimension, so the date axis keeps its ordinary axis-partition role.
@@ -1035,7 +1035,7 @@ describe('inferFromBookmark — communicative role', () => {
 // (a) still resolve the wrapped measure to its base (not drop it as kind: unknown), (b) attach
 // a table-calc fact to that measure, and (c) for ABSOLUTE addressing, upgrade the addressing
 // dimension slots to required with a tablecalc-* role — RELATIVE addressing names no dimension
-// and must leave the dims alone. Modelled on the confirmed XML in the table-calcs knowledge doc.
+// and must leave the dims alone. Modelled on the confirmed XML in the table-calcs expertise doc.
 describe('inferFromBookmark — table-calc semantics as a first-class slot fact', () => {
   // Running Total, Compute Using = Table (across) → ordering-type="Rows", positional. Names no
   // dimension, so the date axis keeps its ordinary axis-partition role.
