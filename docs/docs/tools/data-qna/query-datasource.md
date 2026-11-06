@@ -79,6 +79,43 @@ Example:
 
 ## Optional arguments
 
+### `interpretFieldCaptionsAsFieldNames`
+
+Requires Tableau 2025.3 or later. Set to `true` to use the exact `fieldName` and `parameterName`
+values returned by [Get Datasource Metadata](get-datasource-metadata.md), for example when several
+logical tables contain fields with the same display caption. Choose the intended logical table; do
+not invent or qualify names yourself.
+
+On earlier versions, this argument is omitted from the tool schema and the metadata tool does not
+recommend field-name queries. The runtime version check still rejects clients that send `true`.
+
+Use underlying names consistently for existing fields and parameters, including bracketed references
+inside calculation expressions. The VDS request properties remain `fieldCaption` and
+`parameterCaption`; their values are interpreted as underlying names when this option is enabled. A
+new ad hoc calculation's `fieldCaption` remains a caller-chosen output label.
+
+For example, if metadata returns `fieldName: "staffing_cost"`, reference `[staffing_cost]` inside
+the formula:
+
+```json
+{
+  "interpretFieldCaptionsAsFieldNames": true,
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Total staffing cost",
+        "calculation": "SUM([staffing_cost])"
+      }
+    ]
+  }
+}
+```
+
+Omit or set to `false` to retain display-caption queries. Earlier Tableau versions reject `true`
+before datasource requests, including when supplementary query validation is disabled.
+
+<hr />
+
 ### `limit`
 
 The maximum number of rows to return. The tool will return at most this many rows.
