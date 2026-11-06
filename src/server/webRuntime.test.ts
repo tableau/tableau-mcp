@@ -265,7 +265,11 @@ describe('initializeWebRuntime', () => {
       sessionStore: { provider: 'memory' },
     } as Config);
     expect(log).toHaveBeenCalledWith(
-      expect.objectContaining({ logger: 'startup', level: 'warning' }),
+      expect.objectContaining({
+        logger: 'startup',
+        level: 'warning',
+        message: expect.stringMatching(/SESSION_STORE_PROVIDER is memory/),
+      }),
     );
   });
 
