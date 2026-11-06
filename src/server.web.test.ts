@@ -305,16 +305,17 @@ describe('server', () => {
       expect(instructions).toContain('site-administration capabilities');
       expect(instructions).toContain('general admin/site-health');
       expect(instructions).toContain('query-admin-insights');
-      // Every query-admin-insights kind must be named so the model can route intent to a kind
-      // (W-23757366).
-      for (const kind of [
-        'ts-events',
-        'ts-users',
-        'site-content',
-        'job-performance',
-        'stale-content',
+      // Every query-admin-insights kind must be named with its routing gloss so the model can map
+      // intent to a kind (W-23757366). Assert kind+gloss, not the bare kind: bare kinds collide
+      // with other substrings (e.g. 'stale-content' is inside 'stale-content-cleanup-inform').
+      for (const kindRouting of [
+        'ts-events audit events',
+        'ts-users logins/last access',
+        'site-content metadata/size',
+        'job-performance refresh history',
+        'stale-content stale report',
       ]) {
-        expect(instructions).toContain(kind);
+        expect(instructions).toContain(kindRouting);
       }
       // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
       // session can discover and correctly invoke it without any external doc-feeding (W-23757369).

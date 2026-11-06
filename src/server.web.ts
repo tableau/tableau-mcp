@@ -129,8 +129,8 @@ const ADMIN_INSTRUCTIONS =
   'tasks); user-license-reclamation-inform and user-license-reclamation-apply (downgrade inactive ' +
   'licensed users to Unlicensed). Use the query-admin-insights tool for supporting data (kinds: ' +
   'ts-events audit events, ts-users logins/last access, site-content metadata/size, ' +
-  'job-performance refresh history, stale-content stale report) — even when the user asks broadly rather than ' +
-  'naming a specific tool. ' +
+  'job-performance refresh history, stale-content stale report) — even when the user asks ' +
+  'broadly rather than naming a specific tool. ' +
   'Do not require the user to state or re-confirm admin status before using these prompts or tools — ' +
   'invoke them whenever the task warrants; the server authorizes each call and cleanly rejects ' +
   'non-admins. When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack ' +

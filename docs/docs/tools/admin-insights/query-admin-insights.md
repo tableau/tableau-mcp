@@ -162,16 +162,20 @@ Example: `["Datasource"]`
 ## Known field captions
 
 Field captions are dataset-specific and must match exactly. The tool description lists these
-captions so a model does not have to guess them; each was verified against a live site.
+captions so a model does not have to guess them.
 
 - `ts-events`: `Actor User Name`, `Event Type`, `Event Date`, `Item Type`, `Item Name`
 - `ts-users`: `User Email`, `User Name`, `Tableau Desktop - Last Access Date`,
   `Tableau Prep - Last Access Date`
 - `site-content`: `Item Type`, `Item Name`, `Owner Email`, `Item Parent Project Name`
-- `job-performance`: `Job Type`, `Started At`
+- `job-performance`: `Item Name`, `Job Type`, `Job Result`, `Started At`, `Job Duration`,
+  `Job Execution Duration`, `Schedule Name`, `Was Manual Run`, `Error Message`,
+  `Extract File Size`
 
-These are not exhaustive; use [`get-datasource-metadata`](../data-qna/get-datasource-metadata.md)
-for the full list.
+The tool description renders this list from `KNOWN_FIELD_CAPTIONS` in `queryAdminInsights.ts`; a
+unit test keeps it a superset of the captions the packaged admin prompts send. These are not
+exhaustive; use [`get-datasource-metadata`](../data-qna/get-datasource-metadata.md) for the full
+list.
 
 ## Row cap (`stale-content`)
 
@@ -199,11 +203,11 @@ This is a **successful** result, not an error — only the row payload is withhe
   Management). Items beyond the lookback cannot be distinguished on last-access timestamps.
 - Field captions differ between datasources — e.g. `Item Id` (TS Events) vs `Item ID` (Site
   Content). Inspect with [`get-datasource-metadata`](../data-qna/get-datasource-metadata.md)
-  when in doubt. See [Known field captions](#known-field-captions) for captions verified against
-  a live site.
-- A VDS `Unknown Field` error means a `fieldCaption` does not exist in that datasource. The error
-  message ends with a hint to use the exact captions from the tool description; the query is not
-  retried.
+  when in doubt. See [Known field captions](#known-field-captions) for the captions the tool
+  description lists.
+- A VDS `Unknown Field` error means a `fieldCaption` (in `fields`, `filters`, or a calculation)
+  does not exist in that datasource. For the raw-query kinds the error message ends with a hint to
+  use the exact captions from the tool description; the query is not retried.
 - The `stale-content` backend excludes the Tableau-managed `Admin Insights` project by design.
 - `Last Accessed At` is `null` for never-accessed items; the stale-content backend ages those
   from `Created At` and flags them `neverAccessed: true`.
