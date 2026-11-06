@@ -471,7 +471,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
       expect(selected).toHaveLength(87);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
-      // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
+      // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
       for (const verb of [
         'author-calc',
         'validate-calculated-field',
@@ -491,8 +491,8 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'resolve-field',
         'apply-worksheet',
         'run-dashboard-batch',
-        'read-knowledge-resource',
-        'search-knowledge',
+        'read-expertise-resource',
+        'search-expertise',
         'get-summary-data',
         'get-workbook-inventory',
         'list-workbook-datasources',
