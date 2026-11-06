@@ -259,7 +259,7 @@ export const getPublishWorkbookTool = (
               }
 
               await deleteStagedUpload(
-                resolvedWorkbookFile,
+                resolvedWorkbookFile.stagedKey,
                 extra.config.bucketS3,
                 'publish-workbook',
               );

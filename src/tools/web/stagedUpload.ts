@@ -118,16 +118,16 @@ export async function resolveStagedUpload<FileType extends string>({
 
 /** Best-effort deletion of a published staged upload; never throws. No-op for local files. */
 export async function deleteStagedUpload(
-  file: { stagedKey?: string },
+  stagedKey: string | undefined,
   config: BucketS3Config,
   logger: string,
 ): Promise<void> {
-  if (file.stagedKey === undefined) {
+  if (stagedKey === undefined) {
     return;
   }
   try {
     await deleteObjectFromS3({
-      key: file.stagedKey,
+      key: stagedKey,
       bucket: config.bucket,
       region: config.region,
     });

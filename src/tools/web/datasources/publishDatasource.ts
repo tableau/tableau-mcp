@@ -139,7 +139,7 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
               });
 
               await deleteStagedUpload(
-                resolvedDatasourceFile,
+                resolvedDatasourceFile.stagedKey,
                 extra.config.bucketS3,
                 'publish-datasource',
               );
