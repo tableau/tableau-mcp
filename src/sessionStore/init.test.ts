@@ -181,6 +181,30 @@ describe('SessionStore init', () => {
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
+      expect(store.compareAndDelete).toBeUndefined();
+    });
+
+    it('prefixes atomic compare-and-delete keys and preserves the provider receiver', async () => {
+      globalThis.__sharedSessionBackend = new Map();
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: {
+            module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs',
+          },
+        },
+      } as any);
+      const a = createNamespacedStore<string>('alpha', { ttlMs: 10000 });
+      const b = createNamespacedStore<string>('beta', { ttlMs: 10000 });
+      await a.set('key', 'preview');
+      await b.set('key', 'preview');
+
+      await expect(a.compareAndDelete!('key', 'stale')).resolves.toBe(false);
+      await expect(a.get('key')).resolves.toBe('preview');
+      await expect(a.compareAndDelete!('key', 'preview')).resolves.toBe(true);
+      await expect(a.get('key')).resolves.toBeUndefined();
+      await expect(b.get('key')).resolves.toBe('preview');
+      globalThis.__sharedSessionBackend = undefined;
     });
   });
 

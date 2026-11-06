@@ -477,8 +477,14 @@ Redis, or a transaction for a relational store).
 
 For confirms to work across replicas, the provider also needs to:
 
+- Implement `compareAndDelete(key, expectedValue)` as an atomic comparison and deletion of the exact
+  stored string. Return `true` only when it removes a matching entry; a mismatch must leave the
+  entry intact. Use a backend conditional delete or transaction, not separate `get` and `delete`
+  calls. This method is optional for OAuth-only providers, but mutation previews fail closed without
+  it.
 - Point every replica at the same backend
-- Apply the TTL passed to `configureNamespace`, or expire keys on its own, so unconfirmed previews don't pile up
+- Apply the TTL passed to `configureNamespace`, or expire keys on its own, so unconfirmed previews
+  don't pile up
 - Allow keys under the `mutation-confirmation-nonces-v1:` and `mutation-app-approvals-v1:` prefixes
 
 :::

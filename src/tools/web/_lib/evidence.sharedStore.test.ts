@@ -11,13 +11,16 @@ const config = vi.hoisted(() => ({
     providerConfig: { module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs' },
   } as Record<string, unknown>,
 }));
+const mocks = vi.hoisted(() => ({ log: vi.fn() }));
 
 vi.mock('../../../config.js', () => ({ getConfig: () => config }));
+vi.mock('../../../logging/logger.js', () => ({ log: mocks.log }));
 
 declare global {
   var __sharedSessionBackend: Map<string, unknown> | undefined;
   var __sharedSessionStoresText: boolean | undefined;
   var __sharedSessionStoreDown: boolean | undefined;
+  var __sharedSessionAfterGet: (() => Promise<void>) | undefined;
 }
 
 type EvidenceModule = typeof import('./evidence.js');
@@ -45,6 +48,7 @@ describe('preview evidence across replicas sharing a custom session store', () =
       providerConfig: { module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs' },
     };
     globalThis.__sharedSessionBackend = new Map();
+    mocks.log.mockClear();
   });
 
   afterEach(() => {
@@ -52,6 +56,7 @@ describe('preview evidence across replicas sharing a custom session store', () =
     globalThis.__sharedSessionBackend = undefined;
     globalThis.__sharedSessionStoresText = undefined;
     globalThis.__sharedSessionStoreDown = undefined;
+    globalThis.__sharedSessionAfterGet = undefined;
   });
 
   it('works with a provider that stores values as text', async () => {
@@ -90,6 +95,28 @@ describe('preview evidence across replicas sharing a custom session store', () =
     await expect(rejection).rejects.toThrow('confirmation store is unavailable');
     // The backend's own error text never reaches the client.
     await expect(rejection).rejects.not.toThrow('store down');
+    expect(mocks.log).toHaveBeenCalledWith({
+      message: 'Preview evidence store operation failed',
+      level: 'error',
+      logger: 'mutation-guard',
+    });
+  });
+
+  it('rejects a provider without atomic compare-and-delete before recording a preview', async () => {
+    config.sessionStore = {
+      provider: 'custom',
+      providerConfig: { module: './src/sessionStore/__fixtures__/fakeSessionStore.cjs' },
+    };
+    const a = await startReplica();
+    const preview = new a.RegistryEvidence();
+
+    await expect(preview.establish(makeCtx())).rejects.toThrow('confirmation store is unavailable');
+    expect(preview.getEstablishedNonce()).toBeUndefined();
+    await expect(
+      new a.RegistryEvidence().verify(
+        makeCtx({ confirmationToken: '00000000-0000-4000-8000-000000000000' }),
+      ),
+    ).rejects.toThrow('confirmation store is unavailable');
   });
 
   it('confirms a RegistryEvidence nonce on a different replica, exactly once', async () => {
@@ -168,6 +195,26 @@ describe('preview evidence across replicas sharing a custom session store', () =
     await expect(
       new a.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
     ).resolves.toBe(true);
+  });
+
+  it('preserves a newer preview that replaces a nonce between validation and consumption', async () => {
+    const a = await startReplica();
+    const b = await startReplica();
+    const first = new a.RegistryEvidence();
+    const second = new b.RegistryEvidence();
+    await first.establish(makeCtx());
+
+    // Return the old snapshot only after another replica has replaced the pending proof.
+    globalThis.__sharedSessionAfterGet = () => second.establish(makeCtx());
+    await expect(
+      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: first.getEstablishedNonce() })),
+    ).resolves.toBe(false);
+    await expect(
+      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
+    ).resolves.toBe(true);
+    await expect(
+      new b.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
+    ).resolves.toBe(false);
   });
 
   it('a wrong nonce for the right target does not burn the pending preview', async () => {
