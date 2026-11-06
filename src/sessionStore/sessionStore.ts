@@ -40,6 +40,18 @@ export interface SessionStore<V> {
   consume(key: string): Promise<V | undefined>;
 
   /**
+   * Atomically delete `key` only if its current value equals `expectedValue`. Return true
+   * only when the matching entry was removed; leave a missing or different entry untouched.
+   * Compare values as stored by the backend (preview proof uses strings).
+   *
+   * Required for preview/confirm mutation tools; optional for existing OAuth-only providers.
+   * Mutation previews fail closed if this method is absent. Implement the comparison and
+   * deletion in one backend operation (e.g. a Redis Lua script or a conditional SQL DELETE),
+   * never as a separate get followed by delete.
+   */
+  compareAndDelete?(key: string, expectedValue: V): Promise<boolean>;
+
+  /**
    * Announce the TTL/bound intended for a given namespace's keys, so a custom provider can
    * apply them itself (e.g. native Redis `EX`/`PEXPIRE` in its own `set`). The
    * in-memory default learns this automatically via per-namespace construction; a custom

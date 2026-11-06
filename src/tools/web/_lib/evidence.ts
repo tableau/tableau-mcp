@@ -155,7 +155,8 @@ export function getMutationPreviewTtlMs(): number {
 // Each scope holds one entry, so a new preview replaces the last one and only the latest token works.
 // The entry is a string carrying its own expiry, which survives any provider's serialization and
 // keeps a provider that ignores the namespace TTL from stretching the approval window.
-type PreviewProofStore = SessionStore<string>;
+type PreviewProofStore = SessionStore<string> &
+  Required<Pick<SessionStore<string>, 'compareAndDelete'>>;
 
 const proofStores = new Map<string, PreviewProofStore>();
 
@@ -163,7 +164,13 @@ function getProofStore(namespace: string): PreviewProofStore {
   let store = proofStores.get(namespace);
   if (!store) {
     // Memoized: on the memory provider every createNamespacedStore call returns a fresh store.
-    store = createNamespacedStore<string>(namespace, { ttlMs: getMutationPreviewTtlMs() });
+    const candidate = createNamespacedStore<string>(namespace, {
+      ttlMs: getMutationPreviewTtlMs(),
+    });
+    if (typeof candidate.compareAndDelete !== 'function') {
+      throw new Error('Preview evidence requires atomic compareAndDelete support');
+    }
+    store = candidate as PreviewProofStore;
     proofStores.set(namespace, store);
   }
   return store;
@@ -179,12 +186,12 @@ function sha256(fields: ReadonlyArray<string>): string {
 async function withStore<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
-  } catch (error) {
+  } catch {
+    // Provider errors can contain credentials in their message, stack, or arbitrary fields.
     log({
       message: 'Preview evidence store operation failed',
       level: 'error',
       logger: 'mutation-guard',
-      data: error,
     });
     throw new EvidenceStoreUnavailableError();
   }
@@ -195,7 +202,7 @@ async function recordProof(namespace: string, key: string, secret = ''): Promise
   await withStore(() => getProofStore(namespace).set(key, `${expiresAtMs}.${secret}`));
 }
 
-function matchesProof(stored: unknown, secret: string): boolean {
+function matchesProof(stored: unknown, secret: string): stored is string {
   if (typeof stored !== 'string') {
     return false;
   }
@@ -213,13 +220,16 @@ function matchesProof(stored: unknown, secret: string): boolean {
 }
 
 async function consumeProof(namespace: string, key: string, secret = ''): Promise<boolean> {
-  const store = getProofStore(namespace);
-  // The read keeps a stale token from burning the latest preview. The atomic consume decides which
-  // of two racing confirms wins: only one sees the entry.
-  if (!matchesProof(await withStore(() => store.get(key)), secret)) {
-    return false;
-  }
-  return matchesProof(await withStore(() => store.consume(key)), secret);
+  return withStore(async () => {
+    const store = getProofStore(namespace);
+    const stored = await store.get(key);
+    if (!matchesProof(stored, secret)) {
+      return false;
+    }
+    // A preview may replace the entry after our read. Delete only the proof we validated,
+    // so a stale confirm cannot burn its replacement. Re-check expiry after the store awaits.
+    return (await store.compareAndDelete(key, stored)) && matchesProof(stored, secret);
+  });
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -291,9 +301,9 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
  * `establish` generates a fresh nonce via crypto.randomUUID() and records its hash in the session
  * store under a key scoped to site + user + tool + target + binding, replacing any earlier preview;
  * the preview text echoes the nonce so the caller can supply it on confirm. `verify` atomically
- * consumes that entry and checks the nonce, so a token works once, only for the latest preview of
- * exactly what was previewed. The nonce is server-generated and unguessable, so — like the tag — it
- * cannot be fabricated by computing a value.
+ * compares and deletes that entry after checking the nonce, so a token works once, only for the
+ * latest preview of exactly what was previewed. The nonce is server-generated and unguessable,
+ * so — like the tag — it cannot be fabricated by computing a value.
  *
  * See the store note above: this can only reject, never wrongly allow.
  */

@@ -8,7 +8,10 @@ class SharedBackendSessionStore {
   }
 
   get(key) {
-    return Promise.resolve(this.map.get(key));
+    const value = this.map.get(key);
+    const afterGet = globalThis.__sharedSessionAfterGet;
+    globalThis.__sharedSessionAfterGet = undefined;
+    return afterGet ? afterGet().then(() => value) : Promise.resolve(value);
   }
 
   set(key, value) {
@@ -29,6 +32,19 @@ class SharedBackendSessionStore {
     const value = this.map.get(key);
     this.map.delete(key);
     return Promise.resolve(value);
+  }
+
+  compareAndDelete(key, expectedValue) {
+    if (globalThis.__sharedSessionStoreDown) {
+      return Promise.reject(
+        new Error('store down: redis://test-user:test-password@backend.invalid'),
+      );
+    }
+    if (!this.map.has(key) || this.map.get(key) !== expectedValue) {
+      return Promise.resolve(false);
+    }
+    this.map.delete(key);
+    return Promise.resolve(true);
   }
 }
 

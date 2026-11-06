@@ -55,6 +55,15 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
     return Promise.resolve(value);
   }
 
+  compareAndDelete(key: string, expectedValue: V): Promise<boolean> {
+    // Keep the comparison and deletion synchronous, including timer cleanup only on a match.
+    if (!this.map.has(key) || this.map.get(key) !== expectedValue) {
+      return Promise.resolve(false);
+    }
+    this.map.delete(key);
+    return Promise.resolve(true);
+  }
+
   /**
    * ExpiringMap schedules expiry via a raw setTimeout, which shares Node/setTimeout's 32-bit
    * delay cap (~24.86 days) and throws above it. TTLs beyond that (e.g. a 30-day refresh token)
