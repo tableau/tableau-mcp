@@ -22,6 +22,7 @@ import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/sc
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
+import { deleteStagedUpload } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
@@ -256,6 +257,12 @@ export const getPublishWorkbookTool = (
                 }
                 throw error;
               }
+
+              await deleteStagedUpload(
+                resolvedWorkbookFile.stagedKey,
+                extra.config.bucketS3,
+                'publish-workbook',
+              );
 
               if (personalSpaceTarget !== undefined) {
                 const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');

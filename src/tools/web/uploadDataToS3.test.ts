@@ -14,6 +14,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: vi.fn().mockImplementation(() => ({ send: mocks.send })),
   PutObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'put', input })),
   GetObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'get', input })),
+  DeleteObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'delete', input })),
 }));
 
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
