@@ -25,6 +25,7 @@ export async function validateQueryAgainstDatasourceMetadata(
   query: Query,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
+  interpretFieldCaptionsAsFieldNames = false,
 ): Promise<Result<void, QueryValidationError[]>> {
   const validationErrors: QueryValidationError[] = [];
 
@@ -44,6 +45,7 @@ export async function validateQueryAgainstDatasourceMetadata(
       query.fields,
       readMetadataResult.value,
       validationErrors,
+      interpretFieldCaptionsAsFieldNames,
     );
 
     if (query.parameters) {
@@ -51,6 +53,7 @@ export async function validateQueryAgainstDatasourceMetadata(
         query.parameters,
         readMetadataResult.value,
         validationErrors,
+        interpretFieldCaptionsAsFieldNames,
       );
     }
   } catch {
@@ -69,13 +72,16 @@ export function validateFieldsAgainstDatasourceMetadata(
   fields: Query['fields'],
   datasourceMetadata: MetadataResponse,
   validationErrors: QueryValidationError[],
+  interpretFieldCaptionsAsFieldNames = false,
 ): void {
   for (const field of fields) {
     // Validate bin fields.
     if ('binSize' in field) {
       // The bin size property is only for new bin fields created as part of the query, it can not be used to override preexisting bin fields.
       const preexistingBinField = datasourceMetadata.data?.find(
-        (f) => f.fieldCaption === field.fieldCaption && f.columnClass === 'BIN',
+        (f) =>
+          (interpretFieldCaptionsAsFieldNames ? f.fieldName : f.fieldCaption) ===
+            field.fieldCaption && f.columnClass === 'BIN',
       );
 
       if (preexistingBinField) {
@@ -102,7 +108,8 @@ export function validateFieldsAgainstDatasourceMetadata(
     }
 
     const matchingField = datasourceMetadata.data?.find(
-      (f) => f.fieldCaption === field.fieldCaption,
+      (f) =>
+        (interpretFieldCaptionsAsFieldNames ? f.fieldName : f.fieldCaption) === field.fieldCaption,
     );
 
     // Field must exist in the datasource metadata, unless it's a custom calculation.
@@ -193,10 +200,13 @@ export function validateParametersAgainstDatasourceMetadata(
   parameters: QueryParameter[],
   datasourceMetadata: MetadataResponse,
   validationErrors: QueryValidationError[],
+  interpretFieldCaptionsAsFieldNames = false,
 ): void {
   for (const parameter of parameters) {
     const matchingParameter = datasourceMetadata.extraData?.parameters?.find(
-      (p) => p.parameterCaption === parameter.parameterCaption,
+      (p) =>
+        (interpretFieldCaptionsAsFieldNames ? p.parameterName : p.parameterCaption) ===
+        parameter.parameterCaption,
     );
 
     // Parameters used in the query must exist in the datasource metadata.
