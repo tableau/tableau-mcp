@@ -33,10 +33,13 @@ export async function startExpressServer({
   basePath,
   config,
   logLevel,
+  host,
 }: {
   basePath: string;
   config: Config;
   logLevel: LoggingLevel;
+  // Interface to bind. Empty/undefined binds all interfaces (Docker/Heroku rely on this).
+  host?: string;
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
 
@@ -90,13 +93,18 @@ export async function startExpressServer({
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
   );
 
+  // An empty host is passed to listen() as undefined, which makes Node bind all interfaces.
+  // A loopback bind is reported as 127.0.0.1 because `localhost` can resolve to ::1, which a
+  // 127.0.0.1 listener doesn't serve.
+  // IPv6 literals must be bracketed to form a valid URL.
+  const urlHost = host?.includes(':') ? `[${host}]` : host || 'localhost';
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
     return new Promise((resolve) => {
       const server = http
         .createServer(app)
-        .listen(config.httpPort, () =>
-          resolve({ url: `http://localhost:${config.httpPort}/${basePath}`, app, server }),
+        .listen(config.httpPort, host || undefined, () =>
+          resolve({ url: `http://${urlHost}:${config.httpPort}/${basePath}`, app, server }),
         );
     });
   }
@@ -117,8 +125,8 @@ export async function startExpressServer({
   return new Promise((resolve) => {
     const server = https
       .createServer(options, app)
-      .listen(config.httpPort, () =>
-        resolve({ url: `https://localhost:${config.httpPort}/${basePath}`, app, server }),
+      .listen(config.httpPort, host || undefined, () =>
+        resolve({ url: `https://${urlHost}:${config.httpPort}/${basePath}`, app, server }),
       );
   });
 
