@@ -77,6 +77,26 @@ describe('query-admin-insights tool', () => {
     expect(tool.name).toBe('query-admin-insights');
   });
 
+  it('describes every kind and the known field captions so the model does not guess them', () => {
+    const tool = getQueryAdminInsightsTool(new WebMcpServer());
+    const kinds = ['ts-events', 'ts-users', 'site-content', 'job-performance', 'stale-content'];
+    for (const kind of kinds) {
+      expect(tool.description).toContain(kind);
+    }
+    expect(tool.description).toContain('audit events');
+    expect(tool.description).toContain('extract-refresh and subscription run history');
+    for (const caption of [
+      'Actor User Name',
+      'Event Type',
+      'User Email',
+      'Tableau Desktop - Last Access Date',
+      'Item Parent Project Name',
+      'Started At',
+    ]) {
+      expect(tool.description).toContain(caption);
+    }
+  });
+
   it.each([
     [true, true, false],
     [true, false, false],

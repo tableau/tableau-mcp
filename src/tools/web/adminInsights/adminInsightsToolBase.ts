@@ -177,9 +177,13 @@ export async function executeAdminInsightsQuery({
         continue;
       }
 
+      const unknownFieldHint = /Unknown Field/i.test(vdsError.message)
+        ? ' Field captions must match the dataset exactly; see the query-admin-insights tool ' +
+          'description for known captions.'
+        : '';
       return Err(
         new AdminInsightsUnavailableError(
-          `VDS query against Admin Insights "${datasetName}" failed: ${vdsError.message}`,
+          `VDS query against Admin Insights "${datasetName}" failed: ${vdsError.message}${unknownFieldHint}`,
         ),
       );
     }

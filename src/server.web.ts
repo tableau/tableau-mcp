@@ -127,8 +127,9 @@ const ADMIN_INSTRUCTIONS =
   'stale-content-cleanup-apply (stale workbooks/datasources); job-optimization-inform (job & ' +
   'extract-refresh performance) and extract-optimization-apply (reschedule or delete extract-refresh ' +
   'tasks); user-license-reclamation-inform and user-license-reclamation-apply (downgrade inactive ' +
-  'licensed users to Unlicensed). Use the query-admin-insights tool (e.g. stale-content, ' +
-  'job-performance, ts-users) for supporting data — even when the user asks broadly rather than ' +
+  'licensed users to Unlicensed). Use the query-admin-insights tool for supporting data (kinds: ' +
+  'ts-events audit events, ts-users logins/last access, site-content metadata/size, ' +
+  'job-performance refresh history, stale-content stale report) — even when the user asks broadly rather than ' +
   'naming a specific tool. ' +
   'Do not require the user to state or re-confirm admin status before using these prompts or tools — ' +
   'invoke them whenever the task warrants; the server authorizes each call and cleanly rejects ' +

@@ -52,9 +52,11 @@ type Kind = z.infer<typeof kindSchema>;
 
 const paramsSchema = {
   kind: kindSchema.describe(
-    'Which admin-insights backend to query. Use "ts-events", "ts-users", "site-content", or ' +
-      '"job-performance" for raw VDS queries; use "stale-content" for the deterministic ' +
-      'stale-content anti-join.',
+    'Which admin-insights backend to query. Raw VDS queries: "ts-events" (audit events: access, ' +
+      'publish, update, delete), "ts-users" (per-user last login, Desktop/Prep access), ' +
+      '"site-content" (content metadata, owners, size), "job-performance" (extract-refresh and ' +
+      'subscription run history). Use "stale-content" for the deterministic stale-content ' +
+      'anti-join.',
   ),
   query: querySchema
     .optional()
@@ -131,8 +133,17 @@ administrators on Tableau Cloud sites with Admin Insights enabled.
 
 Dispatches on \`kind\`:
 - \`ts-events\` / \`ts-users\` / \`site-content\` / \`job-performance\` — raw VDS query. Pass
-  \`query\` (required) and optional \`limit\`. Use \`ts-users\` for per-user activity signals such
-  as last login and Tableau Desktop / Prep last-access dates.
+  \`query\` (required) and optional \`limit\`.
+  - \`ts-events\`: audit events (access, publish, update, delete).
+  - \`ts-users\`: per-user activity signals such as last login and Tableau Desktop / Prep
+    last-access dates.
+  - \`site-content\`: content metadata, owners, size.
+  - \`job-performance\`: extract-refresh and subscription run history.
+  Field captions are dataset-specific and must match exactly; do not guess. Known captions:
+  ts-events: Actor User Name, Event Type, Event Date, Item Type, Item Name; ts-users: User Email,
+  User Name, Tableau Desktop - Last Access Date, Tableau Prep - Last Access Date; site-content:
+  Item Type, Item Name, Owner Email, Item Parent Project Name; job-performance: Job Type,
+  Started At.
 - \`stale-content\` — server-side stale-content report. Pass optional \`minAgeDays\`, \`projectIds\`,
   \`itemTypes\`; do NOT pass \`query\` or \`limit\`.
 

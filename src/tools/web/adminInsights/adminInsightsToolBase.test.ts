@@ -146,4 +146,42 @@ describe('executeAdminInsightsQuery health fallback', () => {
     expect(result.unwrapErr()).toBeInstanceOf(AdminInsightsUnavailableError);
     expect(queryDatasource).toHaveBeenCalledTimes(1);
   });
+
+  it('adds a field-caption hint to an Unknown Field error without retrying', async () => {
+    const queryDatasource = vi.fn().mockResolvedValue(
+      Err({
+        type: 'api-error' as const,
+        message: 'Unknown Field: Job Id.',
+        httpStatus: 400,
+        errorCode: undefined,
+      }),
+    );
+    const restApi = makeRestApi(queryDatasource);
+
+    const result = await executeAdminInsightsQuery({
+      restApi,
+      datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
+      query: { fields: [] },
+    });
+
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error).toBeInstanceOf(AdminInsightsUnavailableError);
+    expect((error as Error).message).toContain('Unknown Field: Job Id.');
+    expect((error as Error).message).toContain('Field captions must match the dataset exactly');
+    expect(queryDatasource).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not add the caption hint to other api-errors', async () => {
+    const queryDatasource = vi.fn().mockResolvedValue(Err(NON_HYPER_ERROR));
+    const restApi = makeRestApi(queryDatasource);
+
+    const result = await executeAdminInsightsQuery({
+      restApi,
+      datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
+      query: { fields: [] },
+    });
+
+    expect((result.unwrapErr() as Error).message).not.toContain('Field captions must match');
+  });
 });

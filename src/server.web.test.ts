@@ -305,6 +305,17 @@ describe('server', () => {
       expect(instructions).toContain('site-administration capabilities');
       expect(instructions).toContain('general admin/site-health');
       expect(instructions).toContain('query-admin-insights');
+      // Every query-admin-insights kind must be named so the model can route intent to a kind
+      // (W-23757366).
+      for (const kind of [
+        'ts-events',
+        'ts-users',
+        'site-content',
+        'job-performance',
+        'stale-content',
+      ]) {
+        expect(instructions).toContain(kind);
+      }
       // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
       // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
       // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
