@@ -117,6 +117,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-storyboard',
     'compose-story',
     'open-file',
+    'list-saved-datasources',
     'set-start-page-visibility',
     'set-data-source-page-active',
     'save-workbook',
