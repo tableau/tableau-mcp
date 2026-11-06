@@ -1,3 +1,4 @@
+import type { TenantLuids } from '../../../blobStorage/tenantKey.js';
 import { BucketS3Config } from '../s3Client.js';
 import {
   buildStagedUploadS3Key,
@@ -36,14 +37,17 @@ export type RequestDatasourceUploadResult = {
 export async function requestStagedDatasourceUpload({
   fileName,
   config,
+  tenant,
 }: {
   fileName: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
 }): Promise<RequestDatasourceUploadResult> {
   const { uploadId, ...rest } = await requestStagedUpload({
     kind: datasourceKind,
     fileName,
     config,
+    tenant,
   });
   return { datasourceUploadId: uploadId, ...rest };
 }
@@ -51,26 +55,30 @@ export async function requestStagedDatasourceUpload({
 export async function resolveStagedDatasourceUpload({
   datasourceUploadId,
   config,
+  tenant,
   maxBytes,
 }: {
   datasourceUploadId: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedDatasource> {
   return await resolveStagedUpload({
     kind: datasourceKind,
     uploadId: datasourceUploadId,
     config,
+    tenant,
     maxBytes,
   });
 }
 
 export function buildDatasourceUploadS3Key(
   keyPrefix: string,
+  tenant: TenantLuids,
   datasourceUploadId: string,
   fileType: DatasourceFileType,
 ): string {
-  return buildStagedUploadS3Key(datasourceKind, keyPrefix, datasourceUploadId, fileType);
+  return buildStagedUploadS3Key(datasourceKind, keyPrefix, tenant, datasourceUploadId, fileType);
 }
 
 export function getDatasourceFileType(fileName: string): DatasourceFileType | undefined {

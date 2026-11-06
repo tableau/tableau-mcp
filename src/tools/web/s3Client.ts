@@ -12,6 +12,7 @@
  * S3 client rather than each constructing their own.
  */
 
+import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 
 /**
@@ -115,6 +116,19 @@ export function joinS3Prefix(base: string, segment: string): string {
     .filter(Boolean)
     .join('/');
   return joined ? `${joined}/` : '';
+}
+
+/**
+ * Builds a tenant-scoped object key, `<keyPrefix>/<folder>/<siteLuid>/<userLuid>/<rest>`.
+ * Throws if the tenant LUIDs or folder are not safe key segments, so an unscoped key is never built.
+ */
+export function buildTenantS3Key(
+  keyPrefix: string,
+  tenant: TenantLuids,
+  folder: string,
+  rest: string,
+): string {
+  return `${joinS3Prefix(keyPrefix, '')}${buildTenantBlobKey(tenant, folder, rest)}`;
 }
 
 /**
