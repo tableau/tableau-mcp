@@ -246,7 +246,24 @@ export async function guardMutation<TTarget>({
 
   // (5) Preview phase: establish the server-side proof the confirm phase will verify.
   if (phase === 'preview') {
-    await evidence.establish(evidenceCtx);
+    try {
+      await evidence.establish(evidenceCtx);
+    } catch (error) {
+      if (!(error instanceof McpToolError)) {
+        throw error;
+      }
+      emitAuditRecord({
+        actor,
+        tool,
+        action,
+        phase,
+        target,
+        confirmationEvidence: evidenceDescriptor,
+        result: 'denied',
+        denyReason: error.type,
+      });
+      return error.toErr();
+    }
   }
 
   // (6) Allowed: on a PREVIEW, emit the single terminal 'allowed' record — nothing mutates, so the

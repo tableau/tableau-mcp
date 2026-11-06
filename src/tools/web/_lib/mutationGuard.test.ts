@@ -161,6 +161,24 @@ describe('guardMutation', () => {
     expect(record.denyReason).toBe('evidence-store-unavailable');
   });
 
+  it('on preview, a store outage denies with its own reason and one DENIED audit', async () => {
+    const evidence = makeEvidence({
+      establish: vi.fn().mockRejectedValue(new EvidenceStoreUnavailableError()),
+    });
+    const result = await run({ phase: 'preview', evidence });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.type).toBe('evidence-store-unavailable');
+    }
+
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    const record = auditRecordSchema.parse(audits[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('evidence-store-unavailable');
+    expect(record.phase).toBe('preview');
+  });
+
   it('preserves the denial reason of a typed evidence error', async () => {
     const error = new McpToolError({
       type: 'tableau-service-unavailable',
