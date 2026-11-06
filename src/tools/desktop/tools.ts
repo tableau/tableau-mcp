@@ -37,6 +37,7 @@ import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListOperationsTool } from './api/listOperations.js';
+import { getListSavedDatasourcesTool } from './api/listSavedDatasources.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
@@ -104,6 +105,7 @@ export const desktopToolFactories = [
   getUndoWorkbookTool,
   getRedoWorkbookTool,
   getOpenFileTool,
+  getListSavedDatasourcesTool,
   getSetStartPageVisibilityTool,
   getSetDataSourcePageActiveTool,
   getSaveWorkbookTool,
