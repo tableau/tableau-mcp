@@ -4,6 +4,7 @@ import { WebMcpServer } from '../server.web.js';
 import { testProductVersion } from '../testShared.js';
 import { webToolNames } from '../tools/web/toolName.js';
 import { webToolFactories } from '../tools/web/tools.js';
+import { Provider } from '../utils/provider.js';
 import { activityLogObjectSources, getActivityLogObject } from './objects.js';
 
 // Building every tool reads the feature gate, which would otherwise look for features.json.
@@ -30,7 +31,9 @@ describe('activityLogObjectSources', () => {
         continue;
       }
 
-      const schema = tool.paramsSchema as ZodRawShapeCompat | { shape: ZodRawShapeCompat };
+      const schema = (await Provider.from(tool.paramsSchema)) as
+        | ZodRawShapeCompat
+        | { shape: ZodRawShapeCompat };
       const argNames = Object.keys('shape' in schema ? schema.shape : schema);
       expect(argNames, tool.name).toEqual(expect.arrayContaining([...source.args]));
       checked.push(tool.name);
