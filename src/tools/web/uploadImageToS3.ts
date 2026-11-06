@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { BucketS3Config, exportedForTesting, joinS3Prefix, uploadBufferToS3 } from './s3Client.js';
+import { TenantLuids } from '../../blobStorage/tenantKey.js';
+import {
+  BucketS3Config,
+  buildTenantS3Key,
+  exportedForTesting,
+  joinS3Prefix,
+  uploadBufferToS3,
+} from './s3Client.js';
 
 // Re-exported for existing importers/tests that reference the shared helpers
 // through this module.
@@ -15,18 +22,25 @@ function extensionFor(format: 'PNG' | 'SVG'): string {
 }
 
 /**
- * Builds the S3 object key for a rendered image. The key namespaces objects
- * under the configured prefix and the source resource id (view or custom view
- * LUID), with a random UUID to avoid collisions between concurrent renders of
- * the same resource.
+ * Builds the S3 object key for a rendered image:
+ * `<keyPrefix>/<keyPrefixSegment>/<siteLuid>/<userLuid>/<resourceId>/<uuid>.<ext>`.
+ * The resource id is the view or custom view LUID, and the random UUID avoids
+ * collisions between concurrent renders of the same resource. Throws if the
+ * tenant LUIDs aren't safe key segments, so an unscoped key is never built.
  */
 export function buildImageS3Key(
   keyPrefix: string,
+  tenant: TenantLuids,
+  keyPrefixSegment: string,
   resourceId: string,
   format: 'PNG' | 'SVG',
 ): string {
-  const normalizedPrefix = keyPrefix.replace(/^\/+/, '').replace(/\/*$/, '/');
-  return `${normalizedPrefix}${resourceId}/${randomUUID()}.${extensionFor(format)}`;
+  return buildTenantS3Key(
+    keyPrefix,
+    tenant,
+    keyPrefixSegment,
+    `${resourceId}/${randomUUID()}.${extensionFor(format)}`,
+  );
 }
 
 /**
@@ -43,14 +57,18 @@ export async function uploadImageToS3(
     format,
     resourceId,
     config,
+    keyPrefixSegment,
+    tenant,
   }: {
     format: 'PNG' | 'SVG';
     resourceId: string;
     config: BucketS3Config;
+    keyPrefixSegment: string;
+    tenant: TenantLuids;
   },
 ): Promise<string> {
   const buffer = Buffer.isBuffer(imageData) ? imageData : Buffer.from(imageData);
-  const key = buildImageS3Key(config.keyPrefix, resourceId, format);
+  const key = buildImageS3Key(config.keyPrefix, tenant, keyPrefixSegment, resourceId, format);
 
   return await uploadBufferToS3(buffer, {
     key,
