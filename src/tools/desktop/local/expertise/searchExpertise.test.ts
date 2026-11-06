@@ -42,6 +42,16 @@ describe('searchExpertiseTool', () => {
     expect(description).not.toContain('read-expertise-resource');
   });
 
+  it('identifies the library as Tableau authoring guidance', async () => {
+    const tool = getSearchExpertiseTool(new DesktopMcpServer());
+    const description = await Provider.from(tool.description);
+
+    expect(description).toContain('Search Tableau authoring guidance by concept');
+    expect(description).toContain(
+      'chart choice, calculation patterns, workbook structure, and dashboard layout',
+    );
+  });
+
   it('returns the top hit read requirement', async () => {
     const result = await getResult();
 

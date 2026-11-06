@@ -20,7 +20,7 @@ export const getSearchExpertiseTool = (
     name: 'search-expertise',
     title: toolTitle,
     description:
-      "Find expertise by concept, not tool name. When topHitBody is present, it is the full module; no follow-up read is needed. Otherwise read the top hit's mustReadUri.",
+      "Search Tableau authoring guidance by concept: chart choice, calculation patterns, workbook structure, and dashboard layout. When topHitBody is present, it is the full module; no follow-up read is needed. Otherwise read the top hit's mustReadUri.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,
