@@ -19,6 +19,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   AUTH: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
+  HTTP_HOST: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
   CORS_ORIGIN_CONFIG: string | undefined;
   SERVER: string | undefined;
