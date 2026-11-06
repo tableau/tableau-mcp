@@ -883,17 +883,25 @@ AWS_DEFAULT_REGION=us-east-1
 
 ## `MCP_IMAGE_PREFIX`
 
-The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
-view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
-normalized automatically.
+The base key prefix (folder path) under which objects are stored in the bucket. Each tool appends
+its own segment to this base, so objects are namespaced per tool. Slashes are normalized
+automatically.
 
 - Default: unset (empty). When unset, each tool uses only its own segment.
 - Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-  `custom-view-images/`.
-- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
-  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
-  and `custom-view-images/...` respectively.
+  `custom-view-images/`, `get-view-data` → `view-data/`, `get-custom-view-data` →
+  `custom-view-data/`, `download-workbook` → `workbook-files/`, `request-workbook-upload` →
+  `workbook-uploads/`, `request-datasource-upload` → `datasource-uploads/`.
+- Objects are tenant-scoped: the caller's Tableau site and user LUIDs follow the tool segment, as
+  `<base><tool-segment><siteLuid>/<userLuid>/<rest>`. For example, with `MCP_IMAGE_PREFIX=tableau/`,
+  a view image is keyed as `tableau/view-images/<siteLuid>/<userLuid>/<viewId>/<uuid>.png`. Unset,
+  it is keyed as `view-images/<siteLuid>/<userLuid>/<viewId>/<uuid>.png`. Prefix-based lifecycle or
+  scanning rules on a tool segment keep matching.
+- The LUIDs come from the authenticated session, never from tool input. A request whose session has
+  no valid site or user LUID returns an error instead of writing an unscoped object. A staged upload
+  can be published only by the user who requested it.
+- The data app template that `scaffold-data-app` writes is the exception: it is keyed as
+  `<base>data-app-templates/` without tenant LUIDs.
 - Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**

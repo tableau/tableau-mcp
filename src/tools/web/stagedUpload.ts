@@ -1,18 +1,19 @@
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
+import { type TenantLuids } from '../../blobStorage/tenantKey.js';
 import {
   BucketS3Config,
+  buildTenantS3Key,
   createPresignedPutUrlToS3,
   downloadObjectFromS3IfExists,
-  joinS3Prefix,
 } from './s3Client.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
 export const MAX_STAGED_UPLOAD_BYTES = 5 * 1000 * 1000 * 1000;
 
 export type StagedUploadKind<FileType extends string> = {
-  // Keys are `<prefix>/<prefixSegment>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
+  // Keys are `<prefix>/<prefixSegment>/<siteLuid>/<userLuid>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
   prefixSegment: string;
   objectStem: string;
   label: string;
@@ -30,10 +31,12 @@ export async function requestStagedUpload<FileType extends string>({
   kind,
   fileName,
   config,
+  tenant,
 }: {
   kind: StagedUploadKind<FileType>;
   fileName: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
 }): Promise<{
   uploadId: string;
   uploadUrl: string;
@@ -51,7 +54,7 @@ export async function requestStagedUpload<FileType extends string>({
   const contentType =
     fileType === kind.xmlFileType ? 'application/xml' : 'application/octet-stream';
   const uploadUrl = await createPresignedPutUrlToS3({
-    key: buildStagedUploadS3Key(kind, config.keyPrefix, uploadId, fileType),
+    key: buildStagedUploadS3Key(kind, config.keyPrefix, tenant, uploadId, fileType),
     contentType,
     bucket: config.bucket,
     region: config.region,
@@ -71,18 +74,21 @@ export async function resolveStagedUpload<FileType extends string>({
   kind,
   uploadId,
   config,
+  tenant,
   maxBytes = MAX_STAGED_UPLOAD_BYTES,
 }: {
   kind: StagedUploadKind<FileType>;
   uploadId: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
   maxBytes?: number;
 }): Promise<ResolvedStagedFile> {
   assertStagedUploadId(kind, uploadId);
 
+  // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
   for (const fileType of kind.fileTypes) {
     const bytes = await downloadObjectFromS3IfExists({
-      key: buildStagedUploadS3Key(kind, config.keyPrefix, uploadId, fileType),
+      key: buildStagedUploadS3Key(kind, config.keyPrefix, tenant, uploadId, fileType),
       bucket: config.bucket,
       region: config.region,
       maxBytes,
@@ -107,11 +113,17 @@ export async function resolveStagedUpload<FileType extends string>({
 export function buildStagedUploadS3Key<FileType extends string>(
   kind: StagedUploadKind<FileType>,
   keyPrefix: string,
+  tenant: TenantLuids,
   uploadId: string,
   fileType: FileType,
 ): string {
   assertStagedUploadId(kind, uploadId);
-  return `${joinS3Prefix(keyPrefix, kind.prefixSegment)}${uploadId}/${kind.objectStem}.${fileType}`;
+  return buildTenantS3Key(
+    keyPrefix,
+    tenant,
+    kind.prefixSegment,
+    `${uploadId}/${kind.objectStem}.${fileType}`,
+  );
 }
 
 export function getStagedFileType<FileType extends string>(
