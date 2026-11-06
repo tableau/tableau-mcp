@@ -13,6 +13,7 @@
  */
 
 import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
+import { getTelemetryProvider } from '../../telemetry/init.js';
 
 /**
  * Socket-idle timeouts (ms) for the S3 client's Node HTTP handler.
@@ -156,14 +157,23 @@ export async function uploadBufferToS3(
 ): Promise<string> {
   const { client, PutObjectCommand } = await getS3Bundle(region);
 
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-    }),
-  );
+  const span = getTelemetryProvider().startSpan?.('tableau.s3.upload', { bucket, key });
+  let error: unknown;
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
+  } catch (caughtError) {
+    error = caughtError;
+    throw caughtError;
+  } finally {
+    span?.end(error);
+  }
 
   return await presignGetObjectUrl({ key, bucket, region, presignTtlSeconds });
 }
@@ -228,7 +238,18 @@ export async function downloadObjectFromS3({
   maxBytes: number;
 }): Promise<Buffer> {
   const { client, GetObjectCommand } = await getS3Bundle(region);
-  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+
+  const span = getTelemetryProvider().startSpan?.('tableau.s3.download', { bucket, key });
+  let response: any;
+  let error: unknown;
+  try {
+    response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (caughtError) {
+    error = caughtError;
+    throw caughtError;
+  } finally {
+    span?.end(error);
+  }
 
   if (response.ContentLength !== undefined) {
     const contentLength = Number(response.ContentLength);

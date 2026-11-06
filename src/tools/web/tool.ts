@@ -206,9 +206,13 @@ export class WebTool<
 
     const productTelemetryForwarder = getProductTelemetry();
 
+    const telemetry = getTelemetryProvider();
+    const span = telemetry.startSpan?.('tableau.tool.call', { tool_name: this.name });
+
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
     let toolResult: CallToolResult | undefined;
+    let spanError: unknown;
 
     try {
       const result = await callback();
@@ -253,6 +257,7 @@ export class WebTool<
       };
       return toolResult;
     } catch (error) {
+      spanError = error;
       // A route-safety rejection (a `pathParam` schema, `assertLuid` / `buildRestPath` in a raw
       // call, the Zodios path-param plugin or the axios URL interceptor) means an unsafe ID reached
       // the SDK layer: surface it to the client as an args-validation error, not an unknown 500,
@@ -307,6 +312,7 @@ export class WebTool<
         : getErrorResult(requestId, error);
       return toolResult;
     } finally {
+      span?.end(spanError);
       const sanitizedClientId = sanitizeClientIdForTelemetry(oauthClientId);
       const clientName = getClientDisplayName(oauthClientId);
       productTelemetryForwarder.send('tool_call', {
@@ -340,7 +346,6 @@ export class WebTool<
         object: getActivityLogObject(this.name, args),
       });
       // Record custom metric for this tool call
-      const telemetry = getTelemetryProvider();
       telemetry.recordMetric('mcp.tool.calls', 1, {
         tool_name: this.name,
         request_id: requestId.toString(),
