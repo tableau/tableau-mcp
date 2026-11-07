@@ -961,6 +961,36 @@ describe('scopes', () => {
     });
   });
 
+  describe('tableauAgentToolsEnabled gating', () => {
+    it.each(
+      [undefined, false, true].flatMap((env) => [false, true].map((flag) => ({ env, flag }))),
+    )('advertises matching CABU scopes for env=$env, FF=$flag', async ({ env, flag }) => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        tableauAgentToolsEnabled: env,
+      } as ReturnType<typeof configModule.getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'tableau-agent-tools' && flag,
+      );
+
+      const mcp = await getSupportedMcpScopes();
+      const api = await getSupportedApiScopes();
+      const enabled = env ?? flag;
+      expect(mcp.includes('tableau:mcp:cabu:converse')).toBe(enabled);
+      expect(api.includes('tableau:views:embed_authoring')).toBe(enabled);
+    });
+
+    it('treats the CABU scopes as invalid when tableauAgentToolsEnabled is false', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        tableauAgentToolsEnabled: false,
+      } as ReturnType<typeof configModule.getConfig>);
+
+      expect(await isValidScope('tableau:mcp:cabu:converse')).toBe(false);
+    });
+  });
+
   describe('flowReadToolsEnabled gating', () => {
     it.each(
       [undefined, false, true].flatMap((readEnv) =>

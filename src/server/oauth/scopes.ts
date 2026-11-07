@@ -14,6 +14,7 @@ import {
   isKnowledgeToolsEnabled,
   isKnowledgeWriteToolsEnabled,
 } from '../../features/knowledgeTools.js';
+import { isTableauAgentToolsEnabled } from '../../features/tableauAgentTools.js';
 import { getTableauServerInfo } from '../../getTableauServerInfo.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import { isDataAppVersionSupported } from '../../tools/web/scaffoldDataApp/dataAppVersion.js';
@@ -46,7 +47,8 @@ export type McpScope =
   | 'tableau:mcp:users:write'
   | 'tableau:mcp:workbook:write'
   | 'tableau:mcp:knowledge:read'
-  | 'tableau:mcp:knowledge:write';
+  | 'tableau:mcp:knowledge:write'
+  | 'tableau:mcp:cabu:converse';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -54,6 +56,7 @@ export type TableauApiScope =
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
+  | 'tableau:views:embed_authoring'
   | 'tableau:flows:read'
   | 'tableau:flows:download'
   | 'tableau:flows:run'
@@ -568,6 +571,25 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
+  // Demo/experimental CABU (Tableau Agent) tools -- gated off by default, see
+  // isTableauAgentToolsEnabled. `embed_authoring` is required to establish/continue a CABU
+  // conversation against a dashboard's datasource; see `.work/specs/W-24280234-cabu-tools.md`.
+  'cabu-start-conversation': {
+    mcp: ['tableau:mcp:cabu:converse'],
+    api: new Set([
+      'tableau:views:embed_authoring',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+    ]),
+  },
+  'cabu-ask': {
+    mcp: ['tableau:mcp:cabu:converse'],
+    api: new Set([
+      'tableau:views:embed_authoring',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+    ]),
+  },
 };
 
 async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
@@ -585,6 +607,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const knowledgeWriteToolsEnabled = await isKnowledgeWriteToolsEnabled(config);
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
   const adminToolsEnabled = await isAdminToolsEnabled(config);
+  const tableauAgentToolsEnabled = await isTableauAgentToolsEnabled(config);
 
   // Remove disabled tools based on feature flags
   if (!adminToolsEnabled) {
@@ -659,6 +682,11 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     if (!isDataAppVersionSupported(productVersion)) {
       enabledTools.delete('scaffold-data-app');
     }
+  }
+
+  if (!tableauAgentToolsEnabled) {
+    enabledTools.delete('cabu-start-conversation');
+    enabledTools.delete('cabu-ask');
   }
 
   return enabledTools;
