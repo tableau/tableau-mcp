@@ -6,6 +6,7 @@ import {
   ArgsValidationError,
   CabuResponseError,
   CabuStreamIncompleteError,
+  DatasourceNotAllowedError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -13,6 +14,7 @@ import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { buildCabuAnswer, CabuAnswer } from './cabuAnswer.js';
 import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
@@ -66,6 +68,24 @@ Returns the answer text, any datatables (rendered as truncated markdown), a data
             decoded = decodeUtteranceArgs(utteranceArgs);
           } catch (error) {
             return new ArgsValidationError(getExceptionMessage(error)).toErr();
+          }
+
+          // utteranceArgs is an opaque, unsigned token round-tripped by the caller, so it cannot be
+          // trusted as proof that cabu-start-conversation already checked these datasources --
+          // re-check them here against the same tool-scoping rules.
+          for (const { datasourceLuid } of decoded.datasources) {
+            if (!datasourceLuid) {
+              return new DatasourceNotAllowedError(
+                'utteranceArgs is missing a datasourceLuid for one of its datasources. Start a new conversation with cabu-start-conversation and use the utteranceArgs it returns.',
+              ).toErr();
+            }
+            const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+              datasourceLuid,
+              extra,
+            });
+            if (!isDatasourceAllowedResult.allowed) {
+              return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
+            }
           }
 
           return await useRestApi({

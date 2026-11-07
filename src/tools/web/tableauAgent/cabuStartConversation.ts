@@ -1,12 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { DatasourceNotAllowedError, UnknownError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { Localization } from '../../../sdks/tableau/types/cabu.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
@@ -51,6 +52,14 @@ Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of
         extra,
         args: { datasourceLuid },
         callback: async () => {
+          const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid,
+            extra,
+          });
+          if (!isDatasourceAllowedResult.allowed) {
+            return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
+          }
+
           return await useRestApi({
             ...extra,
             jwtScopes: cabuStartConversationTool.requiredApiScopes,

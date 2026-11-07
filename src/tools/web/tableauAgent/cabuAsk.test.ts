@@ -41,6 +41,10 @@ describe('cabuAskTool', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const tool = getCabuAskTool(new WebMcpServer());
     expect(tool.name).toBe('cabu-ask');
@@ -209,6 +213,43 @@ describe('cabuAskTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('WAII_NO_DATA');
+  });
+
+  it('returns a datasource-not-allowed error and never asks CABU when the decoded datasource is outside tool-scoping', async () => {
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+    const result = await getToolResult({
+      conversationId: 'conversation-1',
+      utteranceArgs: VALID_UTTERANCE_ARGS,
+      question: 'What were total sales?',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Querying the datasource with LUID 11111111-1111-1111-1111-111111111111 is not allowed.',
+    );
+    expect(mocks.mockAskUtterance).not.toHaveBeenCalled();
+  });
+
+  it('returns a datasource-not-allowed error when a decoded datasource entry is missing its datasourceLuid', async () => {
+    const utteranceArgsMissingLuid = encodeUtteranceArgs({
+      scope: 'tenant-123',
+      datasources: [{}],
+      localization: { locale: 'en-US', language: 'en' },
+      embedded: false,
+    });
+
+    const result = await getToolResult({
+      conversationId: 'conversation-1',
+      utteranceArgs: utteranceArgsMissingLuid,
+      question: 'What were total sales?',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/missing a datasourceLuid/i);
+    expect(mocks.mockAskUtterance).not.toHaveBeenCalled();
   });
 });
 

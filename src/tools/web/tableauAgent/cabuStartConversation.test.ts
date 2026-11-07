@@ -32,6 +32,10 @@ describe('cabuStartConversationTool', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const tool = getCabuStartConversationTool(new WebMcpServer());
     expect(tool.name).toBe('cabu-start-conversation');
@@ -85,6 +89,19 @@ describe('cabuStartConversationTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('CES unavailable');
+  });
+
+  it('returns a datasource-not-allowed error and never starts a conversation when the datasource is outside tool-scoping', async () => {
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+    const result = await getToolResult({ datasourceLuid: '11111111-1111-1111-1111-111111111111' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Querying the datasource with LUID 11111111-1111-1111-1111-111111111111 is not allowed.',
+    );
+    expect(mocks.mockStartConversation).not.toHaveBeenCalled();
   });
 });
 
