@@ -46,6 +46,7 @@ export class Config extends BaseConfig {
   server: string;
   sslKey: string;
   sslCert: string;
+  httpHost: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
   siteName: string;
@@ -127,6 +128,7 @@ export class Config extends BaseConfig {
       TRANSPORT: transport,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
+      HTTP_HOST: httpHost,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
@@ -203,6 +205,8 @@ export class Config extends BaseConfig {
 
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
+    // Empty means listen on all interfaces (the Node default).
+    this.httpHost = httpHost?.trim() ?? '';
     this.httpPort = parseNumber(cleansedVars[httpPortEnvVarName?.trim() || 'PORT'], {
       defaultValue: 3927,
       minValue: 1,

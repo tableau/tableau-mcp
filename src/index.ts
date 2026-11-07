@@ -55,6 +55,8 @@ async function startServer(): Promise<void> {
         basePath: 'tableau-mcp',
         config,
         logLevel: notificationLevel,
+        // Empty by default (all interfaces) so the Docker image and Heroku keep working.
+        host: config.httpHost,
       });
 
       // Port is now open. Wait for server info before logging the ready message.

@@ -26,7 +26,8 @@ export const getOpenFileTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     description:
       'Open a local file in Tableau Desktop by absolute path: a .twb/.twbx opens as a workbook, ' +
       'while a datasource file (Excel, .tds, extract, and the like) attaches to the open workbook, ' +
-      'creating one if none is open. A workbook replaces the open one if that is empty and unsaved, ' +
+      'creating one if none is open. Saved sources: see list-saved-datasources. ' +
+      'A workbook replaces the open one if that is empty and unsaved, ' +
       'and opening the file that is already open reloads it after a save prompt. Any other workbook opens in a ' +
       'new window; this session stays bound to the original. If a datasource does not appear, ' +
       'check get-active-dialogs.',

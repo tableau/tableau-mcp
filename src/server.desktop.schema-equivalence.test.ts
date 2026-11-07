@@ -166,10 +166,10 @@ describe('always-load pin list', () => {
       [
         'get-dashboard-xml',
         'invoke-dialog-action',
-        'read-knowledge-resource',
+        'read-expertise-resource',
         'rename-sheet',
         'run-dashboard-batch',
-        'search-knowledge',
+        'search-expertise',
       ].sort(),
     );
     expect(ALWAYS_LOAD_TOOL_NAMES.size).toBe(6);
