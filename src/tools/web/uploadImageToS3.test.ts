@@ -140,7 +140,7 @@ describe('uploadImageToS3', () => {
     expect(clientArgs).not.toHaveProperty('region');
   });
 
-  it('configures the S3 client with connection and request idle timeouts', async () => {
+  it('configures the S3 client with idle timeouts and checksums only when required', async () => {
     await uploadImageToS3(Buffer.from('bytes'), {
       format: 'PNG',
       resourceId: 'view-123',
@@ -151,6 +151,7 @@ describe('uploadImageToS3', () => {
     expect(S3Client).toHaveBeenCalledWith(
       expect.objectContaining({
         requestHandler: { connectionTimeout: 5_000, requestTimeout: 180_000 },
+        requestChecksumCalculation: 'WHEN_REQUIRED',
       }),
     );
   });

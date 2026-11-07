@@ -9,6 +9,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { MAX_STAGED_UPLOAD_BYTES } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import {
   requestStagedWorkbookUpload,
@@ -20,6 +21,12 @@ const paramsSchema = {
     .string()
     .min(1)
     .describe('Name of the Tableau workbook file to upload. Must end in .twb or .twbx.'),
+  fileSizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_STAGED_UPLOAD_BYTES)
+    .describe('Exact file size in bytes; the upload must send exactly this many bytes.'),
 };
 
 export const getRequestWorkbookUploadTool = (
@@ -30,7 +37,7 @@ export const getRequestWorkbookUploadTool = (
     name: 'request-workbook-upload',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId.',
+      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. PUT exactly fileSizeBytes bytes to the returned URL with the returned requiredHeaders, then call publish-workbook with the returned workbookUploadId.',
     paramsSchema,
     annotations: {
       title: 'Request Workbook Upload',
@@ -40,11 +47,12 @@ export const getRequestWorkbookUploadTool = (
       openWorldHint: true,
     },
     disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
-    callback: async ({ fileName }, extra): Promise<CallToolResult> => {
+    callback: async ({ fileName, fileSizeBytes }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({
         extra,
         args: {
           fileName,
+          fileSizeBytes,
         },
         callback: async () => {
           if (extra.tableauAuthInfo?.type === 'Passthrough') {
@@ -70,7 +78,12 @@ export const getRequestWorkbookUploadTool = (
               return tenant;
             }
             return new Ok(
-              await requestStagedWorkbookUpload({ fileName, config, tenant: tenant.value }),
+              await requestStagedWorkbookUpload({
+                fileName,
+                fileSizeBytes,
+                config,
+                tenant: tenant.value,
+              }),
             );
           }
 
@@ -83,7 +96,12 @@ export const getRequestWorkbookUploadTool = (
                 return tenant;
               }
               return new Ok(
-                await requestStagedWorkbookUpload({ fileName, config, tenant: tenant.value }),
+                await requestStagedWorkbookUpload({
+                  fileName,
+                  fileSizeBytes,
+                  config,
+                  tenant: tenant.value,
+                }),
               );
             },
           });

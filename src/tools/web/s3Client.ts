@@ -90,6 +90,8 @@ async function getS3Bundle(region: string): Promise<{
       // timeouts without taking a direct dependency on @smithy/node-http-handler.
       const client = new S3Client({
         ...(region ? { region } : {}),
+        // The SDK default bakes an empty-body CRC32 into presigned PUTs, which S3-compatible stores reject.
+        requestChecksumCalculation: 'WHEN_REQUIRED',
         requestHandler: {
           connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
           requestTimeout: S3_REQUEST_TIMEOUT_MS,
@@ -193,12 +195,14 @@ async function presignGetObjectUrl({
 export async function createPresignedPutUrlToS3({
   key,
   contentType,
+  contentLength,
   bucket,
   region,
   presignTtlSeconds,
 }: {
   key: string;
   contentType: string;
+  contentLength: number;
   bucket: string;
   region: string;
   presignTtlSeconds: number;
@@ -211,6 +215,8 @@ export async function createPresignedPutUrlToS3({
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
+      // Signing Content-Length makes S3 reject any PUT whose body size differs.
+      ContentLength: contentLength,
     }),
     { expiresIn: presignTtlSeconds },
   );
