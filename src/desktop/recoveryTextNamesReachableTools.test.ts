@@ -22,7 +22,7 @@ const TOOLS_INDEX = resolve(SRC_ROOT, 'tools/desktop/tools.ts');
 const ALLOWED: Readonly<Record<string, string>> = {
   'desktop/wrappers/cacheFingerprint.ts':
     'READ_TOOL_BY_KIND is a lookup keyed by artifact kind; the workbook and dashboard rows are only ever read for artifacts that off-profile tools produce',
-  'desktop/knowledge/index.ts':
+  'desktop/expertise/index.ts':
     'QUERY_TOOL_JARGON is a search stop-word list used to clean an incoming query — it is never rendered to the agent',
   'desktop/route/route-state.ts':
     'BindRecoveryProposalContext stores the legacy bind-template tool name as structured puppetry state; it is not rendered as recovery guidance',
