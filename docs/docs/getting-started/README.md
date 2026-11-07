@@ -136,4 +136,10 @@ Solution:
 
 ### IP Filtering
 
-For Tableau Cloud sites that have IP Filtering enabled, hosted Tableau MCP will not work out of the box. See the [IP Filtering Configuration page](../extras/ip-filtering.md) for more information.
+On Tableau Cloud sites with IP filtering enabled, hosted Tableau MCP does not work until you update
+the site allow list and point clients at a pod-level endpoint. In this situation, most AI clients
+will report an error like `Access FORBIDDEN for this IP address`.
+
+Solution:
+
+To enable this combination, see the steps in [Tableau Cloud IP Filtering](../extras/ip-filtering.md).

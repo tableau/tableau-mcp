@@ -17,46 +17,48 @@ hosted Tableau MCP needs two changes before it can reach the site:
 ## Limitations
 
 - Every MCP client, for every user, has to be updated on its own.
-- Not every client can use a custom endpoint. Slackbot in Slack cannot.
+- Not every client can use a custom endpoint. Slackbot cannot.
 
 ## Add Salesforce IP address ranges to your allow list
 
 A site administrator does this step. Allowing the published Salesforce IP ranges lets hosted
 Tableau MCP call your site.
 
-1. Get the IP ranges. Open the published list at https://ip-ranges.salesforce.com/ip-ranges.json
-   and use the Hyperforce ranges. For background, see
-   [Salesforce Help article 000384438](https://help.salesforce.com/s/articleView?id=000384438&type=1)
-   and the Hyperforce section.
+1. Get the IP ranges for your site's region. Open the published list at
+   [https://ip-ranges.salesforce.com/ip-ranges.json](https://ip-ranges.salesforce.com/ip-ranges.json)
+   and use the ranges for your region (for example, `us-west-2`). The region for each pod is in
+   the table below. For background, see the Hyperforce section of
+   [Salesforce Help article 000384438](https://help.salesforce.com/s/articleView?id=000384438&type=1).
 2. Sign in to your Tableau Cloud site as a site administrator and open **Settings**.
-   - On the **Security** tab, scroll to **IP Filtering**.
-   - Select **Enable IP Filtering**. The page shows your current device's IP address.
-   - Under **New IP Addresses and IP Ranges**, add the Salesforce ranges. You can add every
-     Hyperforce range, or only the ranges for your site's region (for example, `us-west-2`; the
-     region for each pod is in the table below). Either:
-     - Enter one address and click **Add**, or
-     - Open the dropdown, select **IP Address Bulk Editor**, and paste the ranges, one per line.
-       Single addresses (`203.0.113.55`) and CIDR subnets (`203.0.113.0/24`) are both accepted.
-   - Keep your existing VPN and office ranges on the list, and add the Salesforce ranges alongside
-     them.
+3. On the **Security** tab, scroll to **IP Filtering**. The page shows your current device's IP
+   address.
+4. Under **New IP Addresses and IP Ranges**, add the ranges for your region. Add them in either
+   of these ways:
+   - Enter one address and click **Add**.
+   - Open the dropdown, select **IP Address Bulk Editor**, and paste the ranges, one per line.
+     Single addresses (`203.0.113.55`) and CIDR subnets (`203.0.113.0/24`) are both accepted.
+5. Keep your existing VPN and office ranges on the list, and add the Salesforce ranges alongside
+   them.
 
-:::caution
+:::warning
 
 If your current IP address is not on the allow list when you save, you can lock yourself out of the
 site. Include the IP address shown on the page before you save.
 
 :::
 
-3. Click **Save**. Changes can take up to 15 minutes to apply.
-4. Keep the list current. Salesforce ranges change, so review them periodically.
+6. Click **Save**. Changes can take up to 15 minutes to apply.
+7. Keep the list current. Salesforce ranges change, so review them periodically.
 
 ## Point MCP clients at the pod-level endpoint
 
-The pod name is the hostname of your site. For example, if the site URL is
-`https://prod-uswest-c.online.tableau.com/#/site/ExampleCompanySiteHere/home`, the pod is
-`prod-uswest-c`. Find that hostname in the table below. The row gives the region (`us-west-2`) and
-the Tableau MCP URL to configure:
+The pod name is the first part of your site's hostname.
 
+For example, if the site URL is `https://prod-uswest-c.online.tableau.com/#/site/ExampleCompanySiteHere/home`,
+the pod is `prod-uswest-c`. Find the matching row in the **Pod URL** column below. That row gives the region
+and the Tableau MCP URL to configure.
+
+For this example, the region is `us-west-2` and the URL is:
 `https://prod-dataplane3-tabhf-mcp-svc-tableau.sfdc-lywfpd.svc.sfdcfc.net/tableau-mcp`
 
 | Pod URL | Region | Tableau MCP URL |
@@ -82,18 +84,19 @@ the Tableau MCP URL to configure:
 | https://us-east-1.online.tableau.com/ | us-east-1 | https://prod-dataplane13-tabhf-mcp-svc-tableau.sfdc-yfeipo.svc.sfdcfc.net/tableau-mcp |
 | https://us-west-2b.online.tableau.com/ | us-west-2 | https://prod-dataplane4-tabhf-mcp-svc-tableau.sfdc-lywfpd.svc.sfdcfc.net/tableau-mcp |
 
-In each MCP client, set the server URL to the Tableau MCP URL from the table. Field names vary by
-client. This shape works for clients that take a JSON config:
+In each MCP client, set the server URL to the Tableau MCP URL from your row. Field names vary by
+client. This shape works for clients that take a JSON config. The URL below is the
+`prod-uswest-c` example:
 
 ```json
 {
   "mcpServers": {
     "tableau": {
-      "transport": "http",
+      "type": "http",
       "url": "https://prod-dataplane3-tabhf-mcp-svc-tableau.sfdc-lywfpd.svc.sfdcfc.net/tableau-mcp"
     }
   }
 }
 ```
 
-Restart the MCP client, reconnect to Tableau MCP, and confirm the connection works.
+Quit and restart the MCP client, reconnect to Tableau MCP, and confirm the connection works.
