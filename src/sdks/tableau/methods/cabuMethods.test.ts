@@ -144,4 +144,26 @@ describe('CabuMethods.streamUtterance', () => {
       responseType: 'stream',
     });
   });
+
+  it('resolves incomplete once the configured timeout elapses on a body that never ends', async () => {
+    vi.useFakeTimers();
+    try {
+      const cabuMethods = new CabuMethods(
+        'https://tableau.example/content-exploration/analytics-assistant/cabu',
+        { type: 'Bearer', token: 'token' },
+        { timeout: 5000 },
+      );
+      const stream = new Readable({ read() {} });
+      const get = vi.fn().mockResolvedValue({ data: stream });
+      // @ts-expect-error - Replacing the Axios client for transport configuration coverage.
+      cabuMethods._apiClient.axios.get = get;
+
+      const promise = cabuMethods.streamUtterance('conv-1', 'utt-1');
+      await vi.advanceTimersByTimeAsync(5000);
+
+      await expect(promise).resolves.toEqual({ status: 'incomplete', responseComplete: undefined });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

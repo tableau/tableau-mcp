@@ -1,7 +1,9 @@
 import { Readable } from 'stream';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { drainSseStream } from './cabuStream.js';
+
+const TIMEOUT_MS = 1000;
 
 function fakeStream(chunks: Array<string>): Readable {
   const stream = new Readable({ read() {} });
@@ -19,7 +21,7 @@ describe('drainSseStream', () => {
       'event: complete\ndata: {}\n\n',
     ]);
 
-    await expect(drainSseStream(stream)).resolves.toEqual({
+    await expect(drainSseStream(stream, TIMEOUT_MS)).resolves.toEqual({
       status: 'complete',
       responseComplete: { node: 'response', response: '42 orders' },
     });
@@ -35,7 +37,7 @@ describe('drainSseStream', () => {
       'event: complete\ndata: {}\n\n',
     ]);
 
-    await expect(drainSseStream(stream)).resolves.toEqual({
+    await expect(drainSseStream(stream, TIMEOUT_MS)).resolves.toEqual({
       status: 'complete',
       responseComplete: { node: 'response', response: 'ok' },
     });
@@ -46,7 +48,7 @@ describe('drainSseStream', () => {
       'event: error\ndata: {"error_code":"WAII_TIMEOUT","error_details":"took too long"}\n\n',
     ]);
 
-    await expect(drainSseStream(stream)).resolves.toEqual({
+    await expect(drainSseStream(stream, TIMEOUT_MS)).resolves.toEqual({
       status: 'error',
       error: { error_code: 'WAII_TIMEOUT', error_details: 'took too long' },
     });
@@ -57,7 +59,7 @@ describe('drainSseStream', () => {
       'event: response_complete\ndata: {"node":"response","response":"partial"}\n\n',
     ]);
 
-    await expect(drainSseStream(stream)).resolves.toEqual({
+    await expect(drainSseStream(stream, TIMEOUT_MS)).resolves.toEqual({
       status: 'incomplete',
       responseComplete: { node: 'response', response: 'partial' },
     });
@@ -65,7 +67,7 @@ describe('drainSseStream', () => {
 
   it('rejects when the underlying stream errors', async () => {
     const stream = new Readable({ read() {} });
-    const promise = drainSseStream(stream);
+    const promise = drainSseStream(stream, TIMEOUT_MS);
     stream.emit('error', new Error('socket hang up'));
 
     await expect(promise).rejects.toThrow('socket hang up');
@@ -78,9 +80,46 @@ describe('drainSseStream', () => {
       'event: complete\ndata: {}\n\n',
     ]);
 
-    await expect(drainSseStream(stream)).resolves.toEqual({
+    await expect(drainSseStream(stream, TIMEOUT_MS)).resolves.toEqual({
       status: 'complete',
       responseComplete: { node: 'response', response: 'chunked' },
+    });
+  });
+
+  describe('when the body stalls', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('resolves incomplete and destroys the stream once timeoutMs elapses with no terminal event', async () => {
+      const stream = new Readable({ read() {} });
+      const destroySpy = vi.spyOn(stream, 'destroy');
+      stream.push(
+        Buffer.from('event: response_complete\ndata: {"node":"response","response":"stalled"}\n\n'),
+      );
+
+      const promise = drainSseStream(stream, TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+
+      await expect(promise).resolves.toEqual({
+        status: 'incomplete',
+        responseComplete: { node: 'response', response: 'stalled' },
+      });
+      expect(destroySpy).toHaveBeenCalled();
+    });
+
+    it('does not time out once a terminal event has already resolved the stream', async () => {
+      const stream = fakeStream(['event: complete\ndata: {}\n\n']);
+
+      const promise = drainSseStream(stream, TIMEOUT_MS);
+      await expect(promise).resolves.toEqual({ status: 'complete', responseComplete: undefined });
+
+      // The pending timer is cleared on resolution; advancing past it must not throw or hang.
+      await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
     });
   });
 });

@@ -576,19 +576,11 @@ const toolScopeMap: Record<
   // conversation against a dashboard's datasource; see `.work/specs/W-24280234-cabu-tools.md`.
   'cabu-start-conversation': {
     mcp: ['tableau:mcp:cabu:converse'],
-    api: new Set([
-      'tableau:views:embed_authoring',
-      'tableau:content:read',
-      'tableau:mcp_site_settings:read',
-    ]),
+    api: new Set(['tableau:views:embed_authoring', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'cabu-ask': {
     mcp: ['tableau:mcp:cabu:converse'],
-    api: new Set([
-      'tableau:views:embed_authoring',
-      'tableau:content:read',
-      'tableau:mcp_site_settings:read',
-    ]),
+    api: new Set(['tableau:views:embed_authoring', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
 };
 

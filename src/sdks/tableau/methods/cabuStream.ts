@@ -25,8 +25,14 @@ export type CabuStreamResult =
  * rather than rejecting -- there is no protocol error to report, just an answer the caller should
  * treat as unconfirmed. A transport-level failure (`error` on the stream itself -- an abort, a
  * socket reset) rejects the returned promise instead, since that is a real request failure.
+ *
+ * `timeoutMs` bounds the whole drain, separately from axios's own `timeout` on the originating
+ * request: for a `responseType: 'stream'` request, axios's `timeout` only covers the wait for the
+ * response to start, not the time spent reading the body, so a CES turn that starts streaming and
+ * then stalls would otherwise hang forever -- see `.work/specs/W-24280234-cabu-tools.md`. A stall is
+ * treated the same as a clean `end` with no terminal event: `status: 'incomplete'`, not a rejection.
  */
-export function drainSseStream(stream: Readable): Promise<CabuStreamResult> {
+export function drainSseStream(stream: Readable, timeoutMs: number): Promise<CabuStreamResult> {
   return new Promise((resolve, reject) => {
     const parser = new SseParser();
     let responseComplete: CabuResponseCompleteEvent | undefined;
@@ -37,12 +43,17 @@ export function drainSseStream(stream: Readable): Promise<CabuStreamResult> {
         return;
       }
       settled = true;
+      clearTimeout(timer);
       stream.removeAllListeners('data');
       stream.removeAllListeners('end');
       stream.removeAllListeners('error');
       stream.destroy();
       resolve(result);
     };
+
+    const timer = setTimeout(() => {
+      finish({ status: 'incomplete', responseComplete });
+    }, timeoutMs);
 
     stream.on('data', (chunk: Buffer | string) => {
       if (settled) {

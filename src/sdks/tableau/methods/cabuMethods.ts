@@ -1,6 +1,7 @@
 import { ZodiosEndpointDefinitions } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { milliseconds } from '../../../utils/milliseconds.js';
 import { buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -41,8 +42,15 @@ const cabuApis = [] as const satisfies ZodiosEndpointDefinitions;
  * @class CabuMethods
  */
 export default class CabuMethods extends AuthenticatedMethods<typeof cabuApis> {
+  // Mirrors the request's own `maxRequestTimeoutMs` so `streamUtterance`'s SSE body read is bounded
+  // by the same budget as every other CES call, rather than by axios's `timeout` -- which, for a
+  // `responseType: 'stream'` request, only covers the wait for the response to start. See
+  // `drainSseStream`'s doc comment.
+  private _streamTimeoutMs: number;
+
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, cabuApis, { axiosConfig }), creds);
+    this._streamTimeoutMs = axiosConfig.timeout ?? milliseconds.fromMinutes(10);
   }
 
   /** Starts a CABU conversation and returns the server's `conversationId` plus the datasource entries it resolved. */
@@ -88,6 +96,6 @@ export default class CabuMethods extends AuthenticatedMethods<typeof cabuApis> {
       },
     );
 
-    return drainSseStream(response.data);
+    return drainSseStream(response.data, this._streamTimeoutMs);
   };
 }
