@@ -9,6 +9,9 @@ on:
       - closed
     branches:
       - main
+    # Docs-only PRs ship no code, so they don't get a version bump or tag.
+    paths-ignore:
+      - 'docs/**'
 
 permissions:
   contents: write
