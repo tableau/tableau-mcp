@@ -113,7 +113,7 @@ are from Claude Desktop but can apply similarly with any AI tools.
 When the AI client is using tools through Tableau MCP, it might fail and report a "401 Unauthorized"
 error.
 
-![401 Unauthorized Error](../getting-started/images/401-error.png)
+<img src={require('./images/401-error.png').default} alt="401 Unauthorized Error" width="600" />
 
 Solutions:
 
@@ -127,9 +127,19 @@ Solutions:
 For Tableau MCP to work, the user must have the "API access" permission enabled. In cases where the
 user does not have that permission, a "403 Forbidden" error can occur.
 
-![403 Forbidden Error](../getting-started/images/403-error.png)
+<img src={require('./images/403-error.png').default} alt="403 Forbidden Error" width="600" />
 
 Solution:
 
 - Grant API access to your user for that specific data source
 - More likely, request that the admin or project owner do that for you
+
+### IP Filtering
+
+On Tableau Cloud sites with IP filtering enabled, hosted Tableau MCP does not work until you update
+the site allow list and point clients at a pod-level endpoint. In this situation, most AI clients
+will report an error like `Access FORBIDDEN for this IP address`.
+
+Solution:
+
+To enable this combination, see the steps in [Tableau Cloud IP Filtering](../extras/ip-filtering.md).
