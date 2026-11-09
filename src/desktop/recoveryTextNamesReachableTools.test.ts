@@ -22,7 +22,7 @@ const TOOLS_INDEX = resolve(SRC_ROOT, 'tools/desktop/tools.ts');
 const ALLOWED: Readonly<Record<string, string>> = {
   'desktop/wrappers/cacheFingerprint.ts':
     'READ_TOOL_BY_KIND is a lookup keyed by artifact kind; the workbook and dashboard rows are only ever read for artifacts that off-profile tools produce',
-  'desktop/knowledge/index.ts':
+  'desktop/expertise/index.ts':
     'QUERY_TOOL_JARGON is a search stop-word list used to clean an incoming query — it is never rendered to the agent',
   'desktop/route/route-state.ts':
     'BindRecoveryProposalContext stores the legacy bind-template tool name as structured puppetry state; it is not rendered as recovery guidance',
@@ -164,7 +164,7 @@ function toolNameToModule(): Map<string, string> {
   return map;
 }
 
-// Scope: the default dynamic-authoring profile only. demo, spec-loop and full serve sets that
+// Scope: the default dynamic-authoring profile only. demo and full serve sets that
 // cannot satisfy a strict check (their text legitimately names tools across profiles).
 describe('recovery text names only tools the caller actually has', () => {
   // The class: an error string that names a tool absent from the profile it ships in
@@ -207,7 +207,7 @@ describe('recovery text names only tools the caller actually has', () => {
   });
 
   it('recognizes underscore spellings as registered tool names', () => {
-    expect(toolNamesNamedIn("'execute_tableau_command'")).toContain('execute-tableau-command');
+    expect(toolNamesNamedIn("'list_templates'")).toContain('list-templates');
   });
 
   it('keeps scanning after an apostrophe inside a string', () => {

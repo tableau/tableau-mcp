@@ -350,8 +350,7 @@ const WATERFALL_SORT_HINT =
   'Waterfall default sort is DESC by the bound measure (largest values first). After apply, verify and stop; override only with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
 // Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled.
 // It stops the agent from calling more tools after a finished bind: the model reads guidance
-// verbatim, so this directly contradicts the bundled skill's "adapt fields/formatting" + the
-// ambient "search-commands available" pulls.
+// verbatim, so this directly contradicts the bundled skill's "adapt fields/formatting".
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 export const POST_APPLY_UNCERTAINTY_GUIDANCE =

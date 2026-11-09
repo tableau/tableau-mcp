@@ -1,16 +1,16 @@
 import Fuse from 'fuse.js';
 
-import { listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
+import { listExpertiseSlugs, readExpertiseBySlug } from '../assets.js';
 
-export interface KnowledgeResource {
+export interface ExpertiseResource {
   uri: string;
   name: string;
   description: string;
   mimeType: 'text/markdown';
 }
 
-export function getKnowledgeCorpusEntryCount(): number {
-  return listKnowledgeSlugs().length;
+export function getExpertiseCorpusEntryCount(): number {
+  return listExpertiseSlugs().length;
 }
 
 function extractMeta(content: string, fallbackName: string): { name: string; description: string } {
@@ -28,16 +28,16 @@ function extractMeta(content: string, fallbackName: string): { name: string; des
   return { name, description: '' };
 }
 
-let _cache: KnowledgeResource[] | null = null;
+let _cache: ExpertiseResource[] | null = null;
 
-export function listKnowledgeResources(): KnowledgeResource[] {
+export function listExpertiseResources(): ExpertiseResource[] {
   if (_cache) return _cache;
-  const slugs = listKnowledgeSlugs();
-  // No external knowledge root configured -> empty corpus, not an error.
+  const slugs = listExpertiseSlugs();
+  // No external expertise root configured -> empty corpus, not an error.
   if (slugs.length === 0) return [];
 
   _cache = slugs.map((slug) => {
-    const content = readKnowledgeBySlug(slug);
+    const content = readExpertiseBySlug(slug);
     const { name, description } =
       content !== null ? extractMeta(content, slug) : { name: slug, description: '' };
     return { uri: `expertise://tableau/${slug}`, name, description, mimeType: 'text/markdown' };
@@ -77,13 +77,13 @@ function headings(lines: string[]): Array<{ level: number; text: string; line: n
 }
 
 /**
- * The top-level section slugs of one knowledge module, in document order. Lets an agent name
+ * The top-level section slugs of one expertise module, in document order. Lets an agent name
  * the section it wants (via a URI fragment) without paying for the whole file first. Only H1/H2
  * are listed — the corpus mandates the same four H2s per module, so the list stays a few dozen
  * bytes; a fragment can still address a deeper heading by slug.
  */
-export function readKnowledgeSections(slug: string): string[] {
-  const content = readKnowledgeBySlug(slug);
+export function readExpertiseSections(slug: string): string[] {
+  const content = readExpertiseBySlug(slug);
   if (content === null) return [];
   return headings(content.split('\n'))
     .filter((heading) => heading.level <= 2)
@@ -116,12 +116,12 @@ function extractSection(content: string, wanted: string): string | null {
 }
 
 /**
- * Read a knowledge module. `expertise://tableau/<slug>` returns the whole file;
+ * Read a expertise module. `expertise://tableau/<slug>` returns the whole file;
  * `expertise://tableau/<slug>#<section>` returns just that section (the corpus's largest
  * module is 33,543 bytes, and an agent usually needs one rule out of it). Returns null when
  * the URI is malformed, the module is missing, or the fragment names no section.
  */
-export function readKnowledgeResource(uri: string): string | null {
+export function readExpertiseResource(uri: string): string | null {
   const PREFIX = 'expertise://tableau/';
   if (!uri.startsWith(PREFIX)) return null;
   const rest = uri.slice(PREFIX.length);
@@ -130,16 +130,16 @@ export function readKnowledgeResource(uri: string): string | null {
   const section = hash === -1 ? '' : rest.slice(hash + 1);
   if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) return null;
 
-  const content = readKnowledgeBySlug(slug);
+  const content = readExpertiseBySlug(slug);
   if (content === null || !section) return content;
   return extractSection(content, section);
 }
 
-export function clearKnowledgeCache(): void {
+export function clearExpertiseCache(): void {
   _cache = null;
 }
 
-interface KnowledgeDoc {
+interface ExpertiseDoc {
   slug: string;
   uri: string;
   title: string;
@@ -149,19 +149,19 @@ interface KnowledgeDoc {
   body: string;
 }
 
-let _knowledgeDocs: KnowledgeDoc[] | null = null;
-let _knowledgeKeywordFuse: Fuse<KnowledgeDoc> | null = null;
-let _knowledgeBroadNearestFuse: Fuse<KnowledgeDoc> | null = null;
+let _expertiseDocs: ExpertiseDoc[] | null = null;
+let _expertiseKeywordFuse: Fuse<ExpertiseDoc> | null = null;
+let _expertiseBroadNearestFuse: Fuse<ExpertiseDoc> | null = null;
 
-// Weights are raw exponents here, not normalized ratios — but unlike the command index, this
-// path never ranks on the fuse score directly. Every query is an extended-search include
+// Weights are raw exponents here, not normalized ratios, and this path never ranks on the fuse
+// score directly. Every query is an extended-search include
 // (`'token`), so each per-key score is 0 and the record score collapses to EPSILON^(sum of
 // matched key weights / sqrt(field length)); the composite ranker below consumes it only as the
 // sub-1 tiebreaker `1 - avgFuseScore`. Scaling these weights UP therefore destroys the ranking
 // rather than sharpening it: measured over the 31 recovered agent queries, the tiebreaker holds
 // 121 distinct values of 142 at the weights below, 89 at 4x, 40 at 10x, and exactly 1 with
 // ignoreFieldNorm on. Leave them small.
-const knowledgeSearchKeys = [
+const expertiseSearchKeys = [
   { name: 'searchTerms', weight: 0.3 },
   { name: 'tags', weight: 0.22 },
   { name: 'title', weight: 0.2 },
@@ -250,15 +250,15 @@ function firstSentence(text: string): string {
   return s.length < t.length ? s : t.length > 200 ? t.slice(0, 200) + '...' : t;
 }
 
-function buildKnowledgeIndex(): KnowledgeDoc[] {
-  if (_knowledgeDocs) return _knowledgeDocs;
-  const docs: KnowledgeDoc[] = [];
+function buildExpertiseIndex(): ExpertiseDoc[] {
+  if (_expertiseDocs) return _expertiseDocs;
+  const docs: ExpertiseDoc[] = [];
 
-  for (const slug of listKnowledgeSlugs()) {
+  for (const slug of listExpertiseSlugs()) {
     // Skip meta/navigation files (basename starts with `_`)
     if (slug.split('/').pop()?.startsWith('_')) continue;
 
-    const content = readKnowledgeBySlug(slug);
+    const content = readExpertiseBySlug(slug);
     if (!content) continue;
 
     const lines = content.split('\n');
@@ -276,25 +276,25 @@ function buildKnowledgeIndex(): KnowledgeDoc[] {
     });
   }
 
-  // An empty corpus (no external knowledge root) yields an empty index, not an error.
+  // An empty corpus (no external expertise root) yields an empty index, not an error.
   docs.sort((a, b) => a.slug.localeCompare(b.slug));
-  _knowledgeDocs = docs;
+  _expertiseDocs = docs;
   return docs;
 }
 
-function ensureKnowledgeKeywordFuse(): Fuse<KnowledgeDoc> {
-  if (_knowledgeKeywordFuse) return _knowledgeKeywordFuse;
-  _knowledgeKeywordFuse = new Fuse(buildKnowledgeIndex(), {
-    keys: knowledgeSearchKeys,
+function ensureExpertiseKeywordFuse(): Fuse<ExpertiseDoc> {
+  if (_expertiseKeywordFuse) return _expertiseKeywordFuse;
+  _expertiseKeywordFuse = new Fuse(buildExpertiseIndex(), {
+    keys: expertiseSearchKeys,
     threshold: 0.4,
     ignoreLocation: true,
     includeScore: true,
     useExtendedSearch: true,
   });
-  return _knowledgeKeywordFuse;
+  return _expertiseKeywordFuse;
 }
 
-export interface KnowledgeHit {
+export interface ExpertiseHit {
   uri: string;
   slug: string;
   title: string;
@@ -306,9 +306,9 @@ export interface KnowledgeHit {
   sections?: string[];
 }
 
-export interface KnowledgeSearchResult {
-  hits: KnowledgeHit[];
-  nearestMatches?: KnowledgeHit[];
+export interface ExpertiseSearchResult {
+  hits: ExpertiseHit[];
+  nearestMatches?: ExpertiseHit[];
   note?: string;
   topHitBody?: string;
 }
@@ -327,20 +327,20 @@ const MUST_READ_INSTRUCTION =
 
 // Only the top hit carries `sections` — it is the module the agent is told to read, and the
 // list costs a few hundred bytes against a module that can run past 30,000.
-function requireTopHitRead(hits: KnowledgeHit[]): KnowledgeHit[] {
+function requireTopHitRead(hits: ExpertiseHit[]): ExpertiseHit[] {
   if (hits.length === 0) return hits;
   return [
     {
       ...hits[0],
       mustReadUri: hits[0].uri,
       instruction: MUST_READ_INSTRUCTION,
-      sections: readKnowledgeSections(hits[0].slug),
+      sections: readExpertiseSections(hits[0].slug),
     },
     ...hits.slice(1),
   ];
 }
 
-function hasConfidentTopHit(hits: KnowledgeHit[]): boolean {
+function hasConfidentTopHit(hits: ExpertiseHit[]): boolean {
   return (
     hits.length === 1 ||
     (hits.length > 1 && hits[0].score - hits[1].score >= CONFIDENT_TOP_HIT_SCORE_GAP)
@@ -363,15 +363,15 @@ function capTopHitBody(body: string): string {
   return prefix.join('') + TOP_HIT_BODY_TRUNCATION_MARKER;
 }
 
-function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
-  if (_knowledgeBroadNearestFuse) return _knowledgeBroadNearestFuse;
-  _knowledgeBroadNearestFuse = new Fuse(buildKnowledgeIndex(), {
-    keys: knowledgeSearchKeys,
+function ensureExpertiseBroadNearestFuse(): Fuse<ExpertiseDoc> {
+  if (_expertiseBroadNearestFuse) return _expertiseBroadNearestFuse;
+  _expertiseBroadNearestFuse = new Fuse(buildExpertiseIndex(), {
+    keys: expertiseSearchKeys,
     threshold: 1,
     ignoreLocation: true,
     includeScore: true,
   });
-  return _knowledgeBroadNearestFuse;
+  return _expertiseBroadNearestFuse;
 }
 
 // Fuse reads ' ! ^ = only at a token start, $ only at a token end, and | and " anywhere.
@@ -404,18 +404,18 @@ function queryTokens(query: string): string[] {
   return [...new Set(tokens)];
 }
 
-function firstSnippet(doc: KnowledgeDoc): string {
+function firstSnippet(doc: ExpertiseDoc): string {
   return (
     firstSentence(doc.whenToUse) ||
     firstSentence(doc.body.split('\n').find((l) => l.trim() && !l.startsWith('#')) ?? '')
   );
 }
 
-function toKnowledgeHit(
-  doc: KnowledgeDoc,
+function toExpertiseHit(
+  doc: ExpertiseDoc,
   score: number,
-  match: KnowledgeHit['match'],
-): KnowledgeHit {
+  match: ExpertiseHit['match'],
+): ExpertiseHit {
   return {
     uri: doc.uri,
     slug: doc.slug,
@@ -426,15 +426,15 @@ function toKnowledgeHit(
   };
 }
 
-function searchKnowledgeByKeywordIntersection(query: string, limit: number): KnowledgeHit[] {
+function searchExpertiseByKeywordIntersection(query: string, limit: number): ExpertiseHit[] {
   const tokens = queryTokens(query);
-  if (tokens.length === 0) return searchKnowledgeByWholeString(query, limit);
+  if (tokens.length === 0) return searchExpertiseByWholeString(query, limit);
 
-  const fuse = ensureKnowledgeKeywordFuse();
+  const fuse = ensureExpertiseKeywordFuse();
   const ranked = new Map<
     string,
     {
-      doc: KnowledgeDoc;
+      doc: ExpertiseDoc;
       matchedTokenCount: number;
       titleTokenCount: number;
       fuseScoreSum: number;
@@ -480,19 +480,19 @@ function searchKnowledgeByKeywordIntersection(query: string, limit: number): Kno
       const compositeScore =
         (rankedDoc.matchedTokenCount * 2 + rankedDoc.titleTokenCount * 0.08 + (1 - avgFuseScore)) /
         (tokens.length * 2.08 + 1);
-      return toKnowledgeHit(rankedDoc.doc, Number(compositeScore.toFixed(3)), 'keyword');
+      return toExpertiseHit(rankedDoc.doc, Number(compositeScore.toFixed(3)), 'keyword');
     });
 }
 
-function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHit[] {
+function searchExpertiseByWholeString(query: string, limit: number): ExpertiseHit[] {
   const q = stripExtendedSearchOperators(query);
   if (!q) return [];
 
-  return ensureKnowledgeKeywordFuse()
+  return ensureExpertiseKeywordFuse()
     .search(q)
     .slice(0, Math.max(1, limit))
     .map((r) =>
-      toKnowledgeHit(
+      toExpertiseHit(
         r.item,
         typeof r.score === 'number' ? Number((1 - r.score).toFixed(3)) : 0,
         'whole-string',
@@ -500,15 +500,15 @@ function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHi
     );
 }
 
-function nearestKeywordMatches(query: string, limit: number, broaden = false): KnowledgeHit[] {
+function nearestKeywordMatches(query: string, limit: number, broaden = false): ExpertiseHit[] {
   const fallbackQuery = keywordFallbackQuery(query);
   if (!fallbackQuery) return [];
 
-  const nearestMatches = ensureKnowledgeKeywordFuse()
+  const nearestMatches = ensureExpertiseKeywordFuse()
     .search(fallbackQuery)
     .slice(0, Math.min(5, Math.max(3, limit)))
     .map((r) =>
-      toKnowledgeHit(
+      toExpertiseHit(
         r.item,
         typeof r.score === 'number' ? Number((1 - r.score).toFixed(3)) : 0,
         'nearest',
@@ -517,11 +517,11 @@ function nearestKeywordMatches(query: string, limit: number, broaden = false): K
 
   if (nearestMatches.length > 0 || !broaden) return nearestMatches;
 
-  return ensureKnowledgeBroadNearestFuse()
+  return ensureExpertiseBroadNearestFuse()
     .search(query)
     .slice(0, Math.min(5, Math.max(3, limit)))
     .map((r) =>
-      toKnowledgeHit(
+      toExpertiseHit(
         r.item,
         typeof r.score === 'number' ? Number((1 - r.score).toFixed(3)) : 0,
         'nearest',
@@ -530,22 +530,22 @@ function nearestKeywordMatches(query: string, limit: number, broaden = false): K
 }
 
 /**
- * Rank knowledge modules by relevance to a free-text query.
+ * Rank expertise modules by relevance to a free-text query.
  * @returns up to `limit` hits, best first; `score` is 0..1 (higher = better).
  */
-export function searchKnowledge(query: string, limit = 5): KnowledgeHit[] {
+export function searchExpertise(query: string, limit = 5): ExpertiseHit[] {
   const q = (query ?? '').trim();
   if (!q) return [];
-  return requireTopHitRead(searchKnowledgeByKeywordIntersection(q, limit));
+  return requireTopHitRead(searchExpertiseByKeywordIntersection(q, limit));
 }
 
-export function searchKnowledgeWithFallback(query: string, limit = 5): KnowledgeSearchResult {
+export function searchExpertiseWithFallback(query: string, limit = 5): ExpertiseSearchResult {
   const resultLimit = Math.max(1, limit);
   // Inspect a runner-up even when limit is 1 so caller truncation cannot manufacture confidence.
-  const candidates = searchKnowledge(query, Math.max(2, resultLimit));
+  const candidates = searchExpertise(query, Math.max(2, resultLimit));
   const hits = candidates.slice(0, resultLimit);
   if (hits.length > 0) {
-    const body = hasConfidentTopHit(candidates) ? readKnowledgeResource(hits[0].uri) : null;
+    const body = hasConfidentTopHit(candidates) ? readExpertiseResource(hits[0].uri) : null;
     return body === null ? { hits } : { hits, topHitBody: capTopHitBody(body) };
   }
 
@@ -561,8 +561,8 @@ export function searchKnowledgeWithFallback(query: string, limit = 5): Knowledge
 }
 
 /** Reset cached index/fuse (tests). */
-export function _resetKnowledgeSearchCache(): void {
-  _knowledgeDocs = null;
-  _knowledgeKeywordFuse = null;
-  _knowledgeBroadNearestFuse = null;
+export function _resetExpertiseSearchCache(): void {
+  _expertiseDocs = null;
+  _expertiseKeywordFuse = null;
+  _expertiseBroadNearestFuse = null;
 }

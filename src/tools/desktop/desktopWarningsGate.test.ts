@@ -15,6 +15,7 @@ import { getActivateSheetTool } from './api/activateSheet.js';
 import { getAddDashboardTool } from './api/addDashboard.js';
 import { getAddStoryboardTool } from './api/addStoryboard.js';
 import { getAddWorksheetTool } from './api/addWorksheet.js';
+import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
@@ -229,6 +230,11 @@ const SORT_XML = `<?xml version="1.0"?>
 </worksheet>`;
 
 const TOOL_CASES: Record<string, ToolCase> = {
+  'close-workbook': {
+    make: getCloseWorkbookTool,
+    args: {},
+    clean: { message: 'Closed the open workbook.' },
+  },
   'undo-workbook': {
     make: getUndoWorkbookTool,
     args: {},
@@ -405,7 +411,7 @@ function executorReturning(
     submitted_at: '2026-01-01T00:00:00Z',
     parsedResult: { outcome: 'COMPLETE', refreshed: [], failed: [] },
     ...(warnings ? { warnings } : {}),
-  } as unknown as ExecuteCommandResult<undefined>;
+  } as unknown as ExecuteCommandResult;
   const overrides: Record<string, unknown> = {
     listWorksheets: vi
       .fn()
