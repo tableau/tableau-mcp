@@ -27,6 +27,22 @@ The hosted service is intended for **Tableau Cloud customers** who want to conne
 
 See [Popular Client Integrations](./client-integrations.md) for step-by-step instructions for Slack, Claude, ChatGPT, and other common AI clients. In general, point any MCP-compatible client at `https://mcp.tableau.com` and complete the OAuth sign-in flow when prompted.
 
+## Switching Tableau Cloud sites
+
+A hosted Tableau MCP connection stays on one Tableau Cloud site: the site you approved at sign-in. To use a different site, disconnect that connection and sign in again.
+
+Clients name this differently. Use the option that matches yours.
+
+- Ask the client to reset the connection. This prompt is usually enough: `Reset my Tableau MCP connection so I can authenticate again`. The client then tells you the next step.
+- In Slack, use the prompt above, then open the Tableau app and disconnect it. Then reconnect it and complete the sign-in prompt.
+- In Claude, go to **Customize** → **Connectors**, select **Tableau**, and choose **Disconnect**. Then choose **Connect** to start sign-in again.
+- In Claude Code, type `/mcp`, select **Tableau**, and choose **Re-authenticate**.
+- In ChatGPT, go to **Settings** → **Plugins**, select **Tableau**, and choose **Reconnect**.
+
+The Tableau Cloud consent page shows the site and username that will be used. Choose **Switch site** or **Switch username** if either is wrong, then approve access.
+
+<img src={require('./images/tableau-cloud-consent.png').default} alt="Tableau Cloud OAuth consent page" width="600" />
+
 ## Admin controls
 
 - **Disable per site.** Tableau Cloud site administrators cannot disable the Tableau MCP hosted service. However, you can prevent hosted Tableau MCP from issuing tool calls against your site through the `EXCLUDE_TOOLS` variable in site settings. Use the [REST API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_tableau_mcp.htm) to exclude all tool groups exposed in the Hosted Tableau MCP Server. You would supply the following payload: 
