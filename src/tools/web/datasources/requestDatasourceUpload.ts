@@ -52,9 +52,12 @@ export const getRequestDatasourceUploadTool = (
           fileName,
         },
         callback: async () => {
-          if (extra.tableauAuthInfo?.type === 'Passthrough') {
+          if (
+            extra.tableauAuthInfo?.type === 'Passthrough' ||
+            extra.tableauAuthInfo?.type === 'ServerEas'
+          ) {
             throw new UnknownError(
-              'Staged data source upload is not available for Passthrough authentication. Use OAuth or server-side authentication so the upload flow can enforce MCP authorization before issuing a signed upload URL.',
+              'Staged data source upload is not available for Passthrough authentication or Server EAS. Use OAuth or server-side authentication so the upload flow can enforce MCP authorization before issuing a signed upload URL.',
             );
           }
 

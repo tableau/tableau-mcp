@@ -12,6 +12,7 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
+import { McpSiteSettingsForbiddenError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
@@ -26,6 +27,7 @@ import { getSessionBinding } from './oauth/siteBinding.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
 import { X_TABLEAU_MCP_CONFIG_HEADER } from './requestUtils.js';
+import { serverEasAuthMiddleware } from './serverEasAuthMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -68,6 +70,9 @@ export async function startExpressServer({
   );
 
   const middleware: Array<RequestHandler> = [handlePingRequest];
+  if (config.auth === 'server-eas') {
+    middleware.push(serverEasAuthMiddleware());
+  }
   if (config.enablePassthroughAuth) {
     middleware.push(passthroughAuthMiddleware());
   }
@@ -207,11 +212,12 @@ export async function startExpressServer({
         data: error,
       });
       if (!res.headersSent) {
-        res.status(500).json({
+        const forbidden = error instanceof McpSiteSettingsForbiddenError;
+        res.status(forbidden ? 403 : 500).json({
           jsonrpc: '2.0',
           error: {
-            code: -32603,
-            message: 'Internal server error',
+            code: forbidden ? -32000 : -32603,
+            message: forbidden ? error.message : 'Internal server error',
           },
           id: null,
         });

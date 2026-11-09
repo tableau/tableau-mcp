@@ -81,8 +81,8 @@ describe('renderInteractiveVizTool', () => {
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
-    it('should be disabled when AUTH=passthrough, even with mcp-apps enabled', async () => {
-      vi.stubEnv('AUTH', 'passthrough');
+    it.each(['passthrough', 'server-eas'])('disables embedding for AUTH=%s', async (auth) => {
+      vi.stubEnv('AUTH', auth);
       vi.stubEnv('TRANSPORT', 'http');
       vi.stubEnv('PAT_NAME', undefined);
       vi.stubEnv('PAT_VALUE', undefined);

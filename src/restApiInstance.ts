@@ -140,7 +140,14 @@ const getNewRestApiInstanceAsync = async (
   });
 
   let signOutWhenCompleted = true;
-  if (tableauAuthInfo?.type === 'Passthrough') {
+  if (tableauAuthInfo?.type === 'ServerEas') {
+    signOutWhenCompleted = false;
+    restApi.setCredentials({
+      token: tableauAuthInfo.accessToken,
+      user: { id: tableauAuthInfo.userId },
+      site: { id: tableauAuthInfo.siteId },
+    });
+  } else if (tableauAuthInfo?.type === 'Passthrough') {
     if (!tableauAuthInfo.raw || !tableauAuthInfo.userId) {
       throw new Error('Auth info is required when not signing in first.');
     }

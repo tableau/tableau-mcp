@@ -418,3 +418,14 @@ export class DataAppTemplateUnavailableError extends McpToolError {
     super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
   }
 }
+
+export class McpSiteSettingsForbiddenError extends McpToolError {
+  constructor() {
+    super({
+      type: 'mcp-site-settings-forbidden',
+      statusCode: 403,
+      message:
+        'The Tableau session cannot read MCP site settings. Include tableau:mcp_site_settings:read when MCP site settings are enabled.',
+    });
+  }
+}

@@ -368,7 +368,20 @@ export class RestApi {
     };
   };
 
-  setCredentials = (accessToken: string, userId: string): void => {
+  get sessionCredentials(): Credentials {
+    if (this.creds.type !== 'X-Tableau-Auth') {
+      throw new Error('A Tableau session is required');
+    }
+    const { token, site, user } = this.creds;
+    return { token, site, user };
+  }
+
+  setCredentials = (accessToken: string | Credentials, userId?: string): void => {
+    if (typeof accessToken !== 'string') {
+      this._creds = { type: 'X-Tableau-Auth', ...accessToken };
+      return;
+    }
+    if (!userId) throw new Error('A Tableau user ID is required');
     const siteId = getSiteLuidFromAccessToken(accessToken);
     if (!siteId) {
       throw new Error('Could not determine site ID. Access token must have 3 parts.');

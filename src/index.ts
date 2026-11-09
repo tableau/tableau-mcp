@@ -62,7 +62,7 @@ async function startServer(): Promise<void> {
       // Port is now open. Wait for server info before logging the ready message.
       await serverInfoReady;
 
-      if (!config.oauth.enabled && config.auth !== 'passthrough') {
+      if (!config.oauth.enabled && config.auth !== 'passthrough' && config.auth !== 'server-eas') {
         log({
           message:
             '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access. Non-OAuth HTTP usage is intended only for testing/prototyping or deployments that are licensed and approved for usage-based licensing (UBL). For general multi-user HTTP deployments, prefer OAuth. By explicitly disabling OAuth with DANGEROUSLY_DISABLE_OAUTH="true", confirm this matches your Tableau licensing/security guidance.',

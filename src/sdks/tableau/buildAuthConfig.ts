@@ -69,6 +69,9 @@ export function buildAuthConfig({
         additionalPayload,
       };
 
+    case 'server-eas':
+      return null;
+
     case 'oauth':
       return null;
 

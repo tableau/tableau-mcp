@@ -35,6 +35,8 @@ export class AuthenticationMethods extends Methods<typeof authenticationApis> {
           },
           ...(await (async () => {
             switch (authConfig.type) {
+              case 'server-eas':
+                return { jwt: authConfig.jwt };
               case 'pat':
                 return {
                   personalAccessTokenName: authConfig.patName,

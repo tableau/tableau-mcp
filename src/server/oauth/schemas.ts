@@ -184,6 +184,15 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     raw: z.string(),
     clientId: z.string().optional(),
   }),
+  z.object({
+    type: z.literal('ServerEas'),
+    username: requiredString('username'),
+    server: requiredString('server'),
+    siteId: requiredString('siteId'),
+    siteName: z.string(),
+    userId: requiredString('userId'),
+    accessToken: requiredString('accessToken'),
+  }),
   passthroughAuthInfoSchema,
 ]);
 
