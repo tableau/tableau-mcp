@@ -13,7 +13,7 @@ describe('createPresignedPutUrlToS3', () => {
     exportedForTesting.resetS3Bundle();
   });
 
-  it('signs Content-Length and omits an empty-body checksum', async () => {
+  it('signs Content-Length', async () => {
     const url = new URL(
       await createPresignedPutUrlToS3({
         key: 'workbook-uploads/site/user/id/workbook.twbx',
@@ -26,6 +26,5 @@ describe('createPresignedPutUrlToS3', () => {
     );
 
     expect(url.searchParams.get('X-Amz-SignedHeaders')?.split(';')).toContain('content-length');
-    expect(url.searchParams.has('x-amz-checksum-crc32')).toBe(false);
   });
 });

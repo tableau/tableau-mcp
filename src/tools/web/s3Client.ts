@@ -90,8 +90,6 @@ async function getS3Bundle(region: string): Promise<{
       // timeouts without taking a direct dependency on @smithy/node-http-handler.
       const client = new S3Client({
         ...(region ? { region } : {}),
-        // The SDK default bakes an empty-body CRC32 into presigned PUTs, which S3-compatible stores reject.
-        requestChecksumCalculation: 'WHEN_REQUIRED',
         requestHandler: {
           connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
           requestTimeout: S3_REQUEST_TIMEOUT_MS,
