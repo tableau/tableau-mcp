@@ -2247,4 +2247,36 @@ describe('server', () => {
       expect.anything(),
     );
   });
+  it.each([
+    { mcpApps: true, interactiveViz: false, vizToolsPresent: false, recordEventPresent: true },
+    { mcpApps: true, interactiveViz: true, vizToolsPresent: true, recordEventPresent: true },
+    { mcpApps: false, interactiveViz: true, vizToolsPresent: false, recordEventPresent: false },
+  ])(
+    'gates the interactive-viz tools and app resource (mcp-apps=$mcpApps, interactive-viz=$interactiveViz)',
+    async ({ mcpApps, interactiveViz, vizToolsPresent, recordEventPresent }) => {
+      // render-interactive-viz is otherwise disabled under the default PAT auth.
+      vi.stubEnv('AUTH', 'uat');
+      vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+      vi.stubEnv('UAT_ISSUER', 'https://tableau-mcp.local/uat');
+      vi.stubEnv('UAT_USERNAME_CLAIM', 'test@example.com');
+      vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (name: string) =>
+          (name === 'mcp-apps' && mcpApps) || (name === 'interactive-viz' && interactiveViz),
+      );
+
+      const server = getServer({ capabilities: uiCapableClientCapabilities });
+      await server.registerTools();
+
+      const registeredNames = [
+        ...vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]),
+        ...mocks.mockRegisterAppTool.mock.calls.map((call) => call[1]),
+      ];
+      const resourceNames = mocks.mockRegisterAppResource.mock.calls.map((call) => call[1]);
+      expect(registeredNames.includes('render-interactive-viz')).toBe(vizToolsPresent);
+      expect(registeredNames.includes('get-embed-token')).toBe(vizToolsPresent);
+      expect(resourceNames.includes('render-interactive-viz')).toBe(vizToolsPresent);
+      expect(registeredNames.includes('record-event')).toBe(recordEventPresent);
+    },
+  );
 });
