@@ -55,7 +55,6 @@ describe('loadWorkbookXml validation preflight', () => {
           },
         });
         expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-        expect(executor.executeCommand).not.toHaveBeenCalled();
       }
     },
   );
@@ -91,7 +90,6 @@ describe('loadWorkbookXml validation preflight', () => {
         expect.objectContaining({ ruleId: 'dashboard-worksheet-zone-type', severity: 'error' }),
       ]);
       expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-      expect(executor.executeCommand).not.toHaveBeenCalled();
     },
   );
 
@@ -273,7 +271,7 @@ describe('loadWorkbookXml validation preflight', () => {
   });
 
   it('rejects a whole-workbook document whose dashboard references an omitted worksheet', async () => {
-    const executor = makeExecutorMock({ executeCommand: vi.fn() });
+    const executor = makeExecutorMock();
 
     const result = await loadWorkbookXml({
       xml:
@@ -303,7 +301,6 @@ describe('loadWorkbookXml validation preflight', () => {
         ]),
       );
     }
-    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('allows a candidate that preserves an unrelated blocking issue from the baseline', async () => {

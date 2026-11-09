@@ -1,6 +1,7 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+import { MOCK_SITE_LUID, MOCK_USER_LUID } from './toolContext.mock.js';
 import {
   BucketS3Config,
   buildImageS3Key,
@@ -27,9 +28,12 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 const baseConfig: BucketS3Config = {
   bucket: 'tableau-images',
   region: 'us-east-1',
-  keyPrefix: 'view-images/',
+  keyPrefix: 'tableau/',
   presignTtlSeconds: 300,
 };
+const tenant = { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID };
+const tenantPrefix = `${MOCK_SITE_LUID}/${MOCK_USER_LUID}`;
+const keyArgs = { keyPrefixSegment: 'view-images', tenant };
 
 describe('uploadImageToS3', () => {
   beforeEach(() => {
@@ -45,6 +49,7 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-123',
       config: baseConfig,
+      ...keyArgs,
     });
 
     expect(url).toBe('https://s3.example.com/signed-url');
@@ -55,7 +60,9 @@ describe('uploadImageToS3', () => {
     expect(putInput.Body).toBe(buffer);
     expect(Buffer.isBuffer(putInput.Body)).toBe(true);
     expect(putInput.ContentType).toBe('image/png');
-    expect(putInput.Key).toMatch(/^view-images\/view-123\/[0-9a-f-]+\.png$/);
+    expect(putInput.Key).toMatch(
+      new RegExp(`^tableau/view-images/${tenantPrefix}/view-123/[0-9a-f-]+\\.png$`),
+    );
 
     expect(mocks.send).toHaveBeenCalledTimes(1);
   });
@@ -66,11 +73,14 @@ describe('uploadImageToS3', () => {
       format: 'SVG',
       resourceId: 'view-123',
       config: baseConfig,
+      ...keyArgs,
     });
 
     const putInput = vi.mocked(PutObjectCommand).mock.calls[0][0];
     expect(putInput.ContentType).toBe('image/svg+xml');
-    expect(putInput.Key).toMatch(/^view-images\/view-123\/[0-9a-f-]+\.svg$/);
+    expect(putInput.Key).toMatch(
+      new RegExp(`^tableau/view-images/${tenantPrefix}/view-123/[0-9a-f-]+\\.svg$`),
+    );
   });
 
   it('converts a string body to a Buffer before uploading', async () => {
@@ -78,6 +88,7 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-123',
       config: baseConfig,
+      ...keyArgs,
     });
 
     const putInput = vi.mocked(PutObjectCommand).mock.calls[0][0];
@@ -90,6 +101,7 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-123',
       config: { ...baseConfig, presignTtlSeconds: 600 },
+      ...keyArgs,
     });
 
     const putInput = vi.mocked(PutObjectCommand).mock.calls[0][0];
@@ -110,6 +122,7 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-123',
       config: baseConfig,
+      ...keyArgs,
     });
 
     expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ region: 'us-east-1' }));
@@ -120,6 +133,7 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-123',
       config: { ...baseConfig, region: '' },
+      ...keyArgs,
     });
 
     const clientArgs = vi.mocked(S3Client).mock.calls[0][0];
@@ -131,6 +145,7 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-123',
       config: baseConfig,
+      ...keyArgs,
     });
 
     expect(S3Client).toHaveBeenCalledWith(
@@ -145,11 +160,13 @@ describe('uploadImageToS3', () => {
       format: 'PNG',
       resourceId: 'view-1',
       config: baseConfig,
+      ...keyArgs,
     });
     await uploadImageToS3(Buffer.from('b'), {
       format: 'PNG',
       resourceId: 'view-2',
       config: baseConfig,
+      ...keyArgs,
     });
 
     expect(S3Client).toHaveBeenCalledTimes(1);
@@ -163,26 +180,62 @@ describe('uploadImageToS3', () => {
         format: 'PNG',
         resourceId: 'view-123',
         config: baseConfig,
+        ...keyArgs,
       }),
     ).rejects.toThrow('access denied');
+  });
+
+  it('rejects an invalid tenant without uploading anything', async () => {
+    await expect(
+      uploadImageToS3(Buffer.from('bytes'), {
+        format: 'PNG',
+        resourceId: 'view-123',
+        config: baseConfig,
+        keyPrefixSegment: 'view-images',
+        tenant: { siteLuid: MOCK_SITE_LUID, userLuid: '' },
+      }),
+    ).rejects.toThrow('Invalid tenant LUIDs for blob storage key.');
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 });
 
 describe('buildImageS3Key', () => {
-  it('namespaces the key under the prefix and resource id with a random uuid', () => {
-    const key = buildImageS3Key('view-images/', 'view-abc', 'PNG');
-    expect(key).toMatch(/^view-images\/view-abc\/[0-9a-f-]+\.png$/);
+  it('namespaces the key under the prefix, tool segment, tenant, and resource id with a random uuid', () => {
+    const key = buildImageS3Key('tableau/', tenant, 'view-images', 'view-abc', 'PNG');
+    expect(key).toMatch(
+      new RegExp(`^tableau/view-images/${tenantPrefix}/view-abc/[0-9a-f-]+\\.png$`),
+    );
   });
 
   it('normalizes leading and missing trailing slashes in the prefix', () => {
-    expect(buildImageS3Key('/images', 'r', 'SVG')).toMatch(/^images\/r\/[0-9a-f-]+\.svg$/);
-    expect(buildImageS3Key('images/', 'r', 'PNG')).toMatch(/^images\/r\/[0-9a-f-]+\.png$/);
+    expect(buildImageS3Key('/images', tenant, 'view-images', 'r', 'SVG')).toMatch(
+      new RegExp(`^images/view-images/${tenantPrefix}/r/[0-9a-f-]+\\.svg$`),
+    );
+    expect(buildImageS3Key('images/', tenant, 'view-images', 'r', 'PNG')).toMatch(
+      new RegExp(`^images/view-images/${tenantPrefix}/r/[0-9a-f-]+\\.png$`),
+    );
+  });
+
+  it('starts with the tool segment when no prefix is configured', () => {
+    expect(buildImageS3Key('', tenant, 'custom-view-images', 'r', 'PNG')).toMatch(
+      new RegExp(`^custom-view-images/${tenantPrefix}/r/[0-9a-f-]+\\.png$`),
+    );
   });
 
   it('produces a unique key on each call for the same inputs', () => {
-    const a = buildImageS3Key('p/', 'r', 'PNG');
-    const b = buildImageS3Key('p/', 'r', 'PNG');
+    const a = buildImageS3Key('p/', tenant, 'view-images', 'r', 'PNG');
+    const b = buildImageS3Key('p/', tenant, 'view-images', 'r', 'PNG');
     expect(a).not.toBe(b);
+  });
+
+  it.each([
+    ['an empty site LUID', { siteLuid: '', userLuid: MOCK_USER_LUID }],
+    ['an empty user LUID', { siteLuid: MOCK_SITE_LUID, userLuid: '' }],
+    ['a path-like site LUID', { siteLuid: '../other', userLuid: MOCK_USER_LUID }],
+  ])('refuses to build an unscoped key for %s', (_name, badTenant) => {
+    expect(() => buildImageS3Key('p/', badTenant, 'view-images', 'r', 'PNG')).toThrow(
+      'Invalid tenant LUIDs for blob storage key.',
+    );
   });
 });
 

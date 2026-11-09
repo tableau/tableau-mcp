@@ -554,7 +554,11 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
           ),
       );
       expect(got).toHaveLength(1);
-      expect(got[0].searchParams).toMatchObject({ maxRows: '50', includeAllColumns: 'true' });
+      expect(got[0].searchParams).toMatchObject({
+        maxRows: '50',
+        ignoreSelection: 'true',
+        includeAllColumns: 'true',
+      });
     } finally {
       await harness.close();
     }

@@ -5222,8 +5222,8 @@ describe('bindTemplateTool auto_apply gate', () => {
 
   it('applied:true non-waterfall bind is terminal: guidance says done and nextAction.kind is "done"', async () => {
     // A completed auto-apply (symbol map, no unfilled re-bind slot) must carry a terminal
-    // marker so the agent stops calling more tools instead of burning 100s on search-commands
-    // over an already-rendered chart. The prose stop-clause works with today's host; the
+    // marker so the agent stops calling more tools instead of burning 100s
+    // re-querying an already-rendered chart. The prose stop-clause works with today's host; the
     // structuredContent.nextAction{kind:'done'} is the durable machine contract.
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },

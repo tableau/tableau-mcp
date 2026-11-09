@@ -2,12 +2,18 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { OverridableConfig } from '../../../overridableConfig.js';
+import { JOB_PERFORMANCE_FIELDS } from '../../../prompts/_lib/jobPerformance.js';
+import {
+  SITE_CONTENT_FIELDS,
+  TS_EVENTS_FIELDS,
+  TS_USERS_FIELDS,
+} from '../../../prompts/userLicenseReclamation/apply.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { clearStaleContentReportCache } from './getStaleContentReport.js';
-import { getQueryAdminInsightsTool } from './queryAdminInsights.js';
+import { getQueryAdminInsightsTool, KNOWN_FIELD_CAPTIONS } from './queryAdminInsights.js';
 import { adminInsightsResolver } from './resolver.js';
 
 const mocks = vi.hoisted(() => ({
@@ -75,6 +81,108 @@ describe('query-admin-insights tool', () => {
   it('exposes the documented tool name', () => {
     const tool = getQueryAdminInsightsTool(new WebMcpServer());
     expect(tool.name).toBe('query-admin-insights');
+  });
+
+  it('describes every kind and the known field captions so the model does not guess them', () => {
+    const tool = getQueryAdminInsightsTool(new WebMcpServer());
+    const kinds = ['ts-events', 'ts-users', 'site-content', 'job-performance', 'stale-content'];
+    for (const kind of kinds) {
+      expect(tool.description).toContain(kind);
+    }
+    expect(tool.description).toContain('audit events');
+    expect(tool.description).toContain('extract-refresh and subscription run history');
+    for (const caption of Object.values(KNOWN_FIELD_CAPTIONS).flat()) {
+      expect(tool.description).toContain(caption);
+    }
+  });
+
+  it('lists every field caption the packaged admin prompts send, so the two cannot drift', () => {
+    const promptFieldsByKind = {
+      'ts-events': TS_EVENTS_FIELDS,
+      'ts-users': TS_USERS_FIELDS,
+      'site-content': SITE_CONTENT_FIELDS,
+      'job-performance': JOB_PERFORMANCE_FIELDS,
+    } as const;
+    for (const [kind, promptFields] of Object.entries(promptFieldsByKind)) {
+      expect(KNOWN_FIELD_CAPTIONS[kind as keyof typeof promptFieldsByKind]).toEqual(
+        expect.arrayContaining([...promptFields]),
+      );
+    }
+  });
+
+  it.each([
+    ['fields', { fields: [{ fieldCaption: 'Job Id' }] }],
+    [
+      'filters only',
+      {
+        fields: [],
+        filters: [
+          {
+            field: { fieldCaption: 'Job Id' },
+            filterType: 'SET' as const,
+            values: ['x'],
+            exclude: false,
+          },
+        ],
+      },
+    ],
+  ])(
+    'appends the known-captions hint to an Unknown Field error from a caller query (%s)',
+    async (_label, query) => {
+      mocks.mockQueryDatasource.mockResolvedValue(
+        new Err({
+          type: 'api-error',
+          message: 'Unknown Field: Job Id.',
+          httpStatus: 400,
+          errorCode: undefined,
+        }),
+      );
+
+      const result = await getToolResult({ kind: 'job-performance', query: query as Query });
+
+      expect(result.isError).toBe(true);
+      if (result.content[0].type !== 'text') {
+        throw new Error('expected text content');
+      }
+      expect(result.content[0].text).toContain('Unknown Field: Job Id.');
+      expect(result.content[0].text).toContain('Field captions must match the dataset exactly');
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('does not append the captions hint to other VDS errors', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(
+      new Err({ type: 'api-error', message: 'VDS exploded', httpStatus: 400, errorCode: '400000' }),
+    );
+
+    const result = await getToolResult({ kind: 'ts-events', query: validQuery });
+
+    expect(result.isError).toBe(true);
+    if (result.content[0].type !== 'text') {
+      throw new Error('expected text content');
+    }
+    expect(result.content[0].text).toContain('VDS exploded');
+    expect(result.content[0].text).not.toContain('Field captions must match');
+  });
+
+  it('does not append the captions hint on the server-built stale-content query', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(
+      new Err({
+        type: 'api-error',
+        message: 'Unknown Field: Item LUID.',
+        httpStatus: 400,
+        errorCode: undefined,
+      }),
+    );
+
+    const result = await getToolResult({ kind: 'stale-content' });
+
+    expect(result.isError).toBe(true);
+    if (result.content[0].type !== 'text') {
+      throw new Error('expected text content');
+    }
+    expect(result.content[0].text).toContain('Unknown Field: Item LUID.');
+    expect(result.content[0].text).not.toContain('Field captions must match');
   });
 
   it.each([

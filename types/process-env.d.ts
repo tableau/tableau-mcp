@@ -19,6 +19,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   AUTH: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
+  HTTP_HOST: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
   CORS_ORIGIN_CONFIG: string | undefined;
   SERVER: string | undefined;
@@ -101,9 +102,8 @@ export interface ProcessEnvDesktop extends ProcessEnvBase {
   IMAGE_EXPORT_TIMEOUT_MS: string | undefined;
   TABLEAU_DESKTOP_CALL_TIMEOUT_MS: string | undefined;
   TABLEAU_EXTERNAL_API_DISCOVERY_DIR: string | undefined;
-  TABLEAU_COMMANDS_REGISTRY_DIR: string | undefined;
   TABLEAU_USER_AGENT_PREFIX: string | undefined;
-  TABLEAU_KNOWLEDGE_DIR: string | undefined;
+  TABLEAU_EXPERTISE_DIR: string | undefined;
   TEMPLATES_DIR: string | undefined;
   TABLEAU_REPOSITORY_DIR: string | undefined;
   WORKBOOK_XSD_PATH: string | undefined;

@@ -89,10 +89,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('ships a compact command census for the common semantic path', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('Command census:');
-    expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
-    expect(rendered).not.toContain('tabdoc:goto-sheet');
     expect(rendered).toContain('activate-sheet');
-    expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
   it('requires explicit requested encodings to participate in template discovery', () => {
@@ -142,7 +139,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('mark density unverified');
   });
 
-  it('recognizes a filter action in the trigger and defers scope detail to knowledge', () => {
+  it('recognizes a filter action in the trigger and defers scope detail to expertise', () => {
     const guidance = routes.find((route) => route.id === 'dynamic-authoring');
 
     expect(guidance).toBeDefined();
@@ -152,7 +149,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     const rendered = renderInstructionEntry(guidance!);
     expect(rendered).toContain('author-action');
-    expect(rendered).toContain('Before authoring, consult the knowledge docs via search-knowledge');
+    expect(rendered).toContain('Before authoring, consult the expertise docs via search-expertise');
   });
 
   it('names add-field then apply-worksheet as the encoding edit path', () => {
@@ -224,7 +221,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(dynamicAuthoring?.action).toContain('format-worksheets');
     expect(dynamicAuthoring?.action).not.toContain('format-labels');
     expect(dynamicAuthoring?.toolSequence).toEqual([
-      'search-knowledge',
+      'search-expertise',
       'author-parameter',
       'author-set',
       'author-calc',
@@ -263,21 +260,21 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).not.toContain('tableau-agent-debug');
   });
 
-  it('caps targeted knowledge consultation at one read before authoring proceeds', () => {
-    const knowledge = routes.find((route) => route.id === 'knowledge-consult');
+  it('caps targeted expertise consultation at one read before authoring proceeds', () => {
+    const expertise = routes.find((route) => route.id === 'expertise-consult');
 
-    expect(knowledge).toMatchObject({
+    expect(expertise).toMatchObject({
       trigger:
         'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design)',
-      toolSequence: ['search-knowledge', 'read-knowledge-resource'],
+      toolSequence: ['search-expertise', 'read-expertise-resource'],
       stopConditions: ['read the top hit once, then proceed'],
     });
   });
 
-  it('places the deterministic plain-chart route before knowledge consultation', () => {
+  it('places the deterministic plain-chart route before expertise consultation', () => {
     const routeIds = routes.map((route) => route.id);
 
-    expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('knowledge-consult'));
+    expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('expertise-consult'));
   });
 
   it('allows direct and open-intent modern template choices', () => {
@@ -582,16 +579,14 @@ describe('buildDesktopInstructions', () => {
     );
   });
 
-  it('keeps legacy template guidance only for demo and makes spec-loop no template claims', () => {
+  it('keeps legacy template guidance only for demo', () => {
     const demo = buildDesktopInstructions({ sessionPinned: false, profile: 'demo' });
-    const specLoop = buildDesktopInstructions({ sessionPinned: false, profile: 'spec-loop' });
 
     expect(demo).toContain('bind-template');
     expect(demo).toContain('run-dashboard-batch');
     expect(demo).toContain('compose-only');
     expect(demo).toContain('live worksheet names');
     expect(demo).not.toContain('build-worksheets-from-templates');
-    expect(specLoop).not.toMatch(/template/i);
   });
 
   it.each(['dynamic-authoring', 'full', 'combined-lean'])(
@@ -640,7 +635,7 @@ const CORE_ENTRY_IDS = [
   'dense-scatter-bubble',
 ];
 
-const PROFILES_WITHOUT_TABLE = ['demo', 'spec-loop'];
+const PROFILES_WITHOUT_TABLE = ['demo'];
 const TABLE_PROFILES = ['', 'not-a-profile', ...TOOL_PROFILE_NAMES].filter(
   (profile) => !PROFILES_WITHOUT_TABLE.includes(profile),
 );
@@ -698,7 +693,7 @@ describe('instruction visibility under the Claude Code default cut', () => {
   );
 
   it.each(variants(PROFILES_WITHOUT_TABLE).map((v) => [v.name, v] as const))(
-    'fits demo and spec-loop whole within the default limit in %s',
+    'fits demo whole within the default limit in %s',
     (_name, { text }) => {
       expect(text.length).toBeLessThanOrEqual(CLAUDE_CODE_DEFAULT_INSTRUCTIONS_LIMIT);
     },

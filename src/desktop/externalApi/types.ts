@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.31), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.32), derived from
  * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
@@ -46,6 +46,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
+  workbookClose: '/v0/workbook:close',
   workbookExportAs: '/v0/workbook:exportAs',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
@@ -81,7 +82,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
-  invokeCommand: '/v0/app:invokeCommand',
   operations: '/v0/operations',
   operationById: '/v0/operations/{id}',
   openapi: '/openapi.json',
@@ -736,6 +736,8 @@ const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
   },
 );
 const dialogColorChannelSchema = z.number().int().min(0).max(255);
+// Desktop accepts only signed 32-bit integers for print values; OpenAPI omits this maximum.
+const dialogPrintIntegerSchema = z.number().int().max(2_147_483_647);
 
 /** Only caller-selected input fields belong on the wire; descriptors are read-only. */
 export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
@@ -780,9 +782,9 @@ export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
       printerId: dialogInputStringSchema,
       range: z.enum(['all-pages', 'page-range', 'current-page', 'selection']),
       sheetScope: z.enum(['entire-workbook', 'active-sheet', 'selected-sheets']),
-      firstPage: z.number().int().min(0),
-      lastPage: z.number().int().min(0),
-      copies: z.number().int().min(1),
+      firstPage: dialogPrintIntegerSchema.min(0),
+      lastPage: dialogPrintIntegerSchema.min(0),
+      copies: dialogPrintIntegerSchema.min(1),
       collate: z.boolean(),
       exportSelection: z.boolean(),
       outputPath: dialogNonemptyInputStringSchema.optional(),
@@ -915,7 +917,7 @@ export const invokeDialogActionResultSchema = z
 export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
- * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
+ * Operation envelope returned by `POST /v0/workbook/document`
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
  * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
  * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older
