@@ -26,6 +26,7 @@ import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
+import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -314,6 +315,11 @@ const TOOL_CASES: Record<string, ToolCase> = {
     make: getSetDataSourcePageActiveTool,
     args: { isDataSourcePageActive: true },
     clean: { isDataSourcePageActive: true, message: 'The Data Source page is active.' },
+  },
+  'reload-workspace-extension': {
+    make: getReloadWorkspaceExtensionTool,
+    args: { extensionId: 'ext-1' },
+    clean: { extensionId: 'ext-1', message: 'Reloaded workspace extension "ext-1".' },
   },
   'reload-extensions': {
     make: getReloadExtensionsTool,
