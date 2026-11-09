@@ -9,6 +9,10 @@ on:
       - closed
     branches:
       - main
+    # Docs- and workflow-only PRs ship no package code, so they don't get a version bump or tag.
+    paths-ignore:
+      - 'docs/**'
+      - '.github/**'
 
 permissions:
   contents: write
