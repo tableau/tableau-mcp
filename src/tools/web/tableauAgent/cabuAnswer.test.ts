@@ -41,6 +41,23 @@ describe('buildCabuAnswer', () => {
     expect(answer.datatables?.[0]).toContain('| East | 800 |');
   });
 
+  it('escapes pipes and collapses newlines in a cell value so they cannot corrupt the table', () => {
+    const event: CabuResponseCompleteEvent = {
+      node: 'response',
+      datatables: [
+        {
+          name: 'Notes',
+          data: [{ Region: 'West', Note: 'Line one|with a pipe\nLine two\r\nLine three' }],
+        },
+      ],
+    };
+
+    const answer = buildCabuAnswer(event);
+    expect(answer.datatables?.[0]).toContain(
+      '| West | Line one\\|with a pipe Line two Line three |',
+    );
+  });
+
   it('truncates a row-object datatable beyond the row cap and notes the truncation', () => {
     const rows = Array.from({ length: 25 }, (_, i) => ({ Region: `Region ${i}`, Sales: i }));
     const event: CabuResponseCompleteEvent = {

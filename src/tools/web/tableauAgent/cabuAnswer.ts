@@ -80,5 +80,5 @@ function formatCell(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
-  return String(value).replace(/\|/g, '\\|');
+  return String(value).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
