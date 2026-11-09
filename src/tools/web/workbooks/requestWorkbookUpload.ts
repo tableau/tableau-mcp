@@ -30,7 +30,7 @@ export const getRequestWorkbookUploadTool = (
     name: 'request-workbook-upload',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId.',
+      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId. Each upload id can be published once.',
     paramsSchema,
     annotations: {
       title: 'Request Workbook Upload',

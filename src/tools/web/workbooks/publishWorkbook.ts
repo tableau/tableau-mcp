@@ -43,7 +43,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path.',
+      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path. Each upload id can be published once.',
     ),
   workbookFilePath: z
     .string()

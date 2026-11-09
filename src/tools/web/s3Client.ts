@@ -30,6 +30,8 @@ import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKe
  */
 const S3_CONNECTION_TIMEOUT_MS = 5_000;
 const S3_REQUEST_TIMEOUT_MS = 180_000;
+// Total cap for the post-publish delete: it is best-effort and the bucket lifecycle rule backstops it.
+const S3_DELETE_TIMEOUT_MS = 5_000;
 
 /**
  * Configuration needed to upload a payload to S3 and presign a URL.
@@ -380,7 +382,9 @@ export async function deleteObjectFromS3({
   region: string;
 }): Promise<void> {
   const { client, DeleteObjectCommand } = await getS3Bundle(region);
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), {
+    abortSignal: AbortSignal.timeout(S3_DELETE_TIMEOUT_MS),
+  });
 }
 
 export const exportedForTesting = {

@@ -171,7 +171,7 @@ describe('resolveStagedDatasourceUpload', () => {
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, tenant }),
     ).rejects.toThrow(
-      'Data source upload not found. Upload the data source bytes before publishing.',
+      'Data source upload not found: it was never uploaded, has expired, or was deleted after prior publish. Check whether the data source already exists before requesting a new upload.',
     );
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(2);
   });

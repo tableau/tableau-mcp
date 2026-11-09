@@ -31,7 +31,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Staged data source upload id returned by request-datasource-upload. Use this for hosted clients that cannot pass a local path.',
+      'Staged data source upload id returned by request-datasource-upload. Use this for hosted clients that cannot pass a local path. The upload id will be deleted upon successful publish.',
     ),
   datasourceFilePath: z
     .string()

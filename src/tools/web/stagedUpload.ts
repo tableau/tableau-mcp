@@ -112,7 +112,7 @@ export async function resolveStagedUpload<FileType extends string>({
   }
 
   throw new Error(
-    `${kind.label} upload not found. Upload the ${kind.noun} bytes before publishing.`,
+    `${kind.label} upload not found: it was never uploaded, has expired, or was deleted after prior publish. Check whether the ${kind.noun} already exists before requesting a new upload.`,
   );
 }
 

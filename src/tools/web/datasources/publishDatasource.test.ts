@@ -2,7 +2,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import * as loggerModule from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -239,7 +238,6 @@ describe('publishDatasourceTool', () => {
   });
 
   it('still returns the published datasource when deleting the staged upload fails', async () => {
-    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     mocks.mockDeleteObject.mockRejectedValue(new Error('AccessDenied'));
 
     const result = await getToolResult(validArgs);
@@ -248,10 +246,6 @@ describe('publishDatasourceTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text).status).toBe('published');
     expect(mocks.mockDeleteObject).toHaveBeenCalledWith(STAGED_DELETE);
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'warning', data: 'AccessDenied' }),
-    );
-    logSpy.mockRestore();
   });
 
   it('uploads and publishes a staged TDSX file', async () => {

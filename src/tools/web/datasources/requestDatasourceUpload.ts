@@ -31,7 +31,7 @@ export const getRequestDatasourceUploadTool = (
     name: 'request-datasource-upload',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Creates a short-lived staged upload URL for a Tableau TDS or TDSX data source. Upload the data source bytes to the returned URL, then call publish-datasource with the returned datasourceUploadId.',
+      'Creates a short-lived staged upload URL for a Tableau TDS or TDSX data source. Upload the data source bytes to the returned URL, then call publish-datasource with the returned datasourceUploadId. Each upload id can be published once.',
     paramsSchema,
     annotations: {
       title: 'Request Data Source Upload',

@@ -161,7 +161,9 @@ describe('resolveStagedWorkbookUpload', () => {
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config, tenant }),
-    ).rejects.toThrow('Workbook upload not found. Upload the workbook bytes before publishing.');
+    ).rejects.toThrow(
+      'Workbook upload not found: it was never uploaded, has expired, or was deleted after prior publish. Check whether the workbook already exists before requesting a new upload.',
+    );
   });
 
   it.each([

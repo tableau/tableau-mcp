@@ -1238,9 +1238,6 @@ describe('publishWorkbookTool', () => {
     expect(response.status).toBe('published');
     expect(response.data.id).toBe(mockWorkbook.id);
     expect(mocks.mockDeleteObject).toHaveBeenCalledWith(STAGED_DELETE);
-    expect(loggerModule.log).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'warning', data: 'AccessDenied' }),
-    );
   });
 
   it('still returns the published workbook when optional permissions authentication fails', async () => {

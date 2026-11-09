@@ -40,6 +40,7 @@ describe('deleteObjectFromS3', () => {
     });
     expect(mocks.send).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ __command: 'delete' }),
+      { abortSignal: expect.any(AbortSignal) },
     );
   });
 
