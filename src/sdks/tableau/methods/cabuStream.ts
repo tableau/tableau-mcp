@@ -95,6 +95,7 @@ export function drainSseStream(stream: Readable, timeoutMs: number): Promise<Cab
         return;
       }
       settled = true;
+      clearTimeout(timer);
       reject(err);
     });
   });

@@ -73,6 +73,20 @@ describe('drainSseStream', () => {
     await expect(promise).rejects.toThrow('socket hang up');
   });
 
+  it('clears the drain timer when the underlying stream errors', async () => {
+    vi.useFakeTimers();
+    try {
+      const stream = new Readable({ read() {} });
+      const promise = drainSseStream(stream, TIMEOUT_MS);
+      stream.emit('error', new Error('socket hang up'));
+
+      await expect(promise).rejects.toThrow('socket hang up');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('splits one record across two chunks and still parses it', async () => {
     const stream = fakeStream([
       'event: response_comp',
