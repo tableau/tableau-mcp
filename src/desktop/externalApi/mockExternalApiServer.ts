@@ -799,6 +799,17 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.appExtensions) {
+      sendJson(res, 200, { extensions: [] });
+      return;
+    }
+
+    const appExtensionReloadMatch = path.match(/^\/v0\/app\/extensions\/([^/]+):reload$/);
+    if (method === 'POST' && appExtensionReloadMatch) {
+      sendOperation(res, 'reload-workspace-extension');
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookWorksheets) {
       sendJson(res, 200, { worksheets: DEFAULT_WORKSHEETS });
       return;

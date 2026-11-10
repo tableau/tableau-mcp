@@ -34,12 +34,21 @@ The name of the Tableau workbook file to upload. Must end in `.twb` or `.twbx`.
 
 Example: `Superstore.twbx`
 
+### `fileSizeBytes`
+
+The exact size of the workbook file in bytes, from 1 up to 5000000000 (5 GB).
+
+Example: `482133`
+
 ## Response behavior
 
 The tool returns a presigned S3 `PUT` URL and an opaque `workbookUploadId`. Upload the raw workbook
 bytes to `uploadUrl` with the given `requiredHeaders` before `expiresAt`, then pass
 `workbookUploadId` to [Publish Workbook](publish-workbook.md). The upload is not visible to Tableau
 until `publish-workbook` is called — this tool only stages the bytes.
+
+The URL is signed for exactly `fileSizeBytes` bytes. S3 rejects an upload of any other size with
+`403`, so send `Content-Length` as returned in `requiredHeaders`.
 
 ## Example result
 
@@ -50,7 +59,8 @@ until `publish-workbook` is called — this tool only stages the bytes.
   "expiresAt": "2026-08-12T18:05:00.000Z",
   "maxSizeBytes": 5000000000,
   "requiredHeaders": {
-    "Content-Type": "application/octet-stream"
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "482133"
   }
 }
 ```

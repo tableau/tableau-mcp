@@ -32,6 +32,7 @@ import { classifySessionFatalError, isSessionFatalError } from './sessionFatalEr
 import {
   ApiRoot,
   apiRootSchema,
+  appExtensionReloadRoute,
   AppInfo,
   appInfoSchema,
   AppScreenshot,
@@ -145,6 +146,8 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
+  WorkspaceExtensionList,
+  workspaceExtensionListSchema,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -367,6 +370,14 @@ export class ExternalApiToolExecutor {
   ): Promise<Result<WorkbookExtensionList, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.workbookExtensions, workbookExtensionListSchema, signal),
+    );
+  }
+
+  async listWorkspaceExtensions(
+    signal: AbortSignal,
+  ): Promise<Result<WorkspaceExtensionList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.appExtensions, workspaceExtensionListSchema, signal),
     );
   }
 
@@ -931,6 +942,16 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(dashboardReloadExtensionsRoute(dashboardId), signal),
       'reload-dashboard-extensions',
+    );
+  }
+
+  async reloadWorkspaceExtension(
+    extensionId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(appExtensionReloadRoute(extensionId), signal),
+      'reload-workspace-extension',
     );
   }
 
