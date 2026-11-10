@@ -464,11 +464,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 87-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 89-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(87);
+      expect(selected).toHaveLength(89);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -540,6 +540,8 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'refresh-dashboard-auto-updates',
         'refresh-storyboard-auto-updates',
         'reload-extensions',
+        'get-workspace-extensions',
+        'reload-workspace-extension',
         'refresh-datasource-data',
         'refresh-datasource-extract',
         'get-workbook-xml',
@@ -819,6 +821,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
     expect(floors.get('close-workbook')).toBe('0.2.32');
+    expect(floors.get('get-workspace-extensions')).toBe('0.2.34');
+    expect(floors.get('reload-workspace-extension')).toBe('0.2.34');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
