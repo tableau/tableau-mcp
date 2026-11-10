@@ -3874,6 +3874,28 @@ describe('bindTemplateTool bind recovery gate', () => {
       expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     });
 
+    it('admits a confirmed resubmit that names the datasource, and applies', async () => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      const session = 'pie-keep-datasource';
+      await getToolResult({ session, ask, getExecutor });
+      await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+      const call3 = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        datasource: 'M7',
+        getExecutor,
+      });
+      expect(call3.isError, JSON.stringify(call3)).toBe(false);
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+        proposal: pieProposal,
+        keepLargePie: true,
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
     it('declines keep_large_pie under requireCompleteRequest without minting coverage', async () => {
       vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
       const result = await getToolResult({

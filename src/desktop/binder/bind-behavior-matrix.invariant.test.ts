@@ -595,6 +595,8 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       if (res.status !== 'propose') return;
       expect(res.decline_reason.detail).toContain('keep_large_pie:true');
       expect(res.decline_reason.detail).toContain('explicitly');
+      expect(res.decline_reason.detail).toContain('blocks it once');
+      expect(res.decline_reason.detail).toContain('Never set keep_large_pie');
       expect(res.decline_reason.detail).not.toContain('Stop calling');
       expect(res.decline_reason.detail).not.toContain('build-worksheets-from-templates');
     });
