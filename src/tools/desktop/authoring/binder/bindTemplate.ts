@@ -1266,6 +1266,21 @@ function isProposalFilterResolutionFailure(
   );
 }
 
+/** keep_large_pie counts only on the exact proposal the server already blocked for its slice count. */
+function largePieConfirmedBy(
+  record: ReturnType<typeof sessionRouteState.getBindRecovery>,
+  currentProposalSignature: string | undefined,
+  keepLargePie: boolean | undefined,
+): boolean {
+  return (
+    keepLargePie === true &&
+    currentProposalSignature !== undefined &&
+    record !== undefined &&
+    record.phase !== 'terminal' &&
+    record.largePieConfirmation?.proposalSignature === currentProposalSignature
+  );
+}
+
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
@@ -1279,10 +1294,7 @@ function recoveryGateBlock(
   }
 
   if (record.phase !== 'terminal' && record.largePieConfirmation !== undefined) {
-    if (
-      keepLargePie === true &&
-      record.largePieConfirmation.proposalSignature === currentProposalSignature
-    ) {
+    if (largePieConfirmedBy(record, currentProposalSignature, keepLargePie)) {
       return undefined;
     }
     // Any other follow-up keeps the pie choice open; the artifact path would re-block the pie.
@@ -3450,6 +3462,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             ).toErr();
           }
 
+          let largePieConfirmed = false;
           try {
             const blocked = recoveryGateBlock(
               priorRecovery,
@@ -3462,6 +3475,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
             }
+            // Read before the reservation, which drops the grant.
+            largePieConfirmed = largePieConfirmedBy(
+              priorRecovery,
+              currentProposalSignature,
+              keep_large_pie,
+            );
             if (requestedDatasource === undefined) {
               bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
                 resolvedSession,
@@ -3551,6 +3570,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   return new IncompleteOperationError(blocked).toErr();
                 }
               }
+              largePieConfirmed = largePieConfirmedBy(
+                currentRecovery,
+                currentProposalSignature,
+                keep_large_pie,
+              );
               bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
                 resolvedSession,
                 askKey,
@@ -3701,7 +3725,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               datasource: effectiveDatasource,
               ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
-              ...(proposal && keep_large_pie === true ? { keepLargePie: true } : {}),
+              ...(proposal && largePieConfirmed ? { keepLargePie: true } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
             if (
@@ -3812,7 +3836,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   requiredFilterValues,
                 })
               : undefined;
-          if (largePieConfirmable(res, proposal as BindingProposal | undefined, keep_large_pie)) {
+          if (
+            largePieConfirmable(res, proposal as BindingProposal | undefined, largePieConfirmed)
+          ) {
             // The pie gate alone is a user decision, not a dead end: keep recovery open so the
             // same proposal can return once with the user's explicit keep-the-pie confirmation.
             const pieDetail =
