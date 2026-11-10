@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getFeatureGate } from '../../../features/init.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getAuthTypeForTelemetry } from '../../../telemetry/authType.js';
 import { getProductTelemetry } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
@@ -68,6 +69,7 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
             message: args.message ?? '',
             site_luid: extra.getSiteLuid(),
             user_luid: extra.getUserLuid(),
+            auth_type: getAuthTypeForTelemetry(extra.config, extra.tableauAuthInfo),
           });
 
           return Ok({ recorded: true as const });
