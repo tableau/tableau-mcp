@@ -1358,6 +1358,21 @@ function isProposalFilterResolutionFailure(
   );
 }
 
+/** True only when this call resubmits the exact pie proposal the slice gate asked the user to confirm. */
+function largePieConfirmedBy(
+  record: ReturnType<typeof sessionRouteState.getBindRecovery>,
+  currentProposalSignature: string | undefined,
+  keepLargePie: boolean | undefined,
+): boolean {
+  return (
+    keepLargePie === true &&
+    currentProposalSignature !== undefined &&
+    record !== undefined &&
+    record.phase !== 'terminal' &&
+    record.largePieConfirmation?.proposalSignature === currentProposalSignature
+  );
+}
+
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
@@ -1371,10 +1386,7 @@ function recoveryGateBlock(
   }
 
   if (record.phase !== 'terminal' && record.largePieConfirmation !== undefined) {
-    if (
-      keepLargePie === true &&
-      record.largePieConfirmation.proposalSignature === currentProposalSignature
-    ) {
+    if (largePieConfirmedBy(record, currentProposalSignature, keepLargePie)) {
       return undefined;
     }
     // Any other follow-up keeps the pie choice open; the artifact path would re-block the pie.
@@ -2608,6 +2620,7 @@ async function performAutoApply({
   trustedDeterministicApply,
   idempotencyKey,
   deterministicBindingFields,
+  keepLargePie,
   reportProgress,
 }: {
   res: BoundResult;
@@ -2628,6 +2641,8 @@ async function performAutoApply({
   trustedDeterministicApply?: boolean;
   idempotencyKey?: string;
   deterministicBindingFields?: string[];
+  /** The user explicitly chose a pie above the slice limit; do not warn about it again. */
+  keepLargePie?: boolean;
   reportProgress: (progress: 1 | 2 | 3, message: string) => Promise<void>;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
@@ -2983,6 +2998,7 @@ async function performAutoApply({
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
   const pieSliceWarning =
+    keepLargePie !== true &&
     args.template_name === 'part-to-whole-pie-chart' &&
     summaryRead.rawRowCount !== undefined &&
     summaryRead.rawRowCount > PIE_SLICE_WORKABLE_MAX
@@ -3575,6 +3591,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             ).toErr();
           }
 
+          let largePieConfirmed = false;
           try {
             const blocked = recoveryGateBlock(
               priorRecovery,
@@ -3587,6 +3604,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
             }
+            largePieConfirmed = largePieConfirmedBy(
+              priorRecovery,
+              currentProposalSignature,
+              keep_large_pie,
+            );
             if (requestedDatasource === undefined) {
               bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
                 resolvedSession,
@@ -3675,6 +3697,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 if (blocked) {
                   return new IncompleteOperationError(blocked).toErr();
                 }
+                largePieConfirmed = largePieConfirmedBy(
+                  currentRecovery,
+                  currentProposalSignature,
+                  keep_large_pie,
+                );
               }
               bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
                 resolvedSession,
@@ -4166,6 +4193,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             deterministicBindingFields: trustedDeterministicApply
               ? proposal?.bindings.map((binding) => binding.field)
               : undefined,
+            keepLargePie: largePieConfirmed,
             reportProgress,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full

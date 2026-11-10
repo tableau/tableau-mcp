@@ -10630,6 +10630,195 @@ describe('bindTemplateTool pie slice count after apply', () => {
     expect(body.guidance).not.toContain('nothing more is needed');
   });
 
+  describe('keep_large_pie (user already chose the pie)', () => {
+    const pieSlots = (): any[] => [
+      { slot_id: 'field_base_1', role: ['dimension'], kind: 'categorical', required: true },
+      { slot_id: 'field_base_2', role: ['measure'], kind: 'quantitative', required: true },
+    ];
+    const piePropose = (): BinderResult => ({
+      ...proposeResult,
+      llm_input: {
+        ...(proposeResult as Extract<BinderResult, { status: 'propose' }>).llm_input,
+        ask: PIE_ASK,
+        candidate_templates: [
+          {
+            template: 'part-to-whole-pie-chart',
+            description: 'Pie',
+            intent_keywords: ['pie'],
+            slots: pieSlots(),
+          },
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: pieSlots(),
+          },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    });
+    const pieGateEscalate: BinderResult = {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail:
+            'pie slice field "Region" has 49 distinct values, above the workable maximum of 12',
+          pie_slice_gate: true,
+        },
+      ],
+    };
+    const pieProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-pie-chart',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    };
+
+    function pieMocks(
+      bind: BinderResult = boundPieResult,
+    ): TableauDesktopToolContext['getExecutor'] {
+      const mocks = setupAutoApplyMocks({
+        bind,
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+        workbookReads: [PIE_WORKBOOK_XML],
+      });
+      sessionRouteState.clear();
+      return summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) });
+    }
+
+    function parse(result: CallToolResult): {
+      body: Record<string, any>;
+      result: CallToolResult;
+      remembered: unknown;
+    } {
+      invariant(result.content[0].type === 'text');
+      return {
+        body: JSON.parse(result.content[0].text),
+        result,
+        remembered: sessionRouteState.getAppliedSheet(
+          '1',
+          appliedSheetSignature(boundPieResult.args),
+        ),
+      };
+    }
+
+    function expectPieWarnsAndNotDone({ body, result }: ReturnType<typeof parse>): void {
+      expect(body.applied).toBe(true);
+      expect(body.pie_slice_warning).toMatchObject({ rows: 13 });
+      expect(body.completionEvidence).toBeUndefined();
+      expect((result.structuredContent?.nextAction as { kind: string } | undefined)?.kind).not.toBe(
+        'done',
+      );
+    }
+
+    // Call 1 proposes, Call 2 hits the pie gate (grant), Call 3 resubmits with the flag.
+    async function confirmedPie(
+      bind: BinderResult = boundPieResult,
+    ): Promise<ReturnType<typeof parse>> {
+      const getExecutor = pieMocks(bind);
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(piePropose())
+        .mockResolvedValueOnce(pieGateEscalate)
+        .mockResolvedValueOnce(bind);
+      await getToolResult({ session: '1', ask: PIE_ASK, getExecutor });
+      const blocked = await getToolResult({
+        session: '1',
+        ask: PIE_ASK,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      invariant(blocked.content[0].type === 'text');
+      expect(JSON.parse(blocked.content[0].text).reason).toBe('pie_slice_limit');
+      return parse(
+        await getToolResult({
+          session: '1',
+          ask: PIE_ASK,
+          proposal: pieProposal,
+          auto_apply: true,
+          keep_large_pie: true,
+          getExecutor,
+        }),
+      );
+    }
+
+    it('(a) confirmed via the gate: 13 rows apply with no warning, done and evidence mint', async () => {
+      const { body, result, remembered } = await confirmedPie();
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+        proposal: pieProposal,
+        keepLargePie: true,
+      });
+      expect(body.applied).toBe(true);
+      expect(body.pie_slice_warning).toBeUndefined();
+      expect(body.guidance).not.toContain('slices of');
+      expect(body.guidance).not.toContain('sorted bar');
+      expect(body.completionEvidence).toMatchObject({ coverage: 'applied_operation' });
+      expect(result.structuredContent?.completionEvidence).toBeDefined();
+      expect((result.structuredContent?.nextAction as { kind: string }).kind).toBe('done');
+      expect(remembered).toBeDefined();
+    });
+
+    it('(b) 13 rows without the flag: still warns and withholds done', async () => {
+      const getExecutor = pieMocks();
+      expectPieWarnsAndNotDone(
+        parse(await getToolResult({ session: '1', ask: PIE_ASK, auto_apply: true, getExecutor })),
+      );
+    });
+
+    it('(c) a confirmed pie with a skipped filter still withholds done', async () => {
+      const { body, result } = await confirmedPie({
+        ...boundPieResult,
+        args: { ...boundPieResult.args, filters: [{ field: 'Segment', values: ['A'] }] },
+      });
+      expect(body.pie_slice_warning).toBeUndefined();
+      expect(body.warnings).toEqual(['filter splice skipped: no unique field named "Segment"']);
+      expect(body.completionEvidence).toBeUndefined();
+      expect(result.structuredContent?.completionEvidence).toBeUndefined();
+      expect((result.structuredContent?.nextAction as { kind: string } | undefined)?.kind).not.toBe(
+        'done',
+      );
+    });
+
+    it('(d) the flag on Call 1 with no proposal still warns', async () => {
+      const getExecutor = pieMocks();
+      expectPieWarnsAndNotDone(
+        parse(
+          await getToolResult({
+            session: '1',
+            ask: PIE_ASK,
+            auto_apply: true,
+            keep_large_pie: true,
+            getExecutor,
+          }),
+        ),
+      );
+    });
+
+    it('(e) the flag on a first Call 2 with no prior grant still warns', async () => {
+      const getExecutor = pieMocks();
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(piePropose())
+        .mockResolvedValueOnce(boundPieResult);
+      await getToolResult({ session: '1', ask: PIE_ASK, getExecutor });
+      expectPieWarnsAndNotDone(
+        parse(
+          await getToolResult({
+            session: '1',
+            ask: PIE_ASK,
+            proposal: pieProposal,
+            auto_apply: true,
+            keep_large_pie: true,
+            getExecutor,
+          }),
+        ),
+      );
+    });
+  });
+
   it('a clean pie with 13 rows keeps "nothing more is needed"', async () => {
     const { body } = await applyPie(pieRows(13));
     expect(body.guidance).toContain('If the user wants the pie, nothing more is needed.');
