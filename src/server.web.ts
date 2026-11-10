@@ -29,6 +29,7 @@ import { ClientInfo, Server } from './server.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { getScopeGrantCheck } from './server/oauth/scopes.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
@@ -526,7 +527,8 @@ export class WebMcpServer extends Server {
     // scope that was never offered. Omitting here (over letting the probe run) keeps the message honest: a
     // missing probe scope reads as "you didn't grant this" rather than being mislabeled as "feature absent".
     const checkConditionApiScopes = checkApiScopes && enforceRegistrationConditions;
-    const grantedScopeSet = new Set(grantedScopes ?? []);
+    const isGranted = await getScopeGrantCheck(grantedScopes ?? []);
+    const isMissing = (scope: string): boolean => !isGranted(scope);
 
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
@@ -551,10 +553,9 @@ export class WebMcpServer extends Server {
       // probing conditions for a tool the caller's token already can't use — including the probe
       // scopes themselves, so a tool is omitted up front rather than failing its condition check.
       const missingScope =
-        (checkMcpScopes && tool.requiredMcpScopes.some((scope) => !grantedScopeSet.has(scope))) ||
-        (checkApiScopes && tool.requiredApiScopes.some((scope) => !grantedScopeSet.has(scope))) ||
-        (checkConditionApiScopes &&
-          tool.requiredConditionApiScopes.some((scope) => !grantedScopeSet.has(scope)));
+        (checkMcpScopes && tool.requiredMcpScopes.some(isMissing)) ||
+        (checkApiScopes && tool.requiredApiScopes.some(isMissing)) ||
+        (checkConditionApiScopes && tool.requiredConditionApiScopes.some(isMissing));
       if (missingScope) {
         toolsOmittedForMissingScopes.push(tool.name);
         continue;

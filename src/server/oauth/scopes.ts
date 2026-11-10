@@ -14,6 +14,7 @@ import {
   isKnowledgeToolsEnabled,
   isKnowledgeWriteToolsEnabled,
 } from '../../features/knowledgeTools.js';
+import { isMcpWildcardScopeEnabled } from '../../features/mcpWildcardScope.js';
 import { getTableauServerInfo } from '../../getTableauServerInfo.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import { isDataAppVersionSupported } from '../../tools/web/scaffoldDataApp/dataAppVersion.js';
@@ -218,6 +219,53 @@ export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:
  * are advertised (see isSiteSettingsScopeRequired).
  */
 export const MCP_SITE_SETTINGS_READ_SCOPE: TableauApiScope = 'tableau:mcp_site_settings:read';
+
+const MCP_SCOPE_PREFIX = 'tableau:mcp:';
+
+/**
+ * Grants every MCP scope the server supports. Advertised in place of the explicit MCP scopes so the
+ * list clients request stays short. It never grants Tableau API scopes.
+ */
+export const MCP_WILDCARD_SCOPE = `${MCP_SCOPE_PREFIX}*`;
+
+export function isMcpScope(scope: string): boolean {
+  return scope.startsWith(MCP_SCOPE_PREFIX);
+}
+
+function isScopeGranted(scope: string, grantedScopes: ReadonlyArray<string>): boolean {
+  return (
+    grantedScopes.includes(scope) ||
+    (isMcpScope(scope) && grantedScopes.includes(MCP_WILDCARD_SCOPE))
+  );
+}
+
+/**
+ * Returns a check for whether `grantedScopes` grant a scope: explicitly, or for an MCP scope through
+ * {@link MCP_WILDCARD_SCOPE} when that is enabled.
+ */
+export async function getScopeGrantCheck(
+  grantedScopes: ReadonlyArray<string>,
+): Promise<(scope: string) => boolean> {
+  return (await isMcpWildcardScopeEnabled())
+    ? (scope) => isScopeGranted(scope, grantedScopes)
+    : (scope) => grantedScopes.includes(scope);
+}
+
+/**
+ * Lists {@link MCP_WILDCARD_SCOPE} in place of the MCP scopes when `scopes` grant every supported MCP
+ * scope, so a scope challenge never spells out the full MCP list.
+ */
+export function collapseMcpScopes(
+  scopes: ReadonlyArray<string>,
+  supportedMcpScopes: ReadonlyArray<string>,
+): string[] {
+  const grantsAllMcpScopes =
+    supportedMcpScopes.length > 0 &&
+    supportedMcpScopes.every((scope) => isScopeGranted(scope, scopes));
+  return grantsAllMcpScopes
+    ? [MCP_WILDCARD_SCOPE, ...scopes.filter((scope) => !isMcpScope(scope))]
+    : [...scopes];
+}
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -711,6 +759,14 @@ export async function getSupportedApiScopes(
   return Array.from(scopes);
 }
 
+/**
+ * Every scope the embedded authorization server accepts in an authorize or token request: each
+ * explicit MCP scope, the MCP wildcard when enabled, and (when `includeApiScopes`) the Tableau API
+ * scopes. A request for any other scope is rejected with `invalid_scope`.
+ *
+ * With the wildcard enabled, this is broader than {@link getAdvertisedScopes}, which offers only the
+ * wildcard for MCP, so clients that request explicit MCP scopes or a subset still get a token.
+ */
 export async function getSupportedScopes({
   includeApiScopes,
   clientId,
@@ -718,9 +774,32 @@ export async function getSupportedScopes({
   includeApiScopes: boolean;
   clientId?: string;
 }): Promise<string[]> {
-  const mcpScopes = await getSupportedMcpScopes(clientId);
+  const explicitMcpScopes = await getSupportedMcpScopes(clientId);
+  const mcpScopes = (await isMcpWildcardScopeEnabled())
+    ? [MCP_WILDCARD_SCOPE, ...explicitMcpScopes]
+    : explicitMcpScopes;
   const apiScopes = await getSupportedApiScopes(clientId);
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
+}
+
+/**
+ * The scopes advertised to clients and granted by default: the MCP wildcard in place of the
+ * explicit MCP scopes when enabled, plus (when `includeApiScopes`) the Tableau API scopes.
+ */
+export async function getAdvertisedScopes({
+  includeApiScopes,
+  clientId,
+}: {
+  includeApiScopes: boolean;
+  clientId?: string;
+}): Promise<string[]> {
+  if (!(await isMcpWildcardScopeEnabled())) {
+    return getSupportedScopes({ includeApiScopes, clientId });
+  }
+
+  return includeApiScopes
+    ? [MCP_WILDCARD_SCOPE, ...(await getSupportedApiScopes(clientId))]
+    : [MCP_WILDCARD_SCOPE];
 }
 
 /**

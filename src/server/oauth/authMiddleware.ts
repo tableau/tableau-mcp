@@ -2,6 +2,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
+import { isMcpWildcardScopeEnabled } from '../../features/mcpWildcardScope.js';
 import {
   isSiteSettingsScopeRequired,
   isStrictScopeMatchEnabled,
@@ -14,9 +15,11 @@ import {
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
+  collapseMcpScopes,
   formatScopes,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
+  getScopeGrantCheck,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   MCP_SITE_SETTINGS_READ_SCOPE,
@@ -74,7 +77,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       );
       const scopeParam =
         enforceScopes && requiredMcpScopes.length > 0
-          ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
+          ? `, scope="${await formatChallengeScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
           : '';
       res
         .status(401)
@@ -139,18 +142,16 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         strict,
         authInfo.clientId,
       );
-      const missingMcpScopes = requiredMcpScopes.filter(
-        (scope) => !authInfo.scopes.includes(scope),
-      );
+      const isGranted = await getScopeGrantCheck(authInfo.scopes);
+      const missingMcpScopes = requiredMcpScopes.filter((scope) => !isGranted(scope));
       const shouldCheckApiScopes = advertiseApiScopes;
       const missingApiScopes = shouldCheckApiScopes
-        ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
+        ? requiredApiScopes.filter((scope) => !isGranted(scope))
         : [];
       // Checked on every request, including initialize: registration reads the site's settings for
       // every session, and a token without the scope would read them as empty.
       const missingMandatory =
-        (await isSiteSettingsScopeRequired(config)) &&
-        !authInfo.scopes.includes(MCP_SITE_SETTINGS_READ_SCOPE)
+        (await isSiteSettingsScopeRequired(config)) && !isGranted(MCP_SITE_SETTINGS_READ_SCOPE)
           ? [MCP_SITE_SETTINGS_READ_SCOPE]
           : [];
       // Dedupe: many tools also list the mandatory scope among their own API scopes.
@@ -187,7 +188,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
             ...authInfo.scopes,
           ]),
         ];
-        const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
+        const scopeParam = `scope="${await formatChallengeScopes(requiredScopesForChallenge, authInfo.clientId)}"`;
         // Name the specific missing scopes and append the shared 403 guidance so the failure is not
         // misread as a missing feature. The challenge header keeps a static error_description (it is a
         // header value); the richer text goes in the response body.
@@ -221,6 +222,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     req.auth = authInfo;
     next();
   };
+}
+
+async function formatChallengeScopes(scopes: string[], clientId?: string): Promise<string> {
+  if (!(await isMcpWildcardScopeEnabled())) {
+    return formatScopes(scopes);
+  }
+
+  return formatScopes(collapseMcpScopes(scopes, await getSupportedMcpScopes(clientId)));
 }
 
 async function getRequiredMcpScopesForRequest(

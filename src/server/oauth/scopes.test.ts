@@ -2,12 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  collapseMcpScopes,
+  getAdvertisedScopes,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
+  getScopeGrantCheck,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
   isValidScope,
+  MCP_WILDCARD_SCOPE,
 } from './scopes.js';
 
 const mocks = vi.hoisted(() => ({
@@ -1110,6 +1114,28 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:content:read');
     });
 
+    it('should accept the MCP wildcard alongside the explicit MCP scopes when the mcp-wildcard-scope flag is on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'mcp-wildcard-scope',
+      );
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+      const scopes = await getSupportedScopes({ includeApiScopes: false });
+      expect(scopes).toContain(MCP_WILDCARD_SCOPE);
+      expect(scopes).toContain('tableau:mcp:datasource:read');
+    });
+
+    it('should not accept the MCP wildcard when the mcp-wildcard-scope flag is off', async () => {
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+      const scopes = await getSupportedScopes({ includeApiScopes: true });
+      expect(scopes).not.toContain(MCP_WILDCARD_SCOPE);
+      expect(scopes).toEqual([
+        ...(await getSupportedMcpScopes()),
+        ...(await getSupportedApiScopes()),
+      ]);
+    });
+
     it('should respect adminToolsEnabled flag when includeApiScopes is true', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -1143,6 +1169,120 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:content:delete');
       expect(scopes).toContain('tableau:tasks:read');
       expect(scopes).toContain('tableau:users:update');
+    });
+  });
+
+  describe('getAdvertisedScopes', () => {
+    describe('with the mcp-wildcard-scope flag on', () => {
+      beforeEach(() => {
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) => featureName === 'mcp-wildcard-scope',
+        );
+      });
+
+      it('advertises the MCP wildcard in place of the explicit MCP scopes', async () => {
+        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+        await expect(getAdvertisedScopes({ includeApiScopes: false })).resolves.toEqual([
+          MCP_WILDCARD_SCOPE,
+        ]);
+      });
+
+      it('advertises the MCP wildcard and the supported API scopes when includeApiScopes is true', async () => {
+        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+        const scopes = await getAdvertisedScopes({ includeApiScopes: true });
+        expect(scopes).toEqual([MCP_WILDCARD_SCOPE, ...(await getSupportedApiScopes())]);
+        expect(scopes).toContain('tableau:content:read');
+      });
+    });
+
+    it.each([false, true])(
+      'advertises the explicit supported scopes when the flag is off (includeApiScopes=%s)',
+      async (includeApiScopes) => {
+        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+        await expect(getAdvertisedScopes({ includeApiScopes })).resolves.toEqual(
+          await getSupportedScopes({ includeApiScopes }),
+        );
+      },
+    );
+  });
+
+  describe('getScopeGrantCheck', () => {
+    it('grants a scope the token lists explicitly', async () => {
+      const isGranted = await getScopeGrantCheck([
+        'tableau:mcp:datasource:read',
+        'tableau:content:read',
+      ]);
+
+      expect(isGranted('tableau:mcp:datasource:read')).toBe(true);
+      expect(isGranted('tableau:content:read')).toBe(true);
+    });
+
+    it('does not grant a scope the token lacks', async () => {
+      const isGranted = await getScopeGrantCheck(['tableau:mcp:datasource:read']);
+
+      expect(isGranted('tableau:mcp:workbook:read')).toBe(false);
+    });
+
+    describe('with the mcp-wildcard-scope flag on', () => {
+      beforeEach(() => {
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) => featureName === 'mcp-wildcard-scope',
+        );
+      });
+
+      it('grants every MCP scope to a token with the MCP wildcard', async () => {
+        const isGranted = await getScopeGrantCheck([MCP_WILDCARD_SCOPE]);
+
+        expect(isGranted('tableau:mcp:datasource:read')).toBe(true);
+        expect(isGranted('tableau:mcp:content:delete')).toBe(true);
+      });
+
+      it('does not grant Tableau API scopes to a token with the MCP wildcard', async () => {
+        const isGranted = await getScopeGrantCheck([MCP_WILDCARD_SCOPE]);
+
+        expect(isGranted('tableau:content:read')).toBe(false);
+        expect(isGranted('tableau:mcp_site_settings:read')).toBe(false);
+      });
+    });
+
+    it('grants nothing through the MCP wildcard when the flag is off', async () => {
+      const isGranted = await getScopeGrantCheck([MCP_WILDCARD_SCOPE]);
+
+      expect(isGranted('tableau:mcp:datasource:read')).toBe(false);
+      expect(isGranted(MCP_WILDCARD_SCOPE)).toBe(true);
+    });
+  });
+
+  describe('collapseMcpScopes', () => {
+    const supported = ['tableau:mcp:datasource:read', 'tableau:mcp:workbook:read'];
+
+    it('lists the wildcard in place of the MCP scopes when every supported one is listed', () => {
+      expect(collapseMcpScopes([...supported, 'tableau:content:read'], supported)).toEqual([
+        MCP_WILDCARD_SCOPE,
+        'tableau:content:read',
+      ]);
+    });
+
+    it('drops explicit MCP scopes that the wildcard already covers', () => {
+      expect(
+        collapseMcpScopes(
+          ['tableau:mcp:datasource:read', MCP_WILDCARD_SCOPE, 'tableau:content:read'],
+          supported,
+        ),
+      ).toEqual([MCP_WILDCARD_SCOPE, 'tableau:content:read']);
+    });
+
+    it('keeps the scopes as listed when some supported MCP scope is not covered', () => {
+      expect(
+        collapseMcpScopes(['tableau:mcp:datasource:read', 'tableau:content:read'], supported),
+      ).toEqual(['tableau:mcp:datasource:read', 'tableau:content:read']);
+    });
+
+    it('adds no wildcard when the server supports no MCP scopes', () => {
+      expect(collapseMcpScopes(['tableau:content:read'], [])).toEqual(['tableau:content:read']);
     });
   });
 
