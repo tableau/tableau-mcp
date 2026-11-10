@@ -759,6 +759,25 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:workbooks:update');
     });
 
+    it.each([
+      { mcpApps: true, interactiveViz: false, expected: false },
+      { mcpApps: true, interactiveViz: true, expected: true },
+      { mcpApps: false, interactiveViz: true, expected: false },
+    ])(
+      'advertises tableau:views:embed only when mcp-apps=$mcpApps and interactive-viz=$interactiveViz are both on',
+      async ({ mcpApps, interactiveViz, expected }) => {
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) =>
+            (featureName === 'mcp-apps' && mcpApps) ||
+            (featureName === 'interactive-viz' && interactiveViz),
+        );
+        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+        const scopes = await getSupportedApiScopes(claudeClientId);
+        expect(scopes.includes('tableau:views:embed')).toBe(expected);
+      },
+    );
+
     it('should include tableau:workbooks:update when data-apps is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
         return featureName === 'data-apps';

@@ -15,7 +15,7 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import {
   DATA_ROOT,
-  getConfiguredKnowledgeDir,
+  getConfiguredExpertiseDir,
   readResourceAsset,
   RESOURCES_ROOT,
 } from './desktop/assets.js';
@@ -25,16 +25,16 @@ import {
   TOOL_PROFILE_NAMES,
   type ToolSchemaProfile,
 } from './desktop/episode-events.js';
+import {
+  getExpertiseCorpusEntryCount,
+  listExpertiseResources,
+  readExpertiseResource,
+} from './desktop/expertise/index.js';
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
 import { discoverInstances } from './desktop/externalApi/discovery.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
-import {
-  getKnowledgeCorpusEntryCount,
-  listKnowledgeResources,
-  readKnowledgeResource,
-} from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
@@ -72,7 +72,7 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * native authoring surface: the author-* tools (calcs, sets, parameters, actions),
  * format-worksheets, ask-user, bind-template for single-view asks, the guarded
  * template artifact fallback, and refine-worksheet for top-N and sort edits in place. It also
- * includes the two knowledge tools (search-knowledge and read-knowledge-resource), because the
+ * includes the two expertise tools (search-expertise and read-expertise-resource), because the
  * instructions tell the model to consult the expertise library before authoring and these are
  * the only way it can read that library. Workbook and data reads, navigation, dialog handling
  * and scoped cached-XML fallbacks are included. Clients that need more can use TOOL_PROFILE=full.
@@ -129,6 +129,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'refresh-dashboard-auto-updates',
     'reload-extensions',
     'get-workbook-extensions',
+    'get-workspace-extensions',
+    'reload-workspace-extension',
     'scaffold-data-app',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
@@ -172,18 +174,18 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'format-worksheets',
     'format-dashboard-zones',
     'set-member-colors',
-    'read-knowledge-resource',
-    'search-knowledge',
+    'read-expertise-resource',
+    'search-expertise',
   ]);
 
 /** Claude Code keeps these loaded under tool search; evals showed agents calling each blind. */
 export const ALWAYS_LOAD_TOOL_NAMES: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'rename-sheet',
-  'read-knowledge-resource',
+  'read-expertise-resource',
   'run-dashboard-batch',
   'get-dashboard-xml',
   'invoke-dialog-action',
-  'search-knowledge',
+  'search-expertise',
 ]);
 
 function getDesktopToolMeta(name: DesktopToolName): { _meta?: Record<string, unknown> } {
@@ -278,7 +280,7 @@ export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: fa
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
-  private knowledgeCorpusChecked = false;
+  private expertiseCorpusChecked = false;
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({
@@ -294,21 +296,21 @@ export class DesktopMcpServer extends Server {
   }
 
   registerResources = async (): Promise<void> => {
-    if (!this.knowledgeCorpusChecked) {
-      this.knowledgeCorpusChecked = true;
-      if (getKnowledgeCorpusEntryCount() === 0) {
-        const configuredDir = getConfiguredKnowledgeDir();
+    if (!this.expertiseCorpusChecked) {
+      this.expertiseCorpusChecked = true;
+      if (getExpertiseCorpusEntryCount() === 0) {
+        const configuredDir = getConfiguredExpertiseDir();
         log({
           message: configuredDir
-            ? `Knowledge corpus is empty; expected assets under ${configuredDir}`
-            : 'Knowledge corpus is empty; set TABLEAU_KNOWLEDGE_DIR to a knowledge root to serve one',
+            ? `Expertise corpus is empty; expected assets under ${configuredDir}`
+            : 'Expertise corpus is empty; set TABLEAU_EXPERTISE_DIR to an expertise root to serve one',
           level: 'warning',
           logger: 'DesktopMcpServer',
         });
       }
     }
     await this._registerDashboardXmlGuide();
-    this._registerKnowledgeResources();
+    this._registerExpertiseResources();
   };
 
   registerTools = async (): Promise<void> => {
@@ -417,10 +419,10 @@ export class DesktopMcpServer extends Server {
     return gatedTools;
   };
 
-  private _registerKnowledgeResources = (): void => {
+  private _registerExpertiseResources = (): void => {
     const template = new ResourceTemplate('expertise://tableau/{+slug}', {
       list: () => ({
-        resources: listKnowledgeResources().map(({ uri, name, description, mimeType }) => ({
+        resources: listExpertiseResources().map(({ uri, name, description, mimeType }) => ({
           uri,
           name,
           description,
@@ -430,21 +432,21 @@ export class DesktopMcpServer extends Server {
     });
 
     this.registerResource({
-      name: 'tableau-expertise-knowledge',
-      title: 'Tableau authoring knowledge',
+      name: 'tableau-expertise',
+      title: 'Tableau authoring expertise',
       description:
-        'Expertise modules scanned from the configured knowledge root (TABLEAU_KNOWLEDGE_DIR)',
+        'Expertise modules scanned from the configured expertise root (TABLEAU_EXPERTISE_DIR)',
       template,
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];
         if (typeof slug !== 'string' || !slug) {
           throw new McpError(ErrorCode.InvalidParams, 'Missing expertise slug in URI.');
         }
-        const text = readKnowledgeResource(`expertise://tableau/${slug}`);
+        const text = readExpertiseResource(`expertise://tableau/${slug}`);
         if (!text) {
           throw new McpError(
             ErrorCode.InvalidParams,
-            `Unknown knowledge resource: expertise://tableau/${slug}`,
+            `Unknown expertise resource: expertise://tableau/${slug}`,
           );
         }
         return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text }] };

@@ -1,5 +1,6 @@
 {
   "mcp-apps": false,
+  "interactive-viz": false,
   "mcp-apps-for-claude": false,
   "enforce-role-requirements": true,
   "enforce-registration-conditions": true,
