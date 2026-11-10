@@ -12,8 +12,10 @@ import {
   isDesktopCallTimeout,
 } from '../callDeadline.js';
 import {
+  externalApiDisabledMessage,
   noInstanceFoundMessage,
   unknownInstanceUnreachableMessage,
+  UNPINNED_NO_INSTANCE_HINT,
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
 import { runAlwaysBlockingValidation } from '../validation/registry.js';
@@ -1385,6 +1387,16 @@ function mapClientError(
         error: `External Client API instance changed from ${error.expected} to ${error.actual}. Build a fresh artifact for the current Desktop instance.`,
       };
     case 'problem': {
+      if (error.status === 503 && error.code === 'api-disabled') {
+        return {
+          type: 'command-failed',
+          error: classifySessionFatalError({
+            code: 'api-disabled',
+            message: externalApiDisabledMessage(),
+            recoverable: false,
+          }),
+        };
+      }
       // A client-rejected document apply reports the generic `operation-failed` in `code`
       // and the real Tableau code in the RFC-9457 `tableauErrorCode` extension. Surface that
       // extension when present so the agent sees the specific code, not `operation-failed`.
@@ -1475,7 +1487,7 @@ function mapClientError(
         error:
           error.pinnedPid !== undefined
             ? noInstanceFoundMessage(error.pinnedPid)
-            : unknownInstanceUnreachableMessage(),
+            : `${unknownInstanceUnreachableMessage()} ${UNPINNED_NO_INSTANCE_HINT}`,
       };
   }
 }

@@ -36,3 +36,21 @@ export function unknownInstanceUnreachableMessage(cause?: string): string {
     'Call list-instances to find a running Desktop and retry with that session.';
   return cause ? `${base} Cause: ${cause}` : base;
 }
+
+export const EXTERNAL_API_ACCESS_HOW_TO_FIX =
+  'Turn it on in Tableau Desktop with Help > Settings and Performance > Enable External API Access, then restart Tableau. If that item is greyed out, your administrator controls this setting.';
+
+export function externalApiDisabledMessage(): string {
+  return `External API access is turned off in Tableau Desktop. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`;
+}
+
+export function pinnedDesktopNotAcceptingMessage(pid: string | number): string {
+  return (
+    `A process with PID ${pid} is still running but isn't accepting agent connections. ` +
+    `If it is Tableau Desktop and has finished starting, External API access is probably turned off. ${EXTERNAL_API_ACCESS_HOW_TO_FIX} ` +
+    'Then relaunch the agent from Tableau Desktop to reconnect.'
+  );
+}
+
+export const UNPINNED_NO_INSTANCE_HINT =
+  'If Tableau Desktop is open, External API access may be turned off: Help > Settings and Performance > Enable External API Access.';

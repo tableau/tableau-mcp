@@ -10,6 +10,10 @@ import {
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
+import {
+  EXTERNAL_API_ACCESS_HOW_TO_FIX,
+  unknownInstanceUnreachableMessage,
+} from '../session/unreachableInstance.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
@@ -2222,7 +2226,11 @@ describe('ExternalApiToolExecutor', () => {
       if (error.type === 'command-failed') {
         expect(error.error?.code).toBe('api-disabled');
         expect(error.error?.recoverable).toBe(false);
-        expect(error.error?.message).toContain('External Client API is disabled.');
+        expect(error.error?.message).toContain(
+          'External API access is turned off in Tableau Desktop.',
+        );
+        expect(error.error?.message).toContain(EXTERNAL_API_ACCESS_HOW_TO_FIX);
+        expect(error.error?.message).not.toContain('may have been invoked');
         expect(error.error?.message).not.toContain('outcome is indeterminate');
       }
       expect(
@@ -3014,7 +3022,10 @@ describe('ExternalApiToolExecutor', () => {
 
       expect(result.unwrapErr()).toMatchObject({
         type: 'command-failed',
-        error: { code: 'api-disabled' },
+        error: {
+          code: 'api-disabled',
+          message: expect.stringContaining(EXTERNAL_API_ACCESS_HOW_TO_FIX),
+        },
       });
       expect(fetchSpy).toHaveBeenCalledOnce();
     });
@@ -3131,5 +3142,32 @@ describe('ExternalApiToolExecutor artifact instance identity', () => {
     expect(firstPost).toHaveBeenCalledTimes(1);
     expect(retryPost).not.toHaveBeenCalled();
     expect(onDispatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('missing-instance messages', () => {
+  const signal = new AbortController().signal;
+
+  it('adds the access-off hint when unpinned and no instance is found', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [] });
+    await executor.start();
+    const error = (await executor.getWorkbookDocument(signal)).unwrapErr();
+    expect(error.error).toContain('External API access may be turned off');
+  });
+
+  it('omits the hint from the cause variant', () => {
+    expect(unknownInstanceUnreachableMessage('boom')).not.toContain('External API access');
+  });
+
+  it('keeps the stale message with a list-instances pointer and no access hint for a pinned pid', async () => {
+    const executor = new ExternalApiToolExecutor({
+      discover: () => [],
+      pid: 4242,
+    });
+    await executor.start();
+    const error = (await executor.getWorkbookDocument(signal)).unwrapErr();
+    expect(error.error).toContain('No Desktop instance found with PID 4242');
+    expect(error.error).toContain('list-instances');
+    expect(error.error).not.toContain('External API access');
   });
 });
