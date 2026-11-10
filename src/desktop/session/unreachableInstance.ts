@@ -10,6 +10,8 @@
  * keeps the same tool-side cache but not the same workbook.
  */
 
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
+
 /** A restarted Desktop keeps the tool-side XML cache but not the workbook it was read from. */
 export const CACHED_XML_WARNING =
   'Cached XML from the old session may not match the current workbook — re-read before applying.';
@@ -37,8 +39,7 @@ export function unknownInstanceUnreachableMessage(cause?: string): string {
   return cause ? `${base} Cause: ${cause}` : base;
 }
 
-export const EXTERNAL_API_ACCESS_HOW_TO_FIX =
-  'Turn it on in Tableau Desktop with Help > Settings and Performance > Enable External API Access, then restart Tableau. If that item is greyed out, your administrator controls this setting.';
+export { EXTERNAL_API_ACCESS_HOW_TO_FIX };
 
 export function externalApiDisabledMessage(): string {
   return `External API access is turned off in Tableau Desktop. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`;

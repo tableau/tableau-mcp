@@ -1,6 +1,7 @@
 import * as configModule from '../../config.desktop.js';
 import * as externalDiscovery from '../externalApi/discovery.js';
 import { resolveSession } from './sessionResolution.js';
+import { UNPINNED_NO_INSTANCE_HINT } from './unreachableInstance.js';
 
 function mockConfig(overrides: Partial<configModule.Config>): void {
   const base = new configModule.Config();
@@ -92,7 +93,9 @@ describe('resolveSession', () => {
     expect(result.isErr()).toBe(true);
     const text = result.unwrapErr().getErrorText();
     expect(text).toContain('7');
+    expect(text).toContain('99');
     expect(text).toContain('list-instances');
+    expect(text).toContain(UNPINNED_NO_INSTANCE_HINT);
   });
 
   it('accepts an explicit session when discovery is empty and nothing is pinned (deliberate fail-open)', () => {

@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../../desktop/session/unreachableInstance.js';
 import { NoDesktopInstancesFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -48,6 +49,12 @@ describe('listInstancesTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new NoDesktopInstancesFoundError().message);
+  });
+
+  it('tells the user how to turn on External API access when no instances are found', () => {
+    const { message } = new NoDesktopInstancesFoundError();
+    expect(message).toContain(EXTERNAL_API_ACCESS_HOW_TO_FIX);
+    expect(message).toContain('older builds need an update');
   });
 
   it('should successfully list instances', async () => {
