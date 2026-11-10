@@ -111,6 +111,7 @@ async function call(
       datasource: undefined,
       proposal: undefined,
       skip_validation: undefined,
+      keep_large_pie: undefined,
       calcs: undefined,
       auto_apply: args.proposal !== undefined,
       ...args,

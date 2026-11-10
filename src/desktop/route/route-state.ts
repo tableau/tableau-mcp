@@ -153,6 +153,11 @@ export interface BindRecoveryRecord {
   };
   /** Outcome records that could not be correlated to a live pending reservation. */
   uncorrelatedOutcomeCount?: number;
+  /**
+   * Set when a proposal's only blocker was the too-many-slices pie gate: the same proposal may
+   * come back once with the user's keep-the-pie confirmation. The next admission drops it.
+   */
+  largePieConfirmation?: { proposalSignature: string; detail: string };
 }
 
 export interface BindRecoveryAttemptInput {
@@ -825,6 +830,28 @@ export class SessionRouteStateStore {
     return this.touchBindRecovery(state, ask, {
       ...record,
       preDispatchRetryAllowance: { proposalSignature, remaining: 1 },
+    });
+  }
+
+  grantLargePieConfirmation(
+    sessionId: string | undefined,
+    ask: string,
+    proposalSignature: string,
+    detail: string,
+  ): boolean {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (
+      !state ||
+      !record ||
+      record.phase === 'terminal' ||
+      record.lastProposalSignature !== proposalSignature
+    ) {
+      return false;
+    }
+    return this.touchBindRecovery(state, ask, {
+      ...record,
+      largePieConfirmation: { proposalSignature, detail },
     });
   }
 

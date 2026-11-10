@@ -27,7 +27,11 @@ import {
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
-import { pieSliceGateDetail } from '../../../../desktop/binder/validate.js';
+import {
+  onlyPieSliceGate,
+  PIE_TEMPLATE_NAME,
+  pieSliceGateDetail,
+} from '../../../../desktop/binder/validate.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import {
@@ -148,6 +152,7 @@ const paramsSchema = {
   auto_apply: z.boolean().optional().describe('Apply now'),
   requireCompleteRequest: z.boolean().optional().describe('Prove full ask or decline, no writes'),
   skip_validation: z.boolean().optional(),
+  keep_large_pie: z.boolean().optional().describe('User-confirmed big pie'),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
@@ -292,6 +297,7 @@ type BlockedBindTemplateResult = {
     | 'ambiguous_filter_intent'
     | 'proposal_contract_mismatch'
     | 'proposal_filter_resolution_failed'
+    | 'pie_slice_limit'
     | 'request_not_covered';
   applied?: false;
   may_have_applied?: false;
@@ -647,11 +653,43 @@ function bareResubmitFallbackResult(
   );
 }
 
-function correctionFallbackResult(detail?: string): StructuredBindTemplateToolResult {
+function correctionFallbackResult(pieDetail?: string): StructuredBindTemplateToolResult {
+  if (pieDetail) {
+    return blockedResult(
+      'fallback_required',
+      `Blocked: the single structured bind correction did not bind and apply. ${pieDetail}. If the user picks the sorted bar, bind it as a new ask.`,
+      'Offer the sorted bar to the user',
+    );
+  }
   return blockedResult(
     'fallback_required',
-    `Blocked: the single structured bind correction did not bind and apply.${detail ? ` ${detail}.` : ''} Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.`,
+    'Blocked: the single structured bind correction did not bind and apply. Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
     'Use template artifact fallback',
+  );
+}
+
+// Warn and offer, never order a rebuild: agents refuse to drop a chart type the user named.
+function pieSliceLimitResult(detail: string): StructuredBindTemplateToolResult {
+  return blockedResult(
+    'pie_slice_limit',
+    `Not applied: ${detail}. If the user picks the sorted bar, bind it as a new ask. ` +
+      'Only if the user explicitly says they want the pie anyway, resubmit this same ask and the same pie proposal with keep_large_pie:true. ' +
+      'Never set keep_large_pie without that confirmation.',
+    'Offer sorted bar; keep pie only if asked',
+  );
+}
+
+/** The blocker set a user's explicit keep-the-pie confirmation may lift. */
+function largePieConfirmable(
+  res: BinderResult,
+  proposal: BindingProposal | undefined,
+  keepLargePie: boolean | undefined,
+): boolean {
+  return (
+    res.status === 'escalate' &&
+    keepLargePie !== true &&
+    proposal?.template === PIE_TEMPLATE_NAME &&
+    onlyPieSliceGate(res.blockers)
   );
 }
 
@@ -1234,9 +1272,21 @@ function recoveryGateBlock(
   session: string,
   askKey: string,
   targetWorksheet: string | undefined,
+  keepLargePie?: boolean,
 ): StructuredBindTemplateToolResult | undefined {
   if (!record) {
     return undefined;
+  }
+
+  if (record.phase !== 'terminal' && record.largePieConfirmation !== undefined) {
+    if (
+      keepLargePie === true &&
+      record.largePieConfirmation.proposalSignature === currentProposalSignature
+    ) {
+      return undefined;
+    }
+    // Any other follow-up keeps the pie choice open; the artifact path would re-block the pie.
+    return pieSliceLimitResult(record.largePieConfirmation.detail);
   }
 
   if (record.phase === 'terminal') {
@@ -3300,6 +3350,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         datasource,
         calcs,
         skip_validation,
+        keep_large_pie,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -3316,6 +3367,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           datasource,
           calcs,
           skip_validation,
+          keep_large_pie,
         },
         callback: async () => {
           const reportProgress = async (progress: 1 | 2 | 3, message: string): Promise<void> =>
@@ -3333,6 +3385,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               proposal !== undefined ||
               calcs !== undefined ||
               skip_validation !== undefined ||
+              keep_large_pie !== undefined ||
               target_worksheet !== undefined ||
               datasource !== undefined)
           ) {
@@ -3404,6 +3457,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               resolvedSession,
               askKey,
               target_worksheet,
+              keep_large_pie,
             );
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
@@ -3491,6 +3545,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   resolvedSession,
                   askKey,
                   target_worksheet,
+                  keep_large_pie,
                 );
                 if (blocked) {
                   return new IncompleteOperationError(blocked).toErr();
@@ -3646,6 +3701,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               datasource: effectiveDatasource,
               ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
+              ...(proposal && keep_large_pie === true ? { keepLargePie: true } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
             if (
@@ -3756,6 +3812,34 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   requiredFilterValues,
                 })
               : undefined;
+          if (largePieConfirmable(res, proposal as BindingProposal | undefined, keep_large_pie)) {
+            // The pie gate alone is a user decision, not a dead end: keep recovery open so the
+            // same proposal can return once with the user's explicit keep-the-pie confirmation.
+            const pieDetail =
+              (res.status === 'escalate' ? pieSliceGateDetail(res.blockers) : undefined) ??
+              'the pie has too many slices';
+            try {
+              sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: res.status,
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+              });
+              if (currentProposalSignature !== undefined) {
+                sessionRouteState.grantLargePieConfirmation(
+                  resolvedSession,
+                  askKey,
+                  currentProposalSignature,
+                  pieDetail,
+                );
+              }
+            } catch {
+              /* fail-open */
+            }
+            return new IncompleteOperationError(pieSliceLimitResult(pieDetail)).toErr();
+          }
           if (isStructuredCorrectionCall && res.status !== 'bound') {
             const filterResolutionFailure =
               res.status === 'escalate' &&
