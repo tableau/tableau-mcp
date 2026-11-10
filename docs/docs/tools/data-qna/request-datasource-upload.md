@@ -18,6 +18,7 @@ via Passthrough auth.
 ## Arguments
 
 - `fileName`: filename ending in `.tds` or `.tdsx`.
+- `fileSizeBytes`: exact file size in bytes, from 1 up to 5000000000 (5 GB).
 
 ## Example result
 
@@ -28,14 +29,15 @@ via Passthrough auth.
   "expiresAt": "2026-10-14T18:05:00.000Z",
   "maxSizeBytes": 5000000000,
   "requiredHeaders": {
-    "Content-Type": "application/octet-stream"
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "482133"
   }
 }
 ```
 
 The content type is `application/xml` for TDS and `application/octet-stream` for TDSX. Staged
-publishing retains the advertised **5 GB (5000000000 bytes)** limit. The signed URL does not
-constrain the PUT size; oversized staged objects are rejected before uploading to Tableau. Configure
-S3 lifecycle rules to expire staged files that are never published. Publishing buffers the file in
-server memory; see
+publishing retains the advertised **5 GB (5000000000 bytes)** limit. The URL is signed for exactly
+`fileSizeBytes` bytes, so S3 rejects an upload of any other size with `403`; send `Content-Length`
+as returned in `requiredHeaders`. Configure S3 lifecycle rules to expire staged files that are never
+published. Publishing buffers the file in server memory; see
 [Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing).

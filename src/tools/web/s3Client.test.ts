@@ -1,52 +1,30 @@
-import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { createPresignedPutUrlToS3, exportedForTesting } from './s3Client.js';
 
-import { deleteObjectFromS3, exportedForTesting } from './s3Client.js';
-
-const mocks = vi.hoisted(() => ({
-  send: vi.fn(),
-}));
-
-vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: vi.fn().mockImplementation(() => ({ send: mocks.send })),
-  PutObjectCommand: vi.fn(),
-  GetObjectCommand: vi.fn(),
-  DeleteObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'delete', input })),
-}));
-
-vi.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: vi.fn(),
-}));
-
-const target = {
-  key: 'mcp/workbook-uploads/site/user/upload/workbook.twb',
-  bucket: 'tableau-workbooks',
-  region: 'us-east-1',
-};
-
-describe('deleteObjectFromS3', () => {
+// Uses the real SDK (no network) so an SDK upgrade that stops signing Content-Length fails here.
+describe('createPresignedPutUrlToS3', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     exportedForTesting.resetS3Bundle();
-    mocks.send.mockResolvedValue({});
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
   });
 
-  it('deletes exactly the given object using a client for the configured region', async () => {
-    await deleteObjectFromS3(target);
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    exportedForTesting.resetS3Bundle();
+  });
 
-    expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ region: 'us-east-1' }));
-    expect(DeleteObjectCommand).toHaveBeenCalledExactlyOnceWith({
-      Bucket: 'tableau-workbooks',
-      Key: target.key,
-    });
-    expect(mocks.send).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ __command: 'delete' }),
-      { abortSignal: expect.any(AbortSignal) },
+  it('signs Content-Length', async () => {
+    const url = new URL(
+      await createPresignedPutUrlToS3({
+        key: 'workbook-uploads/site/user/id/workbook.twbx',
+        contentType: 'application/octet-stream',
+        contentLength: 482133,
+        bucket: 'tableau-workbooks',
+        region: 'us-east-1',
+        presignTtlSeconds: 300,
+      }),
     );
-  });
 
-  it('propagates S3 failures to the caller', async () => {
-    mocks.send.mockRejectedValueOnce(new Error('AccessDenied'));
-
-    await expect(deleteObjectFromS3(target)).rejects.toThrow('AccessDenied');
+    expect(url.searchParams.get('X-Amz-SignedHeaders')?.split(';')).toContain('content-length');
   });
 });

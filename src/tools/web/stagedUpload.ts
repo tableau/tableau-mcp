@@ -35,11 +35,13 @@ export type ResolvedStagedFile = {
 export async function requestStagedUpload<FileType extends string>({
   kind,
   fileName,
+  fileSizeBytes,
   config,
   tenant,
 }: {
   kind: StagedUploadKind<FileType>;
   fileName: string;
+  fileSizeBytes: number;
   config: BucketS3Config;
   tenant: TenantLuids;
 }): Promise<{
@@ -61,6 +63,7 @@ export async function requestStagedUpload<FileType extends string>({
   const uploadUrl = await createPresignedPutUrlToS3({
     key: buildStagedUploadS3Key(kind, config.keyPrefix, tenant, uploadId, fileType),
     contentType,
+    contentLength: fileSizeBytes,
     bucket: config.bucket,
     region: config.region,
     presignTtlSeconds: config.presignTtlSeconds,
@@ -71,7 +74,7 @@ export async function requestStagedUpload<FileType extends string>({
     uploadUrl,
     expiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000).toISOString(),
     maxSizeBytes: MAX_STAGED_UPLOAD_BYTES,
-    requiredHeaders: { 'Content-Type': contentType },
+    requiredHeaders: { 'Content-Type': contentType, 'Content-Length': String(fileSizeBytes) },
   };
 }
 

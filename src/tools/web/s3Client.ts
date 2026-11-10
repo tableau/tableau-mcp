@@ -200,12 +200,14 @@ async function presignGetObjectUrl({
 export async function createPresignedPutUrlToS3({
   key,
   contentType,
+  contentLength,
   bucket,
   region,
   presignTtlSeconds,
 }: {
   key: string;
   contentType: string;
+  contentLength: number;
   bucket: string;
   region: string;
   presignTtlSeconds: number;
@@ -218,6 +220,8 @@ export async function createPresignedPutUrlToS3({
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
+      // Signing Content-Length makes S3 reject any PUT whose body size differs.
+      ContentLength: contentLength,
     }),
     { expiresIn: presignTtlSeconds },
   );
