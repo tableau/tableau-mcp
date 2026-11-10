@@ -129,6 +129,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'refresh-dashboard-auto-updates',
     'reload-extensions',
     'get-workbook-extensions',
+    'get-workspace-extensions',
+    'reload-workspace-extension',
     'scaffold-data-app',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
