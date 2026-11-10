@@ -45,6 +45,9 @@ import {
   type Blocker,
   type EscalateReason,
   type FilterSpec,
+  KEEP_LARGE_PIE_HINT,
+  onlyPieSliceGate,
+  PIE_TEMPLATE_NAME,
   pieSliceGateDetail,
   resolveInSummary,
   validateBinding,
@@ -373,6 +376,7 @@ function validateAndBuild(
   minConfidence: number,
   usedLlm: boolean,
   ask: string,
+  opts?: { allowLargePie?: boolean },
 ): BinderResult {
   const m = manifests.get(proposal.template);
   if (!m) {
@@ -419,7 +423,7 @@ function validateAndBuild(
     };
   }
 
-  const v = validateBinding(m, proposal, summary, ask);
+  const v = validateBinding(m, proposal, summary, ask, opts);
   if (!v.ok) {
     const reason = (v.blockers[0]?.code as EscalateReason) ?? 'missing-required-slot';
     return { status: 'escalate', reason, blockers: v.blockers, proposal };
@@ -616,6 +620,8 @@ export async function bindTemplate(args: {
   minConfidence?: number;
   datasource?: string;
   requireCompleteRequest?: boolean;
+  /** Call 2 only: the user explicitly chose to keep a pie above the slice limit. */
+  keepLargePie?: boolean;
 }): Promise<BinderResult> {
   const summary = summarizeSchema(args.workbookXml, args.datasource);
   const minConfidence = args.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
@@ -625,7 +631,17 @@ export async function bindTemplate(args: {
     if (args.requireCompleteRequest) {
       return requestNotCovered();
     }
-    return validateAndBuild(args.proposal, args.manifests, summary, minConfidence, true, args.ask);
+    return validateAndBuild(
+      args.proposal,
+      args.manifests,
+      summary,
+      minConfidence,
+      true,
+      args.ask,
+      args.keepLargePie === true && args.proposal.template === PIE_TEMPLATE_NAME
+        ? { allowLargePie: true }
+        : undefined,
+    );
   }
 
   // ── FAIL-CLOSED cost guard ───────────────────────
@@ -703,7 +719,9 @@ export async function bindTemplate(args: {
       detail:
         res.status === 'escalate'
           ? `classifyNoLlm selected '${cls.template}', but deterministic validation declined (${res.reason})` +
-            (pieGateDetail ? `: ${pieGateDetail}` : '')
+            (pieGateDetail
+              ? `: ${pieGateDetail}${onlyPieSliceGate(res.blockers) ? `. ${KEEP_LARGE_PIE_HINT}` : ''}`
+              : '')
           : `classifyNoLlm selected '${cls.template}', but deterministic validation did not bind`,
     };
     // else fall through — the no-LLM guess didn't validate.

@@ -6,6 +6,7 @@ import { createPuppetCompatibilityProjection } from '../templates/puppetCompatib
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate } from './binder.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
+import type { BindingProposal } from './validate.js';
 
 // BIND BEHAVIOR MATRIX (the ww-ou-arrow regression lock).
 //
@@ -57,11 +58,14 @@ const WATERFALL_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
 </workbook>`;
 
 let manifests: Map<string, RuntimeTemplateDescriptor>;
+let allManifests: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
-  manifests = createPuppetCompatibilityProjection(
+  const projection = createPuppetCompatibilityProjection(
     loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true, includeExternal: false }),
-  ).descriptors;
+  );
+  manifests = projection.descriptors;
+  allManifests = projection.allDescriptors;
 });
 
 function bind(ask: string, workbookXml: string = FIXTURE): ReturnType<typeof bindTemplate> {
@@ -477,16 +481,123 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
 
   it('shows the injected llmPropose path the ranking-ordered-bar when the pie gate fires', async () => {
     let seen: string[] = [];
-    await bindTemplate({
+    const res = await bindTemplate({
       ask: 'pie chart of Sales by State/Province',
       workbookXml: withExtractApproxCount('State/Province', 49),
       manifests,
       llmPropose: async (input) => {
         seen = input.candidate_templates.map((t) => t.template);
-        return { template: 'ranking-ordered-bar', title: 't', confidence: 0, bindings: [] };
+        return {
+          template: 'ranking-ordered-bar',
+          title: 'Sales by State/Province',
+          confidence: 1,
+          bindings: [
+            { slot_id: 'field_base_1', field: 'State/Province' },
+            { slot_id: 'field_base_2', field: 'Sales' },
+          ],
+        };
       },
     });
     expect(seen).toContain('ranking-ordered-bar');
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.used_llm).toBe(true);
+    expect(res.args.template_name).toBe('ranking-ordered-bar');
+    expect(Object.values(res.args.field_mapping)).toEqual(
+      expect.arrayContaining([
+        '[Sample - Superstore].[none:State/Province:nk]',
+        '[Sample - Superstore].[sum:Sales:qk]',
+      ]),
+    );
+  });
+
+  describe('keep_large_pie (user-confirmed large pie)', () => {
+    const ask = 'pie chart of Sales by State/Province';
+    const pie = (measure = 'Sales'): BindingProposal => ({
+      template: 'part-to-whole-pie-chart',
+      title: 'Sales by State/Province',
+      confidence: 1,
+      bindings: [
+        { slot_id: 'field_base_1', field: 'State/Province' },
+        { slot_id: 'field_base_2', field: measure },
+      ],
+    });
+    const call2 = (
+      proposal: BindingProposal,
+      extra: { keepLargePie?: boolean; ask?: string; requireCompleteRequest?: boolean } = {},
+    ): ReturnType<typeof bindTemplate> =>
+      bindTemplate({
+        ask: extra.ask ?? ask,
+        workbookXml: withExtractApproxCount('State/Province', 49),
+        manifests: allManifests,
+        proposal,
+        ...(extra.keepLargePie !== undefined ? { keepLargePie: extra.keepLargePie } : {}),
+        ...(extra.requireCompleteRequest ? { requireCompleteRequest: true } : {}),
+      });
+
+    it('blocks a 49-slice State pie on Call 2 without the flag', async () => {
+      const res = await call2(pie());
+      expect(res.status, JSON.stringify(res)).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.blockers).toHaveLength(1);
+      expect(res.blockers[0].pie_slice_gate).toBe(true);
+      expect(res.blockers[0].detail).toContain('49');
+      expect(res.blockers[0].detail).toContain('ranking-ordered-bar');
+    });
+
+    it('binds the same 49-slice pie proposal when the user confirmed keep_large_pie', async () => {
+      const res = await call2(pie(), { keepLargePie: true });
+      expect(res.status, JSON.stringify(res)).toBe('bound');
+      if (res.status !== 'bound') return;
+      expect(res.used_llm).toBe(true);
+      expect(res.args.template_name).toBe('part-to-whole-pie-chart');
+      expect(Object.values(res.args.field_mapping)).toEqual(
+        expect.arrayContaining(['[Sample - Superstore].[none:State/Province:nk]']),
+      );
+    });
+
+    it('still blocks an explicit donut ask with the flag set', async () => {
+      const res = await call2(pie(), {
+        keepLargePie: true,
+        ask: 'donut chart of Sales by State/Province',
+      });
+      expect(res.status, JSON.stringify(res)).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.blockers.map((b) => b.detail).join(' ')).toContain('donut');
+      expect(res.blockers.some((b) => b.pie_slice_gate)).toBe(false);
+    });
+
+    it('has no effect on a non-pie template', async () => {
+      const bar: BindingProposal = { ...pie(), template: 'ranking-ordered-bar' };
+      const plain = await call2(bar);
+      const flagged = await call2(bar, { keepLargePie: true });
+      expect(flagged.status, JSON.stringify(flagged)).toBe('bound');
+      expect(flagged).toEqual(plain);
+    });
+
+    it('does not bypass other blockers', async () => {
+      const res = await call2(pie('No Such Measure'), { keepLargePie: true });
+      expect(res.status, JSON.stringify(res)).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.reason).toBe('field-not-found');
+    });
+
+    it('never mints request coverage for a flagged complete-request call', async () => {
+      const res = await call2(pie(), { keepLargePie: true, requireCompleteRequest: true });
+      expect(res.status).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.reason).toBe('request-not-covered');
+    });
+
+    it('tells Call 1 to warn and offer, keeping the pie only on explicit user say-so', async () => {
+      const res = await bind(ask, withExtractApproxCount('State/Province', 49));
+      expect(res.status, JSON.stringify(res)).toBe('propose');
+      if (res.status !== 'propose') return;
+      expect(res.decline_reason.detail).toContain('keep_large_pie:true');
+      expect(res.decline_reason.detail).toContain('explicitly');
+      expect(res.decline_reason.detail).not.toContain('Stop calling');
+      expect(res.decline_reason.detail).not.toContain('build-worksheets-from-templates');
+    });
   });
 
   it('still binds a low-cardinality pie when the extract count is small', async () => {

@@ -120,6 +120,16 @@ export function pieSliceGateDetail(blockers: readonly Blocker[]): string | undef
   return blockers.find((b) => b.pie_slice_gate === true)?.detail;
 }
 
+/** True when the too-many-slices pie gate is the ONLY blocker, so user confirmation can lift it. */
+export function onlyPieSliceGate(blockers: readonly Blocker[]): boolean {
+  return blockers.length > 0 && blockers.every((b) => b.pie_slice_gate === true);
+}
+
+export const PIE_TEMPLATE_NAME = 'part-to-whole-pie-chart';
+
+export const KEEP_LARGE_PIE_HINT =
+  'Only if the user explicitly says they want the pie anyway, send the same pie proposal with keep_large_pie:true';
+
 export interface Blocker {
   code: EscalateReason | BlockerCode;
   slot_id?: string;
@@ -477,6 +487,7 @@ export function validateBinding(
   p: BindingProposal,
   s: SchemaSummary,
   ask?: string,
+  opts?: { allowLargePie?: boolean },
 ): ValidateResult {
   const blockers: Blocker[] = [];
   const resolutionNotes: string[] = [];
@@ -809,20 +820,24 @@ export function validateBinding(
 
   // Chart-specific structural invariants belong in this shared validation seam so
   // Call 1, Call 2, and the eval-only injected proposal path cannot disagree.
-  if (m.template === 'part-to-whole-pie-chart') {
+  if (m.template === PIE_TEMPLATE_NAME) {
     const sliceSlot = m.slots.find(
       (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
     );
     const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
-    if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
+    if (
+      opts?.allowLargePie !== true &&
+      slice?.approxCount !== undefined &&
+      slice.approxCount > PIE_SLICE_WORKABLE_MAX
+    ) {
       blockers.push({
         code: 'kind-mismatch',
         pie_slice_gate: true,
         slot_id: sliceSlot?.slot_id,
         detail:
           `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
-          `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; keep "${slice.name}" and build a sorted bar ` +
-          `instead (template ranking-ordered-bar), and tell the user a pie with ${slice.approxCount} slices is unreadable`,
+          `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; tell the user a pie with ${slice.approxCount} slices ` +
+          `is hard to read and offer a sorted bar of "${slice.name}" (template ranking-ordered-bar)`,
       });
     }
     if (ask && /\bdonut\b/i.test(ask)) {

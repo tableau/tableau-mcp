@@ -3639,6 +3639,212 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
+  describe('keep_large_pie after the pie slice gate', () => {
+    beforeEach(() => {
+      vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    });
+    const ask = 'pie chart of Sales by Region';
+    const slots = (): any[] => [
+      { slot_id: 'field_base_1', role: ['dimension'], kind: 'categorical', required: true },
+      { slot_id: 'field_base_2', role: ['measure'], kind: 'quantitative', required: true },
+    ];
+    const pieDetail =
+      'pie slice field "Region" has 49 distinct values, above the workable maximum of 12; tell the user a pie with 49 slices is hard to read and offer a sorted bar of "Region" (template ranking-ordered-bar)';
+    const pieDeclined = (): BinderResult => ({
+      ...proposeResult,
+      decline_reason: { code: 'no_llm_validation_declined', detail: pieDetail },
+      llm_input: {
+        ...(proposeResult as Extract<BinderResult, { status: 'propose' }>).llm_input,
+        ask,
+        candidate_templates: [
+          {
+            template: 'part-to-whole-pie-chart',
+            description: 'Pie',
+            intent_keywords: ['pie'],
+            slots: slots(),
+          },
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: slots(),
+          },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    });
+    const pieOnlyEscalate: BinderResult = {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [{ code: 'kind-mismatch', detail: pieDetail, pie_slice_gate: true }],
+    };
+    const pieProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-pie-chart',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    };
+    const boundPie = (): BinderResult => ({
+      ...boundM7TwoFilterResult,
+      used_llm: true,
+      args: {
+        ...(boundM7TwoFilterResult as any).args,
+        filters: undefined,
+        template_name: 'part-to-whole-pie-chart',
+      },
+    });
+    const setup = (): ReturnType<typeof setupAutoApplyMocks> => {
+      const mocks = setupAutoApplyMocks({
+        bind: boundPie(),
+        inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+        workbookReads: [M7_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(pieDeclined())
+        .mockResolvedValueOnce(pieOnlyEscalate);
+      return mocks;
+    };
+
+    it('warns and offers on the Call 2 pie block instead of ordering a rebuild', async () => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      await getToolResult({ session: 'pie-keep-1', ask, getExecutor });
+      const call2 = await getToolResult({
+        session: 'pie-keep-1',
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      expect(call2.isError).toBe(true);
+      invariant(call2.content[0].type === 'text');
+      const body = JSON.parse(call2.content[0].text);
+      expect(body.reason).toBe('pie_slice_limit');
+      expect(body.guidance).toContain('49');
+      expect(body.guidance).toContain('ranking-ordered-bar');
+      expect(body.guidance).toContain('explicitly');
+      expect(body.guidance).toContain('keep_large_pie:true');
+      expect(body.guidance).not.toContain('Stop calling bind-template');
+      expect(body.guidance).not.toContain('build-worksheets-from-templates');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('admits a same-proposal resubmit with keep_large_pie after the blocked Call 2, and applies', async () => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      await getToolResult({ session: 'pie-keep-2', ask, getExecutor });
+      await getToolResult({
+        session: 'pie-keep-2',
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      const call3 = await getToolResult({
+        session: 'pie-keep-2',
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(call3.isError, JSON.stringify(call3)).toBe(false);
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+        proposal: pieProposal,
+        keepLargePie: true,
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['without the flag', pieProposal, undefined],
+      [
+        'with the flag on a different proposal',
+        {
+          ...pieProposal,
+          bindings: [
+            { slot_id: 'field_base_1', field: 'Region' },
+            { slot_id: 'field_base_2', field: 'Profit' },
+          ],
+        },
+        true,
+      ],
+    ] as const)('keeps blocking a resubmit %s', async (_label, proposal, keepLargePie) => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      const session = `pie-keep-${_label}`;
+      await getToolResult({ session, ask, getExecutor });
+      await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+      const call3 = await getToolResult({
+        session,
+        ask,
+        proposal: proposal as BindingProposal & { confidence: number },
+        auto_apply: true,
+        ...(keepLargePie ? { keep_large_pie: true } : {}),
+        getExecutor,
+      });
+      expect(call3.isError).toBe(true);
+      invariant(call3.content[0].type === 'text');
+      const blocked = JSON.parse(call3.content[0].text);
+      expect(blocked.status).toBe('blocked');
+      expect(blocked.guidance).not.toContain('build-worksheets-from-templates');
+      expect(blocked.guidance).toContain('keep_large_pie:true');
+      expect(blocked.guidance).toContain('ranking-ordered-bar');
+      expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('keeps a direct first-call pie block non-terminal and admits the flagged resubmit', async () => {
+      const { getExecutor, applyWorkbookDocument } = setupAutoApplyMocks({
+        bind: boundPie(),
+        inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+        workbookReads: [M7_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(pieOnlyEscalate);
+      const session = 'pie-keep-direct';
+      const blocked = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      invariant(blocked.content[0].type === 'text');
+      expect(JSON.parse(blocked.content[0].text).reason).toBe('pie_slice_limit');
+      expect(sessionRouteState.getBindRecovery(session, normalizeAskForMatch(ask))).toMatchObject({
+        phase: 'proposal-attempted',
+        largePieConfirmation: { proposalSignature: proposalSignature(pieProposal) },
+      });
+      const kept = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(kept.isError, JSON.stringify(kept)).toBe(false);
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('declines keep_large_pie under requireCompleteRequest without minting coverage', async () => {
+      vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+      const result = await getToolResult({
+        session: 'pie-keep-strict',
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        keep_large_pie: true,
+      });
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.reason).toBe('request_not_covered');
+      expect(body.requestCoverage.kind).toBe('declined');
+      expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    });
+  });
+
   it('keeps advisories on the applied auto-apply result', async () => {
     const advisory = 'slot cat has 80 distinct values in "Region" - a legibility hint';
     const { getExecutor } = setupAutoApplyMocks({
@@ -3979,6 +4185,7 @@ async function getToolResult({
   datasource,
   calcs,
   skip_validation,
+  keep_large_pie,
   allowSkipValidation,
   customSignal,
   getExecutor,
@@ -4002,6 +4209,7 @@ async function getToolResult({
     role?: string;
   }>;
   skip_validation?: boolean;
+  keep_large_pie?: boolean;
   allowSkipValidation?: boolean;
   customSignal?: AbortSignal;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
@@ -4038,6 +4246,7 @@ async function getToolResult({
       datasource,
       calcs,
       skip_validation,
+      keep_large_pie,
     } as any,
     extra,
   );
@@ -9047,6 +9256,45 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       encodings: { filled: [], unfilled: [] },
     };
   }
+
+  it.each([
+    ['advisories only', true, { advisories: ['slot cat has 80 distinct values in "Region"'] }],
+    ['a genuine inject warning', false, { injectWarnings: ['dropped an encoding'] }],
+  ] as const)(
+    'complete-request verified apply with %s keeps completion evidence and done: %s',
+    async (label, keeps, extra) => {
+      const ask = 'bar chart of Sales by Region';
+      const bind = completeBar(ask);
+      invariant(bind.status === 'bound');
+      const mocks = setupAutoApplyMocks({
+        bind: 'advisories' in extra ? { ...bind, advisories: [...extra.advisories] } : bind,
+        inject: {
+          ok: true,
+          xml: INJECTED_RANKING_WORKBOOK_XML,
+          ...('injectWarnings' in extra ? { warnings: [...extra.injectWarnings] } : {}),
+        },
+        workbookReads: [CURRENCY_WORKBOOK_XML],
+      });
+      const result = await getToolResult({
+        session: `completion-${label}`,
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        getExecutor: summaryRowsExecutor(mocks, SUMMARY_ROWS),
+      });
+      const applied = body(result);
+      expect(applied.applied).toBe(true);
+      expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      if (keeps) {
+        expect(applied.advisories).toEqual(['slot cat has 80 distinct values in "Region"']);
+        expect(applied.completionEvidence).toMatchObject({ coverage: 'complete_request' });
+        expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+      } else {
+        expect(applied.completionEvidence).toBeUndefined();
+        expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+      }
+    },
+  );
 
   it('withholds complete-request evidence and keeps base guidance when the summary read returns zero rows', async () => {
     const ask = 'bar chart of Sales by Region';
