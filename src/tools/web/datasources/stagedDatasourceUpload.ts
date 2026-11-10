@@ -36,16 +36,19 @@ export type RequestDatasourceUploadResult = {
 
 export async function requestStagedDatasourceUpload({
   fileName,
+  fileSizeBytes,
   config,
   tenant,
 }: {
   fileName: string;
+  fileSizeBytes: number;
   config: BucketS3Config;
   tenant: TenantLuids;
 }): Promise<RequestDatasourceUploadResult> {
   const { uploadId, ...rest } = await requestStagedUpload({
     kind: datasourceKind,
     fileName,
+    fileSizeBytes,
     config,
     tenant,
   });

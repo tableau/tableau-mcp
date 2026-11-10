@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -7,6 +8,8 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getRequestDatasourceUploadTool } from './requestDatasourceUpload.js';
 import { MAX_STAGED_DATASOURCE_BYTES } from './stagedDatasourceUpload.js';
+
+const FILE_SIZE_BYTES = 482133;
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
@@ -54,7 +57,22 @@ describe('requestDatasourceUploadTool', () => {
     expect(tool.description).toContain('staged upload URL');
     expect(tool.paramsSchema).toMatchObject({
       fileName: expect.any(Object),
+      fileSizeBytes: expect.any(Object),
     });
+  });
+
+  it('requires fileSizeBytes to be a positive integer within the staged upload cap', async () => {
+    const tool = getRequestDatasourceUploadTool(new WebMcpServer());
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    const fileName = 'Superstore.tds';
+
+    expect(schema.safeParse({ fileName }).success).toBe(false);
+    for (const fileSizeBytes of [0, -1, 1.5, MAX_STAGED_DATASOURCE_BYTES + 1]) {
+      expect(schema.safeParse({ fileName, fileSizeBytes }).success).toBe(false);
+    }
+    for (const fileSizeBytes of [1, MAX_STAGED_DATASOURCE_BYTES]) {
+      expect(schema.safeParse({ fileName, fileSizeBytes }).success).toBe(true);
+    }
   });
 
   it('is enabled when the datasource-authoring flag is ON for ChatGPT', async () => {
@@ -127,6 +145,7 @@ describe('requestDatasourceUploadTool', () => {
     });
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tds',
+      fileSizeBytes: FILE_SIZE_BYTES,
       config: expect.objectContaining({
         enabled: true,
         bucket: 'tableau-workbooks',
@@ -238,6 +257,7 @@ describe('requestDatasourceUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tdsx',
+      fileSizeBytes: FILE_SIZE_BYTES,
       config: expect.objectContaining({ enabled: true }),
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
@@ -300,6 +320,7 @@ async function getToolResult(
   return await callback(
     {
       fileName: params.fileName,
+      fileSizeBytes: FILE_SIZE_BYTES,
     },
     getMockExtra(extraOverrides),
   );
