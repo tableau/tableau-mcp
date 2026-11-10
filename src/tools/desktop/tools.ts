@@ -32,6 +32,7 @@ import { getWorkbookInventoryTool } from './api/getWorkbookInventory.js';
 import { getGetWorkbookXmlTool } from './api/getWorkbookXml.js';
 import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
 import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
+import { getWorkspaceExtensionsTool } from './api/getWorkspaceExtensions.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
@@ -51,6 +52,7 @@ import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
+import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -119,6 +121,8 @@ export const desktopToolFactories = [
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
   getWorkbookExtensionsTool,
+  getWorkspaceExtensionsTool,
+  getReloadWorkspaceExtensionTool,
   getScaffoldDataAppTool,
   getShowMeOptionsTool,
   getListDashboardsTool,
