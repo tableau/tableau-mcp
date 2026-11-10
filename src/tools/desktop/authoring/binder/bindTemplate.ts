@@ -28,7 +28,10 @@ import {
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
-import { pieSliceGateDetail } from '../../../../desktop/binder/validate.js';
+import {
+  effectiveSlotDerivation,
+  pieSliceGateDetail,
+} from '../../../../desktop/binder/validate.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import {
@@ -549,27 +552,48 @@ function pieSliceWarningFor({
   schemaSummary: SchemaSummary;
   sheetName: string;
 }): { flag: PieSliceWarning; guidance: string } {
-  const captionFor = (
-    pick: (slot: TemplateRuntimeSnapshot['descriptor']['slots'][number]) => boolean,
-  ): string | undefined => {
-    const slot = templateSnapshot.descriptor.slots.find((s) => s.bindable && pick(s));
-    if (!slot) return undefined;
+  type Slot = TemplateRuntimeSnapshot['descriptor']['slots'][number];
+  const resolveSlot = (
+    slot: Slot,
+  ): { ref: CanonicalColumnRef; field?: SchemaField } | undefined => {
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
     const mapped = args.field_mapping[key];
     const ref = mapped === undefined ? null : parseCanonicalColumnRef(decodeXmlEntities(mapped));
-    const field = ref ? schemaSummary.fields.find((f) => refMatchesSchemaField(ref, f)) : undefined;
+    if (!ref) return undefined;
+    return { ref, field: schemaSummary.fields.find((f) => refMatchesSchemaField(ref, f)) };
+  };
+  const captionFor = (pick: (slot: Slot) => boolean): string | undefined => {
+    const slot = templateSnapshot.descriptor.slots.find((s) => s.bindable && pick(s));
+    const field = slot ? resolveSlot(slot)?.field : undefined;
     return field ? (field.caption ?? field.name) : undefined;
   };
   const sliceCaption = captionFor((s) => s.kind === 'categorical' && s.role.includes('color'));
   const measureCaption = captionFor((s) => s.kind === 'quantitative');
+  // The offered bar ask re-binds from words alone, so it would silently drop filters, top_n,
+  // and any non-default aggregation the pie carries.
+  const offerWouldDropSemantics =
+    (args.filters?.length ?? 0) > 0 ||
+    args.top_n !== undefined ||
+    templateSnapshot.descriptor.slots.some((slot) => {
+      if (!slot.bindable) return false;
+      const resolved = resolveSlot(slot);
+      if (!resolved?.field || resolved.field.isAggregated || resolved.ref.derivation === 'usr') {
+        return false;
+      }
+      return resolved.ref.derivation !== effectiveSlotDerivation(slot, resolved.field);
+    });
   const sliceField = sliceCaption ?? 'the slice field';
   const exceedsPreview = rows > SUMMARY_ROWS_MAX_ROWS;
   const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
   // Unresolved captions would route the ask to propose, not bind, so only name the ask when both resolved.
   const offer =
-    sliceCaption === undefined || measureCaption === undefined || uncertain || unfilledEncodings
+    sliceCaption === undefined ||
+    measureCaption === undefined ||
+    uncertain ||
+    unfilledEncodings ||
+    offerWouldDropSemantics
       ? 'A sorted bar would read better; offer it to the user.'
       : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of ${measureCaption} by ${sliceCaption}" and target_worksheet "${sheetName}".`;
   return {
@@ -582,7 +606,7 @@ function pieSliceWarningFor({
     guidance: uncertain
       ? `The pie has ${count} slices of ${sliceField}, above the workable maximum of ${PIE_SLICE_WORKABLE_MAX}. Tell the user this. ${offer}`
       : `The pie is already on the sheet and has ${count} slices of ${sliceField}, above the workable maximum of ${PIE_SLICE_WORKABLE_MAX}. ` +
-        `Tell the user this. ${offer}${unfilledEncodings ? '' : ' If the user wants the pie, nothing more is needed.'}`,
+        `Tell the user this. ${offer}`,
   };
 }
 
@@ -2924,11 +2948,9 @@ async function performAutoApply({
           unfilledEncodings: unfilledEncodings !== undefined,
         })
       : undefined;
-  const coreNeedsFollowUp =
-    incomplete ||
-    (injected.warnings?.length ?? 0) > 0 ||
-    postApplyUncertain ||
-    pieSliceWarning !== undefined;
+  const followUpBesidesPie =
+    incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+  const coreNeedsFollowUp = followUpBesidesPie || pieSliceWarning !== undefined;
   const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
@@ -2975,11 +2997,11 @@ async function performAutoApply({
     verificationReport.ok === true &&
     verificationReport.status === 'passed' &&
     nativeFindings.length === 0;
-  const completionEligible =
+  const completionEligibleBesidesPie =
     res.requestCoverage !== undefined &&
     !trustedDeterministicApply &&
     args.sheet_type === 'worksheet' &&
-    !coreNeedsFollowUp &&
+    !followUpBesidesPie &&
     documentWarnings.length === 0 &&
     !emptySummaryReadback &&
     !summaryReadbackTimedOut &&
@@ -3001,16 +3023,17 @@ async function performAutoApply({
     res.encodings.unfilled.length === 0 &&
     (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
     readbackEvidence === '';
+  const completionEligible = completionEligibleBesidesPie && pieSliceWarning === undefined;
   const caveats: CompletionCaveat[] = [];
   if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
   if (nativeFieldUnverified) caveats.push('field_validation_unverified');
   caveats.push('query_render_unverified');
   if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
-  const operationEligible =
+  const operationEligibleBesidesPie =
     !trustedDeterministicApply &&
     res.requestCoverage === undefined &&
     args.sheet_type === 'worksheet' &&
-    !coreNeedsFollowUp &&
+    !followUpBesidesPie &&
     documentWarnings.length === 0 &&
     !emptySummaryReadback &&
     !summaryReadbackTimedOut &&
@@ -3024,14 +3047,27 @@ async function performAutoApply({
     verification.status === 'passed' &&
     verification.findings.length === 0 &&
     (nativeFieldVerified || nativeFieldUnverified);
+  const operationEligible = operationEligibleBesidesPie && pieSliceWarning === undefined;
   const evidenceEligible = completionEligible || operationEligible;
   const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;
-  const pieGuidance = pieSliceWarning ? ` ${pieSliceWarning.guidance}` : '';
+  // "Nothing more is needed" is only true when the pie is the sole reason this apply is not done.
+  const pieIsSoleFollowUp =
+    (completionEligibleBesidesPie || operationEligibleBesidesPie) &&
+    !appliedDefault &&
+    currencyGuidance === '' &&
+    readbackEvidence === '';
+  const pieGuidance = pieSliceWarning
+    ? ` ${pieSliceWarning.guidance}${pieIsSoleFollowUp ? ' If the user wants the pie, nothing more is needed.' : ''}`
+    : '';
   const settledGuidance = `${
     documentWarnings.length > 0
       ? guidance
       : completionEvidenceWithheld
-        ? `${receiptText} Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+        ? `${receiptText} ${
+            pieSliceWarning && completionEligibleBesidesPie
+              ? 'Completion evidence was withheld only because of the pie slice count below.'
+              : 'Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.'
+          }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
         : evidenceEligible && summaryPreviewUnavailable
           ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
           : guidance
