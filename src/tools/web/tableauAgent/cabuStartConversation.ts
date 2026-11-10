@@ -1,12 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { getConfig } from '../../../config.js';
 import { DatasourceNotAllowedError, UnknownError } from '../../../errors/mcpToolError.js';
+import { isTableauAgentToolsEnabled } from '../../../features/tableauAgentTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { Localization } from '../../../sdks/tableau/types/cabu.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
@@ -23,9 +26,11 @@ const DEFAULT_LOCALIZATION: Localization = { locale: 'en-US', language: 'en' };
 export const getCabuStartConversationTool = (
   server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const cabuStartConversationTool = new WebTool({
     server,
     name: 'cabu-start-conversation',
+    disabled: new Provider(async () => !(await isTableauAgentToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     description: `
 Starts a new conversation with CABU (Tableau Agent's natural-language Q&A over a published data source), scoped to one data source. Use \`search-content\` or \`list-datasources\` first to find the \`datasourceLuid\` of the data source you want to ask about.

@@ -10,6 +10,7 @@ import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const mocks = vi.hoisted(() => ({
   mockStartConversation: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -21,6 +22,10 @@ vi.mock('../../../restApiInstance.js', () => ({
       siteId: 'test-site-id',
     }),
   ),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 beforeEach(() => {
@@ -102,6 +107,35 @@ describe('cabuStartConversationTool', () => {
       'Querying the datasource with LUID 11111111-1111-1111-1111-111111111111 is not allowed.',
     );
     expect(mocks.mockStartConversation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [true, true, false],
+    [true, false, false],
+    [false, true, true],
+    [false, false, true],
+  ])(
+    'TABLEAU_AGENT_TOOLS_ENABLED=%s, tableau-agent-tools flag=%s → disabled=%s',
+    async (tableauAgentToolsEnabled, flag, disabled) => {
+      vi.stubEnv('TABLEAU_AGENT_TOOLS_ENABLED', String(tableauAgentToolsEnabled));
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'tableau-agent-tools',
+      );
+      try {
+        const tool = getCabuStartConversationTool(new WebMcpServer());
+        expect(await Provider.from(tool.disabled)).toBe(disabled);
+      } finally {
+        vi.stubEnv('TABLEAU_AGENT_TOOLS_ENABLED', undefined);
+      }
+    },
+  );
+
+  it('defers to the tableau-agent-tools feature flag when TABLEAU_AGENT_TOOLS_ENABLED is unset', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+
+    const tool = getCabuStartConversationTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('tableau-agent-tools');
   });
 });
 

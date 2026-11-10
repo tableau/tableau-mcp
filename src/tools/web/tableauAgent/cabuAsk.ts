@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import {
   ArgsValidationError,
   CabuResponseError,
@@ -9,11 +10,13 @@ import {
   DatasourceNotAllowedError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
+import { isTableauAgentToolsEnabled } from '../../../features/tableauAgentTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { buildCabuAnswer, CabuAnswer } from './cabuAnswer.js';
@@ -27,9 +30,11 @@ const paramsSchema = {
 };
 
 export const getCabuAskTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const cabuAskTool = new WebTool({
     server,
     name: 'cabu-ask',
+    disabled: new Provider(async () => !(await isTableauAgentToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     description: `
 Asks CABU (Tableau Agent's natural-language Q&A over a published data source) a question within a conversation already started by \`cabu-start-conversation\`.

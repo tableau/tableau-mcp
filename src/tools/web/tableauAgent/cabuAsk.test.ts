@@ -11,6 +11,7 @@ import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
 const mocks = vi.hoisted(() => ({
   mockAskUtterance: vi.fn(),
   mockStreamUtterance: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -23,6 +24,10 @@ vi.mock('../../../restApiInstance.js', () => ({
       siteId: 'test-site-id',
     }),
   ),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 beforeEach(() => {
@@ -250,6 +255,35 @@ describe('cabuAskTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toMatch(/missing a datasourceLuid/i);
     expect(mocks.mockAskUtterance).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [true, true, false],
+    [true, false, false],
+    [false, true, true],
+    [false, false, true],
+  ])(
+    'TABLEAU_AGENT_TOOLS_ENABLED=%s, tableau-agent-tools flag=%s → disabled=%s',
+    async (tableauAgentToolsEnabled, flag, disabled) => {
+      vi.stubEnv('TABLEAU_AGENT_TOOLS_ENABLED', String(tableauAgentToolsEnabled));
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'tableau-agent-tools',
+      );
+      try {
+        const tool = getCabuAskTool(new WebMcpServer());
+        expect(await Provider.from(tool.disabled)).toBe(disabled);
+      } finally {
+        vi.stubEnv('TABLEAU_AGENT_TOOLS_ENABLED', undefined);
+      }
+    },
+  );
+
+  it('defers to the tableau-agent-tools feature flag when TABLEAU_AGENT_TOOLS_ENABLED is unset', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+
+    const tool = getCabuAskTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('tableau-agent-tools');
   });
 });
 
