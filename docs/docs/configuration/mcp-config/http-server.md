@@ -63,6 +63,20 @@ The port to use for the HTTP server.
 
 <hr />
 
+## `HTTP_HOST`
+
+The network interface address the HTTP server binds to, such as `127.0.0.1` to accept connections
+only from the local machine.
+
+- Default: empty, which binds all interfaces
+- The Tableau MCP Desktop binary's web profile defaults to `127.0.0.1` when this is not set.
+- Use an IP literal such as `127.0.0.1` rather than a hostname; `localhost` may resolve only to
+  `::1`.
+- Setting a non-loopback value (for example `0.0.0.0`) on a server with OAuth disabled or with
+  passthrough auth makes it reachable from other hosts.
+
+<hr />
+
 ## `SSL_KEY`
 
 The path to the SSL key file to use for the HTTP server.

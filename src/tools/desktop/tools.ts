@@ -37,6 +37,7 @@ import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListOperationsTool } from './api/listOperations.js';
+import { getListSavedDatasourcesTool } from './api/listSavedDatasources.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
@@ -85,8 +86,8 @@ import { getReadCachedXmlTool } from './local/cache/readCachedXml.js';
 import { getValidateWorksheetXmlTool } from './local/cache/validateWorksheetXml.js';
 import { getWriteCachedXmlTool } from './local/cache/writeCachedXml.js';
 import { getBeginEpisodeTool, getEndEpisodeTool } from './local/episodeTools.js';
-import { getReadKnowledgeResourceTool } from './local/knowledge/readKnowledgeResource.js';
-import { getSearchKnowledgeTool } from './local/knowledge/searchKnowledge.js';
+import { getReadExpertiseResourceTool } from './local/expertise/readExpertiseResource.js';
+import { getSearchExpertiseTool } from './local/expertise/searchExpertise.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
@@ -104,6 +105,7 @@ export const desktopToolFactories = [
   getUndoWorkbookTool,
   getRedoWorkbookTool,
   getOpenFileTool,
+  getListSavedDatasourcesTool,
   getSetStartPageVisibilityTool,
   getSetDataSourcePageActiveTool,
   getSaveWorkbookTool,
@@ -175,8 +177,8 @@ export const desktopToolFactories = [
   getValidateCalculatedFieldTool,
   getReadCachedXmlTool,
   getWriteCachedXmlTool,
-  getReadKnowledgeResourceTool,
-  getSearchKnowledgeTool,
+  getReadExpertiseResourceTool,
+  getSearchExpertiseTool,
 ];
 
 export const episodeToolFactories = [getBeginEpisodeTool, getEndEpisodeTool];

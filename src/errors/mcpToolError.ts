@@ -274,6 +274,18 @@ export class EmbedTokenNotAvailableError extends McpToolError {
   }
 }
 
+// Site/user LUIDs come from our own session handling, so a missing or invalid one is a server fault.
+export class TenantUnavailableError extends McpToolError {
+  constructor() {
+    super({
+      type: 'tenant-unavailable',
+      message:
+        "Internal error: the server couldn't determine the signed-in Tableau site and user for this request. This isn't caused by the tool's arguments, and retrying won't help.",
+      statusCode: 500,
+    });
+  }
+}
+
 export class ViewNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'view-not-allowed', message, statusCode: 403 });

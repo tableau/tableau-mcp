@@ -409,6 +409,18 @@ describe('Config', () => {
       expect(config.sslKey).toBe('path/to/ssl-key.pem');
     });
 
+    it('should set httpHost to default when HTTP_HOST is not set', () => {
+      const config = new Config();
+      expect(config.httpHost).toBe('');
+    });
+
+    it('should set httpHost to the trimmed value when HTTP_HOST is set', () => {
+      vi.stubEnv('HTTP_HOST', ' 127.0.0.1 ');
+
+      const config = new Config();
+      expect(config.httpHost).toBe('127.0.0.1');
+    });
+
     it('should set sslCert to default when SSL_CERT is not set', () => {
       const config = new Config();
       expect(config.sslCert).toBe('');
