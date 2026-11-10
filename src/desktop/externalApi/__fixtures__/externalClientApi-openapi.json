@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.32",
+    "version": "0.2.34",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -168,6 +168,126 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/app/extensions": {
+      "get": {
+        "summary": "List workspace extensions",
+        "description": "Lists the user-installed workspace extensions, including disabled ones. Each entry has an opaque id that stays the same across sessions for the same extensionKey (id, version, url); use it as {id} on the extension routes. isEnabled is the user's enabled preference.",
+        "operationId": "getWorkspaceExtensions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lists the user-installed workspace extensions, including disabled ones. Each entry has an opaque id that stays the same across sessions for the same extensionKey (id, version, url); use it as {id} on the extension routes. isEnabled is the user's enabled preference.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceExtensionList"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/app/extensions/{id}:reload": {
+      "post": {
+        "summary": "Reload a workspace extension",
+        "description": "Makes a new or changed workspace extension from the repository Packages folder show up in the Extensions menu and toolbar, and reloads any of its pages that are open, without opening any. It also removes from Desktop, with their pages, menu items and toolbar buttons, any Packages workspace extensions that are no longer in the folder. An id that matches no installed extension returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED. Any other failure, such as a disabled extension or one that is not in the repository Packages folder, comes back as a FAILED operation.",
+        "operationId": "reloadWorkspaceExtension",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The workspace extension's id, as returned by GET /v0/app/extensions.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserAgent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Makes a new or changed workspace extension from the repository Packages folder show up in the Extensions menu and toolbar, and reloads any of its pages that are open, without opening any. It also removes from Desktop, with their pages, menu items and toolbar buttons, any Packages workspace extensions that are no longer in the folder. An id that matches no installed extension returns 404 when the request completes synchronously; after a 202 response, the same rejection appears in the polled HTTP 200 Operation with state FAILED. Any other failure, such as a disabled extension or one that is not in the repository Packages folder, comes back as a FAILED operation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id. Codes specific to this route: workspace-extension-not-found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -5709,6 +5829,7 @@
               "not-found",
               "datasource-not-found",
               "sheet-not-found",
+              "workspace-extension-not-found",
               "logical-table-not-found",
               "operation-not-found",
               "operation-pending",
@@ -6804,7 +6925,7 @@
       },
       "WorkbookExtensionKey": {
         "type": "object",
-        "description": "ExtensionKey (id, version, url). Shared by every placement of the same extension; instanceId tells placements apart.",
+        "description": "ExtensionKey (id, version, url) that identifies an extension. Shared by every placement of the same workbook extension, which instanceId tells apart.",
         "required": [
           "id",
           "version",
@@ -6864,6 +6985,52 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkbookExtension"
+            }
+          }
+        }
+      },
+      "WorkspaceExtension": {
+        "type": "object",
+        "description": "A workspace extension installed in Desktop.",
+        "required": [
+          "id",
+          "extensionKey",
+          "name",
+          "author",
+          "isEnabled"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque id of the extension: a lowercase hex digest of its extensionKey, the same in every session. Use it as {id} on the extension routes."
+          },
+          "extensionKey": {
+            "$ref": "#/components/schemas/WorkbookExtensionKey"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the extension."
+          },
+          "author": {
+            "type": "string",
+            "description": "Name of the extension author."
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "description": "True if the user has the extension enabled."
+          }
+        }
+      },
+      "WorkspaceExtensionList": {
+        "type": "object",
+        "required": [
+          "extensions"
+        ],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceExtension"
             }
           }
         }
