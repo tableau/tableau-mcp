@@ -36,16 +36,19 @@ export type RequestWorkbookUploadResult = {
 
 export async function requestStagedWorkbookUpload({
   fileName,
+  fileSizeBytes,
   config,
   tenant,
 }: {
   fileName: string;
+  fileSizeBytes: number;
   config: BucketS3Config;
   tenant: TenantLuids;
 }): Promise<RequestWorkbookUploadResult> {
   const { uploadId, ...rest } = await requestStagedUpload({
     kind: workbookKind,
     fileName,
+    fileSizeBytes,
     config,
     tenant,
   });
