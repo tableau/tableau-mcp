@@ -555,7 +555,8 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
-1024 characters), `site_luid` and `user_luid`. Calling it also sends the usual `tool_call` event.
+1024 characters), `site_luid`, `user_luid` and `auth_type`. Calling it also sends the usual
+`tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
