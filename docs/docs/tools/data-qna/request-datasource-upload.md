@@ -7,6 +7,7 @@ sidebar_position: 5
 Creates a short-lived presigned S3 PUT URL for a `.tds` or `.tdsx` file. Upload the raw bytes using
 the returned `requiredHeaders` before `expiresAt`, then pass `datasourceUploadId` to
 [Publish Data Source](publish-datasource.md). Requesting a URL does not publish anything to Tableau.
+Each upload id can be published once; the staged upload is deleted after a successful publish.
 
 Requires `MCP_S3_BUCKET` and Explorer (Can Publish) or higher. The MCP scope is
 `tableau:mcp:datasource:create`; requesting a URL does not call the Tableau REST API.
@@ -35,5 +36,6 @@ via Passthrough auth.
 The content type is `application/xml` for TDS and `application/octet-stream` for TDSX. Staged
 publishing retains the advertised **5 GB (5000000000 bytes)** limit. The signed URL does not
 constrain the PUT size; oversized staged objects are rejected before uploading to Tableau. Configure
-S3 lifecycle rules for staged-file expiry. Publishing buffers the file in server memory; see
+S3 lifecycle rules to expire staged files that are never published. Publishing buffers the file in
+server memory; see
 [Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing).

@@ -252,6 +252,7 @@ describe('publishDatasourceTool', () => {
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tdsx',
       bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      stagedKey: 'datasource-uploads/site/user/upload/datasource.tdsx',
     });
 
     const result = await getToolResult(validArgs);
@@ -265,6 +266,10 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
+    expect(mocks.mockDeleteObject).toHaveBeenCalledExactlyOnceWith({
+      ...STAGED_DELETE,
+      key: 'datasource-uploads/site/user/upload/datasource.tdsx',
+    });
   });
 
   it('uploads and publishes a local TDSX data source file path', async () => {

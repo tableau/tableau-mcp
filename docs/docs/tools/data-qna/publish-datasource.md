@@ -20,8 +20,9 @@ The MCP scope is `tableau:mcp:datasource:create`; publication uses `tableau:data
 - `projectId`: destination project LUID. Use [List Projects](../projects/list-projects.md) to find
   it.
 - Exactly one of `datasourceFilePath` or `datasourceUploadId`. `datasourceUploadId` comes from
-  [Request Data Source Upload](request-datasource-upload.md). `datasourceFilePath` is a path on the
-  MCP server and is accepted only when the server runs over stdio and `MCP_S3_BUCKET` is unset.
+  [Request Data Source Upload](request-datasource-upload.md) and can be published once; the staged
+  upload is deleted after a successful publish. `datasourceFilePath` is a path on the MCP server and
+  is accepted only when the server runs over stdio and `MCP_S3_BUCKET` is unset.
 - `overwrite`: defaults to `false`. Set `true` to replace a same-name datasource in the project.
 
 Project bounds apply before file access or upload, including on overwrite. Datasource-ID and tag

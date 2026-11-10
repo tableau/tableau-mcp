@@ -30,16 +30,16 @@ const siteDisabledMessage = {
 } as const satisfies Record<PersonalSpaceAction, string>;
 
 const notInPersonalSpaceMessage = {
-  publish: (landedIn: string) =>
-    `This Tableau site published the workbook to ${landedIn} instead of your personal space — ` +
-    'its REST API does not support personal-space publishing. Delete it there if unwanted, or ' +
-    're-publish to a project by passing projectId; a staged upload must be re-requested with ' +
-    'request-workbook-upload.',
+  publish: (landedIn: string, workbookId?: string) =>
+    `This Tableau site published the workbook${workbookId ? ` (id: ${workbookId})` : ''} to ` +
+    `${landedIn} instead of your personal space — its REST API does not support personal-space ` +
+    'publishing. To put it in a different project, use move-workbook with projectId; delete it ' +
+    'if unwanted.',
   move: (landedIn: string) =>
     `After the move the workbook is in ${landedIn} instead of your personal space — this ` +
     'Tableau site does not support moving workbooks into a personal space. Pass projectId to ' +
     'move it to a project instead.',
-} as const satisfies Record<PersonalSpaceAction, (landedIn: string) => string>;
+} as const satisfies Record<PersonalSpaceAction, (landedIn: string, workbookId?: string) => string>;
 
 const projectIdHint = (action: PersonalSpaceAction): string =>
   `pass projectId (use list-projects) to ${wording[action].verb} to a project instead.`;
@@ -92,7 +92,7 @@ export function mapPersonalSpaceSiteDisabledError(
 
 // Some servers accept a Personal Space destination but silently land the workbook in a project.
 export function notInPersonalSpaceError(
-  workbook: Pick<Partial<Workbook>, 'project' | 'location'>,
+  workbook: Pick<Partial<Workbook>, 'id' | 'project' | 'location'>,
   action: PersonalSpaceAction,
 ): UnknownError | null {
   if (workbook.location?.type === 'PersonalSpace') {
@@ -100,6 +100,9 @@ export function notInPersonalSpaceError(
   }
   const landed = workbook.project?.name ?? workbook.location?.name;
   return new UnknownError(
-    notInPersonalSpaceMessage[action](landed ? `the "${landed}" project` : 'a project'),
+    notInPersonalSpaceMessage[action](
+      landed ? `the "${landed}" project` : 'a project',
+      workbook.id,
+    ),
   );
 }

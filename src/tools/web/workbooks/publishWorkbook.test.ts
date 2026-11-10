@@ -89,6 +89,7 @@ const validLocalArgs = {
 };
 
 const STAGED_KEY = 'workbook-uploads/site/user/upload/workbook.twb';
+const STAGED_TWBX_KEY = 'workbook-uploads/site/user/upload/workbook.twbx';
 const STAGED_DELETE = { key: STAGED_KEY, bucket: 'tableau-workbooks', region: 'us-east-1' };
 
 beforeEach(() => {
@@ -355,6 +356,7 @@ describe('publishWorkbookTool', () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twbx',
       bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      stagedKey: STAGED_TWBX_KEY,
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishWorkbook.mockResolvedValue({
@@ -383,6 +385,10 @@ describe('publishWorkbookTool', () => {
       workbookType: 'twbx',
       projectId: 'target-project-id',
       overwrite: false,
+    });
+    expect(mocks.mockDeleteObject).toHaveBeenCalledExactlyOnceWith({
+      ...STAGED_DELETE,
+      key: STAGED_TWBX_KEY,
     });
   });
 
@@ -1281,7 +1287,9 @@ describe('publishWorkbookTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('personal space');
+    expect(result.content[0].text).toContain(
+      `published the workbook (id: ${mockWorkbook.id}) to the "Default" project`,
+    );
     expect(mocks.mockDeleteObject).toHaveBeenCalledExactlyOnceWith(STAGED_DELETE);
   });
 
