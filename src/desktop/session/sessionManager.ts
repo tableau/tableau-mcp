@@ -1,27 +1,35 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDesktopConfig } from '../../config.desktop.js';
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
 import { ArgsValidationError, ServiceUnavailableError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../episode-events.js';
-import { discoverInstances } from '../externalApi/discovery.js';
+import { defaultIsPidAlive, discoverInstances } from '../externalApi/discovery.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { buildDesktopUserAgent } from '../externalApi/userAgent.js';
 import { parseSessionPid } from './parseSessionPid.js';
-import { CACHED_XML_WARNING, noInstanceFoundMessage } from './unreachableInstance.js';
+import {
+  CACHED_XML_WARNING,
+  noInstanceFoundMessage,
+  pinnedDesktopNotAcceptingMessage,
+} from './unreachableInstance.js';
 
 export type DesktopConnection = {
   sessionId: string;
   executor: ExternalApiToolExecutor;
 };
 
-export const EXTERNAL_API_UNAVAILABLE_MESSAGE =
-  'This Tableau Desktop build does not serve the External Client API — update Desktop.';
+export const EXTERNAL_API_UNAVAILABLE_MESSAGE = `No Tableau Desktop is accepting agent connections. If Tableau Desktop is open, External API access is probably turned off. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`;
 
 export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
   'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.';
 
-export type DesktopUnavailableReason = 'pinned-unreachable' | 'stale-session' | 'no-api';
+export type DesktopUnavailableReason =
+  | 'pinned-unreachable'
+  | 'pinned-not-accepting'
+  | 'stale-session'
+  | 'no-api';
 
 export class ExternalClientApiUnavailableError extends ServiceUnavailableError {
   constructor(sessionId: string | number, reason: DesktopUnavailableReason = 'no-api') {
@@ -37,6 +45,8 @@ export class ExternalClientApiUnavailableError extends ServiceUnavailableError {
       // their work to a stranger's workbook. Relaunching is the only safe reconnect.
       case 'pinned-unreachable':
         return `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Pinned PID: ${sessionId}. ${CACHED_XML_WARNING}`;
+      case 'pinned-not-accepting':
+        return `${pinnedDesktopNotAcceptingMessage(sessionId)} ${CACHED_XML_WARNING}`;
       case 'stale-session':
         return noInstanceFoundMessage(sessionId);
       case 'no-api':
@@ -45,8 +55,18 @@ export class ExternalClientApiUnavailableError extends ServiceUnavailableError {
   }
 }
 
+export type SessionManagerDeps = {
+  /** Liveness probe for the pinned Desktop pid. Injectable for tests. */
+  isPidAlive?: (pid: number) => boolean;
+};
+
 export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
+  private readonly isPidAlive: (pid: number) => boolean;
+
+  constructor(deps: SessionManagerDeps = {}) {
+    this.isPidAlive = deps.isPidAlive ?? defaultIsPidAlive;
+  }
 
   async getExecutor(sessionId: string): Promise<ExternalApiToolExecutor> {
     let session = this.sessions.get(sessionId);
@@ -86,7 +106,9 @@ export class SessionManager {
       if (!executor.isAvailable()) {
         throw new ExternalClientApiUnavailableError(
           sessionId,
-          resolveUnavailableReason(sessionId, config.desktopSessionId, discover()),
+          resolveUnavailableReason(sessionId, config.desktopSessionId, discover(), () =>
+            this.isPidAlive(pid),
+          ),
         );
       }
 
@@ -116,9 +138,10 @@ function resolveUnavailableReason(
   sessionId: string,
   pinnedSessionId: string | undefined,
   runningInstances: ReturnType<typeof discoverInstances>,
+  isPinnedPidAlive: () => boolean,
 ): DesktopUnavailableReason {
   if (pinnedSessionId === sessionId) {
-    return 'pinned-unreachable';
+    return isPinnedPidAlive() ? 'pinned-not-accepting' : 'pinned-unreachable';
   }
   const others = runningInstances.filter((instance) => String(instance.pid) !== sessionId);
   return others.length > 0 ? 'stale-session' : 'no-api';
