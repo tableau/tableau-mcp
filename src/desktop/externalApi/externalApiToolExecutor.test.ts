@@ -2227,7 +2227,7 @@ describe('ExternalApiToolExecutor', () => {
         expect(error.error?.code).toBe('api-disabled');
         expect(error.error?.recoverable).toBe(false);
         expect(error.error?.message).toContain(
-          'External API access is turned off in Tableau Desktop.',
+          "External API access is turned off in Tableau Studio, so I can't connect to your workbook.",
         );
         expect(error.error?.message).toContain(EXTERNAL_API_ACCESS_HOW_TO_FIX);
         expect(error.error?.message).not.toContain('may have been invoked');
