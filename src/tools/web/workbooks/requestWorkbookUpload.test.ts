@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -8,6 +9,8 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getRequestWorkbookUploadTool } from './requestWorkbookUpload.js';
 import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
+
+const FILE_SIZE_BYTES = 482133;
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
@@ -59,7 +62,22 @@ describe('requestWorkbookUploadTool', () => {
     expect(tool.description).toContain('staged upload URL');
     expect(tool.paramsSchema).toMatchObject({
       fileName: expect.any(Object),
+      fileSizeBytes: expect.any(Object),
     });
+  });
+
+  it('requires fileSizeBytes to be a positive integer within the staged upload cap', async () => {
+    const tool = getRequestWorkbookUploadTool(new WebMcpServer());
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    const fileName = 'BoltBikes Workbook.twb';
+
+    expect(schema.safeParse({ fileName }).success).toBe(false);
+    for (const fileSizeBytes of [0, -1, 1.5, MAX_STAGED_WORKBOOK_BYTES + 1]) {
+      expect(schema.safeParse({ fileName, fileSizeBytes }).success).toBe(false);
+    }
+    for (const fileSizeBytes of [1, MAX_STAGED_WORKBOOK_BYTES]) {
+      expect(schema.safeParse({ fileName, fileSizeBytes }).success).toBe(true);
+    }
   });
 
   it('is enabled for ChatGPT', async () => {
@@ -128,6 +146,7 @@ describe('requestWorkbookUploadTool', () => {
     });
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twb',
+      fileSizeBytes: FILE_SIZE_BYTES,
       config: expect.objectContaining({
         enabled: true,
         bucket: 'tableau-workbooks',
@@ -239,6 +258,7 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twbx',
+      fileSizeBytes: FILE_SIZE_BYTES,
       config: expect.objectContaining({ enabled: true }),
       tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
@@ -301,12 +321,14 @@ describe('requestWorkbookUploadTool', () => {
     await callback(
       {
         fileName: 'BoltBikes Workbook.twb',
+        fileSizeBytes: FILE_SIZE_BYTES,
       },
       getMockExtra(),
     );
 
     expect(logAndExecute.mock.calls[0][0].args).toEqual({
       fileName: 'BoltBikes Workbook.twb',
+      fileSizeBytes: FILE_SIZE_BYTES,
     });
   });
 });
@@ -320,6 +342,7 @@ async function getToolResult(
   return await callback(
     {
       fileName: params.fileName,
+      fileSizeBytes: FILE_SIZE_BYTES,
     },
     getMockExtra(extraOverrides),
   );

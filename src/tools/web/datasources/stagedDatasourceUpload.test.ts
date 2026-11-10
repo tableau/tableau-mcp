@@ -47,7 +47,12 @@ describe('requestStagedDatasourceUpload', () => {
   ])(
     'presigns %s with the matching S3 key, TTL, content type, and bounded size',
     async (fileName, fileType, contentType) => {
-      const result = await requestStagedDatasourceUpload({ fileName, config, tenant });
+      const result = await requestStagedDatasourceUpload({
+        fileName,
+        fileSizeBytes: 482133,
+        config,
+        tenant,
+      });
 
       expect(result.datasourceUploadId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -58,11 +63,12 @@ describe('requestStagedDatasourceUpload', () => {
         uploadUrl: 'https://s3.example.com/signed-put',
         expiresAt: '2026-10-14T18:05:00.000Z',
         maxSizeBytes: 5 * 1000 * 1000 * 1000,
-        requiredHeaders: { 'Content-Type': contentType },
+        requiredHeaders: { 'Content-Type': contentType, 'Content-Length': '482133' },
       });
       expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledExactlyOnceWith({
         key: `mcp/datasource-uploads/${tenantPrefix}/${result.datasourceUploadId}/datasource.${fileType}`,
         contentType,
+        contentLength: 482133,
         bucket: config.bucket,
         region: config.region,
         presignTtlSeconds: 300,
@@ -73,9 +79,9 @@ describe('requestStagedDatasourceUpload', () => {
   it.each(['Sales.xml', 'Sales.tds.exe', 'Sales', ''])(
     'rejects unsupported filename %j before presigning',
     async (fileName) => {
-      await expect(requestStagedDatasourceUpload({ fileName, config, tenant })).rejects.toThrow(
-        'Data source upload filename must end in .tds or .tdsx.',
-      );
+      await expect(
+        requestStagedDatasourceUpload({ fileName, fileSizeBytes: 482133, config, tenant }),
+      ).rejects.toThrow('Data source upload filename must end in .tds or .tdsx.');
       expect(mocks.createPresignedPutUrlToS3).not.toHaveBeenCalled();
     },
   );
@@ -85,7 +91,12 @@ describe('requestStagedDatasourceUpload', () => {
     mocks.createPresignedPutUrlToS3.mockRejectedValue(error);
 
     await expect(
-      requestStagedDatasourceUpload({ fileName: 'Sales.tds', config, tenant }),
+      requestStagedDatasourceUpload({
+        fileName: 'Sales.tds',
+        fileSizeBytes: 482133,
+        config,
+        tenant,
+      }),
     ).rejects.toBe(error);
   });
 });
