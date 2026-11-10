@@ -2,7 +2,7 @@ import { Config } from '../config.js';
 import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
 /**
- * Derives the auth mode label for the product telemetry `tool_call` event.
+ * Derives the auth mode label for product telemetry events.
  */
 export function getAuthTypeForTelemetry(
   config: Config,
@@ -23,6 +23,8 @@ export function getAuthTypeForTelemetry(
       return 'direct-trust';
     case 'oauth':
       return 'embedded-oauth';
+    case 'passthrough':
+      return 'passthrough';
     default:
       return 'unknown';
   }
