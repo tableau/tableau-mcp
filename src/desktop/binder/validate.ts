@@ -128,7 +128,7 @@ export function onlyPieSliceGate(blockers: readonly Blocker[]): boolean {
 export const PIE_TEMPLATE_NAME = 'part-to-whole-pie-chart';
 
 export const KEEP_LARGE_PIE_HINT =
-  'Only if the user explicitly says they want the pie anyway, send the same pie proposal with keep_large_pie:true';
+  'Only if the user explicitly says they want the pie anyway, send the pie proposal; the tool blocks it once and says how to keep it (keep_large_pie:true on the same proposal). Never set keep_large_pie without the user saying so';
 
 export interface Blocker {
   code: EscalateReason | BlockerCode;
