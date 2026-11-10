@@ -1358,7 +1358,7 @@ function isProposalFilterResolutionFailure(
   );
 }
 
-/** True only when this call resubmits the exact pie proposal the slice gate asked the user to confirm. */
+/** keep_large_pie counts only on the exact proposal the server already blocked for its slice count. */
 function largePieConfirmedBy(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
@@ -3604,6 +3604,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
             }
+            // Read before the reservation, which drops the grant.
             largePieConfirmed = largePieConfirmedBy(
               priorRecovery,
               currentProposalSignature,
@@ -3697,12 +3698,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 if (blocked) {
                   return new IncompleteOperationError(blocked).toErr();
                 }
-                largePieConfirmed = largePieConfirmedBy(
-                  currentRecovery,
-                  currentProposalSignature,
-                  keep_large_pie,
-                );
               }
+              largePieConfirmed = largePieConfirmedBy(
+                currentRecovery,
+                currentProposalSignature,
+                keep_large_pie,
+              );
               bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
                 resolvedSession,
                 askKey,
@@ -3853,7 +3854,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               datasource: effectiveDatasource,
               ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
-              ...(proposal && keep_large_pie === true ? { keepLargePie: true } : {}),
+              ...(proposal && largePieConfirmed ? { keepLargePie: true } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
             if (
@@ -3964,7 +3965,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   requiredFilterValues,
                 })
               : undefined;
-          if (largePieConfirmable(res, proposal as BindingProposal | undefined, keep_large_pie)) {
+          if (
+            largePieConfirmable(res, proposal as BindingProposal | undefined, largePieConfirmed)
+          ) {
             // The pie gate alone is a user decision, not a dead end: keep recovery open so the
             // same proposal can return once with the user's explicit keep-the-pie confirmation.
             const pieDetail =

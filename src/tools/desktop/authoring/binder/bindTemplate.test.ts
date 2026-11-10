@@ -3828,6 +3828,52 @@ describe('bindTemplateTool bind recovery gate', () => {
       expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     });
 
+    it('ignores keep_large_pie on a first Call 2 the server never blocked, then admits the flagged resubmit', async () => {
+      const { getExecutor, applyWorkbookDocument } = setupAutoApplyMocks({
+        bind: boundPie(),
+        inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+        workbookReads: [M7_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      // Mirrors the binder: the slice gate lifts only when keepLargePie reaches it.
+      vi.mocked(binderModule.bindTemplate).mockImplementation(async (args) =>
+        (args as { keepLargePie?: boolean }).keepLargePie === true ? boundPie() : pieOnlyEscalate,
+      );
+      const session = 'pie-keep-unearned';
+      const first = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(first.isError).toBe(true);
+      invariant(first.content[0].type === 'text');
+      expect(JSON.parse(first.content[0].text).reason).toBe('pie_slice_limit');
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[0]?.[0]).not.toHaveProperty(
+        'keepLargePie',
+      );
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(sessionRouteState.getBindRecovery(session, normalizeAskForMatch(ask))).toMatchObject({
+        phase: 'proposal-attempted',
+        largePieConfirmation: { proposalSignature: proposalSignature(pieProposal) },
+      });
+      const kept = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(kept.isError, JSON.stringify(kept)).toBe(false);
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[1]?.[0]).toMatchObject({
+        keepLargePie: true,
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
     it('declines keep_large_pie under requireCompleteRequest without minting coverage', async () => {
       vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
       const result = await getToolResult({
