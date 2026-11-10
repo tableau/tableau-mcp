@@ -48,12 +48,15 @@ import {
   validationResultSchema,
   windowInfoSchema,
   workbookDiagnosticsSchema,
+  workbookExtensionKeySchema,
   workbookInventorySchema,
   workbookValidationIssueSchema,
   worksheetDiagnosticsSchema,
   worksheetInvalidFieldSchema,
   worksheetItemSchema,
   worksheetListSchema,
+  workspaceExtensionListSchema,
+  workspaceExtensionSchema,
 } from './types.js';
 
 /**
@@ -168,8 +171,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.32 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.32');
+  it('tracks the 0.2.34 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.34');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -271,6 +274,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['ImageExport', imageResultSchema],
       ['OperationList', operationListSchema],
       ['ValidateCalculatedFieldResponse', validateCalculatedFieldResponseSchema],
+      ['WorkbookExtensionKey', workbookExtensionKeySchema],
+      ['WorkspaceExtension', workspaceExtensionSchema],
+      ['WorkspaceExtensionList', workspaceExtensionListSchema],
     ] as const)(
       '%s: properties and required set match except known version deltas',
       (name, schema) => {
@@ -659,6 +665,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookDatasourceLogicalTableData,
       EXTERNAL_API_ROUTES.worksheetReloadExtension,
       EXTERNAL_API_ROUTES.dashboardReloadExtensions,
+      EXTERNAL_API_ROUTES.appExtensions,
+      EXTERNAL_API_ROUTES.appExtensionReload,
     ])('spec documents %s', (route) => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
@@ -699,6 +707,17 @@ describe('external client API contract (captured openapi fixture)', () => {
         get?: { operationId?: string };
       };
       expect(item.get?.operationId).toBe('getWorkbookExtensions');
+    });
+
+    it('documents the 0.2.34 workspace extension operations by operationId', () => {
+      expect(
+        (spec.paths[EXTERNAL_API_ROUTES.appExtensions] as { get?: { operationId?: string } }).get
+          ?.operationId,
+      ).toBe('getWorkspaceExtensions');
+      expect(
+        (spec.paths[EXTERNAL_API_ROUTES.appExtensionReload] as { post?: { operationId?: string } })
+          .post?.operationId,
+      ).toBe('reloadWorkspaceExtension');
     });
 
     it('documents the new 0.2.25 operations by operationId', () => {

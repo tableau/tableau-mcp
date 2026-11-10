@@ -8,6 +8,7 @@ export const APP_SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.28';
 export const DATASOURCE_CALC_VALIDATION_MIN_API_VERSION: ApiVersionFloor = '0.2.30';
 export const DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION: ApiVersionFloor = '0.2.31';
 export const WORKBOOK_CLOSE_MIN_API_VERSION: ApiVersionFloor = '0.2.32';
+export const WORKSPACE_EXTENSIONS_MIN_API_VERSION: ApiVersionFloor = '0.2.34';
 
 export function supportsDashboardVisualRegistration(apiVersion: string | undefined): boolean {
   return (
