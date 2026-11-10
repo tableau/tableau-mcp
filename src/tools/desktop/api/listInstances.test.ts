@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../../desktop/session/unreachableInstance.js';
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../../errors/externalApiAccess.js';
 import { NoDesktopInstancesFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
   discoverInstances: vi.fn(),
 }));
 
-vi.mock('../../../desktop/externalApi/discovery.js', () => ({
+vi.mock('../../../desktop/externalApi/discovery.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/externalApi/discovery.js')>()),
   discoverInstances: mocks.discoverInstances,
 }));
 
@@ -54,7 +55,7 @@ describe('listInstancesTool', () => {
   it('tells the user how to turn on External API access when no instances are found', () => {
     const { message } = new NoDesktopInstancesFoundError();
     expect(message).toContain(EXTERNAL_API_ACCESS_HOW_TO_FIX);
-    expect(message).toContain('older builds need an update');
+    expect(message).toContain('This Tableau Desktop version supports the External Client API');
   });
 
   it('should successfully list instances', async () => {

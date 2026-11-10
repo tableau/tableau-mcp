@@ -1,5 +1,6 @@
 import { Err, Ok } from 'ts-results-es';
 
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
 import * as logger from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style/formatDashboardZones.js';
@@ -10,10 +11,7 @@ import {
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
 } from '../callDeadline.js';
-import {
-  EXTERNAL_API_ACCESS_HOW_TO_FIX,
-  unknownInstanceUnreachableMessage,
-} from '../session/unreachableInstance.js';
+import { unknownInstanceUnreachableMessage } from '../session/unreachableInstance.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {

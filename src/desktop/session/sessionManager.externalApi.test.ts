@@ -1,7 +1,7 @@
 import pkg from '../../../package.json';
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { SessionManager } from './sessionManager.js';
-import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from './unreachableInstance.js';
 
 const mocks = vi.hoisted(() => ({
   discoverInstances: vi.fn(() => []),
@@ -89,7 +89,7 @@ describe('SessionManager executor selection', () => {
     await expect(promise).rejects.toThrow('No Tableau Desktop is accepting agent connections.');
     await expect(promise).rejects.toThrow(EXTERNAL_API_ACCESS_HOW_TO_FIX);
     await expect(promise).rejects.toThrow(
-      "Older Tableau Desktop builds don't have this setting and need an update. Requested session: 12345.",
+      `${EXTERNAL_API_ACCESS_HOW_TO_FIX} Requested session: 12345.`,
     );
   });
 

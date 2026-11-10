@@ -1,6 +1,7 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDesktopConfig } from '../../config.desktop.js';
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
 import { ArgsValidationError, ServiceUnavailableError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../episode-events.js';
@@ -10,7 +11,6 @@ import { buildDesktopUserAgent } from '../externalApi/userAgent.js';
 import { parseSessionPid } from './parseSessionPid.js';
 import {
   CACHED_XML_WARNING,
-  EXTERNAL_API_ACCESS_HOW_TO_FIX,
   noInstanceFoundMessage,
   pinnedDesktopNotAcceptingMessage,
 } from './unreachableInstance.js';
@@ -20,7 +20,7 @@ export type DesktopConnection = {
   executor: ExternalApiToolExecutor;
 };
 
-export const EXTERNAL_API_UNAVAILABLE_MESSAGE = `No Tableau Desktop is accepting agent connections. If Tableau Desktop is open, External API access is probably turned off. ${EXTERNAL_API_ACCESS_HOW_TO_FIX} Older Tableau Desktop builds don't have this setting and need an update.`;
+export const EXTERNAL_API_UNAVAILABLE_MESSAGE = `No Tableau Desktop is accepting agent connections. If Tableau Desktop is open, External API access is probably turned off. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`;
 
 export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
   'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.';
@@ -61,13 +61,12 @@ export type SessionManagerDeps = {
 };
 
 export class SessionManager {
+  private readonly sessions: Map<string, DesktopConnection> = new Map();
   private readonly isPidAlive: (pid: number) => boolean;
 
   constructor(deps: SessionManagerDeps = {}) {
-    this.isPidAlive = deps.isPidAlive ?? ((pid) => defaultIsPidAlive(pid));
+    this.isPidAlive = deps.isPidAlive ?? defaultIsPidAlive;
   }
-
-  private readonly sessions: Map<string, DesktopConnection> = new Map();
 
   async getExecutor(sessionId: string): Promise<ExternalApiToolExecutor> {
     let session = this.sessions.get(sessionId);

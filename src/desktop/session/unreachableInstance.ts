@@ -1,13 +1,18 @@
 /**
- * One message shape for "the Desktop you asked for is not answering".
+ * Messages for "the agent can't reach Desktop".
  *
  * Leaf module on purpose: both `sessionManager` (which owns session creation) and
  * `externalApiToolExecutor` (which owns the wire) need it, and sessionManager already
  * imports the executor.
  *
- * The agent can only re-target if the error names the instance, so every variant names the
- * pid and points at list-instances. Cached XML is called out because a restarted Desktop
- * keeps the same tool-side cache but not the same workbook.
+ * Two kinds of message live here:
+ * - Retarget messages (stale session, unreachable pid) name the pid and point at
+ *   list-instances, because the agent can only re-target if the error names the instance.
+ *   Cached XML is called out because a restarted Desktop keeps the tool-side cache but not
+ *   the workbook.
+ * - Access-off messages (External API access turned off) tell the user how to turn it on.
+ *   The pinned one omits list-instances on purpose: relaunching is the only safe reconnect
+ *   (see `sessionManager.ts`).
  */
 
 import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
@@ -39,8 +44,6 @@ export function unknownInstanceUnreachableMessage(cause?: string): string {
   return cause ? `${base} Cause: ${cause}` : base;
 }
 
-export { EXTERNAL_API_ACCESS_HOW_TO_FIX };
-
 export function externalApiDisabledMessage(): string {
   return `External API access is turned off in Tableau Studio, so I can't connect to your workbook. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`;
 }
@@ -53,5 +56,4 @@ export function pinnedDesktopNotAcceptingMessage(pid: string | number): string {
   );
 }
 
-export const UNPINNED_NO_INSTANCE_HINT =
-  'If Tableau Desktop is open, External API access may be turned off: Help > Settings and Performance > Enable External API Access (Requires Restart).';
+export const UNPINNED_NO_INSTANCE_HINT = `If Tableau Desktop is open, External API access may be turned off. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`;
