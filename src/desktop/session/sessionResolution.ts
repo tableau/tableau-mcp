@@ -8,6 +8,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { DesktopToolName } from '../../tools/desktop/toolName.js';
 import { discoverInstances } from '../externalApi/discovery.js';
+import { UNPINNED_NO_INSTANCE_HINT } from './unreachableInstance.js';
 
 const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
 
@@ -68,7 +69,7 @@ export function resolveSession(session: string | undefined): Result<string, McpT
   if (runningPids.length > 0 && !runningPids.includes(requestedSession)) {
     return Err(
       new ArgsValidationError(
-        `Tableau Desktop session '${requestedSession}' is not a running instance (running: ${runningPids.join(', ')}). See ${LIST_INSTANCES_TOOL} for the current instances.`,
+        `Tableau Desktop session '${requestedSession}' is not a running instance (running: ${runningPids.join(', ')}). See ${LIST_INSTANCES_TOOL} for the current instances. ${UNPINNED_NO_INSTANCE_HINT}`,
       ),
     );
   }
