@@ -35,6 +35,10 @@ export const getCabuStartConversationTool = (
     description: `
 Starts a new conversation with CABU (Tableau Agent's natural-language Q&A over a published data source), scoped to one data source. Use \`search-content\` or \`list-datasources\` first to find the \`datasourceLuid\` of the data source you want to ask about.
 
+**When to use:** only when the user explicitly asks for Tableau Agent or CABU, or asks to hand a question off to Tableau's own agent so it does the analysis server-side.
+
+**When NOT to use:** for ordinary questions about the data in a data source (totals, breakdowns, top-N, trends, filters). Answer those with \`get-datasource-metadata\` and \`query-datasource\` instead; they are the default way to query data.
+
 Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of these, unmodified, to every \`cabu-ask\` call that continues this conversation -- \`utteranceArgs\` is required on every turn, not just the first.
 
 **Parameters:**

@@ -39,6 +39,8 @@ export const getCabuAskTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     description: `
 Asks CABU (Tableau Agent's natural-language Q&A over a published data source) a question within a conversation already started by \`cabu-start-conversation\`.
 
+**When to use:** only to continue a CABU conversation that the user explicitly asked for (see \`cabu-start-conversation\`). For ordinary questions about the data in a data source, use \`get-datasource-metadata\` and \`query-datasource\` instead.
+
 **Parameters:**
 
 - \`conversationId\` (required): The \`conversationId\` returned by \`cabu-start-conversation\`.
