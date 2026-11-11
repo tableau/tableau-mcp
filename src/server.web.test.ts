@@ -810,6 +810,7 @@ describe('server', () => {
       'update-cloud-extract-refresh-task',
       'list-jobs',
       'list-users',
+      'list-groups',
       'update-user',
       'query-admin-insights',
       'delete-content',
