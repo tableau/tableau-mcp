@@ -8,7 +8,9 @@ import { Config } from '../../config.desktop.js';
 import { createCallDeadline } from '../../desktop/callDeadline.js';
 import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
+import { sessionLastTool } from '../../desktop/route/last-tool.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
+import { IncompleteOperationError } from '../../errors/mcpToolError.desktop.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
@@ -663,6 +665,116 @@ describe('DesktopTool product telemetry', () => {
         logger: 'tool',
       }),
     );
+  });
+});
+
+describe('DesktopTool next-step breadcrumb', () => {
+  beforeEach(() => sessionLastTool.reset());
+  afterEach(() => sessionLastTool.reset());
+
+  const bodyOf = (result: CallToolResult): Record<string, any> => {
+    const part = result.content[0];
+    expect(part.type).toBe('text');
+    return JSON.parse((part as { text: string }).text);
+  };
+
+  const run = (name: DesktopToolName, value: unknown, args: Record<string, unknown> = {}) =>
+    makeTool(name).logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args,
+      callback: async () => new Ok(value),
+    });
+
+  it('folds the apply-* finalizer floor into a one-step draft (build -> apply)', async () => {
+    const body = bodyOf(await run('build-worksheets-from-templates', { artifactId: 'a1' }));
+    expect(body.artifactId).toBe('a1');
+    expect(body.nextStep).toContain('apply-worksheet(NEXT)');
+    expect(body.nextStep).toContain('emit the next tool-call block for apply-worksheet now');
+  });
+
+  it('does not breadcrumb a result that already states its own next action', async () => {
+    const body = bodyOf(
+      await run('add-field', {
+        message: 'added',
+        structuredContent: { nextAction: { kind: 'prefill', label: 'Apply worksheet edits' } },
+      }),
+    );
+    expect(body.nextStep).toBeUndefined();
+  });
+
+  it('does not breadcrumb a tool with no unambiguous successor', async () => {
+    const body = bodyOf(await run('ask-user', { message: 'hi' }));
+    expect(body.nextStep).toBeUndefined();
+  });
+
+  it('fixes fields -> build from the recorded previous tool (bigram)', async () => {
+    // The env stub lets the per-session trace record across the two calls so the bigram resolves.
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    try {
+      await run('list-templates', { templates: [] }, { session: '4242' });
+      const body = bodyOf(await run('list-available-fields', { fields: [] }, { session: '4242' }));
+      expect(body.nextStep).toContain('build-worksheets-from-templates(NEXT)');
+      expect(body.nextStep).toContain('The list-available-fields result above is complete');
+      expect(body.nextStep).toContain(
+        'emit the next tool-call block for build-worksheets-from-templates now',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('stays silent on the dense-scatter path (get-worksheet-xml -> list-available-fields)', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    try {
+      await run('get-worksheet-xml', { xml: '<x/>' }, { session: '4242' });
+      const body = bodyOf(await run('list-available-fields', { fields: [] }, { session: '4242' }));
+      expect(body.nextStep).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe('DesktopTool retry-safe recovery breadcrumb', () => {
+  const textOf = (result: CallToolResult): string => {
+    const part = result.content[0];
+    expect(part.type).toBe('text');
+    return (part as { text: string }).text;
+  };
+
+  const runErr = (name: DesktopToolName, error: McpToolError) =>
+    makeTool(name).logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '4242' },
+      callback: async () => new Err(error),
+    });
+
+  it('appends a recovery breadcrumb after the JSON of a retry-safe failure', async () => {
+    const payload = {
+      applied: false,
+      retrySafe: true,
+      steps: [{ index: 0, operation: 'dashboard', state: 'failed', error: 'needs a KPI worksheet' }],
+    };
+    const result = await runErr('run-dashboard-batch', new IncompleteOperationError(payload));
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text.startsWith(JSON.stringify(payload))).toBe(true);
+    expect(text).toContain('The run-dashboard-batch result above did not apply (applied:false)');
+    expect(text).toContain('emit the next tool-call block to make that fix now');
+  });
+
+  it('does not append a recovery breadcrumb to a non-retry-safe failure', async () => {
+    const payload = { applied: 'unknown', retrySafe: false, steps: [] };
+    const text = textOf(await runErr('run-dashboard-batch', new IncompleteOperationError(payload)));
+    expect(text).toBe(JSON.stringify(payload));
+    expect(text).not.toContain('retry-safe recovery');
+  });
+
+  it('does not append a recovery breadcrumb to an ordinary McpToolError', async () => {
+    const text = textOf(
+      await runErr('run-dashboard-batch', new McpToolError({ type: 'bad', message: 'nope', statusCode: 500 })),
+    );
+    expect(text).not.toContain('retry-safe recovery');
   });
 });
 

@@ -1283,7 +1283,7 @@ function recoveryGateBlock(
       : 'If the measure remains ambiguous, use ask-user and present these choices; do not guess.';
     return blockedResult(
       'awaiting_proposal',
-      'Blocked: bind-template already returned a proposal request for this ask. The same choices from the previous llm_input are repeated in call_2_contract below. Choose an exact compatible field for every required slot, then call bind-template with the listed arguments plus proposal:{template,title,bindings:[{slot_id,field}],confidence}. Do not resubmit the bare ask. ' +
+      'Blocked: bind-template already returned a proposal request for this ask. The same choices from the previous llm_input are repeated in call_2_contract below. Choose an exact compatible field for every required slot, then resubmit bind-template with every proposal field nested inside ONE argument named "proposal" — do NOT place template/title/bindings/confidence at the top level (top-level copies are ignored, which is why the prior call was treated as a bare ask). The arguments object must look exactly like {"ask":"<this ask>","auto_apply":true,"proposal":{"template":"<chosen template>","title":"<title>","bindings":[{"slot_id":"<slot>","field":"<field>"}],"confidence":<0..1>}}. Do not resubmit the bare ask. ' +
         choiceGuidance,
       recommended ? 'Use recommended proposal' : 'Pick a proposal or ask user',
       proposalContext,

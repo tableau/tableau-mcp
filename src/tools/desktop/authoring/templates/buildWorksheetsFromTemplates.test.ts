@@ -170,6 +170,8 @@ describe('build-worksheets-from-templates', () => {
       ],
     });
     expect(JSON.stringify(body)).not.toMatch(/expiresAt|confirm|workflow|<worksheet|formula/i);
+    // The breadcrumb is folded in centrally in tool.ts/logAndExecute (covered by nextStep.test.ts);
+    // this test invokes the raw callback directly, so it only pins the draft body.
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(sessionRouteState.get('12345')).toBeUndefined();
 

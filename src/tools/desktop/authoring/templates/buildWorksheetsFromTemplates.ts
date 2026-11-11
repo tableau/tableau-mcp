@@ -138,6 +138,9 @@ export const getBuildWorksheetsFromTemplatesTool = (
             provenance: built.value.provenance,
             bindings: built.value.bindings,
             ...(topN !== undefined ? { topN } : {}),
+            // Draft artifact — the worksheet isn't rendered until apply-worksheet (which takes the
+            // artifactId above). The breadcrumb telling a weaker model to finish is folded in
+            // centrally in tool.ts/logAndExecute; see nextStep.ts.
           });
         },
       });

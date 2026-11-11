@@ -58,6 +58,16 @@ export class IncompleteOperationError<T extends object> extends McpToolError {
     const { structuredContent: _, ...body } = this.recoveryPayload;
     return JSON.stringify(body);
   }
+
+  /**
+   * Whether the operation can be retried once the caller fixes the condition the payload names (the
+   * body's `retrySafe` flag). tool.ts uses this to attach a recovery breadcrumb only on retry-safe
+   * failures, never on a genuine dead end. Read defensively: the generic payload isn't typed with
+   * `retrySafe`, so an omitted flag reads as not-retry-safe.
+   */
+  isRetrySafe(): boolean {
+    return (this.recoveryPayload as { retrySafe?: unknown }).retrySafe === true;
+  }
 }
 
 /**
