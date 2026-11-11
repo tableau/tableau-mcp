@@ -3,6 +3,7 @@ import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from './externalApiAccess.js';
 
 export class McpToolError extends Error {
   readonly type: string;
@@ -346,8 +347,9 @@ export class NoDesktopInstancesFoundError extends McpToolError {
         'No running Tableau Desktop instances found.',
         'Make sure:',
         '  1. Tableau Desktop is running',
-        '  2. The External Client API is available in this Desktop build',
-        '  3. The External Client API discovery file exists in the expected location',
+        `  2. External API access is turned on. ${EXTERNAL_API_ACCESS_HOW_TO_FIX}`,
+        '  3. This Tableau Desktop version supports the External Client API',
+        '  4. The External Client API discovery file exists in the expected location',
       ].join('\n'),
       statusCode: 404,
     });
