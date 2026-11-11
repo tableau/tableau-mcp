@@ -33,6 +33,7 @@ describe('getJwt', () => {
         alg: 'HS256',
         typ: 'JWT',
         kid: mockConnectedApp.secretId,
+        iss: mockConnectedApp.clientId,
       });
     });
 
