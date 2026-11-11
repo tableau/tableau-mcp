@@ -11,13 +11,16 @@ import {
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
 import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { sessionLastTool } from '../../desktop/route/last-tool.js';
 import { resolveSession } from '../../desktop/session/sessionResolution.js';
+import { IncompleteOperationError } from '../../errors/mcpToolError.desktop.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { recoveryBreadcrumb, routeBreadcrumb } from './nextStep.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
@@ -34,6 +37,41 @@ export function resolveEpisodeKey(
     typeof args === 'object' && args !== null ? (args as { session?: unknown }).session : undefined;
   const resolved = resolveSession(typeof session === 'string' ? session : undefined);
   return resolved.isOk() ? resolved.value : fallback;
+}
+
+/**
+ * The key the route/last-tool trace is stored under: the raw `session` argument the agent passes on
+ * every call. The breadcrumb only needs a key consistent across a session's calls, not the resolved
+ * Desktop pid, so we skip resolveSession and its per-call filesystem scan. Undefined (no session)
+ * disables the breadcrumb for that call.
+ */
+function sessionTraceKey(args: unknown): string | undefined {
+  const session =
+    typeof args === 'object' && args !== null ? (args as { session?: unknown }).session : undefined;
+  return typeof session === 'string' && session.length > 0 ? session : undefined;
+}
+
+/**
+ * Fold a route-progress breadcrumb into a success value's body, or return it unchanged. Skips any
+ * result that is not a plain object, or that already states its own next action (an existing
+ * `nextStep`, or a structuredContent/nextAction envelope such as add-field's prefill or an apply-*
+ * done receipt). Fail-open: any fault leaves the value untouched.
+ */
+function decorateWithNextStep<T>(
+  toolName: DesktopToolName,
+  previousTool: DesktopToolName | undefined,
+  value: T,
+): T {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const body = value as Record<string, unknown>;
+    if ('nextStep' in body || 'nextAction' in body || getStructuredContent(body)) return value;
+    const line = routeBreadcrumb(previousTool, toolName);
+    if (!line) return value;
+    return { ...body, nextStep: line } as T;
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -108,11 +146,18 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     try {
       const result = await raceDeadline(extra, callback);
       if (result.isOk()) {
+        // Fold a route-progress breadcrumb into a mid-sequence result before serializing, then record
+        // this tool as the session's last-run step. Weak BYOLLM-fallback models drop the next-action
+        // call after a draft result; an adjacent next-step line fixes it. See nextStep.ts.
+        const traceKey = sessionTraceKey(args);
+        const previousTool = sessionLastTool.get(traceKey);
+        const successValue = decorateWithNextStep(this.name, previousTool, result.value);
+        sessionLastTool.set(traceKey, this.name);
         toolResult = getSuccessResult
-          ? getSuccessResult(result.value)
+          ? getSuccessResult(successValue)
           : {
               isError: false,
-              content: [{ type: 'text', text: JSON.stringify(result.value) }],
+              content: [{ type: 'text', text: JSON.stringify(successValue) }],
             };
         const mappedError = toolResult.isError === true;
         success = !mappedError;
@@ -143,9 +188,20 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         errorType = result.error.type;
       }
       const structuredContent = getStructuredContent(result.error);
+      // A retry-safe failure is recoverable, not a dead end, but a weak BYOLLM-fallback model reads
+      // the error, narrates the fix, then drops the next tool-call block. Append a recovery
+      // breadcrumb after the error JSON (see nextStep.ts) to keep it going — only when no
+      // structuredContent envelope is already steering the client, and never on a non-retry-safe
+      // failure, where stopping to report is correct.
+      const errorText =
+        !structuredContent &&
+        result.error instanceof IncompleteOperationError &&
+        result.error.isRetrySafe()
+          ? `${result.error.getErrorText()}\n\n${recoveryBreadcrumb(this.name)}`
+          : result.error.getErrorText();
       toolResult = {
         isError: true,
-        content: [{ type: 'text', text: result.error.getErrorText() }],
+        content: [{ type: 'text', text: errorText }],
         ...(structuredContent ? { structuredContent } : {}),
       };
       void emitToolErrorEvent({

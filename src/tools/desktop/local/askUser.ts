@@ -56,10 +56,20 @@ function renderAskUser({
   urgency?: z.infer<typeof urgencySchema>;
   options?: string[];
 }): string {
-  const prefix = `[${(urgency ?? 'blocking').toUpperCase()}]`;
+  const resolvedUrgency = urgency ?? 'blocking';
+  const prefix = `[${resolvedUrgency.toUpperCase()}]`;
   const optionsBlock =
     options && options.length > 0
       ? `\n\nOptions:\n${options.map((option, index) => `${index + 1}. ${option}`).join('\n')}`
       : '';
-  return `${prefix} ${question}${optionsBlock}`;
+  // Over the blocking fallback there's no human to answer, so a bare echo leaves the model narrating
+  // its choice and stopping. Steer it to proceed. Phrased conditionally so it stays correct on the
+  // interactive path, where the host collects a real answer first.
+  const proceedSteer =
+    resolvedUrgency === 'blocking'
+      ? '\n\n(If no interactive answer is available and you must proceed on your own, pick the ' +
+        'best-supported option and continue by emitting the next tool-call block now — do not stop ' +
+        'at a prose summary of your choice.)'
+      : '';
+  return `${prefix} ${question}${optionsBlock}${proceedSteer}`;
 }

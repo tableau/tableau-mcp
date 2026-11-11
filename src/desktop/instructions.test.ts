@@ -1,4 +1,5 @@
 import { buildCombinedInstructions } from '../instructions.combined.js';
+import { routeDerivedFinalizer } from '../tools/desktop/nextStep.js';
 import { desktopToolNames } from '../tools/desktop/toolName.js';
 import { TOOL_PROFILE_NAMES } from './episode-events.js';
 import {
@@ -524,6 +525,30 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       expect(rendered).toContain(stopCondition);
     }
   });
+
+  // Draft-artifact producers and their apply-* finalizers are derived from the route table by
+  // routeDerivedFinalizer (see nextStep.ts), not a hand-kept registry. Pin the derived set and
+  // in-sequence adjacency so a route edit or new producer can't silently drop the finalizing step.
+  it('derives exactly the known draft-artifact producers from the route table', () => {
+    const producers = new Set(
+      routes
+        .flatMap((route) => route.toolSequence)
+        .filter((tool) => routeDerivedFinalizer(tool) !== undefined),
+    );
+    expect(producers).toEqual(new Set(['build-worksheets-from-templates', 'add-field']));
+  });
+
+  it.each(routes)(
+    'route "$id" follows every draft-artifact producer with its finalizer',
+    (route) => {
+      route.toolSequence.forEach((tool, i) => {
+        const finalizer = routeDerivedFinalizer(tool);
+        if (finalizer !== undefined) {
+          expect(route.toolSequence[i + 1]).toBe(finalizer);
+        }
+      });
+    },
+  );
 });
 
 describe('generateDesktopInstructions', () => {

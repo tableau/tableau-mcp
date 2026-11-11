@@ -28,10 +28,17 @@ describe('askUserTool', () => {
 
   it('defaults to blocking urgency', async () => {
     const text = await getToolText({ question: 'Which Sales field should I use?' });
-    expect(text).toBe('[BLOCKING] Which Sales field should I use?');
+    expect(text).toContain('[BLOCKING] Which Sales field should I use?');
   });
 
-  it('renders soft urgency', async () => {
+  it('steers a blocking question to resolve and emit the next tool-call over the fallback', async () => {
+    const text = await getToolText({ question: 'Which Sales field should I use?' });
+    expect(text).toContain('If no interactive answer is available');
+    expect(text).toContain('emitting the next tool-call block now');
+    expect(text).toContain('do not stop');
+  });
+
+  it('renders soft urgency without the proceed steer', async () => {
     const text = await getToolText({
       question: 'Should I use monthly grain?',
       urgency: 'soft',
@@ -44,7 +51,7 @@ describe('askUserTool', () => {
       question: 'Which field should I use?',
       options: ['Sales', 'Profit', 'Revenue'],
     });
-    expect(text).toBe(
+    expect(text).toContain(
       '[BLOCKING] Which field should I use?\n\nOptions:\n1. Sales\n2. Profit\n3. Revenue',
     );
   });

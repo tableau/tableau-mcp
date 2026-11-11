@@ -3339,6 +3339,9 @@ describe('bindTemplateTool bind recovery gate', () => {
       { name: 'Goals Against', label: 'Goals Against (from standings.csv)' },
     ]);
     expect(repeatedBody.guidance).toContain('Do not resubmit the bare ask');
+    expect(repeatedBody.guidance).toContain('nested inside ONE argument named "proposal"');
+    expect(repeatedBody.guidance).toContain('do NOT place template/title/bindings/confidence');
+    expect(repeatedBody.guidance).toContain('"proposal":{"template":"<chosen template>"');
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
   });
