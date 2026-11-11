@@ -1238,6 +1238,96 @@ describe('Config', () => {
     });
   });
 
+  describe('KV provider configuration and session compatibility', () => {
+    beforeEach(() => {
+      vi.stubEnv('KV_STORE_PROVIDER', undefined);
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', undefined);
+      vi.stubEnv('SESSION_STORE_PROVIDER', undefined);
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', undefined);
+    });
+
+    it('defaults to memory with the legacy property pointing at the same configuration', () => {
+      const config = new Config();
+      expect(config.keyValueStore).toEqual({ provider: 'memory' });
+      expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('accepts custom KV modules and forwards provider-specific settings', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"@example/kv-provider","table":"state"}');
+      const config = new Config();
+      expect(config.keyValueStore).toEqual({
+        provider: 'custom',
+        providerConfig: { module: '@example/kv-provider', table: 'state' },
+      });
+      expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('uses legacy session configuration when the KV provider is unset', () => {
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs","table":"sessions"}');
+      const config = new Config();
+      expect(config.keyValueStore).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './legacy.cjs', table: 'sessions' },
+      });
+      expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('selects KV settings as a pair without parsing obsolete session configuration', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"./kv.cjs"}');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', 'invalid-json');
+      expect(new Config().keyValueStore).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './kv.cjs' },
+      });
+    });
+
+    it('honors explicit KV memory even when a legacy custom provider is configured', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'memory');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs"}');
+      expect(new Config().keyValueStore).toEqual({ provider: 'memory' });
+    });
+
+    it('requires KV custom configuration instead of borrowing legacy settings', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs"}');
+      expect(() => new Config()).toThrow(
+        'KV_STORE_PROVIDER_CONFIG is required when KV_STORE_PROVIDER is "custom"',
+      );
+    });
+
+    it('preserves the legacy missing-configuration error', () => {
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      expect(() => new Config()).toThrow(
+        'SESSION_STORE_PROVIDER_CONFIG is required when SESSION_STORE_PROVIDER is "custom"',
+      );
+    });
+
+    it('rejects unrecognized KV providers instead of silently selecting memory', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'redis');
+      expect(() => new Config()).toThrow('KV_STORE_PROVIDER must be "memory" or "custom"');
+    });
+
+    it.each(['invalid-json', '{}', '{"module":42}'])(
+      'rejects malformed custom KV configuration: %s',
+      (value) => {
+        vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+        vi.stubEnv('KV_STORE_PROVIDER_CONFIG', value);
+        expect(() => new Config()).toThrow();
+      },
+    );
+
+    it('preserves the existing memory default for an unrecognized legacy provider', () => {
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'invalid');
+      expect(new Config().sessionStore).toEqual({ provider: 'memory' });
+    });
+  });
+
   describe('Passthrough auth', () => {
     beforeEach(() => {
       vi.stubEnv('AUTH', 'passthrough');

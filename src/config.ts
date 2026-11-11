@@ -15,10 +15,10 @@ import {
 import { log } from './logging/logger.js';
 import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
-  isSessionStoreProvider,
-  providerConfigSchema as sessionStoreProviderConfigSchema,
-  SessionStoreConfig,
-} from './sessionStore/types.js';
+  isKeyValueStoreProvider,
+  KeyValueStoreConfig,
+  providerConfigSchema as keyValueStoreProviderConfigSchema,
+} from './storage/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
@@ -97,7 +97,8 @@ export class Config extends BaseConfig {
   telemetry: TelemetryConfig;
   latencyMetricName: string;
   featureGate: FeatureGateConfig;
-  sessionStore: SessionStoreConfig;
+  keyValueStore: KeyValueStoreConfig;
+  sessionStore: KeyValueStoreConfig;
   activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
@@ -177,6 +178,8 @@ export class Config extends BaseConfig {
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
+      KV_STORE_PROVIDER: keyValueStoreProvider,
+      KV_STORE_PROVIDER_CONFIG: keyValueStoreProviderConfig,
       SESSION_STORE_PROVIDER: sessionStoreProvider,
       SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
       ACTIVITY_LOG_PROVIDER: activityLogProvider,
@@ -366,24 +369,30 @@ export class Config extends BaseConfig {
       };
     }
 
-    // Session store provider configuration (similar to feature gate provider)
-    if (isSessionStoreProvider(sessionStoreProvider) && sessionStoreProvider === 'custom') {
-      if (!sessionStoreProviderConfig) {
-        throw new Error(
-          'SESSION_STORE_PROVIDER_CONFIG is required when SESSION_STORE_PROVIDER is "custom"',
-        );
+    // Generic KV settings take precedence as a pair; legacy session settings remain a fallback.
+    const useKeyValueSettings = keyValueStoreProvider !== undefined;
+    if (useKeyValueSettings && !isKeyValueStoreProvider(keyValueStoreProvider)) {
+      throw new Error('KV_STORE_PROVIDER must be "memory" or "custom"');
+    }
+    const storeProvider = useKeyValueSettings ? keyValueStoreProvider : sessionStoreProvider;
+    const storeProviderConfig = useKeyValueSettings
+      ? keyValueStoreProviderConfig
+      : sessionStoreProviderConfig;
+    if (storeProvider === 'custom') {
+      if (!storeProviderConfig) {
+        const variable = useKeyValueSettings ? 'KV_STORE_PROVIDER' : 'SESSION_STORE_PROVIDER';
+        throw new Error(`${variable}_CONFIG is required when ${variable} is "custom"`);
       }
-      this.sessionStore = {
+      this.keyValueStore = {
         provider: 'custom',
-        providerConfig: sessionStoreProviderConfigSchema.parse(
-          JSON.parse(sessionStoreProviderConfig),
-        ),
+        providerConfig: keyValueStoreProviderConfigSchema.parse(JSON.parse(storeProviderConfig)),
       };
     } else {
-      this.sessionStore = {
+      this.keyValueStore = {
         provider: 'memory',
       };
     }
+    this.sessionStore = this.keyValueStore;
 
     // Activity Log provider configuration (similar to feature gate provider)
     if (isActivityLogProvider(activityLogProvider) && activityLogProvider === 'custom') {

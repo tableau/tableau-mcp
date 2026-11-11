@@ -87,7 +87,7 @@ describe('SessionStore init', () => {
       } as any);
 
       expect(() => initializeSessionStore()).toThrow(
-        /Failed to load custom session store provider/,
+        /Failed to load custom key-value store provider/,
       );
     });
 
