@@ -1,4 +1,9 @@
-import { objectFromShape, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import {
+  AnyObjectSchema,
+  AnySchema,
+  objectFromShape,
+  ZodRawShapeCompat,
+} from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 
 /**
@@ -16,8 +21,12 @@ import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-sc
  * union schemas: a z.discriminatedUnion (or a .superRefine wrapper around one) has no top-level
  * `.shape`, so this same conversion previously produced `{"type":"object","properties":{}}`.
  */
-export function advertisedInputSchema(paramsShape: ZodRawShapeCompat): Record<string, unknown> {
-  const objectSchema = objectFromShape(paramsShape);
+export function advertisedInputSchema(
+  params: ZodRawShapeCompat | AnySchema,
+): Record<string, unknown> {
+  // A raw shape is wrapped like the SDK does at registration; a full schema is used as is.
+  const objectSchema =
+    'parse' in params ? (params as AnyObjectSchema) : objectFromShape(params as ZodRawShapeCompat);
   return toJsonSchemaCompat(objectSchema, {
     strictUnions: true,
     pipeStrategy: 'input',
