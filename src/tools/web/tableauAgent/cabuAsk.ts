@@ -44,7 +44,7 @@ Asks CABU (Tableau Agent's natural-language Q&A over a published data source) a 
 **Parameters:**
 
 - \`conversationId\` (required): The \`conversationId\` returned by \`cabu-start-conversation\`.
-- \`utteranceArgs\` (required): The opaque token returned by \`cabu-start-conversation\` (or by the most recent \`cabu-ask\` call in this conversation). Pass it through unmodified; do not inspect or edit it.
+- \`utteranceArgs\` (required): The opaque token returned by \`cabu-start-conversation\`. Pass the same value, unmodified, on every turn of this conversation; \`cabu-ask\` does not return a new one. Do not inspect or edit it.
 - \`question\` (required): The natural-language question to ask CABU.
 - \`parentLuid\` (optional): The \`nextParentLuid\` returned by the previous \`cabu-ask\` call in this conversation. Omit it for the first question in a conversation; include it on every follow-up question so CABU has the prior turn's context.
 
@@ -52,7 +52,7 @@ Returns the answer text, any datatables (rendered as truncated markdown), a data
 
 **Example Usage (a two-turn conversation):**
 1. \`{ conversationId: "...", utteranceArgs: "...", question: "What were total sales?" }\`
-2. \`{ conversationId: "...", utteranceArgs: "...", question: "Now just the West region.", parentLuid: "<nextParentLuid from turn 1>" }\`
+2. \`{ conversationId: "<same as turn 1>", utteranceArgs: "<same as turn 1>", question: "Now just the West region.", parentLuid: "<nextParentLuid from turn 1>" }\`
 `,
     paramsSchema,
     annotations: {
