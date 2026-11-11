@@ -20,6 +20,14 @@ For example, for the [`query-datasource`](../../../tools/data-qna/query-datasour
 it internally calls into VizQL Data Service, the JWT will only have the
 `tableau:viz_data_service:read` scope.
 
+When registering tools, the server checks whether the site supports Pulse and AI-powered Pulse
+insights (Tableau+). If the Knowledge tools are on
+([`KNOWLEDGE_TOOLS_ENABLED=true`](../env-vars.md#knowledge_tools_enabled)), it also checks for
+Tableau Knowledge. The checks use `tableau:insight_definitions_metrics:read`,
+`tableau:entitlements:read`, and (Knowledge only) `tableau:knowledge:read`. If the Connected App
+doesn't grant a check's scope, the check is denied and those tools are left out, even on a site that
+supports the feature. Grant the scope to get them back.
+
 ## Required Variables
 
 ### `JWT_SUB_CLAIM`
@@ -70,6 +78,9 @@ Example:
 ```json
 { "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
+
+`{OAUTH_USERNAME}` must sit inside a quoted JSON string value, as in the example. The username is
+JSON-escaped before it is inserted.
 
 [direct-trust]: https://help.tableau.com/current/online/en-us/connected_apps.htm#direct-trust
 [jwt]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt

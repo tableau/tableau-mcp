@@ -12,6 +12,8 @@
  * S3 client rather than each constructing their own.
  */
 
+import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
+
 /**
  * Socket-idle timeouts (ms) for the S3 client's Node HTTP handler.
  *
@@ -116,6 +118,19 @@ export function joinS3Prefix(base: string, segment: string): string {
 }
 
 /**
+ * Builds a tenant-scoped object key, `<keyPrefix>/<folder>/<siteLuid>/<userLuid>/<rest>`.
+ * Throws if the tenant LUIDs or folder are not safe key segments, so an unscoped key is never built.
+ */
+export function buildTenantS3Key(
+  keyPrefix: string,
+  tenant: TenantLuids,
+  folder: string,
+  rest: string,
+): string {
+  return `${joinS3Prefix(keyPrefix, '')}${buildTenantBlobKey(tenant, folder, rest)}`;
+}
+
+/**
  * Uploads a payload buffer to S3 under `key` and returns a short-lived
  * presigned GET URL. The raw buffer is uploaded directly (no base64), so the
  * object is exactly the bytes passed in.
@@ -178,12 +193,14 @@ async function presignGetObjectUrl({
 export async function createPresignedPutUrlToS3({
   key,
   contentType,
+  contentLength,
   bucket,
   region,
   presignTtlSeconds,
 }: {
   key: string;
   contentType: string;
+  contentLength: number;
   bucket: string;
   region: string;
   presignTtlSeconds: number;
@@ -196,6 +213,8 @@ export async function createPresignedPutUrlToS3({
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
+      // Signing Content-Length makes S3 reject any PUT whose body size differs.
+      ContentLength: contentLength,
     }),
     { expiresIn: presignTtlSeconds },
   );

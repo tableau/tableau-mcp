@@ -29,7 +29,10 @@ See [Popular Client Integrations](https://tableau.github.io/tableau-mcp/docs/hos
 
 ### Self-Hosted / Local (npx)
 
-The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
+The `@tableau/mcp-server` npm package contains the Web server for Tableau Cloud and Tableau
+Server. It does not contain the Tableau Desktop authoring server or its data.
+
+This is the quickest way to run Tableau MCP locally. It requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
 
 ```json
 {
@@ -49,6 +52,21 @@ The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.o
 ```
 
 For Docker, building from source, and other self-hosted options, see the [Getting Started guide](https://tableau.github.io/tableau-mcp/docs/getting-started).
+
+### Tableau Desktop Authoring Server
+
+The npm package is Web-only. The Desktop authoring server is a separate build from this repo; see
+[`docs/README.desktop.md`](docs/README.desktop.md) for the quickstart.
+
+## Standalone Binaries (SEA)
+
+The server can be packaged as a [Node.js Single Executable Application](https://tableau.github.io/tableau-mcp/docs/extras/node-sea)
+so it runs without a Node.js install. `npm run build:sea -- --variant default` builds the Web
+executable into `build/sea/default/<platform>/`.
+
+For a published GitHub Release, the `upload-binaries` workflow is configured to attach one archive
+per supported release platform. Each archive contains the Web executable (`tableau-mcp`; `.exe` on
+Windows) only. Releases that predate the archives may not have them.
 
 ## Deploy to Heroku
 

@@ -1,20 +1,37 @@
 import features from '../../features.json';
 import pkg from '../../package.json';
+import { Config } from '../../src/config.js';
+import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
+import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
-const authoringToolsEnabled = Boolean(features['authoring-tools']);
-const flowToolsEnabled = Boolean(features['flow-tools']);
+const datasourceAuthoringEnabled = Boolean(features['datasource-authoring']);
+const flowReadToolsEnabled = Boolean(features['flow-read-tools']);
+const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
+let flowReadExpected: boolean;
+let flowWriteExpected: boolean;
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
+const knowledgeWriteToolsEnabled = Boolean(features['knowledge-write-tools']);
+let knowledgeReadExpected: boolean;
+let knowledgeWriteExpected: boolean;
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
+const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
-  beforeAll(setEnv);
+  beforeAll(() => {
+    setEnv();
+    const config = new Config();
+    flowReadExpected = config.flowReadToolsEnabled ?? flowReadToolsEnabled;
+    flowWriteExpected = config.flowWriteToolsEnabled ?? flowWriteToolsEnabled;
+    knowledgeReadExpected = config.knowledgeToolsEnabled ?? knowledgeToolsEnabled;
+    knowledgeWriteExpected =
+      knowledgeReadExpected && (config.knowledgeWriteToolsEnabled ?? knowledgeWriteToolsEnabled);
+  });
   afterAll(resetEnv);
 
   describe('default variant', () => {
@@ -27,7 +44,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -58,24 +75,22 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
         'get-flow-task',
-        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
-      // authoring tools are gated off by default (authoring-tools feature flag)
-      const authoringTools: ReadonlyArray<WebToolName> = [
-        'request-workbook-upload',
-        'publish-workbook',
+      // datasource publishing tools are gated off by default (datasource-authoring feature flag)
+      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = [
+        'request-datasource-upload',
+        'publish-datasource',
       ];
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      // Knowledge tools follow KNOWLEDGE_TOOLS_ENABLED / KNOWLEDGE_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
         'inspect-knowledge-context',
@@ -91,14 +106,14 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !oauthOnlyTools.includes(name));
       }
 
-      // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+      // Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true' || !adminToolsFlagEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out flow tools unless both the env switch and the feature flag are on
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowReadExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -106,13 +121,17 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!authoringToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      if (!datasourceAuthoringEnabled) {
+        expectedToolNames = expectedToolNames.filter(
+          (name) => !datasourceAuthoringTools.includes(name),
+        );
       }
 
-      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
-      if (!knowledgeToolsEnabled) {
+      if (!knowledgeReadExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
+      }
+      if (!knowledgeWriteExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'manage-knowledge-context');
       }
 
       // Filter out data-app tools if they are not enabled (data-apps feature flag)
@@ -120,16 +139,13 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Filter out content-mutating flow tools unless explicitly enabled.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
-      if (!authoringToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
-      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -149,8 +165,8 @@ describe('server', () => {
     });
   });
 
-  // Instructions depend on ADMIN_TOOLS_ENABLED, which is fixed at process spawn, so the admin-on case
-  // needs its own client with the flag injected into its env (mirroring how admin-tool tests inject it).
+  // Admin instructions require ADMIN_TOOLS_ENABLED and the admin-tools feature flag, both fixed at
+  // process spawn, so the admin-on case needs its own client env (see getAdminToolsEnv).
   describe('default variant with admin tools enabled', () => {
     let client: McpClient;
 
@@ -158,13 +174,13 @@ describe('server', () => {
       await buildVariant('default');
       client = new McpClient({
         variant: 'default',
-        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+        env: getAdminToolsEnv(),
       });
       await client.connect();
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     // The substrings here are kept in lockstep with the unit test in src/server.web.test.ts.
@@ -197,7 +213,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -209,7 +225,10 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const expectedToolNames = [...desktopToolNames];
+      const expectedToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -225,7 +244,7 @@ describe('server', () => {
     });
 
     afterAll(async () => {
-      await client.close();
+      await client?.close();
     });
 
     it('should get server version', async () => {
@@ -256,24 +275,22 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
         'get-flow-task',
-        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
-      // authoring tools are gated off by default (authoring-tools feature flag)
-      const authoringTools: ReadonlyArray<WebToolName> = [
-        'request-workbook-upload',
-        'publish-workbook',
+      // datasource publishing tools are gated off by default (datasource-authoring feature flag)
+      const datasourceAuthoringTools: ReadonlyArray<WebToolName> = [
+        'request-datasource-upload',
+        'publish-datasource',
       ];
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      // Knowledge tools follow KNOWLEDGE_TOOLS_ENABLED / KNOWLEDGE_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       const knowledgeTools: ReadonlyArray<WebToolName> = [
         'query-knowledge-context',
         'inspect-knowledge-context',
@@ -291,16 +308,16 @@ describe('server', () => {
         );
       }
 
-      // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+      // Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true' || !adminToolsFlagEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !adminOnlyTools.includes(name),
         );
       }
 
-      // Filter out flow tools unless both the env switch and the feature flag are on
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowReadExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -308,16 +325,20 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!authoringToolsEnabled) {
+      if (!datasourceAuthoringEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
-          (name) => !authoringTools.includes(name),
+          (name) => !datasourceAuthoringTools.includes(name),
         );
       }
 
-      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
-      if (!knowledgeToolsEnabled) {
+      if (!knowledgeReadExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !knowledgeTools.includes(name),
+        );
+      }
+      if (!knowledgeWriteExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => name !== 'manage-knowledge-context',
         );
       }
 
@@ -326,8 +347,8 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Filter out content-mutating flow tools unless explicitly enabled.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),
         );
@@ -335,11 +356,12 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
-      if (!authoringToolsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
-      }
 
-      const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
+      const expectedDesktopToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedDesktopToolNames).toContain('bind-template');
+      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });

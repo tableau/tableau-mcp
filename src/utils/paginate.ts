@@ -209,10 +209,13 @@ type GetPageArgs<T> = {
  *   Tableau reported when there is no cap. When a server-side `maxResultLimit`
  *   offset ceiling is in force, this is capped to it so the caller presents the
  *   number of items actually reachable rather than the uncapped server total.
+ * - `cappedByMaxResultLimit` — `true` iff `rawTotal > maxResultLimit`, i.e. the
+ *   cap hides items that no page can reach. Same value on every page of a walk.
  */
 export type GetPageResult<T> = {
   data: Array<T>;
   totalAvailable: number;
+  cappedByMaxResultLimit?: boolean;
 };
 
 /**
@@ -256,7 +259,9 @@ export async function getPage<T>(args: GetPageArgs<T>): Promise<GetPageResult<T>
   // presents the number of items actually reachable, not the uncapped total.
   const cappedTotalAvailable =
     maxResultLimit == null ? totalAvailable : Math.min(totalAvailable, maxResultLimit);
-  return { data: trimmed, totalAvailable: cappedTotalAvailable };
+  // Ignores `limit`: totalAvailable already exposes a caller's own trim; only the cap hides items.
+  const cappedByMaxResultLimit = maxResultLimit != null && totalAvailable > maxResultLimit;
+  return { data: trimmed, totalAvailable: cappedTotalAvailable, cappedByMaxResultLimit };
 }
 
 /**

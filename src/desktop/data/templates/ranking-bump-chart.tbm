@@ -1,0 +1,170 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='ranking-bump-chart'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column caption='Rank' datatype='integer' name='[Calculation_508343847073411072]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='Rank(Sum([Profit]))'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+        <column-instance column='[Order Date]' derivation='Month' name='[mn:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_508343847073411072]' derivation='User' name='[usr:Calculation_508343847073411072:qk:1]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[Sample - Superstore].[Customer Name]' ordering-type='Field' />
+        </column-instance>
+        <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[Sample - Superstore].[yr:Order Date:ok]'>
+        <groupfilter function='level-members' level='[yr:Order Date:ok]' />
+      </filter>
+      <slices>
+        <column>[Sample - Superstore].[yr:Order Date:ok]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='height' field='[Sample - Superstore].[mn:Order Date:ok]' value='22' />
+        <encoding attr='space' class='0' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' field-type='quantitative' reverse='true' scope='rows' type='space' />
+        <format attr='subtitle' class='0' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' scope='rows' value='' />
+        <format attr='auto-subtitle' class='0' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' scope='rows' value='true' />
+        <format attr='width' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' value='20' />
+        <format attr='display' class='1' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' scope='rows' value='false' />
+        <format attr='display' class='0' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' scope='rows' value='false' />
+        <encoding attr='space' class='1' field='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' field-type='quantitative' fold='true' scope='rows' synchronized='true' type='space' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='width' field='[Sample - Superstore].[mn:Order Date:ok]' value='67' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-format' field='[Sample - Superstore].[mn:Order Date:ok]' value='iLLL' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='tab_base' value='true' />
+        <format attr='enabled' id='um_lcover' value='true' />
+        <format attr='enabled' id='tab_coastline' value='false' />
+        <format attr='enabled' id='pp2_line' value='false' />
+        <format attr='enabled' id='light_adm0_bnd' value='false' />
+        <format attr='enabled' id='light_adm0_lbl' value='false' />
+        <format attr='enabled' id='um_adm0_bnd' value='true' />
+        <format attr='enabled' id='um_adm0_lbl' value='true' />
+        <format attr='enabled' id='light_pp2_statebounds' value='false' />
+        <format attr='enabled' id='light_pp2_statelabels' value='false' />
+        <format attr='enabled' id='pp2_adminlabels' value='false' />
+        <format attr='enabled' id='pp2_statebounds' value='true' />
+        <format attr='enabled' id='pp2_statelabels' value='true' />
+        <format attr='enabled' id='countybounds' value='false' />
+        <format attr='enabled' id='countylabels' value='false' />
+        <format attr='enabled' id='zipbounds' value='false' />
+        <format attr='enabled' id='ziplabels' value='false' />
+        <format attr='enabled' id='tab_areabounds' value='false' />
+        <format attr='enabled' id='tab_arealabels' value='false' />
+        <format attr='enabled' id='tab_msabounds' value='false' />
+        <format attr='enabled' id='tab_msalabels' value='false' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Customer Name:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='pane'>
+            <format attr='minwidth' value='804' />
+            <format attr='maxwidth' value='804' />
+            <format attr='minheight' value='436' />
+            <format attr='maxheight' value='436' />
+            <format attr='aspect' value='0' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='1' selection-relaxation-option='selection-relaxation-disallow' y-axis-name='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Customer Name:nk]' />
+          <text column='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' />
+        </encodings>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+            <format attr='vertical-align' value='center' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='auto' />
+            <format attr='font-size' value='8' />
+            <format attr='font-weight' value='bold' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='true' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='2' selection-relaxation-option='selection-relaxation-disallow' y-axis-name='[Sample - Superstore].[usr:Calculation_508343847073411072:qk:1]' y-index='1'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Customer Name:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='0.88955801725387573' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#000000' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>([Sample - Superstore].[usr:Calculation_508343847073411072:qk:1] + [Sample - Superstore].[usr:Calculation_508343847073411072:qk:1])</rows>
+    <cols>([Sample - Superstore].[yr:Order Date:ok] / [Sample - Superstore].[mn:Order Date:ok])</cols>
+  </table>
+</bookmark>

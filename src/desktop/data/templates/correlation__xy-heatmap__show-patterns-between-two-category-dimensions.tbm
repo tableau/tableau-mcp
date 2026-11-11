@@ -1,0 +1,345 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>A good way of showing the patterns between 2 categories of data, less good at showing fine differences in amounts.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <preferences>
+    <color-palette custom='true' name='FT Black' type='ordered-sequential'>
+      <color>#f2e5da</color>
+      <color>#e6d9ce</color>
+      <color>#ccc1b7</color>
+      <color>#b3a9a0</color>
+      <color>#999189</color>
+      <color>#807973</color>
+      <color>#66605c</color>
+      <color>#4d4845</color>
+      <color>#33302e</color>
+      <color>#1a1817</color>
+    </color-palette>
+  </preferences>
+  <datasources>
+    <datasource caption='Americans Bank Savings' inline='true' name='federated.09c20je0q5g3r21bbot2n14oiosj' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Americans Bank Savings' name='excel-direct.14gy1t70sjvgqf13auj8505g54sl'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='excel-direct.14gy1t70sjvgqf13auj8505g54sl' name='Sheet1' table='[Sheet1$]' type='table'>
+          <columns gridOrigin='A1:D50:no:A1:D50:0' header='yes' outcome='2'>
+            <column datatype='string' name='Age Group' ordinal='0' />
+            <column datatype='string' name='Age Range' ordinal='1' />
+            <column datatype='string' name='Savings Amount' ordinal='2' />
+            <column datatype='real' name='Response Rate' ordinal='3' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Age Group</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Age Group]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Age Group</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Age Range</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Age Range]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Age Range</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Savings Amount</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Savings Amount]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Savings Amount</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Response Rate</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Response Rate]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Response Rate</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:D50:no:A1:D50:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>2</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='string' name='[Age Range]' role='dimension' type='nominal'>
+        <aliases>
+          <alias key='%null%' value='Overall' />
+        </aliases>
+      </column>
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column datatype='real' default-format='p0.0%' name='[Response Rate]' role='measure' type='quantitative' />
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/13/2018 08:46:58 AM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='49' timestamp-start='2018-07-13 08:46:58.591' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Age Group</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Age Group]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Age Group</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Sheet1</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>7</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Age Range</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Age Range]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Age Range</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Sheet1</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>7</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Savings Amount</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Savings Amount]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Savings Amount</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Sheet1</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>7</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Response Rate</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Response Rate]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Response Rate</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Sheet1</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>45</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-aliased-fields='true' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='excel-direct.14gy1t70sjvgqf13auj8505g54sl' name='Sheet1' table='[Sheet1$]' type='table'>
+                <columns gridOrigin='A1:D50:no:A1:D50:0' header='yes' outcome='2'>
+                  <column datatype='string' name='Age Group' ordinal='0' />
+                  <column datatype='string' name='Age Range' ordinal='1' />
+                  <column datatype='string' name='Savings Amount' ordinal='2' />
+                  <column datatype='real' name='Response Rate' ordinal='3' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <window tab-color='#a65200'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[federated.09c20je0q5g3r21bbot2n14oiosj].[sum:Response Rate:qk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{39475526-7FC8-4A3B-9EF1-9C85752D46BF}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Americans Bank Savings' name='federated.09c20je0q5g3r21bbot2n14oiosj' />
+      </datasources>
+      <datasource-dependencies datasource='federated.09c20je0q5g3r21bbot2n14oiosj'>
+        <column datatype='string' name='[Age Range]' role='dimension' type='nominal'>
+          <aliases>
+            <alias key='%null%' value='Overall' />
+          </aliases>
+        </column>
+        <column datatype='real' default-format='p0.0%' name='[Response Rate]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Savings Amount]' role='dimension' type='nominal' />
+        <column-instance column='[Age Range]' derivation='None' name='[none:Age Range:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Savings Amount]' derivation='None' name='[none:Savings Amount:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Response Rate]' derivation='Sum' name='[sum:Response Rate:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <manual-sort column='[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Savings Amount:nk]' direction='ASC'>
+        <dictionary>
+          <bucket>&quot;I don&apos;t have a savings account&quot;</bucket>
+          <bucket>&quot;$0&quot;</bucket>
+          <bucket>&quot;Just the minimum balance requirement&quot;</bucket>
+          <bucket>&quot;Less than $1,000&quot;</bucket>
+          <bucket>&quot;$1,000-$4,999&quot;</bucket>
+          <bucket>&quot;$5,000-$9,999&quot;</bucket>
+          <bucket>&quot;$10,000 or more&quot;</bucket>
+        </dictionary>
+      </manual-sort>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='header'>
+        <format attr='width' field='[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Age Range:nk]' value='60' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='font-family' field='[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Savings Amount:nk]' value='Tableau Light' />
+        <format attr='font-family' field='[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Age Range:nk]' value='Tableau Light' />
+        <format attr='font-size' field='[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Savings Amount:nk]' value='7' />
+        <format attr='font-size' field='[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Age Range:nk]' value='7' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.09c20je0q5g3r21bbot2n14oiosj].[sum:Response Rate:qk]' palette='FT Black' type='interpolated' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[federated.09c20je0q5g3r21bbot2n14oiosj].[sum:Response Rate:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+            <format attr='vertical-align' value='center' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Age Range:nk]</rows>
+    <cols>[federated.09c20je0q5g3r21bbot2n14oiosj].[none:Savings Amount:nk]</cols>
+  </table>
+</bookmark>

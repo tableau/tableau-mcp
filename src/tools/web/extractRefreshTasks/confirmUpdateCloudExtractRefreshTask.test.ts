@@ -94,7 +94,6 @@ vi.mock('../adminGate.js', () => ({
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -120,7 +119,7 @@ async function establishApproval(
 describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({
       id: 'owner-1',
@@ -143,7 +142,7 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
-  it('is a model-invisible app-only tool gated on adminToolsEnabled && mcp-apps', () => {
+  it('is a model-invisible app-only tool gated on admin-tools enablement && mcp-apps', () => {
     const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.name).toBe('confirm-update-cloud-extract-refresh-task');
     expect(tool.meta).toEqual({ ui: { visibility: ['app'] } });
@@ -152,12 +151,41 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
   });
 
   it('is disabled when admin tools are not enabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'mcp-apps',
+    );
     const { getConfig } = await import('../../../config.js');
     vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled: false } as ReturnType<
       typeof getConfig
     >);
     const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is enabled when ADMIN_TOOLS_ENABLED, admin-tools, and mcp-apps are all on', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'admin-tools' || featureName === 'mcp-apps',
+    );
+    const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+  });
+
+  it('is enabled when only the admin-tools flag is on (ADMIN_TOOLS_ENABLED off) and mcp-apps is on', async () => {
+    // beforeEach leaves the admin-tools and mcp-apps flags on; only the env var is turned off here.
+    const { getConfig } = await import('../../../config.js');
+    vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled: false } as ReturnType<
+      typeof getConfig
+    >);
+    const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+  });
+
+  it('is enabled when only ADMIN_TOOLS_ENABLED is on (admin-tools flag off) and mcp-apps is on', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'mcp-apps',
+    );
+    const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('is disabled when the mcp-apps flag is OFF', async () => {

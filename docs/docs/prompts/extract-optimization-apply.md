@@ -6,6 +6,8 @@ sidebar_position: 4
 
 `extract-optimization-apply`
 
+Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/extract-optimization-apply` (default arguments).
+
 A guided, **destructive** Tableau Cloud admin workflow that joins the extract refresh inventory with Admin Insights job performance, recommends a `keep` / `downgrade` / `delete` action per task, and — only after explicit human approval — applies those changes.
 
 :::warning[Admin Only · Destructive]

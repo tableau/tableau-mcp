@@ -3,6 +3,7 @@ import path from 'path';
 
 import { log } from '../logging/logger.js';
 import { getDirname } from '../utils/getDirname.js';
+import { readSeaAssetText, runningAsSea } from '../utils/sea.js';
 import type { FeatureGateProvider } from './featureGateProvider.js';
 
 const FEATURES_CONFIG_PATH = 'features.json';
@@ -31,10 +32,18 @@ export class ServerFeatureGate implements FeatureGateProvider {
   }
 
   private loadFeatures(): Map<string, boolean> {
-    const filePath = path.join(getDirname(), FEATURES_CONFIG_PATH);
+    const sea = runningAsSea();
+    const filePath = sea
+      ? `SEA asset '${FEATURES_CONFIG_PATH}'`
+      : path.join(getDirname(), FEATURES_CONFIG_PATH);
 
     try {
-      const fileContent = readFileSync(filePath, 'utf-8');
+      const fileContent = sea
+        ? readSeaAssetText(FEATURES_CONFIG_PATH)
+        : readFileSync(filePath, 'utf-8');
+      if (fileContent === null) {
+        throw new Error(`${filePath} is not embedded in the binary`);
+      }
       const rawConfig = JSON.parse(fileContent);
 
       // Validate that it's an object

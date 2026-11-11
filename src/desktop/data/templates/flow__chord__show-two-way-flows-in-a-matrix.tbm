@@ -1,0 +1,526 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Chord Chart' inline='true' name='federated.0ubafqv1bygk7b19u3voc1nh25s4' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Chord Data Densified' name='hyper.04msgpf0d43dp717z638j09gevth'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='hyper.04msgpf0d43dp717z638j09gevth' name='Extract' table='[Extract].[Extract]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Rank</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Rank]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Rank</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>27</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Rank2</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Rank2]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Rank2</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>19</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>t</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[t]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>t</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>102</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Dimension</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Dimension]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Dimension</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>27</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>To Dimension</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[To Dimension]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>To Dimension</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>19</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Measure</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Measure]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Measure</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>56</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='1. Colour Selected' datatype='boolean' name='[Calculation_1440926096150550]' role='dimension' type='nominal'>
+        <calculation class='tableau' formula='[Dimension]=[Parameters].[Parameter 1440926124773425]' />
+      </column>
+      <column caption='2. Filter Marks' datatype='boolean' hidden='true' name='[Calculation_1440926096396311]' role='dimension' type='nominal'>
+        <calculation class='tableau' formula='IF [t]=2 THEN &#13;&#10;    IF [Calculation_1440926096150550] THEN TRUE&#13;&#10;    ELSE {FIXED [Rank] : MIN([Rank2])} = [Rank2]&#13;&#10;    END&#13;&#10;ELSE&#13;&#10;    TRUE   &#13;&#10;END' />
+      </column>
+      <column caption='3. Seperate Lines from Dots' datatype='string' name='[Calculation_1440926096482328]' role='dimension' type='nominal'>
+        <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN &quot;Chord Lines&quot;&#13;&#10;ELSE &quot;Points&quot;&#13;&#10;END' />
+      </column>
+      <column caption='3. Separator ' datatype='string' hidden='true' name='[Calculation_1440926096568345]' role='dimension' type='nominal'>
+        <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN &quot;chord&quot;&#13;&#10;ELSEIF [t] = 2&#13;&#10;THEN &quot;start point&quot;&#13;&#10;ELSEIF [t] = 3&#13;&#10;THEN &quot;end point&quot;&#13;&#10;ELSEIF [t] = 4 OR [t] = 5&#13;&#10;THEN &quot;start bar&quot;&#13;&#10;ELSEIF [t]= 6 OR [t] = 7&#13;&#10;THEN &quot;end bar&quot;&#13;&#10;END' />
+      </column>
+      <column caption='Coordinates' datatype='string' default-role='measure' default-type='quantitative' hidden='true' name='[Calculation_1440926096625690]' role='dimension' type='nominal'>
+        <calculation class='tableau' formula='if [t]=2 then LEFT(STR([Calculation_1440926096826397]),4) + &apos;,&apos;+ LEFT(STR([Calculation_1440926096949278]),4) END' />
+      </column>
+      <column caption='Theta To' datatype='real' name='[Calculation_1440926096723995]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[Rank2]/{COUNTD([Dimension])} * PI() * 2' />
+      </column>
+      <column caption='Theta From' datatype='real' name='[Calculation_1440926096773148]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[Rank]/{COUNTD([Dimension])} * PI() * 2' />
+      </column>
+      <column caption='1a. from x' datatype='real' name='[Calculation_1440926096826397]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='COS([Calculation_1440926096773148])' />
+      </column>
+      <column caption='1a. from y' datatype='real' name='[Calculation_1440926096949278]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SIN([Calculation_1440926096773148])' />
+      </column>
+      <column caption='1a. to x' datatype='real' name='[Calculation_1440926097010719]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='COS([Calculation_1440926096723995])' />
+      </column>
+      <column caption='1a. to y' datatype='real' name='[Calculation_1440926097047584]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SIN([Calculation_1440926096723995])' />
+      </column>
+      <column caption='2a. Middling Point x' datatype='real' hidden='true' name='[Calculation_1440926097109025]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='COS((ACOS([Calculation_1440926096826397])+ACOS([Calculation_1440926097010719]))/2)' />
+      </column>
+      <column caption='2a. Middling Point y' datatype='real' hidden='true' name='[Calculation_1440926097207330]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SIN((ASIN([Calculation_1440926096949278])+ASIN([Calculation_1440926097047584]))/2)' />
+      </column>
+      <column caption='2b. Chord Length' datatype='real' hidden='true' name='[Calculation_1440926097281059]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SQRT(([Calculation_1440926097010719] - [Calculation_1440926096826397])^2 + ([Calculation_1440926097047584] - [Calculation_1440926096949278])^2)' />
+      </column>
+      <column caption='3a. Spline x' datatype='real' hidden='true' name='[Calculation_1440926097711140]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN&#13;&#10;(( (1 - [t])^2 ) * [Calculation_1440926096826397]) +&#13;&#10;(2 * (1 - [t]) * [t] *  &#13;&#10;  (&#13;&#10;    ((2 - [Calculation_1440926097281059])/ 2) *&#13;&#10;    [Calculation_1440926097109025]&#13;&#10;  )&#13;&#10;) + &#13;&#10;([t]^2 * [Calculation_1440926096826397])&#13;&#10;&#13;&#10;ELSEIF [t] = 2 THEN [Parameters].[Parameter 1440926097838117] * [Calculation_1440926096826397]&#13;&#10;&#13;&#10;END' />
+      </column>
+      <column caption='3a. Spline y' datatype='real' hidden='true' name='[Calculation_1440926097969190]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN&#13;&#10;(( (1 - [t])^2 ) * [Calculation_1440926096949278]) +&#13;&#10;(2 * (1 - [t]) * [t] *  &#13;&#10;  (&#13;&#10;    ((2 - [Calculation_1440926097281059])/ 2) *&#13;&#10;    [Calculation_1440926097207330] &#13;&#10;  )&#13;&#10;) + &#13;&#10;([t]^2 * [Calculation_1440926097047584])&#13;&#10;&#13;&#10;ELSEIF [t] = 2 THEN [Parameters].[Parameter 1440926097838117] * [Calculation_1440926096949278]&#13;&#10;&#13;&#10;END' />
+      </column>
+      <column caption='3b. Spline x Default' datatype='real' name='[Calculation_1440926098092071]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN&#13;&#10;(1 - [t])^2 * [Calculation_1440926096826397] + [t]^2 * [Calculation_1440926097010719]&#13;&#10;ELSEIF [t] = 2 THEN [Parameters].[Parameter 1440926097838117] * [Calculation_1440926096826397]&#13;&#10;&#13;&#10;END' />
+      </column>
+      <column caption='3b. Spline y Default' datatype='real' name='[Calculation_1440926098173992]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN&#13;&#10;(1 - [t])^2  * [Calculation_1440926096949278] + [t]^2 * [Calculation_1440926097047584]&#13;&#10;&#13;&#10;ELSEIF [t] = 2 THEN [Parameters].[Parameter 1440926097838117] * [Calculation_1440926096949278]&#13;&#10;&#13;&#10;END' />
+      </column>
+      <column caption='4a. Point Size' datatype='real' name='[Calculation_1440926098247721]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='{ MAX([Measure]) } / 2' />
+      </column>
+      <column caption='4b Size' datatype='real' name='[Calculation_1440926098292778]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF &#13;&#10;[t]=2 THEN [Calculation_1440926098247721]&#13;&#10;ELSE [Measure] * (1-[t])  // makes the lines get thinner towards the end&#13;&#10;END' />
+      </column>
+      <column caption='5. From Dimension Totals' datatype='integer' hidden='true' name='[Calculation_1440926098358315]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IIF([t]=0,[Measure],NULL)' />
+      </column>
+      <column caption='Selected Label' datatype='string' name='[Calculation_1440926121443372]' role='dimension' type='nominal'>
+        <calculation class='tableau' formula='IF [Calculation_1440926096150550] &#13;&#10;AND [t]=1&#13;&#10;THEN [To Dimension]&#13;&#10;elseif [Calculation_1440926096150550]&#13;&#10;and [t]=2&#13;&#10; then [Dimension]&#13;&#10;END' />
+      </column>
+      <column caption='Extract' datatype='table' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]' role='measure' type='quantitative' />
+      <column caption='T' datatype='real' name='[t]' role='measure' type='quantitative' />
+      <column-instance column='[Calculation_1440926096150550]' derivation='None' name='[none:Calculation_1440926096150550:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:11:11 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Chord Data Densified Extract' increment-value='%null%' refresh-type='create' rows-inserted='8058' timestamp-start='2026-06-30 20:11:10.980' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Rank</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Rank]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Rank</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Extract</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>27</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Rank2</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Rank2]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Rank2</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Extract</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>19</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>t</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[t]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>t</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Extract</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>102</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Dimension</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Dimension]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Dimension</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>27</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RUS' />
+              <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>To Dimension</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[To Dimension]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>To Dimension</remote-alias>
+              <ordinal>4</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>19</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RUS' />
+              <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Measure</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Measure]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Measure</remote-alias>
+              <ordinal>5</ordinal>
+              <family>Extract</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>56</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.74359' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.25641' show-structure='true' user-set-layout-v2='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:Calculation_1440926096150550:nk]' type='palette'>
+            <map to='#63b698'>
+              <bucket>true</bucket>
+            </map>
+            <map to='#d8e1ec'>
+              <bucket>false</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='Point Gap' datatype='real' name='[Parameter 1440926097838117]' param-domain-type='any' role='measure' type='quantitative' value='1.'>
+          <calculation class='tableau' formula='1.' />
+        </column>
+        <column caption='Dimension Parameter' datatype='string' name='[Parameter 1440926124773425]' param-domain-type='list' role='measure' type='nominal' value='&quot;Spain&quot;'>
+          <calculation class='tableau' formula='&quot;Spain&quot;' />
+        </column>
+      </datasource-dependencies>
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86'>
+            <properties context=''>
+              <relation connection='hyper.04msgpf0d43dp717z638j09gevth' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926096150550:nk]' type='color' />
+          <card pane-specification-id='0' param='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[attr:Calculation_1440926098292778:qk]' type='size' />
+          <card mode='type_in' param='[Parameters].[Parameter 1440926097838117]' type='parameter' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926096150550:nk]</field>
+          <field>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926096482328:nk]</field>
+          <field>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926121443372:nk]</field>
+          <field>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Dimension:nk]</field>
+          <field>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:To Dimension:nk]</field>
+          <field>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:t:qk]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{2A1AE4DB-5E30-41C7-BC6C-E9C68372456C}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Chord Chart' name='federated.0ubafqv1bygk7b19u3voc1nh25s4' />
+        <datasource name='Parameters' />
+      </datasources>
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='Point Gap' datatype='real' name='[Parameter 1440926097838117]' param-domain-type='any' role='measure' type='quantitative' value='1.'>
+          <calculation class='tableau' formula='1.' />
+        </column>
+        <column caption='Dimension Parameter' datatype='string' name='[Parameter 1440926124773425]' param-domain-type='list' role='measure' type='nominal' value='&quot;Spain&quot;'>
+          <calculation class='tableau' formula='&quot;Spain&quot;' />
+        </column>
+      </datasource-dependencies>
+      <datasource-dependencies datasource='federated.0ubafqv1bygk7b19u3voc1nh25s4'>
+        <column caption='1. Colour Selected' datatype='boolean' name='[Calculation_1440926096150550]' role='dimension' type='nominal'>
+          <calculation class='tableau' formula='[Dimension]=[Parameters].[Parameter 1440926124773425]' />
+        </column>
+        <column caption='3. Seperate Lines from Dots' datatype='string' name='[Calculation_1440926096482328]' role='dimension' type='nominal'>
+          <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN &quot;Chord Lines&quot;&#13;&#10;ELSE &quot;Points&quot;&#13;&#10;END' />
+        </column>
+        <column caption='Theta To' datatype='real' name='[Calculation_1440926096723995]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='[Rank2]/{COUNTD([Dimension])} * PI() * 2' />
+        </column>
+        <column caption='Theta From' datatype='real' name='[Calculation_1440926096773148]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='[Rank]/{COUNTD([Dimension])} * PI() * 2' />
+        </column>
+        <column caption='1a. from x' datatype='real' name='[Calculation_1440926096826397]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='COS([Calculation_1440926096773148])' />
+        </column>
+        <column caption='1a. from y' datatype='real' name='[Calculation_1440926096949278]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SIN([Calculation_1440926096773148])' />
+        </column>
+        <column caption='1a. to x' datatype='real' name='[Calculation_1440926097010719]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='COS([Calculation_1440926096723995])' />
+        </column>
+        <column caption='1a. to y' datatype='real' name='[Calculation_1440926097047584]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SIN([Calculation_1440926096723995])' />
+        </column>
+        <column caption='3b. Spline x Default' datatype='real' name='[Calculation_1440926098092071]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN&#13;&#10;(1 - [t])^2 * [Calculation_1440926096826397] + [t]^2 * [Calculation_1440926097010719]&#13;&#10;ELSEIF [t] = 2 THEN [Parameters].[Parameter 1440926097838117] * [Calculation_1440926096826397]&#13;&#10;&#13;&#10;END' />
+        </column>
+        <column caption='3b. Spline y Default' datatype='real' name='[Calculation_1440926098173992]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF [t] &lt;= 1&#13;&#10;THEN&#13;&#10;(1 - [t])^2  * [Calculation_1440926096949278] + [t]^2 * [Calculation_1440926097047584]&#13;&#10;&#13;&#10;ELSEIF [t] = 2 THEN [Parameters].[Parameter 1440926097838117] * [Calculation_1440926096949278]&#13;&#10;&#13;&#10;END' />
+        </column>
+        <column caption='4a. Point Size' datatype='real' name='[Calculation_1440926098247721]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='{ MAX([Measure]) } / 2' />
+        </column>
+        <column caption='4b Size' datatype='real' name='[Calculation_1440926098292778]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF &#13;&#10;[t]=2 THEN [Calculation_1440926098247721]&#13;&#10;ELSE [Measure] * (1-[t])  // makes the lines get thinner towards the end&#13;&#10;END' />
+        </column>
+        <column caption='Selected Label' datatype='string' name='[Calculation_1440926121443372]' role='dimension' type='nominal'>
+          <calculation class='tableau' formula='IF [Calculation_1440926096150550] &#13;&#10;AND [t]=1&#13;&#10;THEN [To Dimension]&#13;&#10;elseif [Calculation_1440926096150550]&#13;&#10;and [t]=2&#13;&#10; then [Dimension]&#13;&#10;END' />
+        </column>
+        <column datatype='string' name='[Dimension]' role='dimension' type='nominal' />
+        <column datatype='integer' name='[Measure]' role='measure' type='quantitative' />
+        <column datatype='integer' name='[Rank2]' role='measure' type='quantitative' />
+        <column datatype='integer' name='[Rank]' role='measure' type='quantitative' />
+        <column datatype='string' name='[To Dimension]' role='dimension' type='nominal' />
+        <column caption='Extract' datatype='table' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]' role='measure' type='quantitative' />
+        <column-instance column='[__tableau_internal_object_id__].[Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86]' derivation='Count' name='[__tableau_internal_object_id__].[cnt:Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_1440926098292778]' derivation='Attribute' name='[attr:Calculation_1440926098292778:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[To Dimension]' derivation='Attribute' name='[attr:To Dimension:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_1440926096150550]' derivation='None' name='[none:Calculation_1440926096150550:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_1440926096482328]' derivation='None' name='[none:Calculation_1440926096482328:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_1440926098092071]' derivation='None' name='[none:Calculation_1440926098092071:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_1440926098173992]' derivation='None' name='[none:Calculation_1440926098173992:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_1440926121443372]' derivation='None' name='[none:Calculation_1440926121443372:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Dimension]' derivation='None' name='[none:Dimension:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Rank2]' derivation='None' name='[none:Rank2:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Rank]' derivation='None' name='[none:Rank:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[t]' derivation='None' name='[none:t:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Measure]' derivation='Sum' name='[sum:Measure:qk]' pivot='key' type='quantitative' />
+        <column caption='T' datatype='real' name='[t]' role='measure' type='quantitative' />
+      </datasource-dependencies>
+      <manual-sort column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926096150550:nk]' direction='ASC'>
+        <dictionary>
+          <bucket>true</bucket>
+          <bucket>false</bucket>
+        </dictionary>
+      </manual-sort>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='display' class='0' field='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926098092071:qk]' scope='cols' value='false' />
+        <format attr='display' class='0' field='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926098173992:qk]' scope='rows' value='false' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='size' field='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[attr:Calculation_1440926098292778:qk]' field-type='quantitative' max='72000.0' max-size='1' min='0.0' min-size='0.00497843' type='rangesize' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926096150550:nk]' />
+          <size column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[attr:Calculation_1440926098292778:qk]' />
+          <tooltip column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[sum:Measure:qk]' />
+          <tooltip column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[attr:To Dimension:nk]' />
+          <lod column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Dimension:nk]' />
+          <text column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926121443372:nk]' />
+          <path column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:t:qk]' />
+          <lod column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Dimension:nk]' />
+          <lod column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926096482328:nk]' />
+          <lod column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Rank:qk]' />
+          <lod column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Rank2:qk]' />
+          <lod column='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[__tableau_internal_object_id__].[cnt:Extract (Extract.Extract)_8EF84C23CCE74F9D9D46F70554FF6C86:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Dimension:nk]&gt;</run>
+            <run fontname='Tableau Regular'> migration to </run>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.0ubafqv1bygk7b19u3voc1nh25s4].[attr:To Dimension:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run bold='true' fontname='Tableau Medium' fontsize='12'>&lt;[federated.0ubafqv1bygk7b19u3voc1nh25s4].[sum:Measure:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+            <format attr='vertical-align' value='top' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-size' value='8' />
+            <format attr='font-family' value='Tableau Regular' />
+            <format attr='font-weight' value='bold' />
+            <format attr='color' value='#44485f' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='1' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-range-field' value='[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:t:qk]' />
+            <format attr='mark-labels-range-scope' value='table' />
+            <format attr='mark-labels-range-min' value='true' />
+            <format attr='mark-labels-line-last' value='false' />
+            <format attr='mark-labels-line-first' value='true' />
+            <format attr='mark-labels-cull' value='false' />
+            <format attr='mark-labels-mode' value='line-ends' />
+            <format attr='mark-markers-mode' value='none' />
+            <format attr='mark-transparency' value='255' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926098173992:qk]</rows>
+    <cols>[federated.0ubafqv1bygk7b19u3voc1nh25s4].[none:Calculation_1440926098092071:qk]</cols>
+  </table>
+</bookmark>

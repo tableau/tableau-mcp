@@ -1,0 +1,143 @@
+import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
+import {
+  addDashboard,
+  deleteDashboard,
+  extractDashboardXml,
+  listDashboardRefs,
+  listWorkbookDashboards,
+  resolveDashboardRef,
+} from './dashboards.js';
+import { normalizeArray, parseXML } from './parser.js';
+
+describe('addDashboard', () => {
+  it('creates a dashboard shell with a vertical flow inside the root basic layout', () => {
+    const workbook = parseXML(addDashboard('<workbook/>', 'New Dashboard'));
+    const root = normalizeArray(
+      normalizeArray(workbook.workbook?.dashboards?.dashboard)[0]?.zones?.zone,
+    )[0];
+    expect(root?.['@_type-v2']).toBe('layout-basic');
+    const flow = normalizeArray(root?.zone)[0];
+    expect(flow).toMatchObject({ '@_type-v2': 'layout-flow', '@_param': 'vert' });
+    expect(root?.['@_id']).not.toBe(flow?.['@_id']);
+  });
+});
+
+// Same shape as the worksheet regression (sheets.test.ts): the <workbook> root declares
+// xmlns:user, and a zone's filter carries a user:-prefixed attribute. The declaration lives on
+// the ancestor <workbook> element, not on <dashboard> itself.
+const WORKBOOK_WITH_USER_NAMESPACE = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook original-version='18.1' source-build='0.0.0 (0000.26.0531.2046)' source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <dashboards>
+    <dashboard name='Overview'>
+      <zones>
+        <zone type-v2='layout-basic'>
+          <groupfilter function='level-members' level='[none:Region:nk]' user:ui-enumeration='all' />
+        </zone>
+      </zones>
+    </dashboard>
+  </dashboards>
+</workbook>`;
+
+describe('extractDashboardXml', () => {
+  it('finds and extracts an existing dashboard', () => {
+    const xml = extractDashboardXml(WORKBOOK_WITH_USER_NAMESPACE, 'Overview');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('<dashboard');
+    expect(xml).toContain('name="Overview"');
+  });
+
+  it('returns null for a dashboard that does not exist', () => {
+    expect(extractDashboardXml(WORKBOOK_WITH_USER_NAMESPACE, 'Does Not Exist')).toBeNull();
+  });
+
+  // Same live-bug shape as extractSheetXml (sheets.test.ts): an untouched get-dashboard-xml ->
+  // apply-dashboard round-trip must pass the same well-formed-xml preflight apply-dashboard runs.
+  it('carries the xmlns:user declaration from the workbook root onto the extracted dashboard', () => {
+    const xml = extractDashboardXml(WORKBOOK_WITH_USER_NAMESPACE, 'Overview');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('user:ui-enumeration');
+
+    const issues = wellFormedXmlRule.validate(xml!);
+    const errors = issues.filter((i) => i.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+
+  it('does not overwrite a namespace declaration the dashboard already carries itself', () => {
+    const workbookWithConflict = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <dashboards>
+    <dashboard name='q' xmlns:user='http://example.com/already-declared'>
+      <zones></zones>
+    </dashboard>
+  </dashboards>
+</workbook>`;
+    const xml = extractDashboardXml(workbookWithConflict, 'q');
+    expect(xml).toContain('http://example.com/already-declared');
+    expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
+  });
+});
+
+describe('listWorkbookDashboards', () => {
+  it('lists dashboard names', () => {
+    expect(listWorkbookDashboards(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Overview']);
+  });
+});
+
+describe('listDashboardRefs / resolveDashboardRef', () => {
+  const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <dashboards>
+    <dashboard name='Overview'><zones /><simple-id uuid='{DB-0001}' /></dashboard>
+    <dashboard name='P&amp;L'><zones /><simple-id uuid='{DB-0002}' /></dashboard>
+  </dashboards>
+</workbook>`;
+
+  it('pairs each dashboard id with its name', () => {
+    expect(listDashboardRefs(WORKBOOK)).toEqual([
+      { id: '{DB-0001}', name: 'Overview' },
+      { id: '{DB-0002}', name: 'P&L' },
+    ]);
+  });
+
+  it('drops a dashboard that carries no simple-id — a Desktop document always has one', () => {
+    expect(listDashboardRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([]);
+  });
+
+  it('resolves by simple-id first (id identifies across a rename)', () => {
+    expect(resolveDashboardRef(WORKBOOK, '{DB-0002}')).toEqual({ id: '{DB-0002}', name: 'P&L' });
+  });
+
+  it('falls back to the display name, decoding XML entities', () => {
+    expect(resolveDashboardRef(WORKBOOK, 'P&L')).toEqual({ id: '{DB-0002}', name: 'P&L' });
+  });
+
+  it('returns null when neither an id nor a name matches', () => {
+    expect(resolveDashboardRef(WORKBOOK, 'No Such Dashboard')).toBeNull();
+  });
+});
+
+describe('deleteDashboard', () => {
+  it('removes every canonically equivalent dashboard and dashboard window', () => {
+    const workbook = `<workbook>
+      <dashboards>
+        <dashboard name='Re\u0301sume\u0301'><zones /></dashboard>
+        <dashboard name='R\u00e9sum\u00e9'><zones /></dashboard>
+        <dashboard name='Keep'><zones /></dashboard>
+      </dashboards>
+      <windows>
+        <window class='dashboard' name='Re\u0301sume\u0301' />
+        <window class='dashboard' name='R\u00e9sum\u00e9' />
+        <window class='worksheet' name='R\u00e9sum\u00e9' />
+        <window class='dashboard' name='Keep' />
+      </windows>
+    </workbook>`;
+
+    const result = deleteDashboard(workbook, 'R\u00e9sum\u00e9');
+
+    expect(listWorkbookDashboards(result)).toEqual(['Keep']);
+    expect(result).not.toContain('class="dashboard" name="Re\u0301sume\u0301"');
+    expect(result).not.toContain('class="dashboard" name="R\u00e9sum\u00e9"');
+    expect(result).toContain('class="worksheet" name="R\u00e9sum\u00e9"');
+    expect(result).toContain('class="dashboard" name="Keep"');
+  });
+});

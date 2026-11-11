@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getFeatureGate } from '../../../features/init.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getAuthTypeForTelemetry } from '../../../telemetry/authType.js';
 import { getProductTelemetry } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
@@ -61,21 +62,14 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
         extra,
         args,
         callback: async () => {
-          const { config } = extra;
-
-          const productTelemetryForwarder = getProductTelemetry(
-            config.productTelemetryEndpoint,
-            config.productTelemetryEnabled,
-            config.server,
-          );
+          const productTelemetryForwarder = getProductTelemetry();
 
           productTelemetryForwarder.send('tableau_mcp_event', {
             event_type: args.event_type,
             message: args.message ?? '',
             site_luid: extra.getSiteLuid(),
             user_luid: extra.getUserLuid(),
-            podname: config.server,
-            is_hyperforce: config.isHyperforce,
+            auth_type: getAuthTypeForTelemetry(extra.config, extra.tableauAuthInfo),
           });
 
           return Ok({ recorded: true as const });

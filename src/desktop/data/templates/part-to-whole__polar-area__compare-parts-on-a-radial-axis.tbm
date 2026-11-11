@@ -1,0 +1,687 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <RelationshipCalculations />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Radar Chart (Football)' inline='true' name='federated.0ekaykw02fhokp0zlnc6r075pqpt' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Football Radar Data 2' name='hyper.1jf4xhv038pq6x115jy4t1ssdjn8'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+          <named-connection caption='PAD' name='excel-direct.0mfntxm1bhdcwv15s1lhm13wwpi8'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation type='collection'>
+          <relation connection='hyper.1jf4xhv038pq6x115jy4t1ssdjn8' name='Extract' table='[Extract].[Extract]' type='table' />
+          <relation connection='excel-direct.0mfntxm1bhdcwv15s1lhm13wwpi8' name='Sheet1' table='[Sheet1$]' type='table'>
+            <columns gridOrigin='A1:A104:no:A1:A104:0' header='yes' outcome='6'>
+              <column datatype='integer' name='Pad' ordinal='0' />
+            </columns>
+          </relation>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:A104:no:A1:A104:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Percentile Rank</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Percentile Rank]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Percentile Rank</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>19</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Metric</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Metric]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Metric</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>10</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>team</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[team]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>team</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>player</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[player]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>player</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Pad</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Pad]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Pad</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Index' datatype='integer' name='[Calculation_674414107008884736]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='INDEX()-1'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Avg. Value' datatype='real' name='[Calculation_674414107008933889]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='WINDOW_MAX(AVG([Percentile Rank]))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Metric Count' datatype='integer' name='[Calculation_674414107009056770]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='WINDOW_COUNT(COUNTD([Metric]))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Degree' datatype='real' name='[Calculation_674414107009122307]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='360/[Calculation_674414107009056770]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Radar Value' datatype='real' name='[Calculation_674414107009159172]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='MAX([Percentile Rank])/[Calculation_674414107008933889]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='X Radar' datatype='real' name='[Calculation_674414107009298437]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SIN(RADIANS([Calculation_674414107008884736])*[Calculation_674414107009122307])*[Calculation_674414107009159172]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Y Radar' datatype='real' name='[Calculation_674414107009335302]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='COS(RADIANS([Calculation_674414107008884736])*[Calculation_674414107009122307])*[Calculation_674414107009159172]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Max Value' datatype='real' name='[Calculation_674414107011518474]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='MAX([Percentile Rank])' />
+      </column>
+      <column caption='# Metrics' datatype='integer' name='[Calculation_674414107083194383]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='{FIXED [player]: COUNTD([Metric])}' />
+      </column>
+      <column caption='Index 2' datatype='integer' name='[Calculation_674414107083341840]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='INDEX()'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Edges' datatype='integer' name='[Calculation_674414107083444241]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='INDEX()'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Angle' datatype='real' name='[Calculation_674414107083497490]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='([Calculation_674414107083444241]-1)*(2 * PI()&#13;&#10;/&#13;&#10;MAX([Calculation_674414107083194383]))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='X Axis' datatype='real' name='[Calculation_674414107083653139]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [Calculation_674414107083341840] = 1 OR [Calculation_674414107083341840] = WINDOW_MAX([Calculation_674414107083341840]) THEN 0&#13;&#10;&#13;&#10;ELSE&#13;&#10;MAX([Percentile Rank]) * SIN([Calculation_674414107083497490]+((([Calculation_674414107083341840]-2) * WINDOW_MAX(2*PI())&#13;&#10;/&#13;&#10;(MAX([Calculation_674414107083194383])*100))))&#13;&#10;END'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Y Axis' datatype='real' name='[Calculation_674414107083878420]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [Calculation_674414107083341840] = 1 OR [Calculation_674414107083341840] = WINDOW_MAX([Calculation_674414107083341840]) THEN 0&#13;&#10;&#13;&#10;ELSE&#13;&#10;MAX([Percentile Rank]) * COS([Calculation_674414107083497490]+((([Calculation_674414107083341840]-2) * WINDOW_MAX(2*PI())&#13;&#10;/&#13;&#10;(MAX([Calculation_674414107083194383])*100))))&#13;&#10;END'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column datatype='string' name='[Metric]' role='dimension' type='nominal' />
+      <column caption='X Radar (copy)' datatype='real' hidden='true' name='[X Radar (copy)_674414107011608587]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SIN(RADIANS([Calculation_674414107008884736])*[Calculation_674414107009122307])*[Calculation_674414107011518474]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Extract' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]' role='measure' type='quantitative' />
+      <column caption='Sheet1' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]' role='measure' type='quantitative' />
+      <column caption='Player' datatype='string' name='[player]' role='dimension' type='nominal' />
+      <column caption='Team' datatype='string' hidden='true' name='[team]' role='dimension' type='nominal' />
+      <column-instance column='[Metric]' derivation='None' name='[none:Metric:nk]' pivot='key' type='nominal' />
+      <column-instance column='[player]' derivation='None' name='[none:player:nk]' pivot='key' type='nominal' />
+      <folders-common>
+        <folder name='Polar'>
+          <folder-item name='[Calculation_674414107083194383]' type='field' />
+          <folder-item name='[Calculation_674414107083341840]' type='field' />
+          <folder-item name='[Calculation_674414107083444241]' type='field' />
+          <folder-item name='[Calculation_674414107083497490]' type='field' />
+          <folder-item name='[Calculation_674414107083653139]' type='field' />
+          <folder-item name='[Calculation_674414107083878420]' type='field' />
+        </folder>
+        <folder name='Radar'>
+          <folder-item name='[Calculation_674414107008884736]' type='field' />
+          <folder-item name='[Calculation_674414107008933889]' type='field' />
+          <folder-item name='[Calculation_674414107009056770]' type='field' />
+          <folder-item name='[Calculation_674414107009122307]' type='field' />
+          <folder-item name='[Calculation_674414107009159172]' type='field' />
+          <folder-item name='[Calculation_674414107009298437]' type='field' />
+          <folder-item name='[Calculation_674414107009335302]' type='field' />
+          <folder-item name='[Calculation_674414107011518474]' type='field' />
+          <folder-item name='[X Radar (copy)_674414107011608587]' type='field' />
+        </folder>
+      </folders-common>
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:11:27 PM' username=''>
+          <relation type='collection'>
+            <relation name='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24' table='[Extract].[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]' type='table' />
+            <relation name='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F' table='[Extract].[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]' type='table' />
+          </relation>
+          <refresh>
+            <refresh-event add-from-file-path='Football Radar Data Extract' increment-value='%null%' refresh-type='create' rows-inserted='133' timestamp-start='2026-06-30 20:11:26.799' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Percentile Rank</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Percentile Rank]</local-name>
+              <parent-name>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</parent-name>
+              <remote-alias>Percentile Rank</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Extract</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>19</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Metric</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Metric]</local-name>
+              <parent-name>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</parent-name>
+              <remote-alias>Metric</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>10</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>player</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[player]</local-name>
+              <parent-name>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</parent-name>
+              <remote-alias>player</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>3</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RUS' />
+              <object-id>[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Pad</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Pad]</local-name>
+              <parent-name>[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]</parent-name>
+              <remote-alias>Pad</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Sheet1</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>103</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='false' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:Metric:nk]' type='palette'>
+            <map to='#4e79a7'>
+              <bucket>&quot;Blocks&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Goals&quot;</bucket>
+            </map>
+            <map to='#76b7b2'>
+              <bucket>&quot;Fouls&quot;</bucket>
+            </map>
+            <map to='#9c755f'>
+              <bucket>&quot;Tackles&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Passes&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Take-ons&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Crosses&quot;</bucket>
+            </map>
+            <map to='#edc948'>
+              <bucket>&quot;Interceptions&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Box Touches&quot;</bucket>
+            </map>
+            <map to='#ff9da7'>
+              <bucket>&quot;Progressive Runs&quot;</bucket>
+            </map>
+          </encoding>
+          <encoding attr='color' field='[none:Metric:nk]&#10;[none:player:nk]' type='palette'>
+            <map to='#4fadff'>
+              <multibucket>
+                <bucket>&quot;Crosses&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#686af1'>
+              <multibucket>
+                <bucket>&quot;Tackles&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#76bba1'>
+              <multibucket>
+                <bucket>&quot;Passes&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#87deca'>
+              <multibucket>
+                <bucket>&quot;Box Touches&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#9fc5fe'>
+              <multibucket>
+                <bucket>&quot;Take-ons&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#aa55ff'>
+              <multibucket>
+                <bucket>&quot;Goals&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Blocks&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Box Touches&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Crosses&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Fouls&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Goals&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Interceptions&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Passes&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Progressive Runs&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Tackles&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#e4e5e7'>
+              <multibucket>
+                <bucket>&quot;Take-ons&quot;</bucket>
+                <bucket>&quot;MAX Value&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#f07cef'>
+              <multibucket>
+                <bucket>&quot;Fouls&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#f4db81'>
+              <multibucket>
+                <bucket>&quot;Interceptions&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#fdb490'>
+              <multibucket>
+                <bucket>&quot;Progressive Runs&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+            <map to='#ff5e5e'>
+              <multibucket>
+                <bucket>&quot;Blocks&quot;</bucket>
+                <bucket>&quot;Lee Jae-Sung&quot;</bucket>
+              </multibucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24'>
+            <properties context=''>
+              <relation connection='hyper.1jf4xhv038pq6x115jy4t1ssdjn8' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24' table='[Extract].[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]' type='table' />
+            </properties>
+          </object>
+          <object caption='Sheet1' id='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F'>
+            <properties context=''>
+              <relation connection='excel-direct.0mfntxm1bhdcwv15s1lhm13wwpi8' name='Sheet1' table='[Sheet1$]' type='table'>
+                <columns gridOrigin='A1:A104:no:A1:A104:0' header='yes' outcome='6'>
+                  <column datatype='integer' name='Pad' ordinal='0' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F' table='[Extract].[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]' type='table' />
+            </properties>
+          </object>
+        </objects>
+        <relationships>
+          <relationship>
+            <expression op='='>
+              <expression op='1' />
+              <expression op='1&#13;&#10;' />
+            </expression>
+            <first-end-point object-id='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24' />
+            <second-end-point object-id='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F' />
+          </relationship>
+        </relationships>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='4' param='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:Metric:nk]&#10;[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:player:nk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{0FB7CEE4-8BD8-4505-B124-3AAFEE23D3AD}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Radar Chart (Football)' name='federated.0ekaykw02fhokp0zlnc6r075pqpt' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0ekaykw02fhokp0zlnc6r075pqpt'>
+        <column caption='Max Value' datatype='real' name='[Calculation_674414107011518474]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='MAX([Percentile Rank])' />
+        </column>
+        <column caption='# Metrics' datatype='integer' name='[Calculation_674414107083194383]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='{FIXED [player]: COUNTD([Metric])}' />
+        </column>
+        <column caption='Index 2' datatype='integer' name='[Calculation_674414107083341840]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='INDEX()'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Edges' datatype='integer' name='[Calculation_674414107083444241]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='INDEX()'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Angle' datatype='real' name='[Calculation_674414107083497490]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='([Calculation_674414107083444241]-1)*(2 * PI()&#13;&#10;/&#13;&#10;MAX([Calculation_674414107083194383]))'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='X Axis' datatype='real' name='[Calculation_674414107083653139]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF [Calculation_674414107083341840] = 1 OR [Calculation_674414107083341840] = WINDOW_MAX([Calculation_674414107083341840]) THEN 0&#13;&#10;&#13;&#10;ELSE&#13;&#10;MAX([Percentile Rank]) * SIN([Calculation_674414107083497490]+((([Calculation_674414107083341840]-2) * WINDOW_MAX(2*PI())&#13;&#10;/&#13;&#10;(MAX([Calculation_674414107083194383])*100))))&#13;&#10;END'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Y Axis' datatype='real' name='[Calculation_674414107083878420]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF [Calculation_674414107083341840] = 1 OR [Calculation_674414107083341840] = WINDOW_MAX([Calculation_674414107083341840]) THEN 0&#13;&#10;&#13;&#10;ELSE&#13;&#10;MAX([Percentile Rank]) * COS([Calculation_674414107083497490]+((([Calculation_674414107083341840]-2) * WINDOW_MAX(2*PI())&#13;&#10;/&#13;&#10;(MAX([Calculation_674414107083194383])*100))))&#13;&#10;END'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column datatype='string' name='[Metric]' role='dimension' type='nominal' />
+        <column datatype='integer' name='[Pad]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Percentile Rank]' role='measure' type='quantitative' />
+        <column-instance column='[Metric]' derivation='None' name='[none:Metric:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Pad]' derivation='None' name='[none:Pad:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[player]' derivation='None' name='[none:player:nk]' pivot='key' type='nominal' />
+        <column caption='Player' datatype='string' name='[player]' role='dimension' type='nominal' />
+        <column-instance column='[Percentile Rank]' derivation='Sum' name='[sum:Percentile Rank:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_674414107011518474]' derivation='User' name='[usr:Calculation_674414107011518474:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_674414107083653139]' derivation='User' name='[usr:Calculation_674414107083653139:qk:13]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Pad]' ordering-type='Field' />
+          <table-calc field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Calculation_674414107083497490]' ordering-type='Rows' />
+          <table-calc field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Calculation_674414107083341840]' ordering-field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Pad]' ordering-type='Field' />
+          <table-calc field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Calculation_674414107083444241]' level-address='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Metric]' ordering-type='Field'>
+            <order field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Metric]' />
+            <order field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Pad]' />
+          </table-calc>
+        </column-instance>
+        <column-instance column='[Calculation_674414107083878420]' derivation='User' name='[usr:Calculation_674414107083878420:qk:9]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Pad]' ordering-type='Field' />
+          <table-calc field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Calculation_674414107083497490]' ordering-type='Rows' />
+          <table-calc field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Calculation_674414107083341840]' ordering-field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Pad]' ordering-type='Field' />
+          <table-calc field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Calculation_674414107083444241]' ordering-field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[Metric]' ordering-type='Field' />
+        </column-instance>
+      </datasource-dependencies>
+      <computed-sort column='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:Metric:nk]' direction='DESC' using='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107011518474:qk]' />
+      <filter class='categorical' column='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:player:nk]'>
+        <groupfilter function='union' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
+          <groupfilter function='member' level='[none:player:nk]' member='&quot;Lee Jae-Sung&quot;' />
+          <groupfilter function='member' level='[none:player:nk]' member='&quot;MAX Value&quot;' />
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:player:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107083878420:qk:9]' field-type='quantitative' max='1.2' min='-1.2' range-type='fixed' scope='rows' type='space' />
+        <encoding attr='space' class='0' field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107083653139:qk:13]' field-type='quantitative' max='1.6000000000000001' min='-1.6000000000000001' range-type='fixed' scope='cols' type='space' />
+        <format attr='display' class='0' field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107083653139:qk:13]' scope='cols' value='false' />
+        <format attr='display' class='0' field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107083878420:qk:9]' scope='rows' value='false' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='text-format' field='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[sum:Percentile Rank:qk]' value='p0.0%' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='border-width' data-class='total' value='0' />
+        <format attr='border-style' data-class='total' value='none' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='border-width' data-class='total' value='0' />
+        <format attr='border-style' data-class='total' value='none' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#cbcbcb58' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='4' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Polygon' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:Metric:nk]' />
+          <color column='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:player:nk]' />
+          <path column='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:Pad:ok]' />
+          <tooltip column='[federated.0ekaykw02fhokp0zlnc6r075pqpt].[sum:Percentile Rank:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:player:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontname='Tableau Medium' fontsize='12'>&lt;[federated.0ekaykw02fhokp0zlnc6r075pqpt].[none:Metric:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontname='Tableau Regular' fontsize='11'>Percentile Rank:</run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'> &lt;[federated.0ekaykw02fhokp0zlnc6r075pqpt].[sum:Percentile Rank:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-size' value='8' />
+            <format attr='font-family' value='Tableau Regular' />
+            <format attr='color' value='#44485f' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='size' value='0.51574587821960449' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='mark-color' value='#6e7383' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+            <format attr='mark-transparency' value='203' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107083878420:qk:9]</rows>
+    <cols>[federated.0ekaykw02fhokp0zlnc6r075pqpt].[usr:Calculation_674414107083653139:qk:13]</cols>
+  </table>
+</bookmark>

@@ -76,6 +76,8 @@ export class ExpiringMap<K, V> extends Map<K, V> {
     const timeout = setTimeout(() => {
       this.delete(key);
     }, expirationTimeMs);
+    // A cache expiry must not keep the process alive.
+    timeout.unref();
 
     this.timeouts.set(key, timeout);
 

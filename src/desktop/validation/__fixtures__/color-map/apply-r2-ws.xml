@@ -1,0 +1,50 @@
+<!-- Live eval-agent payload agent-apply-ws.xml, verbatim: nothing cut. Andy's shape: the mark rule sits in <table><style>. -->
+<worksheet name='Sales by Category' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='start' />
+      </datasources>
+      <datasource-dependencies datasource='start'>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <computed-sort column='[start].[none:Category:nk]' direction='DESC' using='[start].[sum:Sales:qk]' />
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[start].[none:Category:nk]' type='palette'>
+          <map to='#ff0000'>
+            <bucket>&quot;Furniture&quot;</bucket>
+          </map>
+        </encoding>
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[start].[none:Category:nk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[start].[none:Category:nk]</rows>
+    <cols>[start].[sum:Sales:qk]</cols>
+  </table>
+  <simple-id uuid='{6AF06DE3-FABF-4638-92F4-827E9BEF9E9B}' />
+</worksheet>

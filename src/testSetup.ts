@@ -1,8 +1,14 @@
+import './testTelemetryGuard.js';
+
 import { Ok } from 'ts-results-es';
 
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
+
+beforeEach(() => {
+  stubDefaultEnvVars();
+});
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
   return {

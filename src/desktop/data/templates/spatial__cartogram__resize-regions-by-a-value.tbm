@@ -1,0 +1,622 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <Layers />
+    <LayersPerPaneSpecPrimaryDS />
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SpatialFileLayer />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Scaled Cartogram (Background)' inline='true' name='federated.09day2w0kb7skl1fs2awr1az2gv9' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='5 Background' name='ogrdirect.132yecy12gnqay15n8s7c1mhwi1i'>
+            <connection class='ogrdirect' directory='' tablename='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='ogrdirect.132yecy12gnqay15n8s7c1mhwi1i' name='5 Background.shp' table='[5 Background.shp]' type='table'>
+          <columns>
+            <column datatype='integer' name='id' ordinal='0' />
+            <column datatype='string' name='Name' ordinal='1' />
+            <column datatype='spatial' name='Geometry' ordinal='2' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>id</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[id]</local-name>
+            <parent-name>[5 Background.shp]</parent-name>
+            <remote-alias>id</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[5 Background.shp_62EE71AC49C3439590A31E7F3AFAAF4E]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Name]</local-name>
+            <parent-name>[5 Background.shp]</parent-name>
+            <remote-alias>Name</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[5 Background.shp_62EE71AC49C3439590A31E7F3AFAAF4E]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Geometry</remote-name>
+            <remote-type>8</remote-type>
+            <local-name>[Geometry]</local-name>
+            <parent-name>[5 Background.shp]</parent-name>
+            <remote-alias>Geometry</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[5 Background.shp_62EE71AC49C3439590A31E7F3AFAAF4E]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='string' hidden='true' name='[Name]' role='dimension' type='nominal' />
+      <column caption='5 Background.shp' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[5 Background.shp_62EE71AC49C3439590A31E7F3AFAAF4E]' role='measure' type='quantitative' />
+      <column caption='Id' datatype='integer' hidden='true' name='[id]' role='dimension' type='ordinal' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:10:54 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='5 Background' increment-value='%null%' refresh-type='create' rows-inserted='3' timestamp-start='2026-06-30 20:10:53.657' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Geometry</remote-name>
+              <remote-type>128</remote-type>
+              <local-name>[Geometry]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Geometry</remote-alias>
+              <ordinal>0</ordinal>
+              <family>5 Background.shp</family>
+              <local-type>spatial</local-type>
+              <aggregation>Collect</aggregation>
+              <approx-count>3</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[5 Background.shp_62EE71AC49C3439590A31E7F3AFAAF4E]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.782051' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.217949' show-structure='true' user-set-layout-v2='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='5 Background.shp' id='5 Background.shp_62EE71AC49C3439590A31E7F3AFAAF4E'>
+            <properties context=''>
+              <relation connection='ogrdirect.132yecy12gnqay15n8s7c1mhwi1i' name='5 Background.shp' table='[5 Background.shp]' type='table'>
+                <columns>
+                  <column datatype='integer' name='id' ordinal='0' />
+                  <column datatype='string' name='Name' ordinal='1' />
+                  <column datatype='spatial' name='Geometry' ordinal='2' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+    <datasource caption='Scaled Cartogram (Group)' inline='true' name='federated.18kmj8g0nbq4nj108jil60nhvj7v' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='2 Group outlines' name='ogrdirect.1il530r06lecct198jg440tityrn'>
+            <connection class='ogrdirect' directory='' tablename='' workgroup-auth-mode='as-is' />
+          </named-connection>
+          <named-connection caption='uk_group_population' name='textscan.0yx1xqr16shyy81f2vhmf1d13cgo'>
+            <connection class='textscan' directory='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation type='collection'>
+          <relation connection='ogrdirect.1il530r06lecct198jg440tityrn' name='2 Group outlines.shp' table='[2 Group outlines.shp]' type='table'>
+            <columns>
+              <column datatype='string' name='Group' ordinal='0' />
+              <column datatype='string' name='Group-labe' ordinal='1' />
+              <column datatype='string' name='RegionNati' ordinal='2' />
+              <column datatype='spatial' name='Geometry' ordinal='3' />
+            </columns>
+          </relation>
+          <relation connection='textscan.0yx1xqr16shyy81f2vhmf1d13cgo' name='uk_group_population.csv' table='[uk_group_population#csv]' type='table'>
+            <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+              <column datatype='string' name='Group' ordinal='0' />
+              <column datatype='integer' name='Population' ordinal='1' />
+              <column datatype='string' name='Label' ordinal='2' />
+            </columns>
+          </relation>
+        </relation>
+        <cols>
+          <map key='[Geometry]' value='[2 Group outlines.shp].[Geometry]' />
+          <map key='[Group (uk_group_population.csv)]' value='[uk_group_population.csv].[Group]' />
+          <map key='[Group-labe]' value='[2 Group outlines.shp].[Group-labe]' />
+          <map key='[Group]' value='[2 Group outlines.shp].[Group]' />
+          <map key='[Label]' value='[uk_group_population.csv].[Label]' />
+          <map key='[Population]' value='[uk_group_population.csv].[Population]' />
+          <map key='[RegionNati]' value='[2 Group outlines.shp].[RegionNati]' />
+        </cols>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[uk_group_population.csv]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='currency'>&quot;£&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Group</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Group]</local-name>
+            <parent-name>[2 Group outlines.shp]</parent-name>
+            <remote-alias>Group</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Group-labe</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Group-labe]</local-name>
+            <parent-name>[2 Group outlines.shp]</parent-name>
+            <remote-alias>Group-labe</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>RegionNati</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[RegionNati]</local-name>
+            <parent-name>[2 Group outlines.shp]</parent-name>
+            <remote-alias>RegionNati</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Geometry</remote-name>
+            <remote-type>8</remote-type>
+            <local-name>[Geometry]</local-name>
+            <parent-name>[2 Group outlines.shp]</parent-name>
+            <remote-alias>Geometry</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Group</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Group (uk_group_population.csv)]</local-name>
+            <parent-name>[uk_group_population.csv]</parent-name>
+            <remote-alias>Group</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Population</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Population]</local-name>
+            <parent-name>[uk_group_population.csv]</parent-name>
+            <remote-alias>Population</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Label</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Label]</local-name>
+            <parent-name>[uk_group_population.csv]</parent-name>
+            <remote-alias>Label</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Group (uk group population.csv)' datatype='string' name='[Group (uk_group_population.csv)]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Group-labe]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Group]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Label]' role='dimension' type='nominal' />
+      <column caption='Region Nati' datatype='string' hidden='true' name='[RegionNati]' role='dimension' type='nominal' />
+      <column caption='2 Group outlines.shp' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]' role='measure' type='quantitative' />
+      <column caption='uk_group_population.csv' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]' role='measure' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:10:44 PM' username=''>
+          <relation type='collection'>
+            <relation name='2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B' table='[Extract].[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]' type='table' />
+            <relation name='uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD' table='[Extract].[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]' type='table' />
+          </relation>
+          <cols>
+            <map key='[Geometry]' value='[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B].[Geometry]' />
+            <map key='[Group (uk_group_population.csv)]' value='[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD].[Group]' />
+            <map key='[Group]' value='[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B].[Group]' />
+            <map key='[Population]' value='[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD].[Population]' />
+          </cols>
+          <refresh>
+            <refresh-event add-from-file-path='2 Group outlines' increment-value='%null%' refresh-type='create' rows-inserted='120' timestamp-start='2026-06-30 20:10:44.435' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Group</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Group]</local-name>
+              <parent-name>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</parent-name>
+              <remote-alias>Group</remote-alias>
+              <ordinal>0</ordinal>
+              <family>2 Group outlines.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>60</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Geometry</remote-name>
+              <remote-type>128</remote-type>
+              <local-name>[Geometry]</local-name>
+              <parent-name>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</parent-name>
+              <remote-alias>Geometry</remote-alias>
+              <ordinal>1</ordinal>
+              <family>2 Group outlines.shp</family>
+              <local-type>spatial</local-type>
+              <aggregation>Collect</aggregation>
+              <approx-count>60</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Group</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Group (uk_group_population.csv)]</local-name>
+              <parent-name>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</parent-name>
+              <remote-alias>Group</remote-alias>
+              <ordinal>2</ordinal>
+              <family>uk_group_population.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>60</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RGB' />
+              <object-id>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Population</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Population]</local-name>
+              <parent-name>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</parent-name>
+              <remote-alias>Population</remote-alias>
+              <ordinal>3</ordinal>
+              <family>uk_group_population.csv</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>60</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.639423' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.360577' show-structure='true' user-set-layout-v2='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='2 Group outlines.shp' id='2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B'>
+            <properties context=''>
+              <relation connection='ogrdirect.1il530r06lecct198jg440tityrn' name='2 Group outlines.shp' table='[2 Group outlines.shp]' type='table'>
+                <columns>
+                  <column datatype='string' name='Group' ordinal='0' />
+                  <column datatype='string' name='Group-labe' ordinal='1' />
+                  <column datatype='string' name='RegionNati' ordinal='2' />
+                  <column datatype='spatial' name='Geometry' ordinal='3' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B' table='[Extract].[2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B]' type='table' />
+            </properties>
+          </object>
+          <object caption='uk_group_population.csv' id='uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD'>
+            <properties context=''>
+              <relation connection='textscan.0yx1xqr16shyy81f2vhmf1d13cgo' name='uk_group_population.csv' table='[uk_group_population#csv]' type='table'>
+                <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+                  <column datatype='string' name='Group' ordinal='0' />
+                  <column datatype='integer' name='Population' ordinal='1' />
+                  <column datatype='string' name='Label' ordinal='2' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD' table='[Extract].[uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD]' type='table' />
+            </properties>
+          </object>
+        </objects>
+        <relationships>
+          <relationship>
+            <expression op='='>
+              <expression op='[Group]' />
+              <expression op='[Group (uk_group_population.csv)]' />
+            </expression>
+            <first-end-point object-id='2 Group outlines.shp_99EEC23FE2D64DDBA7FE7D2FAE4CDD6B' />
+            <second-end-point object-id='uk_group_population.csv_351ECDD659DD4379A31F67AFC21AE5AD' />
+          </relationship>
+        </relationships>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='300'>
+          <card pane-specification-id='3' param='[federated.18kmj8g0nbq4nj108jil60nhvj7v].[sum:Population:qk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.054wmni0kuswrm10p9guf09s1ka5].[none:Group:nk]</field>
+          <field>[federated.054wmni0kuswrm10p9guf09s1ka5].[none:pcon-name:nk]</field>
+          <field>[federated.18kmj8g0nbq4nj108jil60nhvj7v].[none:Group (uk_group_population.csv):nk]</field>
+          <field>[federated.18kmj8g0nbq4nj108jil60nhvj7v].[sum:Population:qk]</field>
+          <field>[federated.1cdmrio0h0k6lq1buaesf0xtg6ml].[clct:Geometry:nk]</field>
+          <field>[federated.1cdmrio0h0k6lq1buaesf0xtg6ml].[none:CityLabel:nk]</field>
+          <field>[federated.1cdmrio0h0k6lq1buaesf0xtg6ml].[none:Group-labe:nk]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{763ABF72-8EE6-4AC6-8C08-16A5BE4C51B2}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Scaled Cartogram (Background)' name='federated.09day2w0kb7skl1fs2awr1az2gv9' />
+        <datasource caption='Scaled Cartogram (Group)' name='federated.18kmj8g0nbq4nj108jil60nhvj7v' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.09day2w0kb7skl1fs2awr1az2gv9'>
+        <column datatype='spatial' name='[Geometry]' role='measure' type='nominal' />
+        <column-instance column='[Geometry]' derivation='Collect' name='[clct:Geometry:nk]' pivot='key' type='nominal' />
+      </datasource-dependencies>
+      <datasource-dependencies datasource='federated.18kmj8g0nbq4nj108jil60nhvj7v'>
+        <column datatype='spatial' name='[Geometry]' role='measure' type='nominal' />
+        <column caption='Group (uk group population.csv)' datatype='string' name='[Group (uk_group_population.csv)]' role='dimension' type='nominal' />
+        <column datatype='integer' name='[Population]' role='measure' type='quantitative' />
+        <column-instance column='[Geometry]' derivation='Collect' name='[clct:Geometry:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Group (uk_group_population.csv)]' derivation='None' name='[none:Group (uk_group_population.csv):nk]' pivot='key' type='nominal' />
+        <column-instance column='[Population]' derivation='Sum' name='[sum:Population:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='tick-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.18kmj8g0nbq4nj108jil60nhvj7v].[sum:Population:qk]' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-sequential'>
+            <color>#f1f1f1</color>
+            <color>#eae2f2</color>
+            <color>#e3d3f3</color>
+            <color>#dcc4f5</color>
+            <color>#d5b4f6</color>
+            <color>#cea5f8</color>
+            <color>#c795f9</color>
+            <color>#c085fa</color>
+            <color>#b875fc</color>
+            <color>#b165fd</color>
+            <color>#aa55ff</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='parks' value='false' />
+        <format attr='enabled' id='landcover_wood' value='false' />
+        <format attr='enabled' id='landcover_scrub' value='false' />
+        <format attr='enabled' id='landcover_grass' value='false' />
+        <format attr='enabled' id='landcover_crop' value='false' />
+        <format attr='enabled' id='background' value='false' />
+        <format attr='enabled' id='barrier_line-land-polygon' value='false' />
+        <format attr='enabled' id='barrier_line-land-line' value='false' />
+        <format attr='enabled' id='national_park' value='false' />
+        <format attr='enabled' id='pitch' value='false' />
+        <format attr='enabled' id='industrial' value='false' />
+        <format attr='enabled' id='built-up-area' value='false' />
+        <format attr='enabled' id='water' value='false' />
+        <format attr='enabled' id='waterway-river-canal' value='false' />
+        <format attr='enabled' id='aeroway-polygon' value='false' />
+        <format attr='enabled' id='aeroway-runway' value='false' />
+        <format attr='enabled' id='aeroway-taxiway' value='false' />
+        <format attr='enabled' id='admin-1-label-9th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-8th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-7th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-6th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-1st-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-3rd-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-2nd-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-1st-tier' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg-sub' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-sub' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents' value='false' />
+        <format attr='enabled' id='admin1-water-lines-usa-tableau' value='false' />
+        <format attr='enabled' id='9-dash-line-casing' value='false' />
+        <format attr='enabled' id='9-dash-line' value='false' />
+        <format attr='enabled' id='admin-0-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-1st-tier' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute' value='false' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+      </style-rule>
+    </style>
+    <panes customization-axis='layer'>
+      <pane id='1' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+      </pane>
+      <pane id='2' inert='true' selection-relaxation-option='selection-relaxation-allow' title='Base'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <lod column='[federated.09day2w0kb7skl1fs2awr1az2gv9].[clct:Geometry:nk]' />
+          <geometry column='[federated.09day2w0kb7skl1fs2awr1az2gv9].[clct:Geometry:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='has-stroke' value='false' />
+            <format attr='mark-color' value='#c7cad5' />
+            <format attr='mark-transparency' value='229' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane generated-title='2 Group outlines.shp' id='3' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[federated.18kmj8g0nbq4nj108jil60nhvj7v].[sum:Population:qk]' />
+          <lod column='[federated.18kmj8g0nbq4nj108jil60nhvj7v].[clct:Geometry:nk]' />
+          <lod column='[federated.18kmj8g0nbq4nj108jil60nhvj7v].[none:Group (uk_group_population.csv):nk]' />
+          <geometry column='[federated.18kmj8g0nbq4nj108jil60nhvj7v].[clct:Geometry:nk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>&lt;[federated.18kmj8g0nbq4nj108jil60nhvj7v].[none:Group (uk_group_population.csv):nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#757575' fontname='Tableau Regular'>Total Population: </run>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.18kmj8g0nbq4nj108jil60nhvj7v].[sum:Population:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.09day2w0kb7skl1fs2awr1az2gv9].[Latitude (generated)]</rows>
+    <cols>[federated.09day2w0kb7skl1fs2awr1az2gv9].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

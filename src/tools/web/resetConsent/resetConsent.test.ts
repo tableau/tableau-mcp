@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -10,6 +12,10 @@ const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
 const MOCK_SERVER = 'https://my-tableau-server.com';
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('resetConsentTool', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -18,17 +24,13 @@ describe('resetConsentTool', () => {
     vi.stubGlobal('fetch', mockFetch);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it('should create a tool instance with correct properties', async () => {
     const tool = getResetConsentTool(new WebMcpServer());
     const annotations = await Provider.from(tool.annotations);
     expect(tool.name).toBe('reset-consent');
     expect(tool.paramsSchema).toEqual({});
     expect(annotations?.readOnlyHint).toBe(false);
-    expect(annotations?.destructiveHint).toBe(false);
+    expect(annotations?.destructiveHint).toBe(true);
     expect(annotations?.idempotentHint).toBe(true);
     expect(annotations?.openWorldHint).toBe(false);
   });
@@ -55,6 +57,26 @@ describe('resetConsentTool', () => {
       vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
       const tool = getResetConsentTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);
+    });
+
+    describe('with an external authorization server', () => {
+      afterEach(() => {
+        vi.unstubAllEnvs();
+        stubDefaultEnvVars();
+      });
+
+      it('should be disabled when an external authorization server is configured', async () => {
+        vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
+        vi.stubEnv('AUTH', 'direct-trust');
+        vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+        vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_ID', 'connected-app-secret-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'connected-app-secret-value');
+        const tool = getResetConsentTool(new WebMcpServer());
+        expect(await Provider.from(tool.disabled)).toBe(true);
+      });
     });
   });
 

@@ -1,0 +1,76 @@
+{
+  "_description": "Minimal worksheet with a bar chart (dimension on rows, measure on cols)",
+  "_feature": "worksheet",
+  "worksheet": {
+    "type": "worksheet",
+    "attrs": { "name": "Sales by Category" },
+    "children": [
+      {
+        "type": "table",
+        "children": [
+          {
+            "type": "view",
+            "children": [
+              {
+                "type": "datasources",
+                "children": [
+                  { "type": "datasource", "attrs": { "name": "federated.XXXX" } }
+                ]
+              },
+              {
+                "type": "datasource-dependencies",
+                "attrs": { "datasource": "federated.XXXX" },
+                "children": [
+                  {
+                    "type": "column-instance",
+                    "attrs": {
+                      "column": "[Category]",
+                      "derivation": "None",
+                      "name": "[none:Category:nk]",
+                      "pivot": "key",
+                      "type": "nominal"
+                    }
+                  },
+                  {
+                    "type": "column-instance",
+                    "attrs": {
+                      "column": "[Sales]",
+                      "derivation": "Sum",
+                      "name": "[sum:Sales:qk]",
+                      "pivot": "key",
+                      "type": "quantitative"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "panes",
+            "children": [
+              {
+                "type": "pane",
+                "attrs": { "id": "2", "selection-relaxation-option": "selection-relaxation-disallow" },
+                "children": [
+                  { "type": "view", "children": [{ "type": "breakdown", "attrs": { "value": "auto" } }] },
+                  { "type": "mark", "attrs": { "class": "Automatic" } }
+                ]
+              }
+            ]
+          },
+          { "type": "rows", "content": "[federated.XXXX].[none:Category:nk]" },
+          { "type": "cols", "content": "[federated.XXXX].[sum:Sales:qk]" }
+        ]
+      }
+    ]
+  },
+  "window": {
+    "type": "window",
+    "attrs": { "name": "Sales by Category", "class": "worksheet", "saved-hidden": "true", "maximized": "true" }
+  },
+  "notes": {
+    "column_instance_naming": "[derivation:FieldName:typePivot] — derivation is the aggregation (None, Sum, Avg, etc.), typePivot is 'nk' for nominal-key, 'qk' for quantitative-key, 'ok' for ordinal-key",
+    "mark_class_values": ["Automatic", "Text", "Shape", "Bar", "Line", "Area", "Circle", "Square", "Pie", "GanttBar", "Polygon", "Heatmap"],
+    "rows_cols_format": "[datasourceId].[column-instance-name]"
+  }
+}

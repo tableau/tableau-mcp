@@ -9,7 +9,6 @@ export default mergeConfig(
       dir: 'tests/eval',
       testTimeout: 60 * 1000,
       fileParallelism: false,
-      outputFile: 'junit/eval.xml',
     },
   }),
 );

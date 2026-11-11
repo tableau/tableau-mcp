@@ -20,7 +20,8 @@ const paramsSchema = {};
  *   - Bearer (Tableau authZ server mode): posts to `${config.oauth.issuer}/oauth2/resetConsent`
  *     with the access token in the Authorization header. The current session remains valid.
  *
- * Disabled when the embedded authorization server is active (no consent model).
+ * Disabled when the embedded authorization server is active (no consent model) and when an external
+ * authorization server is configured (its tokens are not Tableau tokens).
  *
  * Not supported (returns runtime error):
  *   - Passthrough or other non-Bearer auth: session credentials are managed externally.
@@ -51,11 +52,11 @@ This tool requires no input — it operates on the token already associated with
     annotations: {
       title: 'Reset Consent',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     },
-    disabled: !config.oauth.enabled || config.oauth.embeddedAuthzServer,
+    disabled: !config.oauth.enabled || config.oauth.embeddedAuthzServer || !!config.oauth.external,
     callback: async (_args, extra): Promise<CallToolResult> => {
       return resetConsentTool.logAndExecute<string>({
         extra,

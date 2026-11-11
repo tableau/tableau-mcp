@@ -1,10 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
@@ -46,11 +44,7 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
       idempotentHint: true,
       openWorldHint: false,
     },
-    disabled: new Provider(
-      async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        !(await isAuthoringAllowedForClient(server.clientId)),
-    ),
+    disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
     callback: async ({ workbookId, includeExtract }, extra): Promise<CallToolResult> => {
       return await downloadWorkbookTool.logAndExecute<WorkbookToolResult>({
         extra,
@@ -78,17 +72,16 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
           const extension = mimeType === 'application/xml' ? 'twb' : 'twbx';
           const filename = workbook.filename ?? `workbook-${workbookId}.${extension}`;
 
-          return new Ok(
-            await buildWorkbookToolResult({
-              content: workbook.content,
-              mimeType,
-              filename,
-              resourceId: workbookId,
-              config: extra.config,
-              toolName: downloadWorkbookTool.name,
-              keyPrefixSegment: 'workbook-files/',
-            }),
-          );
+          return await buildWorkbookToolResult({
+            content: workbook.content,
+            mimeType,
+            filename,
+            resourceId: workbookId,
+            config: extra.config,
+            toolName: downloadWorkbookTool.name,
+            keyPrefixSegment: 'workbook-files',
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (result) => ({
           type: 'success',

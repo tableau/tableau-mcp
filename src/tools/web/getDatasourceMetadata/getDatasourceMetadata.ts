@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import {
   ArgsValidationError,
@@ -11,6 +12,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { isEmbeddedDatasource } from '../../../sdks/tableau/types/dataSource.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -22,6 +24,7 @@ import { ToolRules, WebTool } from '../tool.js';
 import {
   combineFields,
   DatasourceType,
+  FieldsResult,
   simplifyReadMetadataResult,
 } from './datasourceMetadataUtils.js';
 
@@ -93,6 +96,24 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
 
 const paramsSchema = {
   datasourceLuid: luidSchema,
+  fieldNames: z
+    .array(z.string().nonempty())
+    .nonempty()
+    .optional()
+    .describe('Exact, case-sensitive field captions. Returns all matches for duplicate captions.'),
+  search: z
+    .string()
+    .trim()
+    .nonempty()
+    .optional()
+    .describe(
+      'Case-insensitive substring of field caption or description; combined with fieldNames using AND.',
+    ),
+  workbookLuid: luidSchema
+    .optional()
+    .describe(
+      'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
+    ),
 };
 
 export type GetDatasourceMetadataError =
@@ -115,7 +136,12 @@ const getDatasourceMetadataToolDescription20263 = `
     This tool retrieves metadata for a datasource specified by its datasourceLuid, which may be a published or an embedded (workbook) data source. It takes the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType. The richer Metadata API context (descriptions, dataCategories, roles, etc.) is only available for published data sources and may be absent for embedded ones.
+    For an embedded data source, also pass workbookLuid: the LUID of the workbook it belongs to. The server configuration may restrict access to embedded data sources based on their workbook.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau data sources.
+    `;
+
+const fieldNameQueryGuidance = `
+    name is the display caption; fieldName is the internal query name. For duplicate captions, choose the intended logical table and use exact fieldName values with query-datasource's interpretFieldCaptionsAsFieldNames option. parameterName is the corresponding internal parameter name.
     `;
 
 export const getGetDatasourceMetadataTool = (
@@ -127,14 +153,17 @@ export const getGetDatasourceMetadataTool = (
     server,
     name: 'get-datasource-metadata',
     minRequiredRole: SiteRole.VIEWER,
-    description: new Provider(() =>
-      getResultForTableauVersion({
-        productVersion,
-        mappings: {
-          '2026.3.0': getDatasourceMetadataToolDescription20263,
-          default: getDatasourceMetadataToolDescription,
-        },
-      }),
+    description: new Provider(
+      () =>
+        'Retrieve metadata for all or selected fields. Use fieldNames for known exact captions, or search for a targeted caption/description lookup. Search is literal: related fields and formula dependencies may not match. For broad discovery or uncertain terminology, omit selectors; fetch referenced fields when needed. Selectors filter fields only; datasource descriptions, parameters and model relationships are unchanged. Inspect mcp.resultInfo for matching counts and unknown field names.\n' +
+        getResultForTableauVersion({
+          productVersion,
+          mappings: {
+            '2026.3.0': getDatasourceMetadataToolDescription20263,
+            default: getDatasourceMetadataToolDescription,
+          },
+        }) +
+        (rules.fieldNamesAreUnavailable ? '' : fieldNameQueryGuidance),
     ),
     paramsSchema,
     annotations: {
@@ -144,12 +173,15 @@ export const getGetDatasourceMetadataTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, workbookLuid, fieldNames, search },
+      extra,
+    ): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
       return await getDatasourceMetadataTool.logAndExecute({
         extra,
-        args: { datasourceLuid },
+        args: { datasourceLuid, workbookLuid, fieldNames, search },
         callback: async () => {
           if (!datasourceLuid) {
             return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
@@ -158,6 +190,8 @@ export const getGetDatasourceMetadataTool = (
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
+            workbookLuid,
+            supportsWorkbookLuid: true,
             extra,
           });
 
@@ -248,7 +282,7 @@ export const getGetDatasourceMetadataTool = (
         constrainSuccessResult: (fields) => {
           return {
             type: 'success',
-            result: fields,
+            result: selectFields(fields, fieldNames, search),
           };
         },
       });
@@ -257,6 +291,38 @@ export const getGetDatasourceMetadataTool = (
 
   return getDatasourceMetadataTool;
 };
+
+function selectFields(source: FieldsResult, fieldNames?: string[], search?: string): FieldsResult {
+  if (!fieldNames && search === undefined) return source;
+
+  const fields = source.fieldGroups.flatMap((group) => group.fields);
+  const availableNames = new Set(fields.map((field) => field.name));
+  const selectedNames = fieldNames ? new Set(fieldNames) : undefined;
+  const term = search?.toLowerCase();
+  const fieldGroups = source.fieldGroups
+    .map((group) => ({
+      ...group,
+      fields: group.fields.filter(
+        (field) =>
+          (!selectedNames || selectedNames.has(field.name ?? '')) &&
+          (term === undefined ||
+            [field.name, field.description].some((value) => value?.toLowerCase().includes(term))),
+      ),
+    }))
+    .filter((group) => group.fields.length > 0);
+
+  return {
+    ...source,
+    fieldGroups,
+    mcp: {
+      resultInfo: {
+        totalFields: fields.length,
+        matchedFields: fieldGroups.reduce((count, group) => count + group.fields.length, 0),
+        unknownFieldNames: [...(selectedNames ?? [])].filter((name) => !availableNames.has(name)),
+      },
+    },
+  };
+}
 
 // A publishedDatasources match (Metadata API) is authoritative and free. Otherwise probe the REST
 // Query Data Source endpoint and classify on the returned shape: WBDS-enabled servers return
@@ -277,8 +343,7 @@ async function resolveDatasourceType(
     datasourceId: datasourceLuid,
   });
   if (restLookup.isOk()) {
-    const datasource = restLookup.value;
-    return datasource.parentType === 'Workbook' || !datasource.project ? 'embedded' : 'published';
+    return isEmbeddedDatasource(restLookup.value) ? 'embedded' : 'published';
   }
   if (restLookup.error === 'not-found') {
     return 'embedded';
@@ -293,6 +358,7 @@ function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
       '2025.3.0': {},
       default: {
         datasourceModelIsUnavailable: true,
+        fieldNamesAreUnavailable: true,
       },
     },
   });

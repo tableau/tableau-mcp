@@ -1,3 +1,4 @@
+import * as loggerModule from '../../../logging/logger.js';
 import { OrderBy, SearchContentFilter } from '../../../sdks/tableau/types/contentExploration.js';
 import invariant from '../../../utils/invariant.js';
 import { mockSearchContentResponse } from './searchContent.test.js';
@@ -7,6 +8,10 @@ import {
   constrainSearchContent,
   reduceSearchContentResponse,
 } from './searchContentUtils.js';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('searchContentUtils', () => {
   describe('buildOrderByString', () => {

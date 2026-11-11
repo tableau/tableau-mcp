@@ -25,6 +25,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
+import { buildTruncationInfo, MAX_INT32, TruncationReason } from '../_lib/truncation.js';
 import {
   getEmbeddedDatasourceVersionHint,
   getVizqlDataServiceDisabledError,
@@ -47,22 +48,58 @@ import { validateQueryAgainstDatasourceMetadata } from './validators/validateQue
 
 const paramsSchema = {
   datasourceLuid: luidSchema,
+  workbookLuid: luidSchema
+    .optional()
+    .describe(
+      'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
+    ),
   query: querySchema,
-  limit: z.number().int().min(1).optional(),
+  interpretFieldCaptionsAsFieldNames: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set true to query using exact fieldName and parameterName values from get-datasource-metadata. Use this for duplicate display names, choosing the intended logical table. Use internal names consistently for existing fields and parameters, including bracketed references inside calculation expressions; do not invent names. A new ad hoc calculation's fieldCaption remains a caller-chosen output label. Omit or set false to use display captions.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    // VDS's rowLimit width is unverified; keep limit + 1 within int32.
+    .max(MAX_INT32 - 1)
+    .optional()
+    .describe(
+      "Max rows to return. When a row limit applies (this or a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason 'admin-cap' means a server cap cut them — narrow filters or aggregate.",
+    ),
 };
+
+const fieldNameParamsSchema = z.object(paramsSchema);
+// Preserve hidden arguments so unsupported calls reach the runtime version guard.
+const captionParamsSchema = fieldNameParamsSchema
+  .omit({ interpretFieldCaptionsAsFieldNames: true })
+  .passthrough();
+type QueryDatasourceParamsSchema = z.ZodType<
+  z.output<typeof fieldNameParamsSchema>,
+  z.ZodTypeDef,
+  z.input<typeof fieldNameParamsSchema>
+>;
 
 type QueryDatasourceResult = QueryOutput & {
   mcp?: {
-    warnings: ContextFilterWarning[];
+    warnings?: ContextFilterWarning[];
+    resultInfo?: {
+      returnedCount: number;
+      truncated: boolean;
+      truncationReason?: TruncationReason;
+    };
   };
 };
 
 export const getQueryDatasourceTool = (
   server: WebMcpServer,
   productVersion: ProductVersion,
-): WebTool<typeof paramsSchema> => {
+): WebTool<QueryDatasourceParamsSchema> => {
   const rules = getQueryDatasourceRules(productVersion);
-  const queryDatasourceTool = new WebTool({
+  const queryDatasourceTool = new WebTool<QueryDatasourceParamsSchema>({
     server,
     name: 'query-datasource',
     minRequiredRole: SiteRole.VIEWER,
@@ -77,7 +114,9 @@ export const getQueryDatasourceTool = (
         },
       }),
     ),
-    paramsSchema,
+    paramsSchema: new Provider(() =>
+      rules.fieldNamesAreUnavailable ? captionParamsSchema : fieldNameParamsSchema,
+    ),
     annotations: {
       title: 'Query Datasource',
       readOnlyHint: true,
@@ -85,12 +124,20 @@ export const getQueryDatasourceTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, workbookLuid, query, limit, interpretFieldCaptionsAsFieldNames },
+      extra,
+    ): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: { datasourceLuid, query },
+        args: { datasourceLuid, workbookLuid, query, interpretFieldCaptionsAsFieldNames },
         callback: async () => {
+          if (interpretFieldCaptionsAsFieldNames && rules.fieldNamesAreUnavailable) {
+            return new ArgsValidationError(
+              'Querying by internal field names requires Tableau 2025.3 or later. Omit interpretFieldCaptionsAsFieldNames or set it to false and use display captions on this server.',
+            ).toErr();
+          }
           try {
             validateQuery({ datasourceLuid, query, rules });
           } catch (error) {
@@ -99,6 +146,8 @@ export const getQueryDatasourceTool = (
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
+            workbookLuid,
+            supportsWorkbookLuid: true,
             extra,
           });
 
@@ -109,14 +158,20 @@ export const getQueryDatasourceTool = (
           const datasource: Datasource = { datasourceLuid };
           const maxResultLimit = configWithOverrides.getMaxResultLimit(queryDatasourceTool.name);
           const rowLimit = maxResultLimit
-            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            ? Math.min(maxResultLimit, limit ?? MAX_INT32 - 1)
             : limit;
 
+          // The extra row tells "exactly rowLimit rows" apart from "more rows matched".
           const options: QueryRequest['options'] = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            ...(rules.dontSpecifyRowLimits ? {} : { rowLimit }),
+            ...(interpretFieldCaptionsAsFieldNames
+              ? { interpretFieldCaptionsAsFieldNames: true }
+              : {}),
+            ...(rules.dontSpecifyRowLimits || rowLimit === undefined
+              ? {}
+              : { rowLimit: rowLimit + 1 }),
           };
 
           const credentials = getDatasourceCredentials(datasourceLuid);
@@ -140,6 +195,7 @@ export const getQueryDatasourceTool = (
                   query,
                   restApi.vizqlDataServiceMethods,
                   datasource,
+                  interpretFieldCaptionsAsFieldNames,
                 );
 
                 if (metadataValidationResult.isErr()) {
@@ -154,6 +210,7 @@ export const getQueryDatasourceTool = (
                   query,
                   restApi.vizqlDataServiceMethods,
                   datasource,
+                  interpretFieldCaptionsAsFieldNames,
                 );
 
                 if (filterValidationResult.isErr()) {
@@ -194,15 +251,31 @@ export const getQueryDatasourceTool = (
                 );
               }
 
-              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
-                result.value.data.length = rowLimit;
+              let resultInfo: NonNullable<QueryDatasourceResult['mcp']>['resultInfo'];
+              if (rowLimit) {
+                const data = result.value.data;
+                const truncatedByLimit = !!data && data.length > rowLimit;
+                if (data && truncatedByLimit) {
+                  data.length = rowLimit;
+                }
+
+                resultInfo = {
+                  returnedCount: data?.length ?? 0,
+                  ...buildTruncationInfo({
+                    truncatedByLimit,
+                    maxResultLimit,
+                    llmLimit: limit,
+                    effectiveLimit: rowLimit,
+                  }),
+                };
               }
 
-              if (contextWarnings.length > 0) {
+              if (contextWarnings.length > 0 || resultInfo) {
                 return new Ok({
                   ...result.value,
                   mcp: {
-                    warnings: contextWarnings,
+                    ...(contextWarnings.length > 0 && { warnings: contextWarnings }),
+                    ...(resultInfo && { resultInfo }),
                   },
                 });
               }
@@ -225,13 +298,18 @@ export const getQueryDatasourceTool = (
 };
 
 function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
-  return getResultForTableauVersion({
+  return getResultForTableauVersion<ToolRules>({
     productVersion,
     mappings: {
       '2026.1.0': {},
+      '2025.3.0': {
+        dontSpecifyRowLimits: true,
+        restrictFunctionsAndCalculationsInFilters: true,
+      },
       default: {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
+        fieldNamesAreUnavailable: true,
       },
     },
   });

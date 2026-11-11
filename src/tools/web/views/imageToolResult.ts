@@ -1,6 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok, Result } from 'ts-results-es';
 
+import { getTenantLuids, TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
 import { Config } from '../../../config.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -8,7 +11,7 @@ import {
   convertViewImageToToolResult,
   convertViewImageUrlToToolResult,
 } from '../convertViewImageToToolResult.js';
-import { joinImageS3Prefix, uploadImageToS3 } from '../uploadImageToS3.js';
+import { uploadImageToS3 } from '../uploadImageToS3.js';
 
 /**
  * Discriminated result carried from an image tool's `callback` to its
@@ -36,12 +39,13 @@ export type ImageToolResult =
  * disabling the flag keeps both behind the gate and preserves the original
  * inline-base64 behavior. The `bucketS3.enabled` check still guards against a
  * missing bucket so an enabled flag without config doesn't attempt a doomed
- * upload on every request.
+ * upload on every request. A missing or invalid tenant returns an error rather
+ * than falling back, so nothing is uploaded unscoped.
  *
- * `keyPrefixSegment` is the caller's per-tool folder (e.g. `view-images/`); it
- * is appended to the shared base prefix (MCP_IMAGE_PREFIX) so each tool
- * namespaces its objects distinctly while still honoring an operator-configured
- * base.
+ * `keyPrefixSegment` is the caller's per-tool folder (e.g. `view-images`); it
+ * follows the shared base prefix (MCP_IMAGE_PREFIX) and precedes the caller's
+ * site and user LUIDs, so each tool namespaces its objects distinctly while
+ * still honoring an operator-configured base.
  */
 export async function buildImageToolResult({
   imageData,
@@ -50,6 +54,7 @@ export async function buildImageToolResult({
   config,
   toolName,
   keyPrefixSegment,
+  tenant,
 }: {
   imageData: Buffer | string;
   format: 'PNG' | 'SVG' | undefined;
@@ -57,21 +62,26 @@ export async function buildImageToolResult({
   config: Config;
   toolName: string;
   keyPrefixSegment: string;
-}): Promise<ImageToolResult> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ImageToolResult, McpToolError>> {
   if (!config.bucketS3.enabled || !(await getFeatureGate().isFeatureEnabled('view-file-mode'))) {
-    return { kind: 'inline', imageData, format };
+    return new Ok({ kind: 'inline', imageData, format });
+  }
+
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
   }
 
   try {
     const url = await uploadImageToS3(imageData, {
       format: format ?? 'PNG',
       resourceId,
-      config: {
-        ...config.bucketS3,
-        keyPrefix: joinImageS3Prefix(config.bucketS3.keyPrefix, keyPrefixSegment),
-      },
+      config: config.bucketS3,
+      keyPrefixSegment,
+      tenant: tenantLuids.value,
     });
-    return { kind: 'url', url, format };
+    return new Ok({ kind: 'url', url, format });
   } catch (error) {
     // The full image buffer is still in hand, so we can always fall back to
     // inline base64. Log the key facts (never the presigned URL / signature).
@@ -82,7 +92,7 @@ export async function buildImageToolResult({
       level: 'warning',
       logger: 'tool',
     });
-    return { kind: 'inline', imageData, format };
+    return new Ok({ kind: 'inline', imageData, format });
   }
 }
 

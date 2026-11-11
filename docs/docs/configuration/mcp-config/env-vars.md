@@ -42,9 +42,15 @@ The MCP transport type to use for the server.
 The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat`, `direct-trust`, or `oauth`
+- Possible values: `pat`, `direct-trust`, `oauth`, or `passthrough`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
+- Setting `passthrough` implies
+  [`ENABLE_PASSTHROUGH_AUTH`](authentication/passthrough.md#enable_passthrough_auth) is `true`,
+  requires `TRANSPORT=http`, and requires every request to carry a token in the `X-Tableau-Auth`
+  header or the `workgroup_session_id` cookie (there is no fallback auth method).
+  OAuth stays disabled in this mode, even when `OAUTH_ISSUER` is set. See
+  [Passthrough Authentication](authentication/passthrough).
 
 <hr />
 
@@ -62,6 +68,8 @@ A comma-separated list of loggers to enable.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
+  The Desktop server starts every name with `desktop-mcp-`, e.g.
+  `desktop-mcp-2025-10-15T22-00-00-000Z.log`.
 - Each line in the log file is a JSON object with a timestamp and additional properties:
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
@@ -85,7 +93,8 @@ The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_logge
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
 - The server will attempt to create the directory if it does not exist.
-- There is no cleanup of old log files. The server will continue to create log files indefinitely.
+- The web server never deletes old log files.
+- The Desktop server deletes its own `desktop-mcp-*.log` files older than 14 days when it starts.
 
 <hr />
 
@@ -206,6 +215,39 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 
 - Default: Empty string (_none_ are excluded)
 - Cannot be provided with `INCLUDE_TOOLS`.
+
+<hr />
+
+## `TOOL_PROFILE`
+
+Selects which tools the Desktop authoring server registers, and whether the combined Web and Desktop
+server loads its Web tools lazily. The value is trimmed and lowercased. The standalone Web
+server ignores `TOOL_PROFILE`. On the combined server, only `combined-lean` changes the Web half.
+
+- Unset or `dynamic-authoring`: the Desktop server registers a lean native authoring subset.
+- `full`: every Desktop tool.
+- `demo`: the demo subset. Experimental; it may change or be removed in a minor release.
+- `combined-lean`: the full Desktop surface, and the Web tools load on demand (see below).
+- Any other value logs a warning and uses the default (`dynamic-authoring`) set.
+
+Lazy Web loading for `combined-lean` happens only on the combined server, which runs over stdio with
+one identity per process. On the standalone Desktop server, `combined-lean` acts like `full`. On the
+combined server, only the `load-web-tools` tool is listed for the Web half at startup. A client calls
+it with a tool group name (or `all`), the server registers that group's tools, and it sends a
+`tools/list_changed` notification. The tool's description lists every group and its tools. Standalone
+Web servers register every Web tool.
+
+The `load-web-tools` result is JSON `{ status, toolNames, warnings?, notes? }`:
+
+- `status` is `loaded`, `already-loaded`, or `partial`. `partial` means a retryable failure dropped
+  some of the requested tools; call `load-web-tools` again for that group.
+- `warnings` lists retryable problems for the requested group only, such as a failed site role
+  lookup, a registration condition check that could not be completed, or a tool that failed to
+  register.
+- `notes` lists deliberate omissions for the requested group, such as a registration condition that
+  is not met. Calling again does not change these.
+- Tools left out on purpose (site role, `INCLUDE_TOOLS`/`EXCLUDE_TOOLS`, unmet conditions) count as
+  loaded, so the group is not retried.
 
 <hr />
 
@@ -440,12 +482,81 @@ LATENCY_METRIC_NAME=http_server_1agg1_request_duration
 
 Enables product telemetry for tool usage tracking.
 
-- Default: `true`
-- When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
-  call, including tool name, request ID, session ID, and site name.
-- Set to `false` to disable product telemetry. Read
+- Default: `true`. This applies to both the web (Tableau Server and Cloud) and the Desktop variants.
+- When `true`, the server sends one `tool_call` event to Tableau's telemetry endpoint for each tool
+  call. See [Product telemetry fields](#product-telemetry-fields) for exactly what each variant
+  sends.
+- Set to `false` to disable product telemetry. Only the exact value `false` disables it. Read
   https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
   information
+
+<hr />
+
+## `PRODUCT_TELEMETRY_ENDPOINT`
+
+The URL product telemetry events are sent to.
+
+- Default: `https://prod.telemetry.tableausoftware.com`
+- If the value is not a valid URL, the server logs one error on the first tool call and sends no
+  product telemetry. Credentials in the URL (`https://user:pass@host`) also count as invalid.
+
+<hr />
+
+## `IS_HYPERFORCE`
+
+Set to `true` to mark the deployment as Hyperforce. Sent as `is_hyperforce` on every product
+telemetry event.
+
+- Default: `false`
+
+<hr />
+
+## `TABLEAU_POD_NAME`
+
+Desktop only. The server URL Desktop is signed in to. Sent as `pod` and `podname` on every product
+telemetry event. The web variants send the value of `SERVER` instead (`SERVER` wins if both are
+set).
+
+<hr />
+
+## `TABLEAU_DATA_APP_WORKSPACE_DIR`
+
+Desktop only. Absolute directory where `scaffold-data-app` writes durable data-app package trees.
+Relative or unset values are ignored; the tool then fails with an actionable error instead of
+writing relative to the process working directory.
+
+<hr />
+
+## `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID`
+
+Desktop only. Set by the launcher (Tableau Desktop and its agent), not by hand. They are sent as
+`site_luid`, `user_luid`, `chat_id` and `session_id` on Desktop product telemetry events. Each is
+empty if the launcher did not set it. `TABLEAU_DESKTOP_SESSION_LUID` is ignored unless it is a
+well-formed GUID.
+
+<hr />
+
+## Product telemetry fields
+
+Every event also carries `type`, `host_timestamp` (UTC time of the call), `service_name`
+(`tableau-mcp`), `podname` and `is_hyperforce`.
+
+| Field                                          | Web                                                                                                                                         | Desktop                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `tool_name`, `request_id`                      | yes                                                                                                                                         | yes                                                                                   |
+| `session_id`                                   | MCP session ID, empty on stdio                                                                                                              | `TABLEAU_DESKTOP_SESSION_LUID`, empty if unset                                        |
+| `site_luid`, `user_luid`                       | from the signed-in session                                                                                                                  | `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`                                              |
+| `chat_id`                                      | not sent                                                                                                                                    | `TABLEAU_CHAT_ID`                                                                     |
+| `success`                                      | yes                                                                                                                                         | yes                                                                                   |
+| `error_code`                                   | empty on success. On failure, the HTTP status of the error, empty if the error result carries none, or `500` for a thrown error without one | status code of a typed tool error, else empty                                         |
+| `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
+| `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
+| `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
+
+The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
+separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
+1024 characters), `site_luid`, `user_luid` and `auth_type`. Calling it also sends the usual
+`tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
@@ -455,29 +566,105 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
-## `FLOW_TOOLS_ENABLED`
+## `FLOW_READ_TOOLS_ENABLED`
 
-Controls the base gate for the Tableau Prep flow tool family. It controls read-only tool registration directly and is also required for the mutating tools.
+Controls the read-only Tableau Prep flow tools. They are enabled by default.
 
-- Default: `false`
-- Set to `true` to enable:
+- Default: unset, which enables the read-only flow tools
+- Set to `true` to enable them explicitly. Any other value is treated as unset
+- Set to `false` to disable them
+- The mutating flow tools are controlled separately by
+  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled)
+- When enabled, registers:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
   - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../tools/flows/describe-flow.md)
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
-- Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
-  disabled.
-- Setting this to `true` is necessary but not sufficient. The flow tools also require the
-  `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
-  without a redeploy. Both switches must be on for the tools to register; either one turns them
-  off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
-- The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled); all flow tools remain subject to the `flow-tools` feature flag.
-- When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
-  `tableau:flows:read`, and `tableau:flows:download`) are neither advertised nor enforced.
-- When enabled, individual flow tools can still be excluded via
-  [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is neither
+  advertised nor accepted. REST API scopes that an enabled tool still uses stay advertised. For
+  example, `run-flow` uses `tableau:flows:read`
+
+<hr />
+
+## `FLOW_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** Tableau Prep flow tools. They are enabled by default. A confirmed
+run consumes Tableau Prep Conductor capacity and can overwrite flow outputs. Each tool previews the
+change first and returns a single-use confirmation token. The tool makes the change only when it's
+called again with that token, after the user approves the preview.
+
+- Default: unset, which enables the mutating flow tools
+- Set to `true` to enable them explicitly. Any other value is treated as unset
+- Set to `false` to disable them
+- The read-only flow tools are controlled separately by
+  [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled)
+- When enabled, registers:
+  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
+  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
+  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:run` and
+  `tableau:mcp:flow:cancel` scopes are neither advertised nor accepted. Their REST API scopes
+  (`tableau:flows:run`, `tableau:flow_tasks:run`, and `tableau:flow_runs:update`) are not advertised
+- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
+- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
+- You can still remove individual flow tools with [`EXCLUDE_TOOLS`](#exclude_tools), or remove all
+  of them with `EXCLUDE_TOOLS=flow`
+
+| `FLOW_READ_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
+| --- | --- | --- |
+| unset or `true` | unset or `true` | read-only and mutating flow tools |
+| unset or `true` | `false` | read-only flow tools |
+| `false` | unset or `true` | mutating flow tools |
+| `false` | `false` | none |
+
+<hr />
+
+## `KNOWLEDGE_TOOLS_ENABLED`
+
+Controls the read-only Tableau Knowledge tools. They are disabled by default.
+
+- Default: unset, which leaves the read-only Knowledge tools disabled
+- Set to `true` to enable them. Any other value is treated as unset
+- Set to `false` to disable them
+- When `true`, the tools appear only on sites where Tableau Knowledge is available. The server
+  checks this when it registers tools, as it does for other site-dependent tools. If the site
+  rejects the check (for example, the request isn't authorized), the tools are left out as
+  unavailable. If the check fails with a temporary error, they are left out with a warning that the
+  error is likely transient
+- When enabled, registers:
+  - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
+  - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)
+- When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is
+  neither advertised nor accepted
+- The mutating Knowledge tool is controlled by
+  [`KNOWLEDGE_WRITE_TOOLS_ENABLED`](#knowledge_write_tools_enabled), and also needs this setting on
+
+<hr />
+
+## `KNOWLEDGE_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** Tableau Knowledge tool. It is disabled by default. Changes are
+shared with everyone and every agent that uses the Knowledge graph.
+
+- Default: unset, which leaves the mutating Knowledge tool disabled
+- Set to `true` to enable it. Any other value is treated as unset
+- Set to `false` to disable it
+- Unlike the flow settings, this one does not stand alone: the tool is registered only when the
+  read-only Knowledge tools are also enabled (see
+  [`KNOWLEDGE_TOOLS_ENABLED`](#knowledge_tools_enabled))
+- When enabled, registers:
+  - [`manage-knowledge-context`](../../tools/knowledge/manage-knowledge-context.md)
+- When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is neither
+  advertised nor accepted, and the `tableau:knowledge:write` REST API scope is not advertised
+- The tool requires the Creator site role or higher
+
+| `KNOWLEDGE_TOOLS_ENABLED` | `KNOWLEDGE_WRITE_TOOLS_ENABLED` | Registered Knowledge tools |
+| --- | --- | --- |
+| `true` | `true` | read-only and mutating Knowledge tools |
+| `true` | unset or `false` | read-only Knowledge tools |
+| unset or `false` | any value | none |
 
 <hr />
 
@@ -500,28 +687,6 @@ Enables admin-only tools that require site administrator permissions.
   - ServerAdministrator
 - Admin tools perform runtime role verification and will return a 403 error if the user does not
   have the required permissions.
-
-<hr />
-
-## `FLOW_WRITE_TOOLS_ENABLED`
-
-Provides the second opt-in for the content-**mutating** Tableau Prep flow run tools. These tools change site state for other users because a run consumes Tableau Prep Conductor capacity and can overwrite outputs, so they are opt-in.
-
-- Default: `false`
-- The base `FLOW_TOOLS_ENABLED=true` gate is also required. If `FLOW_TOOLS_ENABLED=false`, the write tools remain disabled even when this flag is `true`
-- When both flags are `true`, enables:
-  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
-  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
-  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
-- When either flag is `false`, these tools are not registered and their OAuth scopes (`tableau:mcp:flow:run` for the run tools and `tableau:mcp:flow:cancel` for cancel, plus the corresponding `tableau:flows:run` / `tableau:flow_tasks:run` / `tableau:flow_runs:update` API scopes) are not advertised
-- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
-- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
-
-| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
-| --- | --- | --- |
-| `false` | `false` or `true` | none |
-| `true` | `false` | read-only flow tools |
-| `true` | `true` | read-only and mutating flow tools |
 
 <hr />
 
@@ -570,6 +735,26 @@ can pass an explicit `minAgeDays` argument to override per-call.
 
 Overridable per-site via [Site Settings](site-settings.md) and per-request via
 [Request Overrides](request-overrides.md#stale_content_min_age_days).
+
+<hr />
+
+## `PENDING_DELETION_MAX_AGE_DAYS`
+
+The oldest cleanup batch, in days, that a [`delete-content`](../../tools/content/delete-content.md)
+confirm still accepts for a workbook or data source. A confirm whose `cleanupDate` is older is
+rejected with `cleanup-batch-expired` and nothing is deleted, so a `pending-deletion-YYYY-MM-DD`
+marker left by a crashed or abandoned preview stops authorizing deletes on its own. The marker
+itself is not removed — clear it with
+[`delete-content`](../../tools/content/delete-content.md#pending-deletion-markers) with `action: "remove-pending-tags"`.
+
+Set it longer than any grace/notification window you use between tagging and deleting.
+
+- Default: `30`
+- Minimum: `1`
+- Maximum: `90` (a batch older than this could never be previewed-then-confirmed in practice)
+
+Out-of-range or non-numeric values fall back to the default. Not overridable per site or per
+request.
 
 <hr />
 
@@ -642,7 +827,7 @@ discretion.
 
 ## `CSP_ALLOWED_DOMAINS`
 
-A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps (when the `mcp-apps` feature is enabled).
+A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps.
 
 - Default: `https://*.online.tableau.com,https://*.tableau.com`
 - The configured [`SERVER`](#server) origin is automatically appended to this list.
@@ -666,8 +851,6 @@ presigned URL (as a `resource_link` content block) instead of inlining the image
 client fetches the image bytes directly from S3, so the image never streams back through the MCP
 server on read.
 
-- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
-  disabled, this variable has no effect and the tools return inline base64.
 - Default: unset (feature disabled — tools return inline base64, the original behavior).
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
@@ -701,17 +884,25 @@ AWS_DEFAULT_REGION=us-east-1
 
 ## `MCP_IMAGE_PREFIX`
 
-The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
-view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
-normalized automatically.
+The base key prefix (folder path) under which objects are stored in the bucket. Each tool appends
+its own segment to this base, so objects are namespaced per tool. Slashes are normalized
+automatically.
 
 - Default: unset (empty). When unset, each tool uses only its own segment.
 - Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-  `custom-view-images/`.
-- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
-  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
-  and `custom-view-images/...` respectively.
+  `custom-view-images/`, `get-view-data` → `view-data/`, `get-custom-view-data` →
+  `custom-view-data/`, `download-workbook` → `workbook-files/`, `request-workbook-upload` →
+  `workbook-uploads/`, `request-datasource-upload` → `datasource-uploads/`.
+- Objects are tenant-scoped: the caller's Tableau site and user LUIDs follow the tool segment, as
+  `<base><tool-segment><siteLuid>/<userLuid>/<rest>`. For example, with `MCP_IMAGE_PREFIX=tableau/`,
+  a view image is keyed as `tableau/view-images/<siteLuid>/<userLuid>/<viewId>/<uuid>.png`. Unset,
+  it is keyed as `view-images/<siteLuid>/<userLuid>/<viewId>/<uuid>.png`. Prefix-based lifecycle or
+  scanning rules on a tool segment keep matching.
+- The LUIDs come from the authenticated session, never from tool input. A request whose session has
+  no valid site or user LUID returns an error instead of writing an unscoped object. A staged upload
+  can be published only by the user who requested it.
+- The data app template that `scaffold-data-app` writes is the exception: it is keyed as
+  `<base>data-app-templates/` without tenant LUIDs.
 - Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**
@@ -736,3 +927,48 @@ should be fetched promptly rather than stored.
 ```bash
 FILE_TTL=30
 ```
+<hr />
+
+## Desktop
+
+The Tableau Desktop authoring server (`build/index.desktop.js`) reads these variables in addition to
+the shared ones above (for example [`TRANSPORT`](#transport), which must be `stdio`,
+[`ENABLED_LOGGERS`](#enabled_loggers) and [`TOOL_PROFILE`](#tool_profile)). The combined variant
+reads them too. It builds the Desktop config at startup, so they apply there as well. Both entry
+points load a `.env` file from the working directory before reading the environment.
+
+This section is one table on purpose: most of these are set by the app that launches the server, not
+by end users. Each row is tagged:
+
+- **spawner**: set by the app that launches the server. Not for end users.
+- **dev/test**: overrides for development and tests.
+- **user**: safe for anyone to set.
+
+For numeric values, an unparseable value or a value below the minimum is ignored and the default is
+used (it is not raised to the minimum). A value above a clamp is lowered to the clamp.
+
+| Variable                                                                                                        | Default                                                                                                                                                                                                                    | Bounds                                   | What it does                                                                                                                                                                                                                                                                     | Who sets it |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `EPISODE_EVENTS`                                                                                                | off                                                                                                                                                                                                                        | exactly `on` enables                     | Writes episode events (JSON lines, `episodes-<timestamp>.jsonl`) to `EPISODE_EVENTS_DIR`.                                                                                                                                                                                        | user        |
+| `EPISODE_EVENTS_DIR`                                                                                            | `FILE_LOGGER_DIRECTORY`                                                                                                                                                                                                    |                                          | Directory for the episode event files. The server never deletes these files; use a directory you clean up yourself. See [`FILE_LOGGER_DIRECTORY`](#file_logger_directory).                                                                                                       | user        |
+| `INLINE_XML_MAX_BYTES`                                                                                          | `16384`                                                                                                                                                                                                                    | minimum `1`                              | Largest XML returned inline by any get-XML tool (workbook, worksheet, dashboard, datasource, storyboard). Above it, the tool responds in file mode. | user        |
+| `INLINE_IMAGE_MAX_BYTES`                                                                                        | `1048576` (1 MiB)                                                                                                                                                                                                          | minimum `1`                              | Largest image returned inline by the export-image tools and `capture-window-screenshot`. SVG counts about twice its decoded size, because it is sent as both text and an image block. Above the cap, the tool writes a cache file and returns its path. | user        |
+| `IMAGE_EXPORT_TIMEOUT_MS`                                                                                       | `30000`                                                                                                                                                                                                                    | minimum `1`, clamped to `2147483647`     | Deadline for the image-render call. Bounds a hang when Desktop is showing a blocking dialog.                                                                                                                                                                                     | user        |
+| `TABLEAU_DESKTOP_CALL_TIMEOUT_MS`                                                                               | `60000`                                                                                                                                                                                                                    | minimum `40000`, clamped to `2147483647` | Wall-clock ceiling on one Desktop tool call. Past it the call aborts and the agent is told Desktop stopped answering. A value under `40000` is ignored and `60000` is used.                                                                                                      | user        |
+| `TABLEAU_DESKTOP_SESSION_ID`                                                                                    | none                                                                                                                                                                                                                       | must be digits only (a Desktop pid)      | Pins the Desktop instance session-scoped tools default to. The agent can still target another open Desktop. Anything that is not a pid is ignored.                                                                                                                               | spawner     |
+| `TABLEAU_USER_AGENT_PREFIX`                                                                                     | none                                                                                                                                                                                                                       | a single `name/version` product token; anything else is ignored| Product token the launcher puts at the front of the External Client API `User-Agent`, ahead of `tableau-desktop-mcp/<version>`. Desktop attributes each call to the leading token. Tableau Agent sets `tableau-agent/<version>`.                                                 | spawner     |
+| `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`                                                                            | OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if unset), `~/Library/Application Support` on macOS, `$XDG_DATA_HOME` (else `~/.local/share`) on Linux. Two folders are searched, in order: `<root>/Tableau/Tableau/ExternalApi`, then `<root>/Tableau/ExternalApi` |                                          | Directory searched for running Desktop instances. When set, it is the only directory searched.                                                                                                                                                                                   | dev/test    |
+| `TABLEAU_EXPERTISE_DIR`                                                                                         | none (the expertise corpus is empty)                                                                                                                                                                                       |                                          | Authoring expertise roots served as `expertise://` resources. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows). Earlier roots win on a name collision.                                                                                           | spawner     |
+| `TEMPLATES_DIR`                                                                                                 | the bundled `templates` directory                                                                                                                                                                                          |                                          | Replaces the whole template catalog with this directory.                                                                                                                                                                                                                         | dev/test    |
+| `TABLEAU_REPOSITORY_DIR`                                                                                        | none                                                                                                                                                                                                                       |                                          | Adds three external template folders under this directory, in order: `Tableau Agent/templates/.vendored/overridable`, `Bookmarks`, then `Tableau Agent/templates`. A later folder overrides a bundled or earlier template with the same name. Ignored when `TEMPLATES_DIR` is set. | spawner     |
+| `WORKBOOK_XSD_PATH`                                                                                             | the bundled workbook XSD                                                                                                                                                                                                   |                                          | Workbook XSD file for the search library. No registered tool reads it now.                                                                                                                                                                                                                              | dev/test    |
+| `TWB_INDEX_PATH`                                                                                                | the bundled workbook example index                                                                                                                                                                                         |                                          | JSON index of example workbooks. No registered tool reads it now. A path that does not exist gives an empty index.                                                                                                                                                                                                | dev/test    |
+| `EXAMPLES_DIR`                                                                                                  | the bundled `examples`                                                                                                                                                                                                     |                                          | Directory of `.json` and `.md` examples for the search library. No registered tool reads it now. When set, even to an empty string, only this directory is read and the bundled examples are not used. An empty string or a missing directory gives no examples.                                                   | dev/test    |
+| `SYSTEM_PROMPT_VERSION`                                                                                         | `mcp-server@<server version>`                                                                                                                                                                                              |                                          | Sent as `system_prompt_version` on the episode-begin event only. | spawner     |
+| `AGENT_TYPES`                                                                                                   | none                                                                                                                                                                                                                       |                                          | Comma-separated agent types, sent as `agent_types` on the episode-begin event only. Blank entries are dropped. | spawner     |
+| `LANGSMITH_RUN_ID`, `LANGSMITH_TRACE_ID`                                                                        | none                                                                                                                                                                                                                       |                                          | Sent as `langsmith_run_id` on the episode-begin event only. `LANGSMITH_RUN_ID` wins when both are set. | spawner     |
+| `ENABLE_FILTER_GUARDRAIL`                                                                                       | off                                                                                                                                                                                                                        | exactly `true` enables                   | Blocks a proposal with more than 5 categorical filter controls. Any other value, including `false`, `0` and `1`, leaves it off.                                                                                                                                                  | dev/test    |
+| `ALLOW_SKIP_VALIDATION`                                                                                         | `false`                                                                                                                                                                                                                    | exactly `true` enables                   | **Turns off the bind-template preflight.** With it set, a caller can pass `skip_validation` to `bind-template` and skip validation of the proposal before apply. Only a trusted spawner that builds proposals in code should set it. Never set it for an ordinary agent session. | spawner     |
+| `TABLEAU_POD_NAME`, `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID` | none                                                                                                                                                                                                                       |                                          | Product telemetry context. See [`TABLEAU_POD_NAME`](#tableau_pod_name) and [the LUID and chat id variables](#tableau_site_luid-tableau_user_luid-tableau_chat_id-tableau_desktop_session_luid).                                                                                  | spawner     |
+| `TABLEAU_MCP_CACHE_DIR`                                                                                         | `<bundle dir>/../cache`                                                                                                                                                                                                    | absolute path; blank or relative ignored | Directory for cache files (cached XML, exported images) and the only place `read-cached-xml` and `write-cached-xml` accept. Tableau Agent sets a per-session directory so concurrent sessions do not share cache files.                                                          | spawner     |
+| `PRODUCT_TELEMETRY_ENABLED`, `PRODUCT_TELEMETRY_ENDPOINT`, `IS_HYPERFORCE`                                      |                                                                                                                                                                                                                            |                                          | See [`PRODUCT_TELEMETRY_ENABLED`](#product_telemetry_enabled), [`PRODUCT_TELEMETRY_ENDPOINT`](#product_telemetry_endpoint) and [`IS_HYPERFORCE`](#is_hyperforce).                                                                                                                | spawner     |

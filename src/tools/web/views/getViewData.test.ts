@@ -7,7 +7,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 import { mockView } from './mockView.js';
 
@@ -51,7 +51,7 @@ const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
   mockGetViewAllData: vi.fn(),
   mockQueryViewData: vi.fn(),
-  mockUploadCsvToS3: vi.fn(),
+  mockUploadBufferToS3: vi.fn(),
   mockLog: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
@@ -69,9 +69,9 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../uploadDataToS3.js', async (importActual) => ({
-  ...(await importActual<typeof import('../uploadDataToS3.js')>()),
-  uploadCsvToS3: mocks.mockUploadCsvToS3,
+vi.mock('../s3Client.js', async (importActual) => ({
+  ...(await importActual<typeof import('../s3Client.js')>()),
+  uploadBufferToS3: mocks.mockUploadBufferToS3,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -94,6 +94,7 @@ describe('getViewDataTool', () => {
     resetResourceAccessCheckerSingleton();
     RestApi.version = '3.29';
     RestApi.versionIsAtLeast = vi.fn().mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -140,6 +141,20 @@ describe('getViewDataTool', () => {
       viewId: mockView.id,
       viewFilters: { Year: '2024' },
     });
+  });
+
+  it('falls back to the legacy data endpoint on REST API 3.30 or later when view-all-data is off', async () => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    mocks.mockQueryViewData.mockResolvedValue(mockViewData);
+
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('view-all-data');
+    expect(mocks.mockGetViewAllData).not.toHaveBeenCalled();
+    expect(mocks.mockQueryViewData).toHaveBeenCalled();
   });
 
   it('uses allData and returns every parsed server response part on REST API 3.30 or later', async () => {
@@ -319,7 +334,7 @@ describe('getViewDataTool', () => {
 
     it('should return a resource_link (no inline CSV) when MCP_S3_BUCKET is configured', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
+      mocks.mockUploadBufferToS3.mockResolvedValue('https://s3.example.com/signed-url');
 
       const result = await getToolResult({ viewId: mockView.id });
 
@@ -336,28 +351,50 @@ describe('getViewDataTool', () => {
       // No Slack _meta block is emitted for CSV data.
       expect(result._meta).toBeUndefined();
 
-      expect(mocks.mockUploadCsvToS3).toHaveBeenCalledWith(mockViewData, {
-        resourceId: mockView.id,
-        config: expect.objectContaining({
+      expect(mocks.mockUploadBufferToS3).toHaveBeenCalledWith(
+        Buffer.from(mockViewData, 'utf-8'),
+        expect.objectContaining({
+          key: expect.stringMatching(
+            new RegExp(
+              `^view-data/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/${mockView.id}/[0-9a-f-]{36}\\.csv$`,
+            ),
+          ),
+          contentType: 'text/csv; charset=utf-8',
           bucket: 'tableau-data',
-          keyPrefix: 'view-data/',
         }),
-      });
+      );
     });
 
     it('prefixes the S3 key with the base prefix followed by the view-data segment', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
       vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
-      mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
+      mocks.mockUploadBufferToS3.mockResolvedValue('https://s3.example.com/signed-url');
 
       await getToolResult({ viewId: mockView.id });
 
-      expect(mocks.mockUploadCsvToS3).toHaveBeenCalledWith(
-        mockViewData,
+      expect(mocks.mockUploadBufferToS3).toHaveBeenCalledWith(
+        Buffer.from(mockViewData, 'utf-8'),
         expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/view-data/' }),
+          key: expect.stringMatching(
+            new RegExp(
+              `^tableau/view-data/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/${mockView.id}/[0-9a-f-]{36}\\.csv$`,
+            ),
+          ),
         }),
       );
+    });
+
+    it('fails closed without uploading when the session site LUID is not a valid LUID', async () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
+
+      const result = await getToolResult({ viewId: mockView.id }, { _siteLuid: '../other-site' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        "couldn't determine the signed-in Tableau site and user",
+      );
+      expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
     });
 
     it('should return inline CSV when MCP_S3_BUCKET is not configured', async () => {
@@ -366,12 +403,12 @@ describe('getViewDataTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(JSON.stringify(mockViewData));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
     });
 
     it('should fall back to inline CSV and warn when the S3 upload fails', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      mocks.mockUploadCsvToS3.mockRejectedValue(new Error('access denied'));
+      mocks.mockUploadBufferToS3.mockRejectedValue(new Error('access denied'));
 
       const result = await getToolResult({ viewId: mockView.id });
 
@@ -395,21 +432,24 @@ describe('getViewDataTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(JSON.stringify(mockViewData));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
     });
   });
 });
 
-async function getToolResult({
-  viewId,
-  viewFilters,
-}: {
-  viewId: string;
-  viewFilters?: Record<string, string>;
-}): Promise<CallToolResult> {
+async function getToolResult(
+  {
+    viewId,
+    viewFilters,
+  }: {
+    viewId: string;
+    viewFilters?: Record<string, string>;
+  },
+  extraOverrides: Parameters<typeof getMockRequestHandlerExtra>[0] = {},
+): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new WebMcpServer());
   const callback = await Provider.from(getViewDataTool.callback);
-  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra(extraOverrides));
 }
 
 function parseJsonContent(result: CallToolResult): any {

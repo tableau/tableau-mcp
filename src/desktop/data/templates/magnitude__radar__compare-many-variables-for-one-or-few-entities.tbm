@@ -1,0 +1,1109 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Radar Chart: Country' inline='true' name='federated.0luwvdb15h38a719e117k10zo3f4' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='RADAR' name='hyper.0xngajj0v8r92s1419lm812d1gnm'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='hyper.0xngajj0v8r92s1419lm812d1gnm' name='Extract' table='[Extract].[Extract]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Metric</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Metric]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Metric</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LROOT' />
+            <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Value</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Value]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Value</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>47</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Country/Region</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Country/Region]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Country/Region</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>48</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RUS_S2' />
+            <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Region</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Region]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Region</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>1</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RUS_S2' />
+            <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Year</remote-name>
+            <remote-type>133</remote-type>
+            <local-name>[Year]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Year</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>date</local-type>
+            <aggregation>Year</aggregation>
+            <approx-count>1</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Angle' datatype='real' name='[Calculation_1753307682818641920]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='RUNNING_SUM(&#13;&#10;(2*PI())/&#13;&#10;MIN({COUNTD([Metric])}))&#13;&#10;    + (PI()/2)'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Distance from center' datatype='real' hidden='true' name='[Calculation_1753307682819162113]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='AVG([Value])' />
+      </column>
+      <column caption='x' datatype='real' hidden='true' name='[Calculation_1753307682819256322]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[Calculation_1753307682819162113]*COS([Calculation_1753307682818641920])'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Percentile label' datatype='real' name='[Calculation_3198400214763864065]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='ROUND(SUM([Value])*100,1)' />
+      </column>
+      <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column datatype='string' name='[Metric]' role='dimension' type='nominal'>
+        <aliases>
+          <alias key='&quot;Birth Rate Percentile Rank&quot;' value='Birth Rate' />
+          <alias key='&quot;CO2 Percentile Rank&quot;' value='CO2' />
+          <alias key='&quot;Energy Usage Percentile RANK&quot;' value='Energy Usage' />
+          <alias key='&quot;GDP Percentile Rank&quot;' value='GDP' />
+          <alias key='&quot;Health Exp Percentile Rank&quot;' value='Health Exp' />
+          <alias key='&quot;Infant Mortality Percentile Rank&quot;' value='Infant Mortality' />
+        </aliases>
+      </column>
+      <column datatype='string' hidden='true' name='[Region]' role='dimension' type='nominal' />
+      <column datatype='real' default-format='*0.00 percentile' name='[Value]' role='measure' type='quantitative' />
+      <column datatype='date' hidden='true' name='[Year]' role='dimension' type='ordinal' />
+      <column caption='Extract' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]' role='measure' type='quantitative' />
+      <column caption='y' datatype='real' hidden='true' name='[x (copy)_1753307682819366915]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[Calculation_1753307682819162113]*SIN([Calculation_1753307682818641920])'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='x (MAX)' datatype='real' name='[x (copy)_2126543503415009285]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='MAX([Value])*COS([Calculation_1753307682818641920])'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='y (max)' datatype='real' name='[y (copy)_2126543503415336967]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='max([Value])*SIN([Calculation_1753307682818641920])'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column-instance column='[Country/Region Set]' derivation='InOut' name='[io:Country/Region Set:nk]' pivot='key' type='nominal' />
+      <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
+      <column-instance column='[x (copy)_1753307682819366915]' derivation='User' name='[usr:x (copy)_1753307682819366915:qk:1]' pivot='key' type='quantitative'>
+        <table-calc ordering-type='Rows' />
+        <table-calc field='[federated.0luwvdb15h38a719e117k10zo3f4].[Calculation_1753307682818641920]' ordering-field='[federated.0luwvdb15h38a719e117k10zo3f4].[Metric]' ordering-type='Field' />
+      </column-instance>
+      <column-instance column='[y (copy)_2126543503415336967]' derivation='User' name='[usr:y (copy)_2126543503415336967:qk]' pivot='key' type='quantitative'>
+        <table-calc ordering-type='Rows' />
+        <table-calc field='[federated.0luwvdb15h38a719e117k10zo3f4].[Calculation_1753307682818641920]' ordering-field='[federated.0luwvdb15h38a719e117k10zo3f4].[Metric]' ordering-type='Field' />
+      </column-instance>
+      <group caption='Country/Region Set' name='[Country/Region Set]' name-style='unqualified' user:ui-builder='filter-group'>
+        <groupfilter function='member' level='[Country/Region]' member='&quot;United Kingdom&quot;' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </group>
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/01/2026 03:31:28 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='RADAR Extract' increment-value='%null%' refresh-type='create' rows-inserted='288' timestamp-start='2026-07-01 15:31:28.205' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Metric</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Metric]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Metric</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LROOT' />
+              <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Value</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Value]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Value</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Extract</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>47</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Country/Region</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Country/Region]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Country/Region</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>48</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RUS_S2' />
+              <object-id>[Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-aliased-fields='true' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[:Measure Names]' type='palette'>
+            <map to='#4e79a7'>
+              <bucket>&quot;[federated.0luwvdb15h38a719e117k10zo3f4].[usr:y (copy)_2126543503415336967:qk]&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_1753307682819366915:qk:1]&quot;</bucket>
+            </map>
+          </encoding>
+          <encoding attr='color' field='[none:Country/Region:nk]' type='palette'>
+            <map to='#499894'>
+              <bucket>&quot;Armenia&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Bulgaria&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Cyprus&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Gambia, The&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Iraq&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Liechtenstein&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Mozambique&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Poland&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Somalia&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Tonga&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Afghanistan&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Benin&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Comoros&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Eswatini&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Haiti&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Kuwait&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Mauritius&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Norway&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Serbia&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Sweden&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Uzbekistan&quot;</bucket>
+            </map>
+            <map to='#4fadff'>
+              <bucket>&quot;Austria&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Andorra&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Bosnia and Herzegovina&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Cote d&apos;Ivoire&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Finland&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Lebanon&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Monaco&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Papua New Guinea&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Sint Maarten (Dutch part)&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Tanzania&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Yemen&quot;</bucket>
+            </map>
+            <map to='#6eaf96'>
+              <bucket>&quot;Iceland&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Azerbaijan&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Cameroon&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Dominica&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Greece&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Italy&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Madagascar&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Netherlands&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Romania&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Spain&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Turkmenistan&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Aruba&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Burkina Faso&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Czechia&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Georgia&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Ireland&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Lithuania&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Myanmar&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Portugal&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;South Africa&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Trinidad and Tobago&quot;</bucket>
+            </map>
+            <map to='#87deca'>
+              <bucket>&quot;Croatia&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Angola&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Botswana&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;France&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;India&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Lesotho&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Mongolia&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Paraguay&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Slovakia&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Thailand&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Zambia&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Belgium&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;China&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Eritrea&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Guinea-Bissau&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Kiribati&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Marshall Islands&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;North Korea&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Saudi Arabia&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Sudan&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;United States&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Albania&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Bermuda&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Congo (Brazzaville)&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Ethiopia&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Honduras&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Kyrgyzstan&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Mexico&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Oman&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Seychelles&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Switzerland&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Vanuatu&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Barbados&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Chad&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;El Salvador&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Guatemala&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Kazakhstan&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Mali&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Niger&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;San Marino&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;St. Martin (French part)&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;United Arab Emirates&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Antigua and Barbuda&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Brazil&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Cuba&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;French Polynesia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Indonesia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Liberia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Montenegro&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Peru&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Slovenia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Timor-Leste&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Zimbabwe&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Bahamas, The&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Canada&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Dominican Republic&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Greenland&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Jamaica&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Malawi&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;New Caledonia&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Russia&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Sri Lanka&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Turks and Caicos Islands&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Bahrain&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Cayman Islands&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Ecuador&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Grenada&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Japan&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Malaysia&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;New Zealand&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Rwanda&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;St. Kitts and Nevis&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Uganda&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Belarus&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Chile&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Equatorial Guinea&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Guinea&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Kenya&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Malta&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Nigeria&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Sao Tome and Principe&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;St. Vincent and the Grenadines&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Belize&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Colombia&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Estonia&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Guyana&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Kosovo&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Mauritania&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;North Macedonia&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Senegal&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Suriname&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Uruguay&quot;</bucket>
+            </map>
+            <map to='#dcb6fd'>
+              <bucket>&quot;Denmark&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Australia&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Burundi&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Germany&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Isle of Man&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Luxembourg&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Namibia&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Puerto Rico&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;South Korea&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Tunisia&quot;</bucket>
+            </map>
+            <map to='#e7abdd'>
+              <bucket>&quot;Moldova&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Argentina&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Brunei&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Curacao&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Gabon&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Iran&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Libya&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Morocco&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Philippines&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Solomon Islands&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Togo&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Algeria&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Bhutan&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Congo (Kinshasa)&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Faroe Islands&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Hong Kong SAR, China&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Laos&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Micronesia, Fed. Sts.&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Pakistan&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Sierra Leone&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Syria&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Venezuela&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Bangladesh&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Central African Republic&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Egypt&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Guam&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Jordan&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Maldives&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Nicaragua&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Samoa&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;St. Lucia&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Ukraine&quot;</bucket>
+            </map>
+            <map to='#ff8e90'>
+              <bucket>&quot;United Kingdom&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Cambodia&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Djibouti&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Ghana&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Israel&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Macao SAR, China&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Nepal&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Qatar&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;South Sudan&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Türkiye&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;American Samoa&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Bolivia&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Costa Rica&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Fiji&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Hungary&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Latvia&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Panama&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Singapore&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Tajikistan&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Vietnam&quot;</bucket>
+            </map>
+          </encoding>
+          <encoding attr='color' field='[io:Country/Region Set:nk]' type='palette'>
+            <map to='#d9def1'>
+              <bucket>false</bucket>
+            </map>
+            <map to='#ff5e5e'>
+              <bucket>true</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_A383FBDAF4EB43879CEF3BE262079867'>
+            <properties context=''>
+              <relation connection='hyper.0xngajj0v8r92s1419lm812d1gnm' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card param='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]' type='filter' />
+          <card pane-specification-id='3' param='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{EED28B0E-5C63-42C0-8372-B297B4F05105}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Radar Chart: Country' name='federated.0luwvdb15h38a719e117k10zo3f4' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0luwvdb15h38a719e117k10zo3f4'>
+        <column caption='Angle' datatype='real' name='[Calculation_1753307682818641920]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='RUNNING_SUM(&#13;&#10;(2*PI())/&#13;&#10;MIN({COUNTD([Metric])}))&#13;&#10;    + (PI()/2)'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column datatype='string' name='[Metric]' role='dimension' type='nominal'>
+          <aliases>
+            <alias key='&quot;Birth Rate Percentile Rank&quot;' value='Birth Rate' />
+            <alias key='&quot;CO2 Percentile Rank&quot;' value='CO2' />
+            <alias key='&quot;Energy Usage Percentile RANK&quot;' value='Energy Usage' />
+            <alias key='&quot;GDP Percentile Rank&quot;' value='GDP' />
+            <alias key='&quot;Health Exp Percentile Rank&quot;' value='Health Exp' />
+            <alias key='&quot;Infant Mortality Percentile Rank&quot;' value='Infant Mortality' />
+          </aliases>
+        </column>
+        <column datatype='real' default-format='*0.00 percentile' name='[Value]' role='measure' type='quantitative' />
+        <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Metric]' derivation='None' name='[none:Metric:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Value]' derivation='Sum' name='[sum:Value:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_1753307682818641920]' derivation='User' name='[usr:Calculation_1753307682818641920:qk:2]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[federated.0luwvdb15h38a719e117k10zo3f4].[Metric]' ordering-type='Field' />
+        </column-instance>
+        <column-instance column='[x (copy)_2126543503415009285]' derivation='User' name='[usr:x (copy)_2126543503415009285:qk]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Rows' />
+          <table-calc field='[federated.0luwvdb15h38a719e117k10zo3f4].[Calculation_1753307682818641920]' ordering-field='[federated.0luwvdb15h38a719e117k10zo3f4].[Metric]' ordering-type='Field' />
+        </column-instance>
+        <column-instance column='[y (copy)_2126543503415336967]' derivation='User' name='[usr:y (copy)_2126543503415336967:qk]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Rows' />
+          <table-calc field='[federated.0luwvdb15h38a719e117k10zo3f4].[Calculation_1753307682818641920]' ordering-field='[federated.0luwvdb15h38a719e117k10zo3f4].[Metric]' ordering-type='Field' />
+        </column-instance>
+        <column caption='x (MAX)' datatype='real' name='[x (copy)_2126543503415009285]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='MAX([Value])*COS([Calculation_1753307682818641920])'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='y (max)' datatype='real' name='[y (copy)_2126543503415336967]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='max([Value])*SIN([Calculation_1753307682818641920])'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]'>
+        <groupfilter function='union' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
+          <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;Austria&quot;' />
+          <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;Croatia&quot;' />
+          <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;Denmark&quot;' />
+          <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;Iceland&quot;' />
+          <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;Moldova&quot;' />
+          <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;United Kingdom&quot;' />
+        </groupfilter>
+      </filter>
+      <manual-sort column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]' direction='ASC'>
+        <dictionary>
+          <bucket>&quot;Infant Mortality Percentile Rank&quot;</bucket>
+          <bucket>&quot;Energy Usage Percentile RANK&quot;</bucket>
+          <bucket>&quot;Birth Rate Percentile Rank&quot;</bucket>
+          <bucket>&quot;CO2 Percentile Rank&quot;</bucket>
+          <bucket>&quot;Health Exp Percentile Rank&quot;</bucket>
+          <bucket>&quot;GDP Percentile Rank&quot;</bucket>
+        </dictionary>
+      </manual-sort>
+      <slices>
+        <column>[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+        <format attr='tick-color' value='#00000000' />
+        <encoding attr='space' class='1' field='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk]' field-type='quantitative' fold='true' scope='cols' synchronized='true' type='space' />
+        <format attr='display' class='1' field='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk]' scope='cols' value='false' />
+        <format attr='display' class='0' field='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:y (copy)_2126543503415336967:qk]' scope='rows' value='false' />
+        <format attr='display' class='0' field='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk]' scope='cols' value='false' />
+        <encoding attr='space' class='0' field='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:y (copy)_2126543503415336967:qk]' field-type='quantitative' max='1.2' min='-1.2' range-type='fixed' scope='rows' type='space' />
+        <encoding attr='space' class='0' field='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk]' field-type='quantitative' max='1.2' min='-1.2' range-type='fixed' scope='cols' type='space' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='border-width' data-class='total' value='0' />
+        <format attr='border-style' data-class='total' value='none' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='border-width' data-class='total' value='0' />
+        <format attr='border-style' data-class='total' value='none' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-color' value='#6e73830e' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#6e738339' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='2' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Polygon' />
+        <encodings>
+          <lod column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontname='Tableau Regular' fontsize='11'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]&gt;: </run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[sum:Value:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-transparency' value='109' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#f5f5f5' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='3' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Polygon' />
+        <encodings>
+          <color column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]' />
+          <lod column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]' />
+          <path column='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:Calculation_1753307682818641920:qk:2]' />
+          <tooltip column='[federated.0luwvdb15h38a719e117k10zo3f4].[sum:Value:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[none:Country/Region:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontname='Tableau Regular' fontsize='11'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]&gt;: </run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[sum:Value:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#f5f5f5' />
+            <format attr='mark-transparency' value='86' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='4' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk]' x-index='1'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]' />
+          <text column='[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]' />
+          <lod column='[federated.0luwvdb15h38a719e117k10zo3f4].[usr:Calculation_1753307682818641920:qk:2]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run>Æ&#10;</run>
+            <run fontname='Tableau Regular' fontsize='11'>&lt;[federated.0luwvdb15h38a719e117k10zo3f4].[none:Metric:nk]&gt;: </run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-family' value='Tableau Regular' />
+            <format attr='font-size' value='8' />
+            <format attr='color' value='#4c4f5a' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-transparency' value='0' />
+            <format attr='has-stroke' value='false' />
+            <format attr='size' value='0.0099999997764825821' />
+            <format attr='mark-labels-cull' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0luwvdb15h38a719e117k10zo3f4].[usr:y (copy)_2126543503415336967:qk]</rows>
+    <cols>([federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk] + [federated.0luwvdb15h38a719e117k10zo3f4].[usr:x (copy)_2126543503415009285:qk])</cols>
+  </table>
+</bookmark>

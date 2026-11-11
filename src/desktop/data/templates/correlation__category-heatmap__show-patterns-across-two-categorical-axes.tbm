@@ -1,0 +1,344 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Population: Groups' inline='true' name='federated.0y7zfam0ipwbfv122vvev1ykr655' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Population Data' name='textscan.0xpb89l0h5wowg11twg3y1gz98te'>
+            <connection class='textscan' directory='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='textscan.0xpb89l0h5wowg11twg3y1gz98te' name='Population Data.csv' table='[Population Data#csv]' type='table'>
+          <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+            <column datatype='string' name='Age Group' ordinal='0' />
+            <column datatype='string' name='Income Bracket' ordinal='1' />
+            <column datatype='integer' name='Est. Population' ordinal='2' />
+            <column datatype='string' name='Trend Note' ordinal='3' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Population Data.csv]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='currency'>&quot;£&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Age Group</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Age Group]</local-name>
+            <parent-name>[Population Data.csv]</parent-name>
+            <remote-alias>Age Group</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Income Bracket</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Income Bracket]</local-name>
+            <parent-name>[Population Data.csv]</parent-name>
+            <remote-alias>Income Bracket</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Est. Population</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Est. Population]</local-name>
+            <parent-name>[Population Data.csv]</parent-name>
+            <remote-alias>Est. Population</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Trend Note</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Trend Note]</local-name>
+            <parent-name>[Population Data.csv]</parent-name>
+            <remote-alias>Trend Note</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='string' hidden='true' name='[Trend Note]' role='dimension' type='nominal' />
+      <column caption='Population Data.csv' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]' role='measure' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:11:45 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Population Data' increment-value='%null%' refresh-type='create' rows-inserted='36' timestamp-start='2026-06-30 20:11:45.645' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Age Group</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Age Group]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Age Group</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Population Data.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RGB' />
+              <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Income Bracket</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Income Bracket]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Income Bracket</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Population Data.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RGB' />
+              <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Est. Population</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Est. Population]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Est. Population</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Population Data.csv</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>32</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Population Data.csv_EF62FD7779BC4604B7232FB369021EF8]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.698718' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.301282' show-structure='true' user-set-layout-v2='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Population Data.csv' id='Population Data.csv_EF62FD7779BC4604B7232FB369021EF8'>
+            <properties context=''>
+              <relation connection='textscan.0xpb89l0h5wowg11twg3y1gz98te' name='Population Data.csv' table='[Population Data#csv]' type='table'>
+                <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+                  <column datatype='string' name='Age Group' ordinal='0' />
+                  <column datatype='string' name='Income Bracket' ordinal='1' />
+                  <column datatype='integer' name='Est. Population' ordinal='2' />
+                  <column datatype='string' name='Trend Note' ordinal='3' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[federated.0y7zfam0ipwbfv122vvev1ykr655].[sum:Est. Population:qk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{D558D995-BCC4-46F2-82AD-92CE18176DBD}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Population: Groups' name='federated.0y7zfam0ipwbfv122vvev1ykr655' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0y7zfam0ipwbfv122vvev1ykr655'>
+        <column datatype='string' name='[Age Group]' role='dimension' type='nominal' />
+        <column datatype='integer' name='[Est. Population]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Income Bracket]' role='dimension' type='nominal' />
+        <column-instance column='[Age Group]' derivation='None' name='[none:Age Group:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Income Bracket]' derivation='None' name='[none:Income Bracket:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Est. Population]' derivation='Sum' name='[pcto:sum:Est. Population:qk:2]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Field' type='PctTotal'>
+            <order field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Age Group:nk]' />
+            <order field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[Income Bracket]' />
+          </table-calc>
+        </column-instance>
+        <column-instance column='[Est. Population]' derivation='Sum' name='[sum:Est. Population:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='tick-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='text-format' field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[pcto:sum:Est. Population:qk:2]' value='p0.0%' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='width' field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Income Bracket:nk]' value='132' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='font-family' field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Income Bracket:nk]' value='Tableau Regular' />
+        <format attr='font-family' field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Age Group:nk]' value='Tableau Regular' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.0y7zfam0ipwbfv122vvev1ykr655].[sum:Est. Population:qk]' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-diverging'>
+            <color>#ffffff</color>
+            <color>#f8f8f8</color>
+            <color>#f2f2f2</color>
+            <color>#ececec</color>
+            <color>#e5e5e5</color>
+            <color>#dfdfdf</color>
+            <color>#d9d9d9</color>
+            <color>#bbbcc4</color>
+            <color>#9fa2b0</color>
+            <color>#85899b</color>
+            <color>#6d7187</color>
+            <color>#585c73</color>
+            <color>#44485f</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Square' />
+        <encodings>
+          <color column='[federated.0y7zfam0ipwbfv122vvev1ykr655].[sum:Est. Population:qk]' />
+          <text column='[federated.0y7zfam0ipwbfv122vvev1ykr655].[pcto:sum:Est. Population:qk:2]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontcolor='#757575'>Age Group: </run>
+            <run bold='true'>&lt;[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Age Group:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#757575'>Income Bracket: </run>
+            <run bold='true'>&lt;[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Income Bracket:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#757575'>% of Total Population: </run>
+            <run bold='true'>&lt;[federated.0y7zfam0ipwbfv122vvev1ykr655].[pcto:sum:Est. Population:qk:2]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#757575'>Population: </run>
+            <run bold='true'>&lt;[federated.0y7zfam0ipwbfv122vvev1ykr655].[sum:Est. Population:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='auto' />
+            <format attr='font-size' value='8' />
+            <format attr='font-family' value='Tableau Regular' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-transparency' value='219' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Income Bracket:nk]</rows>
+    <cols>[federated.0y7zfam0ipwbfv122vvev1ykr655].[none:Age Group:nk]</cols>
+    <show-full-range>
+      <column>[Sample - EU Superstore].[Profit (bin)]</column>
+    </show-full-range>
+  </table>
+</bookmark>

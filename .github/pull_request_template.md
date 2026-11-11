@@ -8,6 +8,15 @@ the pull request._
 <!-- Thank you for your contribution! Please fill out the following template to help us review your pull
 request! -->
 
+<!-- TITLE: say plainly what the change does. Keep the `type(scope):` prefix; skip jargon, slogans, and
+version numbers. Good: "fix(remove-field): refetch the worksheet before removing a field". -->
+
+## Decision
+
+<!-- The one thing a reviewer is being asked to accept. State whether it is a RULE WE NOW KEEP (e.g.
+"every worksheet-mutating tool refreshes state first") or a ONE-OFF for this case. Do not leave the
+reviewer to infer which. This is the most important line in the PR. -->
+
 ## Description
 
 <!-- Please include a summary of the change. -->
@@ -47,6 +56,8 @@ Version is bumped automatically after merge. Select the bump this PR needs (defa
 - [ ] New and existing unit tests pass locally with my changes
 - [ ] I have documented any breaking changes in the PR description. For example, renaming a config
       environment variable or changing its default value.
+- [ ] This PR adds or changes OAuth scopes. If checked, list the new scopes in the release notes and
+      notify connector owners who maintain static scope lists before release.
 
 ## Contributor Agreement
 

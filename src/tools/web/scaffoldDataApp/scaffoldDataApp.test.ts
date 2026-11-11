@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { z } from 'zod';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -32,8 +33,8 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-// Floor is 2026.3.1 (see scaffoldDataApp.ts).
-const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.1', build: '' };
+// Floor is 2026.3.0 (see dataAppVersion.ts).
+const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.0', build: '' };
 const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
 const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
 const VERSION_UNKNOWN: ProductVersion = { value: 'garbage', build: '' };
@@ -43,6 +44,10 @@ function makeTool(
 ): ReturnType<typeof getScaffoldDataAppTool> {
   return getScaffoldDataAppTool(new WebMcpServer(), productVersion);
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getScaffoldDataAppTool', () => {
   beforeEach(() => {
@@ -107,6 +112,45 @@ describe('getScaffoldDataAppTool', () => {
       const tool = makeTool(VERSION_AT_FLOOR);
       expect(await Provider.from(tool.disabled)).toBe(false);
     });
+
+    it('is disabled for Slack when the data-apps flag is on but authoring-with-slack is off', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (flag) => flag !== 'authoring-with-slack',
+      );
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_AT_FLOOR,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('is enabled for Slack when the data-apps and authoring-with-slack flags are on', async () => {
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_AT_FLOOR,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(false);
+      expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
+    });
+
+    it('is disabled for Slack when all flags are on but the version is below the floor', async () => {
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_BELOW,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('is enabled for a non-Slack client when authoring-with-slack is off', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (flag) => flag !== 'authoring-with-slack',
+      );
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://claude.ai/mcp' }),
+        VERSION_AT_FLOOR,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(false);
+    });
   });
 
   describe('version gate (disabled provider)', () => {
@@ -162,6 +206,29 @@ describe('getScaffoldDataAppTool', () => {
         to: 'Sales Demo',
       });
       expect(payload.allowedOrigins).toEqual(['https://example.com']);
+      expect(payload.requestedOrigins.file).toBe(
+        'Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json',
+      );
+    });
+
+    it('includes the server version and build in the workbook replacement plan', async () => {
+      const callback = await Provider.from(
+        makeTool({
+          value: '2026.3.2',
+          build: '20263.26.1027.1340',
+        }).callback,
+      );
+      const result = await callback({ datappName: 'Sales Demo' }, getMockRequestHandlerExtra());
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      const edit = payload.postUnzip.edits.find(
+        ({ file }: { file: string }) => file === 'Data App Name/Data App Name.twb',
+      );
+      expect(edit.replacements).toContainEqual({
+        find: 'TODO-SOURCE-BUILD',
+        replace: '2026.3.2 (20263.26.1027.1340)',
+      });
     });
 
     it('includes allowedOrigins when the site policy is empty', async () => {

@@ -301,6 +301,18 @@ const sampleMetadataResponse: MetadataResponse = {
         members: [1, 2, 3],
       },
       {
+        parameterType: 'LIST',
+        parameterName: 'Parameter 8',
+        parameterCaption: 'Test Aliased',
+        dataType: 'STRING',
+        value: 'north',
+        members: [
+          { value: 'north', alias: 'North Region' },
+          { value: 'south', alias: 'South Region' },
+          { value: 'west' },
+        ],
+      },
+      {
         parameterType: 'QUANTITATIVE_RANGE',
         parameterName: 'Parameter 1',
         parameterCaption: 'Top Customers',
@@ -795,6 +807,37 @@ describe('validateParametersAgainstDatasourceMetadata', () => {
           "Parameter 'Test Int' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [1, 2, 3].",
       });
     });
+
+    it('should allow value that matches an object member value', () => {
+      const parameters: QueryParameter[] = [{ parameterCaption: 'Test Aliased', value: 'south' }];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateParametersAgainstDatasourceMetadata(
+        parameters,
+        sampleMetadataResponse,
+        validationErrors,
+      );
+
+      expect(validationErrors).toHaveLength(0);
+    });
+
+    it('should add error for value not matching any object member value', () => {
+      const parameters: QueryParameter[] = [{ parameterCaption: 'Test Aliased', value: 'east' }];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateParametersAgainstDatasourceMetadata(
+        parameters,
+        sampleMetadataResponse,
+        validationErrors,
+      );
+
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0]).toEqual({
+        parameter: 'Test Aliased',
+        message:
+          "Parameter 'Test Aliased' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [north, south, west].",
+      });
+    });
   });
 
   describe('QUANTITATIVE_DATE parameter type validation', () => {
@@ -1104,5 +1147,86 @@ describe('validateParametersAgainstDatasourceMetadata', () => {
 
       expect(validationErrors).toHaveLength(1);
     });
+  });
+});
+
+describe('internal-name validation', () => {
+  const metadata: MetadataResponse = {
+    data: [
+      {
+        fieldCaption: 'Margin',
+        fieldName: 'Calculation_1003',
+        dataType: 'REAL',
+        formula: '[Amount]',
+      },
+      { fieldCaption: 'Month', fieldName: 'Month (HEADCOUNT)', dataType: 'DATE' },
+      { fieldCaption: 'Margin bin', fieldName: 'Bin 1', columnClass: 'BIN' },
+    ],
+    extraData: {
+      parameters: [
+        {
+          parameterCaption: 'Period',
+          parameterName: 'Parameter 1',
+          value: 1,
+          parameterType: 'ANY_VALUE',
+          dataType: 'INTEGER',
+        },
+      ],
+    },
+  };
+  it('accepts exact internal names and preserves type and calculation validation', () => {
+    const errors: QueryValidationError[] = [];
+    validateFieldsAgainstDatasourceMetadata(
+      [
+        { fieldCaption: 'Calculation_1003', function: 'AVG' },
+        { fieldCaption: 'Month (HEADCOUNT)', function: 'YEAR' },
+      ],
+      metadata,
+      errors,
+      true,
+    );
+    expect(errors).toEqual([]);
+    validateFieldsAgainstDatasourceMetadata(
+      [
+        { fieldCaption: 'Calculation_1003', function: 'YEAR' },
+        { fieldCaption: 'Calculation_1003', calculation: '1' },
+        { fieldCaption: 'Bin 1', binSize: 2 },
+      ],
+      metadata,
+      errors,
+      true,
+    );
+    expect(errors).toHaveLength(3);
+    expect(errors.map((e) => e.message).join(' ')).toContain('fixed bin size');
+  });
+  it('rejects display captions and invented names in internal-name mode', () => {
+    const errors: QueryValidationError[] = [];
+    validateFieldsAgainstDatasourceMetadata(
+      [{ fieldCaption: 'Margin' }, { fieldCaption: 'guessed' }],
+      metadata,
+      errors,
+      true,
+    );
+    expect(errors).toHaveLength(2);
+  });
+  it('uses internal parameter names while retaining value checks', () => {
+    const errors: QueryValidationError[] = [];
+    validateParametersAgainstDatasourceMetadata(
+      [{ parameterCaption: 'Parameter 1', value: 1 }],
+      metadata,
+      errors,
+      true,
+    );
+    expect(errors).toEqual([]);
+    validateParametersAgainstDatasourceMetadata(
+      [
+        { parameterCaption: 'Period', value: 1 },
+        { parameterCaption: 'Parameter 1', value: 'wrong' },
+      ],
+      metadata,
+      errors,
+      true,
+    );
+    expect(errors).toHaveLength(2);
   });
 });

@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
@@ -43,8 +44,8 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
     minRequiredRole: SiteRole.VIEWER,
     description: [
       "Retrieves data for the specified view in a Tableau workbook, including the user's filters.",
-      "On Tableau REST API versions below 3.30, returns CSV data for the dashboard's first view.",
-      'On version 3.30 or later, returns parsed data for the sheets included in the server response.',
+      "By default, returns CSV data for the dashboard's first view.",
+      'When the server is configured to return all sheet data, returns parsed data for the sheets included in the server response instead.',
       'Requires the view LUID from the content URL (not the published view id).',
       'For custom views, use the tool to get custom view data by custom view id instead.',
     ].join(' '),
@@ -70,7 +71,12 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          if (RestApi.versionIsAtLeast('3.30')) {
+          // allData is disabled on some Server 2026.3 sites (403075), so the REST API version alone
+          // isn't a reliable signal. Fall back to the legacy /data endpoint unless the flag is on.
+          if (
+            RestApi.versionIsAtLeast('3.30') &&
+            (await getFeatureGate().isFeatureEnabled('view-all-data'))
+          ) {
             const response = await useRestApi({
               ...extra,
               jwtScopes: getViewDataTool.requiredApiScopes,
@@ -123,15 +129,14 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
           // Offload to S3 (returning a presigned URL) when configured, otherwise
           // carry the raw CSV for an inline text result. Falls back to inline on
           // any S3 failure.
-          return new Ok(
-            await buildDataToolResult({
-              csv,
-              resourceId: viewId,
-              config: extra.config,
-              toolName: getViewDataTool.name,
-              keyPrefixSegment: 'view-data/',
-            }),
-          );
+          return await buildDataToolResult({
+            csv,
+            resourceId: viewId,
+            config: extra.config,
+            toolName: getViewDataTool.name,
+            keyPrefixSegment: 'view-data',
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (dataToolResult) => {
           return {

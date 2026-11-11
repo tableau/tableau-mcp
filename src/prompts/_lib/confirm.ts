@@ -72,8 +72,8 @@ export function renderHitlGate({
  * Renders the instruction for the second, confirmed call against a two-phase apply tool. Two
  * server-authoritative gate contracts are supported via `gateKind`:
  *
- * - `'tag'` (default): the tool re-fetches the item and verifies it carries the pending-deletion
- *   tag applied in the preview phase. Used by the delete-workbook / delete-datasource path. A
+ * - `'tag'` (default): the tool re-fetches the item and verifies it carries the date-stamped
+ *   pending-deletion tag of the batch the preview opened, and re-checks staleness. Used by the delete-workbook / delete-datasource path. A
  *   caller cannot bypass by fabricating a value — the only way to satisfy the gate is to have run
  *   the preview (tag) step.
  * - `'token'`: the tool returns a per-item `confirmationToken` from the preview call, derived
@@ -114,9 +114,11 @@ export function renderConfirmInstructions({
 
   return [
     `Only AFTER the user approves a given ${itemNoun}, call ${toolRef} for that ${itemNoun} ` +
-      'with `confirm: true` (using the same `tag` value used to tag it in the preview step). The ' +
-      'tool re-fetches the item and verifies the pending-deletion tag before deleting; a delete on ' +
-      'an untagged item is rejected server-side.',
+      'with `confirm: true`, `cleanupDate` set to the cleanup date its preview step reported, and ' +
+      'the same `minAgeDays` used in the preview. The tool re-fetches the item, verifies it carries ' +
+      "that batch's date-stamped pending-deletion tag, and re-checks that it is still stale before " +
+      'deleting; a delete on an untagged item, an item tagged for a different batch, or an item ' +
+      'that is no longer stale is rejected server-side.',
     `Do NOT auto-confirm. Confirm each ${itemNoun} individually — never batch-confirm items the ` +
       'user has not explicitly approved.',
   ].join('\n');

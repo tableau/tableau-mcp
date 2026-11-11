@@ -38,10 +38,17 @@ export const dataSourceSchema = z.object({
 
 export type DataSource = z.infer<typeof dataSourceSchema>;
 
-// Query Data Sources (list) returns published data sources only, so `project` is always present.
-// Used by the list endpoint to get a non-optional `project` without narrowing at call sites.
-export const publishedDataSourceSchema = dataSourceSchema.extend({
+// Some servers return a `project` on embedded data sources too, so `parentType` is checked first.
+export function isEmbeddedDatasource(datasource: DataSource): boolean {
+  return datasource.parentType === 'Workbook' || !datasource.project;
+}
+
+// The Publish Data Source response always carries a `project`, may omit `<tags>` for an untagged
+// data source, and may include a `webpageUrl` for its page in the Tableau web UI.
+export const publishedDataSourceResponseSchema = dataSourceSchema.extend({
   project: projectSchema,
+  tags: tagsSchema.optional(),
+  webpageUrl: z.string().optional(),
 });
 
-export type PublishedDataSource = z.infer<typeof publishedDataSourceSchema>;
+export type PublishedDataSourceResponse = z.infer<typeof publishedDataSourceResponseSchema>;

@@ -1,0 +1,634 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run fontcolor='#40414c' fontname='Tableau Semibold' fontsize='12'>&lt;Sheet Name&gt; (vertical)</run>
+        <run>Æ&#10;</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Radial Chart Extract' inline='true' name='federated.0t13zrz1kvrxmp1ghyluy0ap2d64' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Radial Chart' name='hyper.0zbq9lc17avic61efqvah0spry5u'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='hyper.0zbq9lc17avic61efqvah0spry5u' name='Extract' table='[Extract].[Extract]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Pad</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Pad]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Pad</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>2</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>% Population Urban</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[% Population Urban]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>% Population Urban</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Region</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Region]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Region</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RUS_S2' />
+            <object-id>[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Index' datatype='integer' name='[Calculation_1440926070845441]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='INDEX() - 1'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Pi' datatype='real' name='[Calculation_1440926070988802]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='WINDOW_MAX(MAX(PI()))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Max Value' datatype='real' name='[Calculation_1440926071095299]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='WINDOW_MAX(AVG([% Population Urban]))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Step Size' datatype='real' name='[Calculation_1440926071484421]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[Max Value (copy)_1440926071332868] / [Calculation_1440926071095299]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Rank' datatype='integer' name='[Calculation_1440926071537670]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='RANK_UNIQUE([Max Value (copy)_1440926071332868], &apos;asc&apos;)'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Y' datatype='real' name='[Calculation_1440926071603207]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SIN([Calculation_1440926070845441]*[Calculation_1440926070988802] / 180*[Calculation_1440926071484421]) * [Calculation_1440926071537670]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='X' datatype='real' name='[Calculation_1440926071709704]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='COS([Calculation_1440926070845441]*[Calculation_1440926070988802] / 180*[Calculation_1440926071484421]) * [Calculation_1440926071537670]'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column caption='Max Value Each Region' datatype='real' name='[Max Value (copy)_1440926071332868]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='WINDOW_MAX(AVG([% Population Urban]))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column aggregation='None' caption='Pad (bin)' datatype='integer' name='[Pad (bin)]' role='dimension' type='ordinal'>
+        <calculation class='bin' decimals='0' formula='[Pad]' peg='0' size='1' />
+      </column>
+      <column datatype='integer' name='[Pad]' role='measure' type='quantitative' />
+      <column datatype='string' name='[Region]' role='dimension' type='nominal' />
+      <column caption='Extract' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]' role='measure' type='quantitative' />
+      <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:11:57 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Radial Chart Extract' increment-value='%null%' refresh-type='create' rows-inserted='12' timestamp-start='2026-06-30 20:11:56.812' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Pad</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Pad]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Pad</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Extract</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>2</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>% Population Urban</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[% Population Urban]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>% Population Urban</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Extract</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Region</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Region]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Region</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RUS_S2' />
+              <object-id>[Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:Region:nk]' type='palette'>
+            <map to='#4fadff'>
+              <bucket>&quot;Africa&quot;</bucket>
+            </map>
+            <map to='#686af1'>
+              <bucket>&quot;Oceania&quot;</bucket>
+            </map>
+            <map to='#87deca'>
+              <bucket>&quot;Middle East&quot;</bucket>
+            </map>
+            <map to='#f07cef'>
+              <bucket>&quot;Asia&quot;</bucket>
+            </map>
+            <map to='#f4db81'>
+              <bucket>&quot;The Americas&quot;</bucket>
+            </map>
+            <map to='#fdb490'>
+              <bucket>&quot;Europe&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_042FD0C5E6C44EFF8B66C14236FBBB40'>
+            <properties context=''>
+              <relation connection='hyper.0zbq9lc17avic61efqvah0spry5u' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window tab-color='#4f779a'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='1' param='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+      <highlight>
+        <color-one-way>
+          <field>[Sample - EU Superstore].[none:Region:nk]</field>
+          <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+          <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{3DF77330-B35D-4ADA-8CA4-F147F29B3B89}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Radial Chart Extract' name='federated.0t13zrz1kvrxmp1ghyluy0ap2d64' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0t13zrz1kvrxmp1ghyluy0ap2d64'>
+        <column datatype='real' name='[% Population Urban]' role='measure' type='quantitative' />
+        <column caption='Index' datatype='integer' name='[Calculation_1440926070845441]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='INDEX() - 1'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Pi' datatype='real' name='[Calculation_1440926070988802]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='WINDOW_MAX(MAX(PI()))'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Max Value' datatype='real' name='[Calculation_1440926071095299]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='WINDOW_MAX(AVG([% Population Urban]))'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Step Size' datatype='real' name='[Calculation_1440926071484421]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='[Max Value (copy)_1440926071332868] / [Calculation_1440926071095299]'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Rank' datatype='integer' name='[Calculation_1440926071537670]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='RANK_UNIQUE([Max Value (copy)_1440926071332868], &apos;asc&apos;)'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Y' datatype='real' name='[Calculation_1440926071603207]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SIN([Calculation_1440926070845441]*[Calculation_1440926070988802] / 180*[Calculation_1440926071484421]) * [Calculation_1440926071537670]'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='X' datatype='real' name='[Calculation_1440926071709704]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='COS([Calculation_1440926070845441]*[Calculation_1440926070988802] / 180*[Calculation_1440926071484421]) * [Calculation_1440926071537670]'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Max Value Each Region' datatype='real' name='[Max Value (copy)_1440926071332868]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='WINDOW_MAX(AVG([% Population Urban]))'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column aggregation='None' caption='Pad (bin)' datatype='integer' name='[Pad (bin)]' role='dimension' type='ordinal'>
+          <calculation class='bin' decimals='0' formula='[Pad]' peg='0' size='1' />
+        </column>
+        <column datatype='integer' name='[Pad]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Region]' role='dimension' type='nominal' />
+        <column-instance column='[Pad (bin)]' derivation='None' name='[none:Pad (bin):ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_1440926071603207]' derivation='User' name='[usr:Calculation_1440926071603207:qk:7]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926071537670]' level-address='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Region]' ordering-type='Field'>
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Region]' />
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' />
+          </table-calc>
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926070988802]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926070845441]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926071095299]' ordering-type='Field'>
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' />
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Region]' />
+          </table-calc>
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926071484421]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Max Value (copy)_1440926071332868]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+        </column-instance>
+        <column-instance column='[Calculation_1440926071709704]' derivation='User' name='[usr:Calculation_1440926071709704:qk:7]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926071095299]' ordering-type='Field'>
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' />
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Region]' />
+          </table-calc>
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926070988802]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926070845441]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926071537670]' level-address='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Region]' ordering-type='Field'>
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Region]' />
+            <order field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' />
+          </table-calc>
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Max Value (copy)_1440926071332868]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+          <table-calc field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Calculation_1440926071484421]' ordering-field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]' ordering-type='Field' />
+        </column-instance>
+        <column-instance column='[Max Value (copy)_1440926071332868]' derivation='User' name='[usr:Max Value (copy)_1440926071332868:qk:3]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='CellInPane' />
+        </column-instance>
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]' field-type='quantitative' max='7.0' min='-7.0' range-type='fixed' scope='cols' type='space' />
+        <format attr='display' class='0' field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]' scope='cols' value='false' />
+        <encoding attr='space' class='0' field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]' field-type='quantitative' max='7.0' min='-7.0' range-type='fixed' scope='rows' type='space' />
+        <format attr='display' class='0' field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]' scope='rows' value='false' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-color' scope='cols' value='#333333' />
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='text-format' field='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]' value='p0%' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+        <format attr='band-color' scope='cols' value='#fffcfc' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+        <format attr='band-color' scope='cols' value='#fffcfc' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+        <format attr='band-level' scope='cols' value='1' />
+        <format attr='band-size' scope='rows' value='1' />
+        <format attr='band-size' scope='cols' value='1' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='dropline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-size' value='1' />
+        <format attr='line-visibility' value='on' />
+        <format attr='line-pattern-only' value='dotted' />
+        <format attr='stroke-color' value='#e6e6e6' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-color' scope='rows' value='#b7b9cd' />
+        <format attr='line-pattern-only' scope='rows' value='solid' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='line-pattern-only' scope='cols' value='solid' />
+        <format attr='stroke-color' scope='cols' value='#f5f5f5' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='1' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]' />
+          <text column='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]' />
+          <path column='[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text />
+        </customized-tooltip>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-orientation' value='0' />
+            <format attr='text-align' value='left' />
+            <format attr='vertical-align' value='top' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='font-size' value='7' />
+            <format attr='color' value='#44485f' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='3.6574585437774658' />
+            <format attr='mark-labels-range-scope' value='pane' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+            <format attr='mark-transparency' value='255' />
+            <format attr='mark-labels-cull' value='false' />
+            <format attr='mark-labels-mode' value='line-ends' />
+            <format attr='mark-labels-line-first' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</rows>
+    <cols>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</cols>
+    <show-full-range>
+      <column>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[Pad (bin)]</column>
+    </show-full-range>
+    <mark-labels>
+      <mark-label id='0'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>283</value>
+            <value>&quot;Oceania&quot;</value>
+            <value>-0.2747734900495914</value>
+            <value>-2.9873900865414225</value>
+            <value>0.51639999999999997</value>
+          </tuple>
+        </tuple-reference>
+        <label-position x='-17' y='6' />
+      </mark-label>
+      <mark-label id='1'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>283</value>
+            <value>&quot;Asia&quot;</value>
+            <value>-0.0149010113608017</value>
+            <value>-1.999944489194744</value>
+            <value>0.50294117647058834</value>
+          </tuple>
+        </tuple-reference>
+        <label-position x='-15' y='5' />
+      </mark-label>
+      <mark-label id='2'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>283</value>
+            <value>&quot;Africa&quot;</value>
+            <value>0.51209247763709254</value>
+            <value>-0.85893031984410928</value>
+            <value>0.41588679245283028</value>
+          </tuple>
+        </tuple-reference>
+        <label-position x='-14' y='5' />
+      </mark-label>
+      <mark-label id='3'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>283</value>
+            <value>&quot;Europe&quot;</value>
+            <value>-4.7070138096979219</value>
+            <value>-1.686422543526104</value>
+            <value>0.69768085106382971</value>
+          </tuple>
+        </tuple-reference>
+        <label-position x='-1' y='21' />
+      </mark-label>
+      <mark-label id='4'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>283</value>
+            <value>&quot;The Americas&quot;</value>
+            <value>-3.3939367004074921</value>
+            <value>-2.116883008960841</value>
+            <value>0.66355813953488374</value>
+          </tuple>
+        </tuple-reference>
+        <label-position x='-2' y='16' />
+      </mark-label>
+      <mark-label id='5'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Pad (bin):ok]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[none:Region:nk]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071603207:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Calculation_1440926071709704:qk:7]</field>
+              <field>[federated.0t13zrz1kvrxmp1ghyluy0ap2d64].[usr:Max Value (copy)_1440926071332868:qk:3]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>283</value>
+            <value>&quot;Middle East&quot;</value>
+            <value>-5.868885604402835</value>
+            <value>1.2474701449065515</value>
+            <value>0.78607692307692312</value>
+          </tuple>
+        </tuple-reference>
+        <label-position x='6' y='16' />
+      </mark-label>
+    </mark-labels>
+    <tooltip-style tooltip-mode='none' />
+  </table>
+</bookmark>

@@ -2,6 +2,7 @@ import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
@@ -222,26 +223,70 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
-   * Modifies the project of the specified workbook (i.e. moves it between projects).
+   * Removes a single tag (by label) from the specified workbook. Responds 204; removing a tag the
+   * workbook does not carry is a no-op on the server.
+   *
+   * Required scopes (Tableau Cloud): `tableau:workbook_tags:delete`
+   *
+   * @param workbookId - The ID of the workbook to untag.
+   * @param siteId - The Tableau site ID
+   * @param tagLabel - The tag label to remove.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_tag_from_workbook
+   */
+  deleteTagFromWorkbook = async ({
+    workbookId,
+    siteId,
+    tagLabel,
+  }: {
+    workbookId: string;
+    siteId: string;
+    tagLabel: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteTagFromWorkbook(undefined, {
+      params: { siteId, workbookId, tagName: tagLabel },
+      ...this.authHeader,
+    });
+  };
+
+  /**
+   * Modifies the destination of the specified workbook (i.e. moves it between projects, or into
+   * the caller's Personal Space).
+   *
+   * The destination is exactly one of `projectId` (sends `project: {id}`) or `location` (sends
+   * `location: {id, type: 'PersonalSpace'}`). The two are mutually exclusive.
    *
    * Required scopes (Tableau Cloud): `tableau:workbooks:update`
    *
    * @param workbookId - The ID of the workbook to update.
    * @param siteId - The Tableau site ID
-   * @param projectId - The ID of the project to move the workbook into.
+   * @param projectId - The ID of the project to move the workbook into (mutually exclusive with `location`)
+   * @param location - The Personal Space LUID to move the workbook into (mutually exclusive with `projectId`)
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
    */
   updateWorkbook = async ({
     workbookId,
     siteId,
     projectId,
+    location,
   }: {
     workbookId: string;
     siteId: string;
-    projectId: string;
+    projectId?: string;
+    location?: string;
   }): Promise<Partial<Workbook>> => {
+    if (projectId === undefined && location === undefined) {
+      throw new Error('updateWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('updateWorkbook accepts only one of `projectId` or `location`, not both.');
+    }
     const { workbook } = await this._apiClient.updateWorkbook(
-      { workbook: { project: { id: projectId } } },
+      {
+        workbook:
+          projectId !== undefined
+            ? { project: { id: projectId } }
+            : { location: { id: location!, type: 'PersonalSpace' } },
+      },
       {
         params: { siteId, workbookId },
         ...this.authHeader,
@@ -286,8 +331,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     location?: string;
     overwrite?: boolean;
   }): Promise<Workbook> => {
-    if ((projectId === undefined) === (location === undefined)) {
-      throw new Error('publishWorkbook requires exactly one of `projectId` or `location`.');
+    if (projectId === undefined && location === undefined) {
+      throw new Error('publishWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('publishWorkbook accepts only one of `projectId` or `location`, not both.');
     }
     const destination =
       projectId !== undefined
@@ -376,20 +424,6 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       throw error;
     }
   };
-}
-
-function escapeXmlAttribute(value: string): string {
-  return (
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      // Numeric char ref, not the named &apos; - &apos; is a valid XML 1.0 entity but is absent from
-      // the HTML predefined set and the Tableau publish endpoint's parser rejects it (a name like
-      // O'Brien then 400s). &#39; is universally accepted.
-      .replace(/'/g, '&#39;')
-  );
 }
 
 function getHeader(headers: Record<string, unknown>, name: string): string | undefined {

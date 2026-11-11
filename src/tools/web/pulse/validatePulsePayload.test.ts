@@ -1,8 +1,13 @@
+import { z } from 'zod';
+
+import {
+  pulseBundleRequestSchema,
+  pulseInsightBriefRequestSchema,
+} from '../../../sdks/tableau/types/pulse.js';
 import { validateBriefRequest, validateBundleRequest } from './validatePulsePayload.js';
 
 describe('validateBundleRequest', () => {
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  function makeValidBundleRequest() {
+  function makeValidBundleRequest(): z.infer<typeof pulseBundleRequestSchema> {
     return {
       bundle_request: {
         version: 1,
@@ -132,11 +137,118 @@ describe('validateBundleRequest', () => {
     expect(result).toContain('2.');
     expect(result).toContain('3.');
   });
+
+  it('rejects specific_period when range is not RANGE_BY_CONFIG (silently ignored otherwise)', () => {
+    const req = makeValidBundleRequest();
+    // Builder defaults range to RANGE_LAST_COMPLETE, which the service does NOT
+    // honor specific_period under — the request would return the wrong period.
+    req.bundle_request.input.metric.metric_specification.measurement_period.specific_period = {
+      date: '2026-04-15',
+      end_date: '2026-04-20',
+    };
+    const result = validateBundleRequest(req);
+    expect(result).toContain('specific_period is only honored');
+    expect(result).toContain('RANGE_BY_CONFIG');
+  });
+
+  it('accepts specific_period when range is RANGE_BY_CONFIG', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.input.metric.metric_specification.measurement_period.range =
+      'RANGE_BY_CONFIG';
+    req.bundle_request.input.metric.metric_specification.measurement_period.specific_period = {
+      date: '2026-04-15',
+      end_date: '2026-04-20',
+    };
+    expect(validateBundleRequest(req)).toBeNull();
+  });
+
+  it('rejects setting both options.now and specific_period (undefined precedence)', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.options.now = '2026-05-31';
+    req.bundle_request.input.metric.metric_specification.measurement_period.range =
+      'RANGE_BY_CONFIG';
+    req.bundle_request.input.metric.metric_specification.measurement_period.specific_period = {
+      date: '2026-04-15',
+    };
+    const result = validateBundleRequest(req);
+    expect(result).toContain('cannot both be set');
+  });
+
+  it('accepts a service-supported rolling seven-day period', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.input.metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_BY_CONFIG',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBundleRequest(req)).toBeNull();
+  });
+
+  it('rejects last_x_period outside RANGE_BY_CONFIG', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.input.metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_CURRENT_PARTIAL',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBundleRequest(req)).toContain('last_x_period is only honored');
+  });
+
+  it('rejects a day-based last_x_period with non-day measurement granularity', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.input.metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_MONTH',
+      range: 'RANGE_BY_CONFIG',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBundleRequest(req)).toContain('requires measurement_period.granularity');
+  });
+
+  it('rejects combining rolling and fixed period configurations', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.input.metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_BY_CONFIG',
+      specific_period: { date: '2026-08-25', end_date: '2026-08-31' },
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBundleRequest(req)).toContain('cannot both be set');
+  });
+
+  it('rejects options.now with a rolling period', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.options.now = '2026-08-31';
+    req.bundle_request.input.metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_BY_CONFIG',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBundleRequest(req)).toContain('rolling windows are relative');
+  });
 });
 
 describe('validateBriefRequest', () => {
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  function makeValidBriefRequest() {
+  function makeValidBriefRequest(): z.infer<typeof pulseInsightBriefRequestSchema> {
     return {
       language: 'LANGUAGE_EN_US' as const,
       locale: 'LOCALE_EN_US' as const,
@@ -229,5 +341,77 @@ describe('validateBriefRequest', () => {
       'GRANULARITY_UNSPECIFIED';
     const result = validateBriefRequest(req);
     expect(result).toContain('granularity must be set');
+  });
+
+  it('accepts a service-supported rolling seven-day period in metric context', () => {
+    const req = makeValidBriefRequest();
+    req.messages[0].metric_group_context[0].metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_BY_CONFIG',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBriefRequest(req)).toBeNull();
+  });
+
+  it('rejects last_x_period outside RANGE_BY_CONFIG in metric context', () => {
+    const req = makeValidBriefRequest();
+    req.messages[0].metric_group_context[0].metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_CURRENT_PARTIAL',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    const result = validateBriefRequest(req);
+    expect(result).toContain(
+      "metric_group_context[0]: measurement_period.last_x_period is only honored when measurement_period.range is 'RANGE_BY_CONFIG'",
+    );
+  });
+
+  it('rejects a day-based last_x_period with non-day granularity in metric context', () => {
+    const req = makeValidBriefRequest();
+    req.messages[0].metric_group_context[0].metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_MONTH',
+      range: 'RANGE_BY_CONFIG',
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBriefRequest(req)).toContain(
+      "metric_group_context[0]: a day-based measurement_period.last_x_period requires measurement_period.granularity = 'GRANULARITY_BY_DAY'",
+    );
+  });
+
+  it('rejects combining rolling and fixed periods in metric context', () => {
+    const req = makeValidBriefRequest();
+    req.messages[0].metric_group_context[0].metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_BY_CONFIG',
+      specific_period: { date: '2026-08-25', end_date: '2026-08-31' },
+      last_x_period: {
+        period: 7,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      },
+    };
+    expect(validateBriefRequest(req)).toContain('cannot both be set');
+  });
+
+  it('rejects specific_period outside RANGE_BY_CONFIG in metric context', () => {
+    const req = makeValidBriefRequest();
+    req.messages[0].metric_group_context[0].metric.metric_specification.measurement_period = {
+      granularity: 'GRANULARITY_BY_DAY',
+      range: 'RANGE_CURRENT_PARTIAL',
+      specific_period: { date: '2026-08-25', end_date: '2026-08-31' },
+    };
+    expect(validateBriefRequest(req)).toContain('specific_period is only honored');
   });
 });

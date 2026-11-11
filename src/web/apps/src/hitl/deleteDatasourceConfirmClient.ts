@@ -10,6 +10,11 @@
  * that human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is
  * advisory only: the server independently rejects an expired approval, so disabling the button past
  * expiry is a UX nicety, not the security boundary.
+ *
+ * The preview already marked the item with its batch tag `pending-deletion-<cleanupDate>`. Confirm
+ * echoes `cleanupDate` + `minAgeDays` so the server verifies that exact batch tag and re-checks
+ * staleness; Cancel calls `delete-content` with action "remove-pending-tags" for that batch so a declined preview leaves
+ * no residue (W-24199845).
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
@@ -20,6 +25,8 @@ const confirmPanelSchema = z.object({
   name: z.string().optional(),
   project: z.string().optional(),
   owner: z.string().optional(),
+  cleanupDate: z.string(),
+  minAgeDays: z.number(),
   expiresAtMs: z.number(),
 });
 
@@ -133,7 +140,29 @@ export function renderDeleteDatasourceConfirm(app: App, result: unknown): void {
 
   cancelBtn.addEventListener('click', () => {
     stopTimer();
-    container.remove();
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    countdownEl.textContent = 'Cancelled — removing the pending-deletion marker…';
+    void app
+      .callServerTool({
+        name: 'delete-content',
+        arguments: {
+          action: 'remove-pending-tags',
+          resourceType: 'datasource',
+          resourceIds: [panel.datasourceId],
+          cleanupDate: panel.cleanupDate,
+        },
+      })
+      .then((res) => {
+        countdownEl.textContent =
+          (res as { isError?: boolean }).isError === true
+            ? 'Cancelled. The pending-deletion marker could not be removed; clear it with delete-content action "remove-pending-tags".'
+            : 'Cancelled. Nothing was deleted and the pending-deletion marker was removed.';
+      })
+      .catch(() => {
+        countdownEl.textContent =
+          'Cancelled. The pending-deletion marker could not be removed; clear it with delete-content action "remove-pending-tags".';
+      });
   });
 
   confirmBtn.addEventListener('click', () => {
@@ -146,7 +175,12 @@ export function renderDeleteDatasourceConfirm(app: App, result: unknown): void {
     void app
       .callServerTool({
         name: 'confirm-delete-content',
-        arguments: { resourceType: 'datasource', resourceId: panel.datasourceId },
+        arguments: {
+          resourceType: 'datasource',
+          resourceId: panel.datasourceId,
+          cleanupDate: panel.cleanupDate,
+          minAgeDays: panel.minAgeDays,
+        },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

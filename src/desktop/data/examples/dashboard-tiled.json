@@ -1,0 +1,79 @@
+{
+  "_description": "Minimal tiled dashboard with two worksheets side by side",
+  "_feature": "dashboard",
+  "dashboard": {
+    "type": "dashboard",
+    "attrs": { "name": "Overview Dashboard" },
+    "children": [
+      {
+        "type": "size",
+        "attrs": {
+          "sizing-mode": "fixed",
+          "minwidth": "1200",  "maxwidth": "1200",
+          "minheight": "800",  "maxheight": "800"
+        }
+      },
+      {
+        "type": "zones",
+        "children": [
+          {
+            "type": "zone",
+            "attrs": {
+              "id": 2, "x": 0, "y": 0, "w": 1200, "h": 800,
+              "type-v2": "layout-basic",
+              "layout-strategy-id": "flow"
+            },
+            "children": [
+              {
+                "type": "zone",
+                "attrs": {
+                  "id": 3, "x": 0, "y": 0, "w": 1200, "h": 40,
+                  "type-v2": "title"
+                }
+              },
+              {
+                "type": "zone",
+                "attrs": {
+                  "id": 4, "x": 0, "y": 40, "w": 600, "h": 760,
+                  "type-v2": "visual",
+                  "name": "Sheet 1"
+                }
+              },
+              {
+                "type": "zone",
+                "attrs": {
+                  "id": 5, "x": 600, "y": 40, "w": 600, "h": 760,
+                  "type-v2": "visual",
+                  "name": "Sheet 2"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "window": {
+    "type": "window",
+    "attrs": { "name": "Overview Dashboard", "class": "dashboard", "maximized": "true" },
+    "children": [
+      {
+        "type": "viewpoints",
+        "children": [
+          { "type": "viewpoint", "attrs": { "name": "Sheet 1" } },
+          { "type": "viewpoint", "attrs": { "name": "Sheet 2" } }
+        ]
+      },
+      { "type": "active", "attrs": { "id": "-1" } }
+    ]
+  },
+  "notes": {
+    "zone_id_uniqueness": "Zone IDs must be unique across all dashboards in the workbook. Find max existing ID first.",
+    "visual_zone_name": "The 'name' attribute on a visual zone must exactly match an existing worksheet name (case-sensitive).",
+    "fixed_sizing_requires_equal_min_max": "For sizing-mode='fixed', minwidth MUST equal maxwidth and minheight MUST equal maxheight. Otherwise Tableau fires a CheckSizeValidity LogicAssert (DashboardSizePresModelBuilder.cpp:180) and rejects the workbook load. Use sizing-mode='automatic' to allow ranges.",
+    "dashboard_window_viewpoints": "The <window class='dashboard'> element MUST contain a <viewpoints> child holding one bare <viewpoint name='SheetName' /> per included worksheet. Nesting full <window> elements inside <viewpoints> causes HasVisualDoc to fail in DashboardController_VisualControllers.cpp and the workbook load is rejected.",
+    "sizing_mode_values": ["automatic", "fixed", "range", "vscroll"],
+    "zone_type_values": ["layout-basic", "layout-flow", "visual", "text", "bitmap", "web", "filter", "paramctrl", "color", "shape", "size", "map", "title", "empty"],
+    "layout_strategy_values": ["basic", "free-form", "flow", "distribute-evenly", "trivial"]
+  }
+}

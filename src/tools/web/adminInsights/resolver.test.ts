@@ -253,6 +253,45 @@ describe('adminInsightsResolver', () => {
     });
   });
 
+  describe('datasource listed without a project', () => {
+    it('does not crash and is pruned by project narrowing', async () => {
+      const restApi = makeRestApi({
+        siteId: 'site-no-proj',
+        datasources: [
+          {
+            id: 'luid-canonical',
+            name: 'Site Content',
+            project: { id: 'proj-top', name: 'Admin Insights' },
+          },
+          { id: 'luid-no-project', name: 'Site Content', project: undefined },
+        ],
+        projects: [
+          {
+            id: 'proj-top',
+            name: 'Admin Insights',
+            topLevelProject: true,
+            createdAt: '2020-01-16',
+          },
+        ],
+      });
+
+      const listed = await restApi.datasourcesMethods.listDatasources({
+        siteId: 'site-no-proj',
+        filter: '',
+        pageSize: 100,
+        pageNumber: 1,
+      });
+      expect(listed.datasources.find((d) => d.id === 'luid-no-project')?.project).toBeUndefined();
+
+      const resolution = await adminInsightsResolver.resolveDatasetLuid({
+        restApi,
+        datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
+      });
+
+      expect(resolution.luid).toBe('luid-canonical');
+    });
+  });
+
   describe('free-signal scoring (S2/S5/S7)', () => {
     it('picks the certified, clean-contentUrl candidate without any owner lookup', async () => {
       const usersSpy = vi.fn();

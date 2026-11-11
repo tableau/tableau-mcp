@@ -1,12 +1,19 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 
+import {
+  ActivityLogConfig,
+  isActivityLogProvider,
+  providerConfigSchema as activityLogProviderConfigSchema,
+} from './activityLog/types.js';
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   FeatureGateConfig,
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import { log } from './logging/logger.js';
+import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -18,18 +25,28 @@ import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
   return authTypes.some((type) => type === auth);
 }
 
+/**
+ * Default and bounds for PENDING_DELETION_MAX_AGE_DAYS, the oldest cleanup batch a delete confirm
+ * still accepts. The upper bound keeps the residue sweep (list-workbooks / list-datasources with a
+ * tags filter) to a handful of calls: every marker that can still authorize a confirm is within it.
+ */
+export const PENDING_DELETION_MAX_AGE_DAYS_DEFAULT = 30;
+export const PENDING_DELETION_MAX_AGE_DAYS_MIN = 1;
+export const PENDING_DELETION_MAX_AGE_DAYS_MAX = 90;
+
 export class Config extends BaseConfig {
   auth: AuthType;
   server: string;
   sslKey: string;
   sslCert: string;
+  httpHost: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
   siteName: string;
@@ -71,21 +88,26 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    disableStrictScopeMatch: boolean;
+    external: {
+      discovery: boolean;
+      usernameClaimName: string;
+    } | null;
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
-  productTelemetryEndpoint: string;
-  productTelemetryEnabled: boolean;
-  isHyperforce: boolean;
   featureGate: FeatureGateConfig;
   sessionStore: SessionStoreConfig;
+  activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
-  flowToolsEnabled: boolean;
+  pendingDeletionMaxAgeDays: number;
+  flowReadToolsEnabled: boolean | undefined;
+  flowWriteToolsEnabled: boolean | undefined;
+  knowledgeToolsEnabled: boolean | undefined;
+  knowledgeWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
-  flowWriteToolsEnabled: boolean;
   bucketS3: {
     enabled: boolean;
     bucket: string;
@@ -105,6 +127,7 @@ export class Config extends BaseConfig {
       TRANSPORT: transport,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
+      HTTP_HOST: httpHost,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
@@ -143,26 +166,31 @@ export class Config extends BaseConfig {
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
       ADVERTISE_API_SCOPES: advertiseApiScopes,
+      DISABLE_STRICT_SCOPE_MATCH: disableStrictScopeMatch,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
+      OAUTH_EXTERNAL_DISCOVERY: oauthExternalDiscovery,
+      OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
       SESSION_STORE_PROVIDER: sessionStoreProvider,
       SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
+      ACTIVITY_LOG_PROVIDER: activityLogProvider,
+      ACTIVITY_LOG_PROVIDER_CONFIG: activityLogProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
-      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
-      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
-      IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
-      FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
+      FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
+      KNOWLEDGE_TOOLS_ENABLED: knowledgeToolsEnabled,
+      KNOWLEDGE_WRITE_TOOLS_ENABLED: knowledgeWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
@@ -175,6 +203,8 @@ export class Config extends BaseConfig {
 
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
+    // Empty means listen on all interfaces (the Node default).
+    this.httpHost = httpHost?.trim() ?? '';
     this.httpPort = parseNumber(cleansedVars[httpPortEnvVarName?.trim() || 'PORT'], {
       defaultValue: 3927,
       minValue: 1,
@@ -213,7 +243,17 @@ export class Config extends BaseConfig {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
-    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
+    const normalizedAuth = auth?.trim().toLowerCase();
+    // Like TRANSPORT and the provider vars, an unknown value falls back to the default; warn so a typo (e.g. "passthru") is not silent.
+    if (normalizedAuth && !isAuthType(normalizedAuth)) {
+      log({
+        message: `Unknown AUTH "${auth}"; expected one of ${authTypes.join(', ')}. Falling back to the default.`,
+        level: 'warning',
+        logger: 'config',
+      });
+    }
+    const purePassthroughAuth = normalizedAuth === 'passthrough';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true' || purePassthroughAuth;
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -226,7 +266,7 @@ export class Config extends BaseConfig {
     }
 
     this.oauth = {
-      enabled: disableOauthOverride ? false : !!oauthIssuer,
+      enabled: !purePassthroughAuth && !disableOauthOverride && !!oauthIssuer,
       embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
@@ -270,6 +310,13 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      disableStrictScopeMatch: disableStrictScopeMatch === 'true',
+      external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
+        ? {
+            discovery: oauthExternalDiscovery === 'true',
+            usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
+          }
+        : null,
     };
 
     if (
@@ -299,10 +346,6 @@ export class Config extends BaseConfig {
     }
 
     this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
-    this.productTelemetryEndpoint =
-      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
-    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
-    this.isHyperforce = isHyperforce === 'true';
 
     // Feature gate provider configuration (similar to telemetry provider)
     if (isFeatureGateProvider(featureGateProvider) && featureGateProvider === 'custom') {
@@ -342,17 +385,44 @@ export class Config extends BaseConfig {
       };
     }
 
+    // Activity Log provider configuration (similar to feature gate provider)
+    if (isActivityLogProvider(activityLogProvider) && activityLogProvider === 'custom') {
+      if (!activityLogProviderConfig) {
+        throw new Error(
+          'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+        );
+      }
+      this.activityLog = {
+        provider: 'custom',
+        providerConfig: activityLogProviderConfigSchema.parse(
+          JSON.parse(activityLogProviderConfig),
+        ),
+      };
+    } else {
+      this.activityLog = {
+        provider: 'noop',
+      };
+    }
+
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
-    // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
-    // while flow rollouts are staged into production. Registering them requires both
-    // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
-    this.flowToolsEnabled = flowToolsEnabled === 'true';
+    // Oldest cleanup batch (days) a delete confirm still accepts. Server-level only — deliberately not
+    // a site/request override, so a caller cannot widen the window an orphaned marker stays usable.
+    this.pendingDeletionMaxAgeDays = Math.floor(
+      parseNumber(pendingDeletionMaxAgeDays, {
+        defaultValue: PENDING_DELETION_MAX_AGE_DAYS_DEFAULT,
+        minValue: PENDING_DELETION_MAX_AGE_DAYS_MIN,
+        maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
+      }),
+    );
+    this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
+    this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
+    this.knowledgeToolsEnabled = parseOptionalBoolean(knowledgeToolsEnabled);
+    this.knowledgeWriteToolsEnabled = parseOptionalBoolean(knowledgeWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
@@ -378,13 +448,31 @@ export class Config extends BaseConfig {
       }),
     };
 
-    this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
+    this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
-    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+    if (this.oauth.external) {
+      validateOAuthExternal({
+        auth: this.auth,
+        oauth: this.oauth,
+        external: this.oauth.external,
+        usernameTemplate: jwtSubClaim,
+      });
+    }
+
+    if (
+      this.transport === 'http' &&
+      this.auth !== 'passthrough' &&
+      !disableOauthOverride &&
+      !this.oauth.issuer
+    ) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
+    }
+
+    if (this.auth === 'passthrough' && this.transport === 'stdio') {
+      throw new Error('TRANSPORT must be "http" when AUTH is "passthrough"');
     }
 
     if (this.auth === 'oauth') {
@@ -505,6 +593,16 @@ export class Config extends BaseConfig {
   }
 }
 
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return undefined;
+}
+
 function validateServer(server: string): void {
   if (!['https://', 'http://'].find((prefix) => server.startsWith(prefix))) {
     throw new Error(
@@ -520,6 +618,62 @@ function validateServer(server: string): void {
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
     );
   }
+}
+
+function validateOAuthExternal({
+  auth,
+  oauth: { enabled, embeddedAuthzServer, issuer },
+  external: { discovery },
+  usernameTemplate,
+}: {
+  auth: AuthType;
+  oauth: Config['oauth'];
+  external: NonNullable<Config['oauth']['external']>;
+  usernameTemplate: string | undefined;
+}): void {
+  if (!enabled || embeddedAuthzServer) {
+    throw new Error(
+      'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"',
+    );
+  }
+
+  if (!discovery) {
+    throw new Error('OAUTH_EXTERNAL_* variables require OAUTH_EXTERNAL_DISCOVERY to be "true"');
+  }
+
+  // The issuer becomes the discovery document's fetch target.
+  const issuerUrl = validateHttpsOrLoopbackUri('OAUTH_ISSUER', issuer);
+  // undici repeats the full URL, password included, in its errors.
+  if (issuerUrl.username || issuerUrl.password) {
+    throw new Error(
+      'The environment variable OAUTH_ISSUER must not contain a username or password',
+    );
+  }
+
+  if (auth !== 'direct-trust') {
+    throw new Error('When OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust"');
+  }
+
+  if (!usernameTemplate?.includes('{OAUTH_USERNAME}')) {
+    throw new Error(
+      'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
+    );
+  }
+}
+
+function validateHttpsOrLoopbackUri(name: string, uri: string): URL {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    throw new Error(`The environment variable ${name} is not a valid URL`);
+  }
+
+  if (!isHttpsOrLoopbackUrl(url)) {
+    throw new Error(`The environment variable ${name} must use https unless its host is loopback`);
+  }
+
+  return url;
 }
 
 function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {

@@ -1,0 +1,37 @@
+{
+  "_description": "Add a categorical filter to a worksheet (include specific values)",
+  "_feature": "filter",
+  "filter": {
+    "type": "filter",
+    "attrs": {
+      "column": "[federated.XXXX].[[Segment]]",
+      "class": "categorical"
+    },
+    "children": [
+      {
+        "type": "groupfilter",
+        "attrs": {
+          "user:ui-enumeration": "exclusive",
+          "user:ui-marker": "enumerate",
+          "function": "union"
+        },
+        "children": [
+          { "type": "groupfilter", "attrs": { "function": "member", "level": "[Segment]", "member": "Consumer" } },
+          { "type": "groupfilter", "attrs": { "function": "member", "level": "[Segment]", "member": "Corporate" } }
+        ]
+      }
+    ]
+  },
+  "placement": "Insert as a child of the worksheet's table > view node",
+  "notes": {
+    "column_format": "[datasourceId].[[FieldName]] — note the double brackets around the field name",
+    "filter_class_values": ["categorical", "quantitative", "relative-date"],
+    "groupfilter_function_values": ["union", "member", "intersection", "except", "range", "filter", "level-members"],
+    "exclusive_vs_inclusive": "exclusive means 'show only these values', inclusive is not commonly used in TWB files",
+    "quantitative_filter_example": {
+      "class": "quantitative",
+      "column": "[federated.XXXX].[[Sales]]",
+      "children": [{ "type": "min", "content": "100" }, { "type": "max", "content": "10000" }]
+    }
+  }
+}

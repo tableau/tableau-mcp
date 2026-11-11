@@ -19,22 +19,34 @@
 
 /**
  * Preview "NEXT STEP" text for a TAG-gated delete (workbook / datasource). The caller supplies the
- * `subject` clause (what to show the user) and the pending-deletion `tag` the confirm re-verifies.
+ * `subject` clause (what to show the user), the batch `pendingTag` the confirm re-verifies, and the
+ * batch `cleanupDate` the confirm must carry when it runs on a later day. The text also names the
+ * undo call so a declined preview leaves no residue (W-24199845).
  */
 export function renderTagDeleteNextStep({
   subject,
   pendingTag,
+  cleanupDate,
+  resourceType,
+  resourceId,
 }: {
   /** Imperative clause naming what to present, e.g. "show this workbook (name, project, owner)". */
   subject: string;
-  /** The pending-deletion tag label the confirm phase verifies. */
+  /** The batch pending-deletion tag label the confirm phase verifies. */
   pendingTag: string;
+  /** The batch cleanup date (YYYY-MM-DD, UTC) encoded in `pendingTag`. */
+  cleanupDate: string;
+  resourceType: 'workbook' | 'datasource';
+  resourceId: string;
 }): string {
   return (
     `NEXT STEP — REQUIRED: ${subject} to the user and ask them to explicitly confirm ` +
     'deleting it. Do NOT delete without the user’s approval. ' +
-    'Once approved, call again with confirm: true (the server will verify this ' +
-    `'${pendingTag}' tag before deleting). `
+    `Once approved, call again with confirm: true and cleanupDate: "${cleanupDate}" (the server ` +
+    `will verify this '${pendingTag}' tag and re-check that the item is still stale before ` +
+    'deleting). If the user declines, remove the marker with delete-content ' +
+    `(action: "remove-pending-tags", resourceType: "${resourceType}", resourceIds: ` +
+    `["${resourceId}"], cleanupDate: "${cleanupDate}"). `
   );
 }
 
@@ -104,11 +116,14 @@ export function renderPreviewNotRunMessage({
   previewTool,
   targetKind,
   targetId,
+  detail,
 }: {
   tool: string;
   previewTool?: string;
   targetKind: string;
   targetId: string;
+  /** Optional evidence-specific explanation (e.g. a marker from a different cleanup batch). */
+  detail?: string;
 }): string {
   const recovery = previewTool
     ? `Re-run ${previewTool} to preview again, then approve in the confirmation panel.`
@@ -116,7 +131,7 @@ export function renderPreviewNotRunMessage({
       'confirm: true.';
   return (
     `Mutation blocked: ${tool} could not verify that a preview ran for ${targetKind} ` +
-    `${targetId}. ${recovery} This gate verifies server-side state and cannot be bypassed by ` +
+    `${targetId}.${detail ? ` ${detail}` : ''} ${recovery} This gate verifies server-side state and cannot be bypassed by ` +
     'computing a token.'
   );
 }

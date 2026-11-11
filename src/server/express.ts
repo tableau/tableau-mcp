@@ -20,7 +20,7 @@ import { createSession, getSession, Session } from '../sessions.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
-import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
+import { createOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { getSessionBinding } from './oauth/siteBinding.js';
 import { AuthenticatedRequest } from './oauth/types.js';
@@ -33,10 +33,13 @@ export async function startExpressServer({
   basePath,
   config,
   logLevel,
+  host,
 }: {
   basePath: string;
   config: Config;
   logLevel: LoggingLevel;
+  // Interface to bind. Empty/undefined binds all interfaces (Docker/Heroku rely on this).
+  host?: string;
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
 
@@ -70,9 +73,7 @@ export async function startExpressServer({
   }
 
   if (config.oauth.enabled) {
-    const oauthProvider = config.oauth.embeddedAuthzServer
-      ? new EmbeddedOAuthProvider()
-      : new TableauOAuthProvider();
+    const oauthProvider = createOAuthProvider(config);
 
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
@@ -92,13 +93,18 @@ export async function startExpressServer({
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
   );
 
+  // An empty host is passed to listen() as undefined, which makes Node bind all interfaces.
+  // A loopback bind is reported as 127.0.0.1 because `localhost` can resolve to ::1, which a
+  // 127.0.0.1 listener doesn't serve.
+  // IPv6 literals must be bracketed to form a valid URL.
+  const urlHost = host?.includes(':') ? `[${host}]` : host || 'localhost';
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
     return new Promise((resolve) => {
       const server = http
         .createServer(app)
-        .listen(config.httpPort, () =>
-          resolve({ url: `http://localhost:${config.httpPort}/${basePath}`, app, server }),
+        .listen(config.httpPort, host || undefined, () =>
+          resolve({ url: `http://${urlHost}:${config.httpPort}/${basePath}`, app, server }),
         );
     });
   }
@@ -119,8 +125,8 @@ export async function startExpressServer({
   return new Promise((resolve) => {
     const server = https
       .createServer(options, app)
-      .listen(config.httpPort, () =>
-        resolve({ url: `https://localhost:${config.httpPort}/${basePath}`, app, server }),
+      .listen(config.httpPort, host || undefined, () =>
+        resolve({ url: `https://${urlHost}:${config.httpPort}/${basePath}`, app, server }),
       );
   });
 
@@ -143,7 +149,7 @@ export async function startExpressServer({
           server.mcpServer.close();
         });
 
-        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.auth?.scopes);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -167,7 +173,13 @@ export async function startExpressServer({
           });
 
           const server = new WebMcpServer({ clientInfo, capabilities, clientId });
-          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+          await connect(
+            server,
+            transport,
+            logLevel,
+            getTableauAuthInfo(req.auth),
+            req.auth?.scopes,
+          );
         } else {
           log({
             message: 'Rejected request: no valid session ID and not an initialize request',
@@ -213,8 +225,9 @@ async function connect(
   transport: StreamableHTTPServerTransport,
   logLevel: LoggingLevel,
   authInfo: TableauAuthInfo | undefined,
+  grantedScopes: ReadonlyArray<string> | undefined,
 ): Promise<void> {
-  await server.registerTools(authInfo);
+  await server.registerTools(authInfo, grantedScopes);
   server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
     setNotificationLevel(server.mcpServer, request.params.level);
     return {};

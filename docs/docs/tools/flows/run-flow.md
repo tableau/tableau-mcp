@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 7
 ---
 
 # Run Flow
@@ -13,8 +13,10 @@ outputs.
 To run an _existing schedule_ now instead, use [Run Flow Task](run-flow-task.md). To only inspect a
 flow or its runs, use [Get Flow](get-flow.md) / [List Flow Runs](list-flow-runs.md).
 
-:::warning This tool changes server state
-A confirmed run consumes warehouse + Tableau Prep Conductor capacity and overwrites the flow's outputs. It is **not idempotent** — each confirmed call enqueues another run. It is one of the content-mutating flow tools and is only registered when `FLOW_TOOLS_ENABLED=true`, `FLOW_WRITE_TOOLS_ENABLED=true`, and the `flow-tools` feature flag are enabled.
+:::warning[This tool changes server state]
+
+A confirmed run consumes warehouse + Tableau Prep Conductor capacity and overwrites the flow's outputs. It is **not idempotent** — each confirmed call enqueues another run. The tool is enabled by default. Set [`FLOW_WRITE_TOOLS_ENABLED=false`](../../configuration/mcp-config/env-vars.md#flow_write_tools_enabled) to disable the mutating flow tools.
+
 :::
 
 ## APIs called

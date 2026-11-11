@@ -1,0 +1,47 @@
+<!-- Live probe apply-L2-ws.xml, verbatim: nothing cut. -->
+<worksheet name='L2' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='superstore' />
+      </datasources>
+      <datasource-dependencies datasource='superstore'>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+          <style>
+            <style-rule element='mark'>
+              <encoding attr='color' field='[none:Category:nk]' type='palette'>
+                <map to='#59a14f'>
+                  <bucket>&quot;Furniture&quot;</bucket>
+                </map>
+                <map to='#9c755f'>
+                  <bucket>&quot;Technology&quot;</bucket>
+                </map>
+                <map to='#b07aa1'>
+                  <bucket>&quot;Office Supplies&quot;</bucket>
+                </map>
+              </encoding>
+            </style-rule>
+          </style>
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[superstore].[none:Category:nk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[superstore].[sum:Sales:qk]</rows>
+    <cols>[superstore].[none:Category:nk]</cols>
+  </table>
+  <simple-id uuid='{9ABCE8B5-3E73-4520-AD15-849515E94483}' />
+</worksheet>

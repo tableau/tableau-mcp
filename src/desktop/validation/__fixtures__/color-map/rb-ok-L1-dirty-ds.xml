@@ -1,0 +1,42 @@
+<!-- Trimmed from live probe ok-L1-dirty-ds.xml. Cut: <connection>, <metadata-records>, all <column> elements except Is Tech 2 and, where present, Category, groups, <drill-paths>, <layout>, <semantic-values>, Parameters dependencies, <object-graph>. Kept verbatim: the root element, the datasource-level <column-instance> elements and the datasource <style>. -->
+<datasource inline='true' name='superstore' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <aliases enabled='yes' />
+  <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+  <column caption='Is Tech 2' datatype='boolean' name='[Calculation_B002]' role='dimension' type='nominal'>
+    <calculation class='tableau' formula='[Category] = &quot;Technology&quot;' />
+  </column>
+  <column-instance column='[Calculation_B001]' derivation='None' name='[none:Calculation_B001:nk]' pivot='key' type='nominal' />
+  <column-instance column='[Calculation_B004]' derivation='None' name='[none:Calculation_B004:nk]' pivot='key' type='nominal' />
+  <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+  <style>
+    <style-rule element='mark'>
+      <encoding attr='color' field='[none:Calculation_B001:nk]' type='palette'>
+        <map to='#d4c37a'>
+          <bucket>false</bucket>
+        </map>
+        <map to='#ff0000'>
+          <bucket>true</bucket>
+        </map>
+      </encoding>
+      <encoding attr='color' field='[none:Calculation_B004:nk]' type='palette'>
+        <map to='#d4c37a'>
+          <bucket>false</bucket>
+        </map>
+        <map to='#ff0000'>
+          <bucket>true</bucket>
+        </map>
+      </encoding>
+      <encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#00aa00'>
+          <bucket>&quot;Office Supplies&quot;</bucket>
+        </map>
+        <map to='#4e79a7'>
+          <bucket>&quot;Furniture&quot;</bucket>
+        </map>
+        <map to='#d4c37a'>
+          <bucket>&quot;Technology&quot;</bucket>
+        </map>
+      </encoding>
+    </style-rule>
+  </style>
+</datasource>

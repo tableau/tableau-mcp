@@ -4,12 +4,8 @@ import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  ArgsValidationError,
-  FeatureDisabledError,
-  McpToolError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
+import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
@@ -28,6 +24,11 @@ import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
+import {
+  mapPersonalSpaceSiteDisabledError,
+  notInPersonalSpaceError,
+  resolvePersonalSpace,
+} from '../utils/personalSpaceUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -144,11 +145,7 @@ export const getPublishWorkbookTool = (
       idempotentHint: false,
       openWorldHint: true,
     },
-    disabled: new Provider(
-      async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        !(await isAuthoringAllowedForClient(server.clientId)),
-    ),
+    disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
     callback: async (args, extra): Promise<CallToolResult> => {
       const {
         workbookUploadId,
@@ -196,18 +193,24 @@ export const getPublishWorkbookTool = (
               // unresolvable space fails before uploading anything.
               let personalSpaceTarget: PersonalSpace | undefined;
               if (usePersonalSpace) {
-                const resolvedPersonalSpace = await resolvePersonalSpace(restApi);
+                const resolvedPersonalSpace = await resolvePersonalSpace(restApi, 'publish');
                 if (resolvedPersonalSpace.isErr()) {
                   return resolvedPersonalSpace;
                 }
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
-              const resolvedWorkbookFile = await resolveWorkbookInput({
+              const tenant: TenantIdentitySource = extra;
+              const resolvedWorkbookInput = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
+                tenant,
               });
+              if (resolvedWorkbookInput.isErr()) {
+                return resolvedWorkbookInput;
+              }
+              const resolvedWorkbookFile = resolvedWorkbookInput.value;
               const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -245,28 +248,20 @@ export const getPublishWorkbookTool = (
                 });
               } catch (error) {
                 const mapped =
-                  personalSpaceTarget !== undefined ? mapPersonalSpacePublishError(error) : null;
+                  (personalSpaceTarget !== undefined
+                    ? mapPersonalSpaceSiteDisabledError(error, 'publish')
+                    : null) ?? mapPublishWorkbookError(error);
                 if (mapped) {
                   return mapped.toErr();
                 }
                 throw error;
               }
 
-              // Some servers accept the <location> element but silently land the workbook in a
-              // default project instead. Treat a personal-space publish that didn't come back as
-              // PersonalSpace as a failure, not a silent success.
-              if (
-                personalSpaceTarget !== undefined &&
-                publishedWorkbook.location?.type !== 'PersonalSpace'
-              ) {
-                const landed = publishedWorkbook.project?.name ?? publishedWorkbook.location?.name;
-                return new UnknownError(
-                  'This Tableau site published the workbook to ' +
-                    (landed ? `the "${landed}" project` : 'a project') +
-                    ' instead of your personal space — its REST API does not support ' +
-                    'personal-space publishing. Delete it there if unwanted, or publish to a ' +
-                    'project explicitly by passing projectId.',
-                ).toErr();
+              if (personalSpaceTarget !== undefined) {
+                const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');
+                if (notInPersonalSpace) {
+                  return notInPersonalSpace.toErr();
+                }
               }
 
               const url =
@@ -291,17 +286,31 @@ export const getPublishWorkbookTool = (
             return result;
           }
           const published = result.value;
+
+          // The permissions read is OPTIONAL: it bypasses the tool's mandatory-scope middleware
+          // check (the scope is not in requiredApiScopes), so honor the same OAuth consent boundary
+          // here. When the caller didn't grant the optional scope, skipping the read is the expected
+          // path — not a failure. Log it and return the published workbook so a withheld optional
+          // scope never breaks an already-completed publish.
+          const optionalScopeWithheld =
+            (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
+            extra.config.oauth.enforceScopes &&
+            extra.config.oauth.advertiseApiScopes &&
+            !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+          if (optionalScopeWithheld) {
+            log({
+              message: `publish-workbook: optional scope ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE} not granted; skipping the workbook permissions read and returning the published workbook`,
+              level: 'info',
+              logger: 'publish-workbook',
+            });
+            return new Ok({
+              ...published,
+              permissionsNote: `Published successfully, but the workbook permission rules were not retrieved because the optional ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE} scope was not granted.`,
+            });
+          }
+
+          // Best-effort: a permissions-read failure must not fail an already-completed publish.
           try {
-            // The optional read bypasses the tool's mandatory-scope middleware check.
-            // Honor the same OAuth consent boundary before minting its REST credentials.
-            if (
-              (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
-              extra.config.oauth.enforceScopes &&
-              extra.config.oauth.advertiseApiScopes &&
-              !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
-            ) {
-              throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
-            }
             const permissions = await useRestApi({
               ...extra,
               jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
@@ -397,11 +406,13 @@ async function resolveWorkbookInput({
   config,
   workbookUploadId,
   workbookFilePath,
+  tenant,
 }: {
   config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
   workbookFilePath?: string;
-}): Promise<ResolvedWorkbook> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ResolvedWorkbook, McpToolError>> {
   if (workbookUploadId && workbookFilePath) {
     throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
   }
@@ -412,7 +423,7 @@ async function resolveWorkbookInput({
         'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
-    return await resolveLocalWorkbookFile(workbookFilePath);
+    return new Ok(await resolveLocalWorkbookFile(workbookFilePath));
   }
 
   if (!workbookUploadId) {
@@ -425,10 +436,13 @@ async function resolveWorkbookInput({
       'MCP_S3_BUCKET must be configured before publishing staged workbook uploads.',
     );
   }
-  return await resolveStagedWorkbookUpload({
-    workbookUploadId,
-    config,
-  });
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  return new Ok(
+    await resolveStagedWorkbookUpload({ workbookUploadId, config, tenant: tenantLuids.value }),
+  );
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
@@ -453,52 +467,49 @@ function assertMinimumRestApiVersionSupported(): void {
   }
 }
 
-const PROJECT_ID_HINT = 'pass projectId (use list-projects) to publish to a project instead.';
+// Guidance per documented Publish Workbook error code. Some codes cover several conditions, so
+// Tableau's own summary/detail is always appended to tell them apart.
+// https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
+const publishErrorGuidance: Record<string, string> = {
+  '400000': 'The publish request was malformed or did not include the uploaded workbook.',
+  '400008': 'The publish request contained an invalid true/false value.',
+  '400011': 'Tableau could not publish the workbook. Check that the workbook file is valid.',
+  '400020': 'The workbook file name must end in .twb or .twbx.',
+  '400035': 'The uploaded workbook is missing or is not a .twb or .twbx file.',
+  '403007':
+    'Tableau refused the publish. You may lack publish permission on the project, a workbook with this name may already exist (set overwrite to true to replace it), or a data source the workbook uses could not be reached.',
+  '403008': 'The site does not have enough storage for this workbook.',
+  '403130':
+    'A workbook with this name already exists. Set overwrite to true to replace it, or choose a different name.',
+  '403131': 'Another publish of this workbook is already in progress. Wait and retry.',
+  '403132':
+    'Tableau could not connect to a data source the workbook uses. Check its connection credentials and that it is reachable from Tableau.',
+  '404005': 'The project was not found. Use list-projects to find a valid projectId.',
+  '404006':
+    'overwrite was true but no workbook with this name exists. Retry with overwrite set to false.',
+  '404015': 'The upload session was not found or has expired. Retry publish-workbook.',
+};
 
-async function resolvePersonalSpace(
-  restApi: RestApi,
-): Promise<Result<PersonalSpace, McpToolError>> {
-  // Don't pre-check site.personalSpaceEnabled: Query Site is admin-only, and publish-workbook's
-  // callers are typically non-admin Explorers/Creators. A site with Personal Space disabled
-  // surfaces here as a getPersonalSpace failure instead.
-  let personalSpace: PersonalSpace;
-  try {
-    personalSpace = await restApi.personalSpaceMethods.getPersonalSpace({
-      siteId: restApi.siteId,
-    });
-  } catch (error) {
-    return new ArgsValidationError(
-      `Could not resolve your Personal Space for publishing (${getExceptionMessage(error)}); ` +
-        PROJECT_ID_HINT,
-    ).toErr();
-  }
-
-  if (personalSpace.readOnly) {
-    return new ArgsValidationError(
-      `Your Personal Space is read-only and cannot be used as a publish target; ${PROJECT_ID_HINT}`,
-    ).toErr();
-  }
-
-  return new Ok(personalSpace);
-}
-
-// Map the server's "personal-space publish is disabled for this site" gate (code 400000 with a
-// detail mentioning personal space) to a clean tool error, or null so the caller rethrows to the
-// generic handler.
-function mapPersonalSpacePublishError(error: unknown): FeatureDisabledError | null {
+// Axios's own message ("Request failed with status code 400") drops Tableau's reason, which the
+// model needs to correct the publish. 5xx and body-less errors keep the generic path.
+function mapPublishWorkbookError(error: unknown): McpToolError | null {
   const parsed = parseTableauApiError(error);
-  if (
-    parsed?.status === 400 &&
-    parsed.code === '400000' &&
-    parsed.detail?.toLowerCase().includes('personal space')
-  ) {
-    return new FeatureDisabledError(
-      'Publishing directly to a personal space is not enabled for this Tableau site. Publish to a ' +
-        'project instead by passing projectId, or ask a site administrator to enable ' +
-        'personal-space publishing.',
-    );
+  if (!parsed || parsed.status < 400 || parsed.status >= 500) {
+    return null;
   }
-  return null;
+
+  const guidance =
+    (parsed.code && publishErrorGuidance[parsed.code]) || 'Tableau rejected the workbook publish.';
+  const reason = [parsed.summary, parsed.detail].filter(Boolean).join(': ');
+  const tableauError = reason
+    ? ` Tableau error${parsed.code ? ` ${parsed.code}` : ''}: ${reason}`
+    : '';
+
+  return new McpToolError({
+    type: 'publish-rejected',
+    message: sanitizeFindingText(`${guidance}${tableauError}`, 2_000),
+    statusCode: parsed.status,
+  });
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {

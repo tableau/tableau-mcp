@@ -1,4 +1,5 @@
 import { Config, getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import {
   getOverridableConfig,
   isOverridableVariable,
@@ -9,12 +10,15 @@ import { RestApi } from '../sdks/tableau/restApi.js';
 import { McpSiteSettings, McpSiteSettingsResult } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { isAxiosError } from './axios.js';
 import { ExpiringMap } from './expiringMap.js';
+import { getExceptionMessage } from './getExceptionMessage.js';
 import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
 import { DistributiveOmit } from './types.js';
 
 type SiteNameOrSiteId = string;
 
 const MCP_SITE_SETTINGS_MIN_REST_API_VERSION = '3.29';
+let loggedUncacheableSite = false;
+const loggedFetchFailureKeys = new Set<string>();
 let mcpSiteSettingsCache: ExpiringMap<SiteNameOrSiteId, McpSiteSettings>;
 
 async function getMcpSiteSettings({
@@ -36,15 +40,37 @@ async function getMcpSiteSettings({
     });
   }
 
-  const site = config.siteName || getSiteLuidFromAccessToken(tableauAuthInfo) || 'Default';
+  // Passthrough REST calls run on the token's own site part, so key on that; but cache only when it matches
+  // the session site Tableau validated, so a forged site part cannot read or plant another site's entry.
+  const siteLuid =
+    tableauAuthInfo?.type === 'Passthrough'
+      ? getSiteLuidFromAccessToken(tableauAuthInfo.raw)
+      : getSiteLuidFromAccessToken(tableauAuthInfo);
+  const site = siteLuid ? `luid:${siteLuid.toLowerCase()}` : `name:${config.siteName || 'Default'}`;
   const cacheKey = `${config.server || tableauAuthInfo?.server || ''}|${site}`;
 
-  const cachedSettings = mcpSiteSettingsCache.get(cacheKey);
+  const cacheable =
+    tableauAuthInfo?.type !== 'Passthrough' ||
+    (!!siteLuid &&
+      !!tableauAuthInfo.siteId &&
+      siteLuid.toLowerCase() === tableauAuthInfo.siteId.toLowerCase());
+  if (!cacheable && !loggedUncacheableSite) {
+    loggedUncacheableSite = true;
+    log({
+      message:
+        'MCP site settings are not cached: the token site part differs from the session site.',
+      level: 'debug',
+      logger: 'config',
+    });
+  }
+
+  const cachedSettings = cacheable ? mcpSiteSettingsCache.get(cacheKey) : undefined;
   if (cachedSettings) {
     return cachedSettings;
   }
 
   const mcpSiteSettings: McpSiteSettings = {};
+  let cacheResult = cacheable;
   try {
     const result: McpSiteSettingsResult = await useRestApi({
       ...restApiArgs,
@@ -70,6 +96,18 @@ async function getMcpSiteSettings({
       }
       // else: (403 status code) MCP settings feature flag was disabled on this site,
       // continue and cache with empty settings.
+    } else {
+      cacheResult = false;
+      // Uncacheable requests share one key so forged site parts cannot grow the set.
+      const warnKey = cacheable ? cacheKey : 'uncacheable';
+      if (!loggedFetchFailureKeys.has(warnKey)) {
+        loggedFetchFailureKeys.add(warnKey);
+        log({
+          message: `Could not get MCP site settings; using none and retrying on the next request: ${getExceptionMessage(error)}`,
+          level: 'warning',
+          logger: 'config',
+        });
+      }
     }
   }
 
@@ -77,7 +115,9 @@ async function getMcpSiteSettings({
     delete mcpSiteSettings.ALLOWED_REQUEST_OVERRIDES;
   }
 
-  mcpSiteSettingsCache.set(cacheKey, mcpSiteSettings);
+  if (cacheResult) {
+    mcpSiteSettingsCache.set(cacheKey, mcpSiteSettings);
+  }
   return mcpSiteSettings;
 }
 

@@ -83,3 +83,38 @@ function rankStatements(statements: KnowledgeStatement[], query: string): Knowle
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map(({ statement }) => statement);
 }
+
+const MAX_PROPERTY_VALUE_LENGTH = 300;
+const MAX_PROPERTIES = 12;
+
+/**
+ * Keeps the scalar properties of a node (formula, description, datasource, ...) that help an agent
+ * tell look-alike nodes apart, clipped so a candidate list stays small.
+ */
+export function slimProperties(
+  properties: Record<string, unknown>,
+): Record<string, string | number | boolean> {
+  return Object.fromEntries(
+    Object.entries(properties)
+      .filter(
+        (entry): entry is [string, string | number | boolean] =>
+          ['string', 'number', 'boolean'].includes(typeof entry[1]) && entry[1] !== '',
+      )
+      .slice(0, MAX_PROPERTIES)
+      .map(([key, value]) => [
+        key,
+        typeof value === 'string' ? value.slice(0, MAX_PROPERTY_VALUE_LENGTH) : value,
+      ]),
+  );
+}
+
+/** The most relevant statements already attached to a search candidate, shortened for a list view. */
+export function slimCandidateStatements(
+  statements: Array<{ statement: string; score: number }>,
+  max = 3,
+): string[] {
+  return [...statements]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map(({ statement }) => statement.slice(0, MAX_PROPERTY_VALUE_LENGTH));
+}

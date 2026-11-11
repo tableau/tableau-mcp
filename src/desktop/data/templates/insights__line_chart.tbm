@@ -1,0 +1,80 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0805.0231                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <_.fcp.ExtendedPublishedDataSourceUI.true...ExtendedPublishedDataSourceUI />
+    <ISO8601DefaultCalendarPref />
+    <ISO8601PeriodTypes />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Sample - Superstore' name='Sample - Superstore' />
+  </datasources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[Sample - Superstore].[none:Close Date:qk]</field>
+          <field>[Sample - Superstore].[yr:Close Date:ok]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{04EFD9E7-6809-4F41-B572-213648E86906}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Sample - Superstore' name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column aggregation='Sum' datatype='integer' default-type='quantitative' layered='true' name='[ARR]' pivot='key' role='measure' type='quantitative' user-datatype='integer' visual-totals='Default' />
+        <column aggregation='Year' datatype='date' default-type='ordinal' layered='true' name='[Close Date]' pivot='key' role='dimension' type='ordinal' user-datatype='date' visual-totals='Default' />
+        <column-instance column='[Close Date]' derivation='None' name='[none:Close Date:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[ARR]' derivation='Sum' name='[sum:ARR:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Close Date]' derivation='Day-Trunc' name='[tdy:Close Date:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='relative-date' column='[Sample - Superstore].[none:Close Date:qk]' first-period='-99' include-future='true' include-null='false' last-period='0' period-type-v2='day' />
+      <slices>
+        <column>[Sample - Superstore].[none:Close Date:qk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <trendline enable-confidence-bands='true' enable-instant-analytics='true' enabled='true' exclude-color='false' exclude-intercept='false' fit='linear' />
+      </pane>
+    </panes>
+    <rows>[Sample - Superstore].[sum:ARR:qk]</rows>
+    <cols>[Sample - Superstore].[tdy:Close Date:qk]</cols>
+  </table>
+</bookmark>

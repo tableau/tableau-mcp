@@ -3,18 +3,21 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
+import {
+  AdminInsightsUnavailableError,
+  AdminOnlyError,
+  ArgsValidationError,
+} from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { QueryOutput, querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
+import { buildTruncationInfo, MAX_INT32, TruncationReason } from '../_lib/truncation.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
-import {
-  AdminInsightsQueryResult,
-  executeAdminInsightsQuery,
-  runAdminInsightsQuery,
-} from './adminInsightsToolBase.js';
+import { executeAdminInsightsQuery, runAdminInsightsQuery } from './adminInsightsToolBase.js';
 import {
   _buildProjectIdWarnings,
   _buildRowCapWarning,
@@ -51,11 +54,52 @@ const kindSchema = z.enum([
 ]);
 type Kind = z.infer<typeof kindSchema>;
 
+/**
+ * Known field captions per raw-VDS kind, rendered into the tool description so the model does not
+ * invent captions (W-23757366). Not exhaustive. Must stay a superset of the captions the packaged
+ * admin prompts send (src/prompts/userLicenseReclamation, src/prompts/_lib/jobPerformance.ts);
+ * queryAdminInsights.test.ts enforces this so the two cannot drift.
+ */
+export const KNOWN_FIELD_CAPTIONS: Readonly<
+  Record<Exclude<Kind, 'stale-content'>, ReadonlyArray<string>>
+> = {
+  'ts-events': ['Actor User Name', 'Event Type', 'Event Date', 'Item Type', 'Item Name'],
+  'ts-users': [
+    'User Email',
+    'User Name',
+    'Tableau Desktop - Last Access Date',
+    'Tableau Prep - Last Access Date',
+  ],
+  'site-content': ['Item Type', 'Item Name', 'Owner Email', 'Item Parent Project Name'],
+  'job-performance': [
+    'Item Name',
+    'Job Type',
+    'Job Result',
+    'Started At',
+    'Job Duration',
+    'Job Execution Duration',
+    'Schedule Name',
+    'Was Manual Run',
+    'Error Message',
+    'Extract File Size',
+  ],
+};
+
+const knownFieldCaptionsText = Object.entries(KNOWN_FIELD_CAPTIONS)
+  .map(([kind, captions]) => `${kind}: ${captions.join(', ')}`)
+  .join('; ');
+
+const UNKNOWN_FIELD_HINT =
+  ' Field captions must match the dataset exactly; see the query-admin-insights tool ' +
+  'description for known captions.';
+
 const paramsSchema = {
   kind: kindSchema.describe(
-    'Which admin-insights backend to query. Use "ts-events", "ts-users", "site-content", or ' +
-      '"job-performance" for raw VDS queries; use "stale-content" for the deterministic ' +
-      'stale-content anti-join.',
+    'Which admin-insights backend to query. Raw VDS queries: "ts-events" (audit events: access, ' +
+      'publish, update, delete), "ts-users" (per-user last login, Desktop/Prep access), ' +
+      '"site-content" (content metadata, owners, size), "job-performance" (extract-refresh and ' +
+      'subscription run history). Use "stale-content" for the deterministic stale-content ' +
+      'anti-join.',
   ),
   query: querySchema
     .optional()
@@ -70,7 +114,9 @@ const paramsSchema = {
     .optional()
     .describe(
       'Optional row limit. Applied when kind is "ts-events", "ts-users", "site-content", or ' +
-        '"job-performance"; IGNORED when kind is "stale-content".',
+        '"job-performance"; IGNORED when kind is "stale-content". When a row limit applies (this or ' +
+        'a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason ' +
+        "'admin-cap' means a server cap cut them — narrow filters or aggregate.",
     ),
   minAgeDays: z
     .number()
@@ -106,12 +152,23 @@ type StaleContentResult = {
   mcp?: { warnings: Array<_StaleReportWarning | AdminInsightsResolverWarning> };
 };
 
+type RawQueryResult = QueryOutput & {
+  mcp?: {
+    warnings?: AdminInsightsResolverWarning[];
+    resultInfo?: {
+      returnedCount: number;
+      truncated: boolean;
+      truncationReason?: TruncationReason;
+    };
+  };
+};
+
 export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
   const tool = new WebTool({
     server,
     name: 'query-admin-insights',
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `
 Queries the Tableau Admin Insights datasources on the current site. Restricted to site
@@ -119,8 +176,14 @@ administrators on Tableau Cloud sites with Admin Insights enabled.
 
 Dispatches on \`kind\`:
 - \`ts-events\` / \`ts-users\` / \`site-content\` / \`job-performance\` — raw VDS query. Pass
-  \`query\` (required) and optional \`limit\`. Use \`ts-users\` for per-user activity signals such
-  as last login and Tableau Desktop / Prep last-access dates.
+  \`query\` (required) and optional \`limit\`.
+  - \`ts-events\`: audit events (access, publish, update, delete).
+  - \`ts-users\`: per-user activity signals such as last login and Tableau Desktop / Prep
+    last-access dates.
+  - \`site-content\`: content metadata, owners, size.
+  - \`job-performance\`: extract-refresh and subscription run history.
+  Field captions are dataset-specific and must match exactly; do not guess. Known captions:
+  ${knownFieldCaptionsText}.
 - \`stale-content\` — server-side stale-content report. Pass optional \`minAgeDays\`, \`projectIds\`,
   \`itemTypes\`; do NOT pass \`query\` or \`limit\`.
 
@@ -257,7 +320,7 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
         });
       }
 
-      return await tool.logAndExecute<AdminInsightsQueryResult>({
+      return await tool.logAndExecute<RawQueryResult>({
         extra,
         args: { kind, query, limit },
         callback: async () => {
@@ -270,15 +333,52 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
 
           const toolCap = configWithOverrides.getMaxResultLimit(tool.name);
           const caps = [toolCap, limit].filter((v): v is number => typeof v === 'number' && v > 0);
-          const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
+          const rowLimit = caps.length > 0 ? Math.min(...caps, MAX_INT32 - 1) : undefined;
 
-          const datasetName = kindToDataset(kind);
-          return await runAdminInsightsQuery({
+          // The extra row tells "exactly rowLimit rows" apart from "more rows matched".
+          const result = await runAdminInsightsQuery({
             extra,
             jwtScopes: tool.requiredApiScopes,
-            datasetName,
+            datasetName: kindToDataset(kind),
             query,
-            rowLimit,
+            rowLimit: rowLimit === undefined ? undefined : rowLimit + 1,
+          });
+          // The caller authored this query, so an Unknown Field error is a bad caption in its
+          // fields, filters, or calculations — point it at the known captions. Server-built queries
+          // (stale-content, staleness checks) skip this path, where the hint would be misleading.
+          if (
+            result.isErr() &&
+            result.error instanceof AdminInsightsUnavailableError &&
+            /Unknown Field/i.test(result.error.message)
+          ) {
+            return new AdminInsightsUnavailableError(
+              `${result.error.message}${UNKNOWN_FIELD_HINT}`,
+            ).toErr();
+          }
+          if (result.isErr() || rowLimit === undefined) {
+            return result;
+          }
+
+          const data = result.value.data;
+          const truncatedByLimit = !!data && data.length > rowLimit;
+          if (data && truncatedByLimit) {
+            data.length = rowLimit;
+          }
+
+          return new Ok({
+            ...result.value,
+            mcp: {
+              ...result.value.mcp,
+              resultInfo: {
+                returnedCount: data?.length ?? 0,
+                ...buildTruncationInfo({
+                  truncatedByLimit,
+                  maxResultLimit: toolCap,
+                  llmLimit: limit,
+                  effectiveLimit: rowLimit,
+                }),
+              },
+            },
           });
         },
         constrainSuccessResult: (queryOutput) => ({ type: 'success', result: queryOutput }),

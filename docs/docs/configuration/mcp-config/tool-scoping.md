@@ -73,6 +73,9 @@ be included in the results of the tools. This variable is site and request overr
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
   scoping is disabled).
 - Has no impact on tools that return information about workbooks or views.
+- This is an absolute allowlist: when set, data sources outside it cannot be queried, and embedded
+  (workbook) data sources, which have no stable ID to list, cannot be queried at all. See
+  [Embedded data sources](#embedded-data-sources).
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
@@ -140,6 +143,21 @@ results of the tools. This variable is site and request overridable, see
 
 Example: `sales,marketing`
 
+## Data source publishing
+
+`publish-datasource` uses `INCLUDE_PROJECT_IDS` to limit the destination project, including when
+`overwrite` is true. Datasource-ID and tag bounds constrain queries and listings; they do not
+restrict replacing a same-name datasource within an allowed project. Tableau publish and overwrite
+permissions still apply.
+
+`datasourceFilePath` refers to the MCP server's filesystem and uses the process's file permissions.
+It is accepted only when the server runs over stdio. Don't put a stdio server behind a stdio-to-HTTP
+proxy: it still counts as stdio, so remote callers could read files on the server. HTTP servers must
+use `request-datasource-upload` and pass its staged upload ID, which requires `MCP_S3_BUCKET`. When
+`MCP_S3_BUCKET` is configured, the publisher also rejects local paths. Staged datasource uploads
+retain the **5 GB (5000000000 bytes)** limit. Files are buffered in server memory before the chunked
+Tableau upload.
+
 ## Data source permissions
 
 When [`INCLUDE_PROJECT_IDS`](#include_project_ids) and/or [`INCLUDE_TAGS`](#include_tags) is set,
@@ -155,3 +173,20 @@ available on Tableau Enterprise and Tableau Plus and if
 [`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests) is not set. Therefore,
 if you are using project or tag based tool scoping, we recommend that your users have view access on
 the projects where they have view access to the content in those projects.
+
+## Embedded data sources
+
+Embedded (workbook) data sources have no tags or stable ID of their own, so when tool scoping is
+enabled they are scoped by the workbook they belong to. To query an embedded data source or get its
+metadata, a client must also pass the ID of that workbook as `workbookLuid`. The server confirms the
+data source belongs to the workbook, then applies the workbook's scoping:
+
+- [`INCLUDE_PROJECT_IDS`](#include_project_ids): the workbook must be in an allowed project.
+- [`INCLUDE_TAGS`](#include_tags): the workbook must have an allowed tag.
+- [`INCLUDE_WORKBOOK_IDS`](#include_workbook_ids): when `workbookLuid` is passed, the workbook must
+  be in the list. On its own this variable does not restrict which data sources can be queried, so
+  it only gates an embedded data source when `workbookLuid` is provided.
+
+Under `INCLUDE_PROJECT_IDS` or `INCLUDE_TAGS`, an embedded data source cannot be queried without
+`workbookLuid`. If [`INCLUDE_DATASOURCE_IDS`](#include_datasource_ids) is set, embedded data sources
+cannot be queried at all: it is an absolute allowlist, and `workbookLuid` does not widen it.

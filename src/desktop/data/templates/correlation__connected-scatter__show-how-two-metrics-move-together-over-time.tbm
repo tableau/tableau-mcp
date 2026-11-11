@@ -1,0 +1,757 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Usually used to show how the relationship between 2 variables has changed over time.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Inequality' inline='true' name='federated.0bcq9g80509zc811j5es30x41zxx' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Inequality' name='excel-direct.1d12zes0w3p3e31dxnouo0ramomt'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='excel-direct.1d12zes0w3p3e31dxnouo0ramomt' name='Data' table='[Data$]' type='table'>
+          <columns gridOrigin='A1:P101:no:A1:P101:0' header='yes' outcome='6'>
+            <column datatype='integer' name='Year' ordinal='0' />
+            <column datatype='real' name='Bottom 90%' ordinal='1' />
+            <column datatype='real' name='Top 10%' ordinal='2' />
+            <column datatype='real' name='Top 5%' ordinal='3' />
+            <column datatype='real' name='Top 1%' ordinal='4' />
+            <column datatype='real' name='Top 0.5%' ordinal='5' />
+            <column datatype='real' name='Top 0.1%' ordinal='6' />
+            <column datatype='real' name='Top 0.1% with offshore assets' ordinal='7' />
+            <column datatype='real' name='Top 0.01%' ordinal='8' />
+            <column datatype='real' name='Top 10% to 1%' ordinal='9' />
+            <column datatype='real' name='Top 10% to 5%' ordinal='10' />
+            <column datatype='real' name='Top 5% to 1%' ordinal='11' />
+            <column datatype='real' name='Top 1% to 0.1%' ordinal='12' />
+            <column datatype='real' name='Top 1% to 0.5%' ordinal='13' />
+            <column datatype='real' name='Top 0.5% to 0.1%' ordinal='14' />
+            <column datatype='real' name='Top 0.1% to 0.01%' ordinal='15' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Year</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Year]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Year</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Bottom 90%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Bottom 90%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Bottom 90%</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 10%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 10%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 10%</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 5%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 5%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 5%</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 1%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 1%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 1%</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 0.5%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 0.5%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 0.5%</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 0.1%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 0.1%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 0.1%</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 0.1% with offshore assets</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 0.1% with offshore assets]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 0.1% with offshore assets</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 0.01%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 0.01%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 0.01%</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 10% to 1%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 10% to 1%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 10% to 1%</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 10% to 5%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 10% to 5%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 10% to 5%</remote-alias>
+            <ordinal>10</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 5% to 1%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 5% to 1%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 5% to 1%</remote-alias>
+            <ordinal>11</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 1% to 0.1%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 1% to 0.1%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 1% to 0.1%</remote-alias>
+            <ordinal>12</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 1% to 0.5%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 1% to 0.5%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 1% to 0.5%</remote-alias>
+            <ordinal>13</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 0.5% to 0.1%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 0.5% to 0.1%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 0.5% to 0.1%</remote-alias>
+            <ordinal>14</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Top 0.1% to 0.01%</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Top 0.1% to 0.01%]</local-name>
+            <parent-name>[Data]</parent-name>
+            <remote-alias>Top 0.1% to 0.01%</remote-alias>
+            <ordinal>15</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Data]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:P101:no:A1:P101:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='real' default-format='p0%' name='[Bottom 90%]' role='measure' type='quantitative' />
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column datatype='real' default-format='p0%' name='[Top 0.01%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 0.1% to 0.01%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 0.1% with offshore assets]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 0.1%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 0.5% to 0.1%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 0.5%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 1% to 0.1%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 1% to 0.5%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 1%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 10% to 1%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 10% to 5%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 10%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 5% to 1%]' role='measure' type='quantitative' />
+      <column datatype='real' default-format='p0%' name='[Top 5%]' role='measure' type='quantitative' />
+      <column datatype='integer' name='[Year]' role='dimension' type='quantitative' />
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/13/2018 08:47:43 AM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='100' timestamp-start='2018-07-13 08:47:43.196' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Year</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Year]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Year</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Data</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Bottom 90%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Bottom 90%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Bottom 90%</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>97</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 10%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 10%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 10%</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>97</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 5%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 5%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 5%</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>97</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 1%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 1%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 1%</remote-alias>
+              <ordinal>4</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 0.5%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 0.5%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 0.5%</remote-alias>
+              <ordinal>5</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 0.1%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 0.1%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 0.1%</remote-alias>
+              <ordinal>6</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 0.1% with offshore assets</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 0.1% with offshore assets]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 0.1% with offshore assets</remote-alias>
+              <ordinal>7</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 0.01%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 0.01%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 0.01%</remote-alias>
+              <ordinal>8</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 10% to 1%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 10% to 1%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 10% to 1%</remote-alias>
+              <ordinal>9</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>97</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 10% to 5%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 10% to 5%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 10% to 5%</remote-alias>
+              <ordinal>10</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>95</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 5% to 1%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 5% to 1%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 5% to 1%</remote-alias>
+              <ordinal>11</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>97</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 1% to 0.1%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 1% to 0.1%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 1% to 0.1%</remote-alias>
+              <ordinal>12</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 1% to 0.5%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 1% to 0.5%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 1% to 0.5%</remote-alias>
+              <ordinal>13</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>98</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 0.5% to 0.1%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 0.5% to 0.1%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 0.5% to 0.1%</remote-alias>
+              <ordinal>14</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Top 0.1% to 0.01%</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Top 0.1% to 0.01%]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Top 0.1% to 0.01%</remote-alias>
+              <ordinal>15</ordinal>
+              <family>Data</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>100</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='excel-direct.1d12zes0w3p3e31dxnouo0ramomt' name='Data' table='[Data$]' type='table'>
+                <columns gridOrigin='A1:P101:no:A1:P101:0' header='yes' outcome='6'>
+                  <column datatype='integer' name='Year' ordinal='0' />
+                  <column datatype='real' name='Bottom 90%' ordinal='1' />
+                  <column datatype='real' name='Top 10%' ordinal='2' />
+                  <column datatype='real' name='Top 5%' ordinal='3' />
+                  <column datatype='real' name='Top 1%' ordinal='4' />
+                  <column datatype='real' name='Top 0.5%' ordinal='5' />
+                  <column datatype='real' name='Top 0.1%' ordinal='6' />
+                  <column datatype='real' name='Top 0.1% with offshore assets' ordinal='7' />
+                  <column datatype='real' name='Top 0.01%' ordinal='8' />
+                  <column datatype='real' name='Top 10% to 1%' ordinal='9' />
+                  <column datatype='real' name='Top 10% to 5%' ordinal='10' />
+                  <column datatype='real' name='Top 5% to 1%' ordinal='11' />
+                  <column datatype='real' name='Top 1% to 0.1%' ordinal='12' />
+                  <column datatype='real' name='Top 1% to 0.5%' ordinal='13' />
+                  <column datatype='real' name='Top 0.5% to 0.1%' ordinal='14' />
+                  <column datatype='real' name='Top 0.1% to 0.01%' ordinal='15' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <window tab-color='#a65200'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <simple-id uuid='{2C7848BC-6749-49BF-B9B2-F375EC809F0B}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Inequality' name='federated.0bcq9g80509zc811j5es30x41zxx' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0bcq9g80509zc811j5es30x41zxx'>
+        <column datatype='real' default-format='p0%' name='[Bottom 90%]' role='measure' type='quantitative' />
+        <column datatype='real' default-format='p0%' name='[Top 0.01%]' role='measure' type='quantitative' />
+        <column datatype='integer' name='[Year]' role='dimension' type='quantitative' />
+        <column-instance column='[Year]' derivation='None' name='[none:Year:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Bottom 90%]' derivation='Sum' name='[sum:Bottom 90%:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Top 0.01%]' derivation='Sum' name='[sum:Top 0.01%:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' domain-expand='false' field='[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Bottom 90%:qk]' field-type='quantitative' scope='cols' type='space' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='show-null-value-warning' value='false' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='fill-above' id='refline0' value='#00000000' />
+        <format attr='fill-below' id='refline0' value='#00000000' />
+        <format attr='stroke-color' id='refline0' value='#b40f1e' />
+        <format attr='vertical-align' id='refline0' value='top' />
+        <format attr='background-color' id='refline0' value='#ffffff' />
+        <format attr='fill-above' id='refline1' value='#00000000' />
+        <format attr='fill-below' id='refline1' value='#00000000' />
+        <format attr='stroke-color' id='refline1' value='#b40f1e' />
+        <format attr='text-align' id='refline1' value='right' />
+        <format attr='text-align' id='refline0' value='auto' />
+        <format attr='wrap' id='refline1' value='on' />
+        <format attr='font-weight' id='refline0' value='bold' />
+        <format attr='color' id='refline0' value='#000000' />
+        <format attr='color' id='refline1' value='#000000' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='line-visibility' value='on' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='legend'>
+        <format attr='background-color' value='#ffffff' />
+      </style-rule>
+      <style-rule element='annotation'>
+        <format attr='rounding' id='annotation_0' value='medium' />
+        <format attr='body-type' id='annotation_0' value='none' />
+      </style-rule>
+      <style-rule element='parameter-ctrl'>
+        <format attr='font-family' value='Arial' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <encodings>
+          <path column='[federated.0bcq9g80509zc811j5es30x41zxx].[none:Year:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='font-weight' value='bold' />
+            <format attr='color-mode' value='auto' />
+            <format attr='font-size' value='8' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-mode' value='range' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-range-field' value='[federated.0bcq9g80509zc811j5es30x41zxx].[none:Year:qk]' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+            <format attr='mark-color' value='#9d7660' />
+            <format attr='mark-transparency' value='255' />
+          </style-rule>
+          <style-rule element='trendline'>
+            <format attr='stroke-size' value='1' />
+            <format attr='stroke-color' value='#000000' />
+            <format attr='line-pattern-only' value='solid' />
+            <format attr='line-visibility' value='on' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Top 0.01%:qk]</rows>
+    <cols>[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Bottom 90%:qk]</cols>
+    <mark-labels>
+      <mark-label id='1' label-state='on'>
+        <tuple-reference>
+          <tuple-descriptor>
+            <pane-descriptor>
+              <x-fields>
+                <field>[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Bottom 90%:qk]</field>
+              </x-fields>
+              <y-fields>
+                <field>[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Top 0.01%:qk]</field>
+              </y-fields>
+            </pane-descriptor>
+            <columns>
+              <field>[federated.0bcq9g80509zc811j5es30x41zxx].[none:Year:qk]</field>
+              <field>[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Bottom 90%:qk]</field>
+              <field>[federated.0bcq9g80509zc811j5es30x41zxx].[sum:Top 0.01%:qk]</field>
+            </columns>
+          </tuple-descriptor>
+          <tuple>
+            <value>1917</value>
+            <value>0.20487635893130551</value>
+            <value>0.094323836953905435</value>
+          </tuple>
+        </tuple-reference>
+      </mark-label>
+    </mark-labels>
+  </table>
+</bookmark>

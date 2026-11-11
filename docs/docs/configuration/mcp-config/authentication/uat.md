@@ -14,6 +14,14 @@ For example, for the [`query-datasource`](../../../tools/data-qna/query-datasour
 it internally calls into VizQL Data Service, the JWT will only have the
 `tableau:viz_data_service:read` scope.
 
+When registering tools, the server checks whether the site supports Pulse and AI-powered Pulse
+insights (Tableau+). If the Knowledge tools are on
+([`KNOWLEDGE_TOOLS_ENABLED=true`](../env-vars.md#knowledge_tools_enabled)), it also checks for
+Tableau Knowledge. The checks use `tableau:insight_definitions_metrics:read`,
+`tableau:entitlements:read`, and (Knowledge only) `tableau:knowledge:read`. If the UAT config
+doesn't grant a check's scope, the check is denied and those tools are left out, even on a site that
+supports the feature. Grant the scope to get them back.
+
 ## Prerequisites
 
 - Tableau Cloud only, December 2025 release.
@@ -101,5 +109,8 @@ Example:
   "https://tableau.com/siteId": "c1dd3d70-dca2-400a-a0dd-cae9b658587a"
 }
 ```
+
+`{OAUTH_USERNAME}` must sit inside a quoted JSON string value, as in the example. The username is
+JSON-escaped before it is inserted.
 
 [uat]: https://help.tableau.com/current/api/cloud-manager/en-us/docs/unified_access_tokens.html

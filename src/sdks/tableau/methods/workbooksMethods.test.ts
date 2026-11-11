@@ -205,6 +205,59 @@ describe('WorkbooksMethods', () => {
         },
       );
     });
+
+    it('PUTs a PersonalSpace location when location is given', async () => {
+      const mockUpdateWorkbook = vi.fn().mockResolvedValue({
+        workbook: { id: 'wb-1', location: { id: 'ps-1', type: 'PersonalSpace' } },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        updateWorkbook: mockUpdateWorkbook,
+      };
+
+      await workbooksMethods.updateWorkbook({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+        location: 'ps-1',
+      });
+
+      expect(mockUpdateWorkbook).toHaveBeenCalledWith(
+        { workbook: { location: { id: 'ps-1', type: 'PersonalSpace' } } },
+        {
+          params: { siteId: 'site-1', workbookId: 'wb-1' },
+          headers: { Authorization: 'Bearer test' },
+        },
+      );
+    });
+
+    it('rejects when both or neither of projectId and location are given', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      const mockUpdateWorkbook = vi.fn();
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = { updateWorkbook: mockUpdateWorkbook };
+
+      await expect(
+        workbooksMethods.updateWorkbook({
+          siteId: 'site-1',
+          workbookId: 'wb-1',
+          projectId: 'project-2',
+          location: 'ps-1',
+        }),
+      ).rejects.toThrow('accepts only one of `projectId` or `location`, not both');
+      await expect(
+        workbooksMethods.updateWorkbook({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).rejects.toThrow('requires one of `projectId` or `location`');
+      expect(mockUpdateWorkbook).not.toHaveBeenCalled();
+    });
   });
 
   describe('publishWorkbook', () => {
@@ -390,7 +443,7 @@ describe('WorkbooksMethods', () => {
           projectId: 'project-1',
           location: 'ps-luid',
         }),
-      ).rejects.toThrow('exactly one of `projectId` or `location`');
+      ).rejects.toThrow('accepts only one of `projectId` or `location`, not both');
     });
 
     it('throws when neither projectId nor location is provided', async () => {
@@ -411,7 +464,7 @@ describe('WorkbooksMethods', () => {
           workbookType: 'twbx',
           name: 'My Workbook',
         }),
-      ).rejects.toThrow('exactly one of `projectId` or `location`');
+      ).rejects.toThrow('requires one of `projectId` or `location`');
     });
 
     it('passes overwrite through as a query param when provided', async () => {

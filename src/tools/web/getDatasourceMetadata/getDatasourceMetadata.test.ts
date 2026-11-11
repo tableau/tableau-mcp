@@ -2,14 +2,20 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
+import {
+  stubDefaultEnvVars,
+  testProductVersion,
+  testProductVersion2025_3,
+} from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { FieldsResult, fieldsResultSchema } from './datasourceMetadataUtils.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -250,6 +256,9 @@ const mocks = vi.hoisted(() => ({
   mockGetDatasourceModel: vi.fn(),
   mockGraphql: vi.fn(),
   mockTryQueryDatasource: vi.fn(),
+  mockQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGetWorkbook: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -265,10 +274,19 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
       datasourcesMethods: {
         tryQueryDatasource: mocks.mockTryQueryDatasource,
+        queryDatasource: mocks.mockQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
+        getWorkbook: mocks.mockGetWorkbook,
       },
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
@@ -284,6 +302,127 @@ describe('getDatasourceMetadataTool', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  describe('field selection', () => {
+    beforeEach(() => {
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+      mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    });
+
+    async function metadata(
+      params: Parameters<typeof getToolResult>[0] = {},
+    ): Promise<FieldsResult> {
+      const result = await getToolResult(params);
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return fieldsResultSchema.parse(JSON.parse(result.content[0].text));
+    }
+
+    it('preserves full field details and non-field metadata when selecting captions', async () => {
+      const baseline = await metadata();
+      const selected = await metadata({ fieldNames: ['Profit Ratio', 'Missing'] });
+      expect(selected.fieldGroups.flatMap((group) => group.fields)).toEqual(
+        flattenResponseFields(baseline).filter((field) => field.name === 'Profit Ratio'),
+      );
+      expect({ ...selected, fieldGroups: baseline.fieldGroups, mcp: undefined }).toEqual(baseline);
+      expect(selected.mcp?.resultInfo).toEqual({
+        totalFields: 3,
+        matchedFields: 1,
+        unknownFieldNames: ['Missing'],
+      });
+      expect(baseline).not.toHaveProperty('mcp');
+    });
+
+    it.each([
+      ['PROFIT RATIO', ['Profit Ratio']],
+      ['ORDERED', ['Quantity']],
+      ['not present', []],
+    ])('searches captions and descriptions without case sensitivity: %s', async (search, names) => {
+      const selected = await metadata({ search });
+      expect(flattenResponseFields(selected).map((field) => field.name)).toEqual(names);
+      expect(selected.fieldGroups.every((group) => group.fields.length)).toBe(true);
+    });
+
+    it('combines selectors with AND and distinguishes missing names from search exclusions', async () => {
+      const selected = await metadata({
+        fieldNames: ['Quantity', 'Product Name', 'Missing'],
+        search: 'ordered',
+      });
+      expect(flattenResponseFields(selected).map((field) => field.name)).toEqual(['Quantity']);
+      expect(selected.mcp?.resultInfo.unknownFieldNames).toEqual(['Missing']);
+    });
+
+    it('matches exact captions case-sensitively and reports missing names once', async () => {
+      const selected = await metadata({ fieldNames: ['quantity', 'quantity'] });
+      expect(selected.fieldGroups).toEqual([]);
+      expect(selected.mcp?.resultInfo.unknownFieldNames).toEqual(['quantity']);
+    });
+
+    it('returns every duplicate-caption match across logical tables', async () => {
+      const response = structuredClone(mockReadMetadataResponses.success);
+      response.data.push({
+        ...response.data[2],
+        fieldName: 'Other Quantity',
+        logicalTableId: 'other',
+      });
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(response));
+      const selected = await metadata({ fieldNames: ['Quantity'] });
+      expect(flattenResponseFields(selected)).toHaveLength(2);
+      expect(flattenResponseFields(selected).map((field) => field.fieldName)).toEqual([
+        response.data[2].fieldName,
+        'Other Quantity',
+      ]);
+      expect(selected.fieldGroups.map((group) => group.logicalTableId)).toEqual([
+        'Orders_123456789',
+        'other',
+      ]);
+    });
+
+    it.each(['disabled', 'failed', 'empty'])(
+      'selects fields on Metadata API %s paths',
+      async (mode) => {
+        if (mode === 'disabled') vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+        if (mode === 'failed') mocks.mockGraphql.mockRejectedValue(new Error('unavailable'));
+        if (mode === 'empty') mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
+        const selected = await metadata({ fieldNames: ['Quantity'] });
+        expect(flattenResponseFields(selected).map((field) => field.name)).toEqual(['Quantity']);
+        expect(selected.parameters).toHaveLength(4);
+      },
+    );
+
+    it('validates empty selectors and trims search input', async () => {
+      const tool = getGetDatasourceMetadataTool(new WebMcpServer(), testProductVersion);
+      const paramsSchema = await Provider.from(tool.paramsSchema);
+      expect(paramsSchema.fieldNames.safeParse([]).success).toBe(false);
+      expect(paramsSchema.fieldNames.safeParse(['']).success).toBe(false);
+      expect(paramsSchema.search.safeParse('  ').success).toBe(false);
+      expect(paramsSchema.search.parse(' Quantity ')).toBe('Quantity');
+    });
+
+    it('searches the Metadata API fallback when VDS returns no field data', async () => {
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.nullData));
+      const selected = await metadata({ search: 'BINNED' });
+      expect(flattenResponseFields(selected).map((field) => field.name)).toEqual(['Binned Field']);
+      expect(selected.mcp?.resultInfo).toMatchObject({ totalFields: 4, matchedFields: 1 });
+    });
+
+    it('reduces a wide response through selection while leaving the full catalog available', async () => {
+      const response = structuredClone(mockReadMetadataResponses.success);
+      response.data = Array.from({ length: 553 }, (_, index) => ({
+        ...response.data[0],
+        fieldName: `internal_${index}`,
+        fieldCaption: `Field ${index}`,
+      }));
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(response));
+      const baseline = await metadata();
+      const selected = await metadata({ fieldNames: ['Field 0', 'Field 552'] });
+      expect(flattenResponseFields(baseline)).toHaveLength(553);
+      expect(flattenResponseFields(selected)).toHaveLength(2);
+      expect(Buffer.byteLength(JSON.stringify(selected))).toBeLessThan(
+        Buffer.byteLength(JSON.stringify(baseline)) / 10,
+      );
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -302,6 +441,23 @@ describe('getDatasourceMetadataTool', () => {
       openWorldHint: false,
     });
   });
+
+  it.each([
+    [testProductVersion2025_2, false],
+    [testProductVersion2025_3, true],
+    [{ value: '2026.3.0', build: '20263.26.1001.1200' }, true],
+  ] as const)(
+    'advertises field-name guidance according to version %s',
+    async (version, supported) => {
+      const tool = getGetDatasourceMetadataTool(new WebMcpServer(), version);
+      const description = await Provider.from(tool.description);
+      expect(description.includes('interpretFieldCaptionsAsFieldNames')).toBe(supported);
+      expect(description).toContain('metadata');
+      if (version.value === '2026.3.0') {
+        expect(description).toContain('embedded');
+      }
+    },
+  );
 
   it('should successfully merge data from both APIs and return enriched metadata', async () => {
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
@@ -1035,7 +1191,10 @@ describe('getDatasourceMetadataTool', () => {
     );
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
 
-    const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
+    const result = await callback(
+      { datasourceLuid: '', workbookLuid: undefined, fieldNames: undefined, search: undefined },
+      getMockRequestHandlerExtra(),
+    );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -1109,17 +1268,78 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
+
+  describe('embedded datasources under a project scope', () => {
+    const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
+    const workbookProjectId = 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d';
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_PROJECT_IDS', workbookProjectId);
+      mocks.mockQueryDatasource.mockResolvedValue({
+        id: 'test-luid',
+        name: 'Embedded',
+        parentType: 'Workbook',
+        tags: {},
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: 'test-luid' } },
+      ]);
+      mocks.mockGetWorkbook.mockResolvedValue({
+        id: workbookLuid,
+        name: 'Workbook',
+        project: { id: workbookProjectId, name: 'Project' },
+        tags: {},
+      });
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+      mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    });
+
+    it('should return metadata for an embedded datasource when its workbook is allowed', async () => {
+      const result = await getToolResult({ workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockReadMetadata).toHaveBeenCalled();
+    });
+
+    it('should not return metadata for an embedded datasource without a workbookLuid', async () => {
+      const result = await getToolResult();
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'can only be queried by also providing the workbookLuid',
+      );
+      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function getToolResult(
-  params: { productVersion?: ProductVersion } = {},
+  params: {
+    productVersion?: ProductVersion;
+    workbookLuid?: string;
+    fieldNames?: [string, ...string[]];
+    search?: string;
+  } = {},
 ): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
     new WebMcpServer(),
     params.productVersion ?? testProductVersion,
   );
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
+  return await callback(
+    {
+      datasourceLuid: 'test-luid',
+      workbookLuid: params.workbookLuid,
+      fieldNames: params.fieldNames,
+      search: params.search,
+    },
+    getMockRequestHandlerExtra(),
+  );
 }
 
 function flattenResponseFields(responseData: Record<string, unknown>): Record<string, unknown>[] {

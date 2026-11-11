@@ -11,6 +11,7 @@ Generates an insight bundle for the current aggregated value for a Pulse metric.
 - [Generate current metric value insight bundle](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBundleBAN)
 - [Generate basic insight bundle](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBundleBasic)
 - [Generate detail insight bundle](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBundleDetail)
+- [Generate exploration insight bundle](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBundleExploration)
 - [Generate springboard insight bundle](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBundleSpringboard)
 
 ## Required arguments
@@ -107,6 +108,47 @@ Example:
 }
 ```
 
+### Measurement period options
+
+These fields move the analysis window. All of them are inside the `bundleRequest` argument.
+
+| Field             | Where                                                                                 | What it does                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `now`             | `bundle_request.options.now`                                                          | Anchors the analysis to a date instead of today. Format `YYYY-MM-DD` or `YYYY-MM-DD HH:MM:SS` (24-hour). Leave it out or use an empty string for today-relative analysis. When set, `time_zone` is ignored. |
+| `specific_period` | `bundle_request.input.metric.metric_specification.measurement_period.specific_period` | An exact period or date range. `date` is required. `end_date` is optional and must not be before `date`. Both are `YYYY-MM-DD`.                                                                             |
+| `last_x_period`   | `bundle_request.input.metric.metric_specification.measurement_period.last_x_period`   | A rolling window the service supports (see below).                                                                                                                                                          |
+
+To analyze one past month, set `now` to the last day of that month, `range` to
+`RANGE_CURRENT_PARTIAL` and `granularity` to `GRANULARITY_BY_MONTH`. `RANGE_LAST_COMPLETE` targets
+the period before the anchor's period, not the anchor's own.
+
+`specific_period` with only `date` covers the one period (at the chosen `granularity`) that contains
+that date. With `end_date`, it runs from the start of `date`'s period to the end of `end_date`'s
+period.
+
+`last_x_period` accepts exactly two shapes:
+
+- Rolling days: `period` 7, 14, 30, 60 or 90, `period_type` `GRANULARITY_BY_DAY`,
+  `include_current_period` `true`, and `granularity` `GRANULARITY_BY_DAY`.
+- Trailing year by month: `period` 1, `period_type` `GRANULARITY_BY_YEAR`, `include_current_period`
+  `false`, and `granularity` `GRANULARITY_BY_MONTH`.
+
+The tool checks the request before it calls Pulse. If a rule below is broken, the call fails with
+`Payload validation failed before calling the Pulse Insights API` and a numbered list of the
+problems. The `RANGE_BY_CONFIG` rules exist because the service ignores these fields under any other
+`range` and would return an insight for a different period. The tool rejects the `now` combinations
+because the service's behavior for them is not defined.
+
+- `specific_period` and `last_x_period` need `range` set to `RANGE_BY_CONFIG`.
+- `specific_period` and `last_x_period` cannot both be set.
+- A day-based `last_x_period` needs `granularity` `GRANULARITY_BY_DAY`.
+- The trailing-year `last_x_period` needs `granularity` `GRANULARITY_BY_MONTH`.
+- `now` cannot be combined with `specific_period`.
+- `now` cannot be combined with `last_x_period`.
+
+A `last_x_period` shape outside the two above, or an `end_date` before `date`, is rejected when the
+arguments are parsed, before the checks above run.
+
 ## Optional arguments
 
 ### `bundleType`
@@ -119,6 +161,16 @@ The type of bundle to generate. The default is `ban`.
 | `basic`       | Return a basic insight bundle. Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data. |
 | `springboard` | Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.                                                                                                                                                             |
 | `detail`      | Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.                     |
+| `exploration` | Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups. Available in API 3.26 (Tableau Cloud September 2025) and later. Not available for Tableau Server.                                                                             |
+
+### `verbosity`
+
+How much of the response to return. The default is `full`.
+
+| Value  | Description                                                                            |
+| ------ | -------------------------------------------------------------------------------------- |
+| `full` | Returns the response as Pulse sent it, including the `viz` chart specifications.       |
+| `slim` | Removes the large `viz` (Vega chart-spec) blobs from every insight and summary result. |
 
 ## Example result
 

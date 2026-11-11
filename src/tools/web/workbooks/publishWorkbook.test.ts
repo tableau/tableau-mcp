@@ -3,13 +3,14 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { AxiosError } from 'axios';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { mockWorkbook } from './mockWorkbook.js';
 import { getPublishWorkbookTool } from './publishWorkbook.js';
 
@@ -81,6 +82,10 @@ const validLocalArgs = {
   projectId: 'target-project-id',
 };
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('publishWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,9 +112,7 @@ describe('publishWorkbookTool', () => {
       ...mockWorkbook,
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
-    mocks.mockIsFeatureEnabled.mockImplementation(
-      async (flag) => flag === 'authoring-tools' || flag === 'data-apps',
-    );
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'data-apps');
     // Benign default so project-publish tests that don't assert on permissions stay green.
     mocks.mockQueryWorkbookPermissions.mockResolvedValue([]);
   });
@@ -231,28 +234,27 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
+  it('is enabled for ChatGPT', async () => {
     const tool = getPublishWorkbookTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled for a non-Slack client', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is enabled when the authoring-tools flag is ON for an unknown client', async () => {
+  it('is enabled for an unknown client', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer({ clientId: 'https://example.com/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools flag is ON for Slack', async () => {
+  it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     const tool = getPublishWorkbookTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -260,7 +262,7 @@ describe('publishWorkbookTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when the authoring-tools and authoring-with-slack flags are ON', async () => {
+  it('is enabled for Slack when the authoring-with-slack flag is ON', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
     const tool = getPublishWorkbookTool(
@@ -271,19 +273,10 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when there is no OAuth client id (stdio)', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
-    const tool = getPublishWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('validates, publishes to the requested project, and returns the published workbook', async () => {
@@ -333,6 +326,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -386,14 +380,93 @@ describe('publishWorkbookTool', () => {
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishWorkbook.mockRejectedValue(
-      new Error('Tableau publishWorkbook request failed with status 400: bad workbook'),
+      tableauAxiosError(400, {
+        error: { code: '400011', summary: 'Bad Request', detail: 'The workbook is corrupt.' },
+      }),
     );
 
     const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('bad workbook');
+    expect(result.content[0].text).toBe(
+      'Tableau could not publish the workbook. Check that the workbook file is valid. Tableau error 400011: Bad Request: The workbook is corrupt.',
+    );
+  });
+
+  it.each([
+    [400, '400020', 'The workbook file name must end in .twb or .twbx.'],
+    [403, '403007', 'You may lack publish permission on the project'],
+    [403, '403130', 'Set overwrite to true to replace it'],
+    [404, '404005', 'Use list-projects to find a valid projectId.'],
+    [404, '404006', 'Retry with overwrite set to false.'],
+  ])(
+    'maps documented publish error %i/%s to actionable guidance',
+    async (status, code, guidance) => {
+      mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+        timestamp: '2026-06-10T14:32:18.456Z',
+        uploadId: 'validated-upload-id',
+      });
+      mocks.mockPublishWorkbook.mockRejectedValue(
+        tableauAxiosError(status, { error: { code, detail: 'Tableau detail.' } }),
+      );
+
+      const result = await getToolResult(validArgs);
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(guidance);
+      expect(result.content[0].text).toContain(`Tableau error ${code}: Tableau detail.`);
+    },
+  );
+
+  it("returns Tableau's reason for an undocumented 4xx publish error", async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(
+      tableauAxiosError(409, { error: { code: '409093', detail: 'Workbook already exists.' } }),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      'Tableau rejected the workbook publish. Tableau error 409093: Workbook already exists.',
+    );
+  });
+
+  it('falls back to the generic error for a 400 without a Tableau error body', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(tableauAxiosError(400, '<html>Bad Request</html>'));
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Request failed with status code 400');
+  });
+
+  it('does not map 5xx publish failures', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(
+      tableauAxiosError(500, { error: { code: '500000', detail: 'Internal error.' } }),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Request failed with status code 500');
+    expect(result.content[0].text).not.toContain('Tableau error');
   });
 
   it('uploads and publishes a local TWBX workbook file path without a separate validation step', async () => {
@@ -495,12 +568,25 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.twb',
       workbook: Buffer.from('<workbook source="new" />'),
     });
+  });
+
+  it('fails closed without reading the staged upload when the session has no valid tenant LUIDs', async () => {
+    const result = await getToolResult(validArgs, { extraOverrides: { _userLuid: 'not-a-luid' } });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "couldn't determine the signed-in Tableau site and user",
+    );
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('validates and publishes a local workbook file path', async () => {
@@ -829,16 +915,18 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
+      'tableau:mcp_site_settings:read',
     ]);
 
     mocks.useRestApiCalls.length = 0;
-    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     mocks.mockPublishWorkbook.mockResolvedValue(mockWorkbook);
     await getToolResult(validArgs);
     expect(mocks.useRestApiCalls[0]?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
+      'tableau:mcp_site_settings:read',
     ]);
     expect(mocks.useRestApiCalls[1]?.jwtScopes).toEqual(['tableau:permissions:read']);
     expect(mocks.useRestApiCalls).toHaveLength(2);
@@ -882,6 +970,7 @@ describe('publishWorkbookTool', () => {
             'tableau:workbooks:create',
             'tableau:file_uploads:create',
             'tableau:projects:read',
+            'tableau:mcp_site_settings:read',
           ],
         },
         { jwtScopes: ['tableau:permissions:read'] },
@@ -970,7 +1059,7 @@ describe('publishWorkbookTool', () => {
   });
 
   it('returns permissions when data-apps is disabled', async () => {
-    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -994,7 +1083,7 @@ describe('publishWorkbookTool', () => {
   it('still reads permissions if data-apps is disabled while publishing', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
     mocks.mockPublishWorkbook.mockImplementation(async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
       return mockWorkbook;
     });
 
@@ -1053,8 +1142,10 @@ describe('publishWorkbookTool', () => {
         expect(response.permissions).toEqual([]);
         expect(response.permissionsNote).toBeUndefined();
       } else {
+        // Optional scope withheld: the read is skipped (consent boundary), not attempted-and-failed,
+        // so the note names the missing scope rather than reporting a retrieval failure.
         expect(response.permissions).toBeUndefined();
-        expect(response.permissionsNote).toContain('could not be retrieved');
+        expect(response.permissionsNote).toContain('was not granted');
         expect(response).not.toHaveProperty('permissionsMessage');
       }
     },
@@ -1260,6 +1351,12 @@ describe('publishWorkbookTool', () => {
   });
 });
 
+function tableauAxiosError(status: number, data: unknown): AxiosError {
+  const error = new AxiosError(`Request failed with status code ${status}`);
+  error.response = { status, data } as AxiosError['response'];
+  return error;
+}
+
 async function getToolResult(
   params: {
     workbookUploadId?: string;
@@ -1269,7 +1366,7 @@ async function getToolResult(
     personalSpace?: boolean;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
+  options: Parameters<typeof getMockExtra>[0] = {},
 ): Promise<CallToolResult> {
   const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -1289,11 +1386,13 @@ async function getToolResult(
 function getMockExtra({
   boundedProjectIds = null,
   bucketS3Enabled = true,
+  extraOverrides = {},
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
+  extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
+  const extra = getMockRequestHandlerExtra(extraOverrides);
   return {
     ...extra,
     getConfigWithOverrides: vi.fn().mockResolvedValue({

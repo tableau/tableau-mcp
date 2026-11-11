@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
@@ -15,7 +16,13 @@ import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 import { formatProjectPhrase } from './deleteContent.js';
 import { AllEvidence, AppApprovalEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
+import {
+  checkCleanupBatchAge,
+  cleanupDateSchema,
+  getUtcCleanupDate,
+} from './pendingDeletionTag.js';
 import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
+import { checkContentStillStale } from './stalenessCheck.js';
 
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
 
@@ -26,16 +33,21 @@ const paramsSchema = {
   resourceId: luidSchema.describe(
     'The LUID of the workbook or data source, or the UUID of the extract refresh task.',
   ),
-  tag: z
-    .string()
-    .max(200)
-    .regex(
-      /^[A-Za-z0-9 _-]+$/,
-      'tag must contain only letters, numbers, spaces, underscores, and dashes',
-    )
+  cleanupDate: cleanupDateSchema
     .optional()
     .describe(
-      'Only for resourceType="workbook" or "datasource": the pending-deletion tag label used in the preview.',
+      'Only for resourceType="workbook" or "datasource": the cleanup batch date (YYYY-MM-DD, UTC) ' +
+        'from the preview panel. Defaults to today.',
+    ),
+  minAgeDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(3650)
+    .optional()
+    .describe(
+      'Only for resourceType="workbook" or "datasource": the staleness threshold the preview used. ' +
+        'Defaults to the server stale-content threshold.',
     ),
 };
 
@@ -47,7 +59,8 @@ export const getConfirmDeleteContentTool = (server: WebMcpServer): WebTool<typeo
     name: 'confirm-delete-content',
     disabled: new Provider(
       async () =>
-        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+        !(await isAdminToolsEnabled(config)) ||
+        !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `
@@ -56,7 +69,8 @@ Confirms and executes a content deletion previously previewed by \`delete-conten
 the rendered MCP App interface, never by the assistant.
 
 Before executing the deletion, the server re-verifies that a human approved it in the App within the
-allowed time window. If the check fails the deletion is rejected and the user must preview again.
+allowed time window, that the item carries the preview's \`pending-deletion-YYYY-MM-DD\` batch tag
+(and the batch is within the server's max batch age), and that it is still stale per Admin Insights. If any check fails the deletion is rejected.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -76,6 +90,18 @@ allowed time window. If the check fails the deletion is rejected and the user mu
         extra,
         args,
         callback: async () => {
+          const cleanupDate = args.cleanupDate ?? getUtcCleanupDate();
+          const minAgeDays =
+            args.minAgeDays ?? (await extra.getConfigWithOverrides()).staleContentMinAgeDays;
+          if (args.resourceType !== 'extract-refresh-task') {
+            const expired = checkCleanupBatchAge({
+              cleanupDate,
+              maxAgeDays: config.pendingDeletionMaxAgeDays,
+            });
+            if (expired) {
+              return expired.toErr();
+            }
+          }
           return await useRestApi({
             ...extra,
             jwtScopes: confirmDeleteContentTool.requiredApiScopes,
@@ -114,11 +140,19 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                     mode: 'preview-confirm',
                     phase: 'confirm',
                     evidence: new AllEvidence([
-                      new TagEvidence({ tag: args.tag ?? '', kind: 'workbook' }),
+                      new TagEvidence({ cleanupDate, kind: 'workbook' }),
                       new AppApprovalEvidence('delete-content'),
                     ]),
                     resolveTarget,
                     fallbackTargetKind: 'workbook',
+                    precondition: () =>
+                      checkContentStillStale({
+                        restApi,
+                        resourceType: 'workbook',
+                        resourceId,
+                        minAgeDays,
+                        cleanupDate,
+                      }),
                   });
                   if (guardResult.isErr()) {
                     return guardResult.error.toErr();
@@ -174,11 +208,19 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                     mode: 'preview-confirm',
                     phase: 'confirm',
                     evidence: new AllEvidence([
-                      new TagEvidence({ tag: args.tag ?? '', kind: 'datasource' }),
+                      new TagEvidence({ cleanupDate, kind: 'datasource' }),
                       new AppApprovalEvidence('delete-content'),
                     ]),
                     resolveTarget,
                     fallbackTargetKind: 'datasource',
+                    precondition: () =>
+                      checkContentStillStale({
+                        restApi,
+                        resourceType: 'datasource',
+                        resourceId,
+                        minAgeDays,
+                        cleanupDate,
+                      }),
                   });
                   if (guardResult.isErr()) {
                     return guardResult.error.toErr();

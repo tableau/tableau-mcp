@@ -49,8 +49,14 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | `pageSize` | number | No | Maximum number of results to return after filtering (client-side). |
 | `limit` | number | No | Maximum number of results to return after filtering (client-side). If both `pageSize` and `limit` are set, the smaller value applies. |
 
+The tool also honors the admin result cap: it returns at most
+[`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit) tasks, or
+[`MAX_RESULT_LIMITS=list-extract-refresh-tasks:N`](../../configuration/mcp-config/env-vars.md#max_result_limits)
+when set. When `pageSize`, `limit`, and the cap all apply, the smallest wins. The response does not
+say whether the cap cut the list.
+
 :::note[API Limitation]
-The Tableau REST API does not support server-side filtering or pagination for extract refresh tasks — all tasks are fetched in a single request. This tool applies `filter`, `pageSize`, and `limit` client-side after fetching.
+The Tableau REST API does not support server-side filtering or pagination for extract refresh tasks — all tasks are fetched in a single request. This tool applies `filter`, `pageSize`, `limit`, and the admin cap client-side after fetching, so the cap bounds the response size but not the work done against Tableau.
 :::
 
 ### Filterable fields

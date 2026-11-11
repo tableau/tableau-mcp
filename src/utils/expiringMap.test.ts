@@ -50,6 +50,17 @@ describe('ExpiringMap', () => {
     expect(map.get('key')).toBeUndefined();
   });
 
+  it('unrefs the expiry timer, including on overwrite, so a cached entry does not keep the process alive', () => {
+    const map = new ExpiringMap<string, string>({ defaultExpirationTimeMs: 10000 });
+    const timers = (map as unknown as { timeouts: Map<string, NodeJS.Timeout> }).timeouts;
+
+    map.set('key', 'value');
+    expect(timers.get('key')?.hasRef()).toBe(false);
+
+    map.set('key', 'value2');
+    expect(timers.get('key')?.hasRef()).toBe(false);
+  });
+
   it('should throw error when expiration time is less than or equal to 0', () => {
     expect(() => new ExpiringMap<string, string>({ defaultExpirationTimeMs: 0 })).toThrow(
       'Expiration time must be greater than 0',

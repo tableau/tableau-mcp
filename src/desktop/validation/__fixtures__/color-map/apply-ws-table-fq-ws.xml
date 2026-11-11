@@ -1,0 +1,36 @@
+<!-- Live probe apply-ws-table-fq.xml, verbatim: nothing cut. -->
+<worksheet name='B2' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='superstore' />
+      </datasources>
+      <datasource-dependencies datasource='superstore'>
+        <column caption='Is Tech 2' datatype='boolean' name='[Calculation_B002]' role='dimension' type='nominal'>
+          <calculation class='tableau' formula='[Category] = &quot;Technology&quot;' />
+        </column>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Calculation_B002]' derivation='None' name='[none:Calculation_B002:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style><style-rule element='mark'><encoding attr='color' field='[superstore].[none:Calculation_B002:nk]' type='palette'><map to='#ff0000'><bucket>true</bucket></map><map to='#d4c37a'><bucket>false</bucket></map></encoding></style-rule></style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[superstore].[none:Calculation_B002:nk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[superstore].[sum:Sales:qk]</rows>
+    <cols>[superstore].[none:Category:nk]</cols>
+  </table>
+  <simple-id uuid='{B0000000-0000-4000-8000-000000000002}' />
+</worksheet>

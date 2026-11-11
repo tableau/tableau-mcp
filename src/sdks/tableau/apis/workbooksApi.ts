@@ -100,7 +100,7 @@ const queryWorkbookPermissionsEndpoint = makeEndpoint({
 /**
  * Update Workbook
  * PUT /api/api-version/sites/site-id/workbooks/workbook-id
- * Modifies the project of the specified workbook.
+ * Modifies the project or Personal Space location of the specified workbook.
  * Tableau Cloud scope: tableau:workbooks:update
  * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
  */
@@ -108,17 +108,35 @@ const updateWorkbookEndpoint = makeEndpoint({
   method: 'put',
   path: '/sites/:siteId/workbooks/:workbookId',
   alias: 'updateWorkbook',
-  description: 'Modifies the project of the specified workbook.',
+  description: 'Modifies the project or Personal Space location of the specified workbook.',
   parameters: [
     pathParam('siteId', 'segment'),
     pathParam('workbookId'),
     {
       name: 'body',
       type: 'Body',
-      schema: z.object({ workbook: z.object({ project: z.object({ id: z.string() }) }) }),
+      schema: z.object({
+        workbook: z.union([
+          z.object({ project: z.object({ id: z.string() }) }),
+          z.object({ location: z.object({ id: z.string(), type: z.literal('PersonalSpace') }) }),
+        ]),
+      }),
     },
   ],
   response: z.object({ workbook: workbookSchema.partial() }),
+});
+
+const deleteTagFromWorkbookEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/workbooks/:workbookId/tags/:tagName',
+  alias: 'deleteTagFromWorkbook',
+  description: 'Removes a single tag (by label) from the specified workbook.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
 });
 
 const workbooksApi = makeApi([
@@ -128,6 +146,7 @@ const workbooksApi = makeApi([
   queryWorkbookPermissionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
+  deleteTagFromWorkbookEndpoint,
   updateWorkbookEndpoint,
 ]);
 

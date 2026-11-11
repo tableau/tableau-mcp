@@ -1,9 +1,12 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
-import { queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import * as loggerModule from '../../../logging/logger.js';
+import { Query, queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -57,6 +60,10 @@ const mockVdsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
+  mockReadMetadata: vi.fn(),
+  mockRestQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGetWorkbook: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -64,18 +71,32 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       signIn: vi.fn(),
       signOut: vi.fn(),
+      siteId: 'test-site-id',
       vizqlDataServiceMethods: {
         queryDatasource: mocks.mockQueryDatasource,
+        readMetadata: mocks.mockReadMetadata,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockRestQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
+        getWorkbook: mocks.mockGetWorkbook,
       },
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('queryDatasourceTool', () => {
   const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockReadMetadata.mockReset();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetDatasourceCredentials();
@@ -98,6 +119,202 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
+  it('should bound limit so that limit + 1 fits in a 32-bit int', async () => {
+    const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
+    const schema = await Provider.from(queryDatasourceTool.paramsSchema);
+    const base = {
+      datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      query: { fields: [{ fieldCaption: 'Category' }] },
+    };
+
+    expect(schema.safeParse({ ...base, limit: 2147483646 }).success).toBe(true);
+    expect(schema.safeParse({ ...base, limit: 2147483647 }).success).toBe(false);
+  });
+
+  it.each([testProductVersion2025_3, testProductVersion])(
+    'validates and forwards internal field names only when requested on $value',
+    async (productVersion) => {
+      mocks.mockReadMetadata.mockResolvedValue(
+        Ok({ data: [{ fieldCaption: 'Margin', fieldName: 'Calculation_1003', dataType: 'REAL' }] }),
+      );
+      mocks.mockQueryDatasource.mockResolvedValue(Ok(mockVdsResponses.success));
+      const query: Query = { fields: [{ fieldCaption: 'Calculation_1003', function: 'AVG' }] };
+      const result = await getToolResult({
+        query,
+        productVersion,
+        interpretFieldCaptionsAsFieldNames: true,
+      });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query,
+          options: expect.objectContaining({ interpretFieldCaptionsAsFieldNames: true }),
+        }),
+      );
+      mocks.mockQueryDatasource.mockClear();
+      const rejected = await getToolResult({ query, productVersion });
+      expect(rejected.isError).toBe(true);
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    },
+  );
+
+  it('forwards internal field and parameter references in calculations with a caller-chosen label', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(
+      Ok({
+        data: [{ fieldCaption: 'Staffing Cost', fieldName: 'staffing_cost', dataType: 'REAL' }],
+        extraData: {
+          parameters: [
+            {
+              parameterCaption: 'Multiplier',
+              parameterName: 'Parameter 1',
+              parameterType: 'ANY_VALUE',
+              dataType: 'REAL',
+              value: 1,
+            },
+          ],
+        },
+      }),
+    );
+    mocks.mockQueryDatasource.mockResolvedValue(Ok({ data: [{ 'Adjusted staffing cost': 200 }] }));
+    const query: Query = {
+      fields: [
+        {
+          fieldCaption: 'Adjusted staffing cost',
+          calculation: 'SUM([staffing_cost]) * [Parameter 1]',
+        },
+      ],
+      parameters: [{ parameterCaption: 'Parameter 1', value: 2 }],
+    };
+
+    const result = await getToolResult({ query, interpretFieldCaptionsAsFieldNames: true });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query,
+        options: expect.objectContaining({ interpretFieldCaptionsAsFieldNames: true }),
+      }),
+    );
+  });
+
+  it.each([
+    [{ value: '2025.2.9', build: '20252.25.1001.1200' }, false],
+    [testProductVersion2025_3, true],
+  ] as const)(
+    'advertises name mode according to version %s over MCP',
+    async (productVersion, supported) => {
+      const { McpServer } = await vi.importActual<
+        typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+      >('@modelcontextprotocol/sdk/server/mcp.js');
+      const server = new McpServer({ name: 'test', version: '0.0.0' });
+      const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
+      const callback = await Provider.from(tool.callback);
+      server.registerTool(
+        tool.name,
+        { inputSchema: await Provider.from(tool.paramsSchema) },
+        (args) => callback(args, getMockRequestHandlerExtra()),
+      );
+      const client = new Client({ name: 'test-client', version: '0.0.0' });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      mocks.mockReadMetadata.mockResolvedValue(
+        Ok({
+          data: [
+            { fieldCaption: 'Margin', fieldName: 'Calculation_1003', dataType: 'REAL' },
+            { fieldCaption: 'Category', fieldName: 'Category', dataType: 'STRING' },
+          ],
+        }),
+      );
+      mocks.mockQueryDatasource.mockResolvedValue(Ok(mockVdsResponses.success));
+      try {
+        await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+        const { tools } = await client.listTools();
+        expect(
+          Object.hasOwn(
+            tools[0].inputSchema.properties ?? {},
+            'interpretFieldCaptionsAsFieldNames',
+          ),
+        ).toBe(supported);
+        expect(tools[0].inputSchema.properties).toHaveProperty('datasourceLuid');
+        expect(tools[0].inputSchema.properties).toHaveProperty('query');
+        const args = {
+          datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+          query: { fields: [{ fieldCaption: 'Calculation_1003', function: 'AVG' }] },
+          interpretFieldCaptionsAsFieldNames: true,
+        };
+        const result = await client.callTool({ name: tool.name, arguments: args });
+        expect(result.isError).toBe(!supported);
+        if (supported) {
+          expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+            expect.objectContaining({
+              options: expect.objectContaining({ interpretFieldCaptionsAsFieldNames: true }),
+            }),
+          );
+        } else {
+          expect(result).toMatchObject({
+            content: [{ text: expect.stringContaining('requires Tableau 2025.3 or later') }],
+          });
+          expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+          expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+        }
+        const captionResult = await client.callTool({
+          name: tool.name,
+          arguments: {
+            datasourceLuid: args.datasourceLuid,
+            query: { fields: [{ fieldCaption: 'Category' }] },
+          },
+        });
+        expect(captionResult.isError).toBe(false);
+        expect(mocks.mockQueryDatasource.mock.lastCall?.[0].options).not.toHaveProperty(
+          'interpretFieldCaptionsAsFieldNames',
+        );
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    },
+  );
+
+  describe('field-name queries on Tableau 2025.2', () => {
+    const productVersion = { value: '2025.2.9', build: '20252.25.1001.1200' };
+
+    it.each(['false', 'true'])(
+      'rejects name mode with validation disabled=%s',
+      async (disabled) => {
+        vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', disabled);
+        const result = await getToolResult({
+          productVersion,
+          interpretFieldCaptionsAsFieldNames: true,
+        });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('requires Tableau 2025.3 or later');
+        expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+        expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([undefined, false])('preserves caption queries when name mode is %s', async (mode) => {
+      mocks.mockQueryDatasource.mockResolvedValue(Ok(mockVdsResponses.success));
+      const result = await getToolResult({
+        productVersion,
+        interpretFieldCaptionsAsFieldNames: mode,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+        datasource: { datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9' },
+        query: {
+          fields: [
+            { fieldCaption: 'Category' },
+            { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
+          ],
+        },
+        options: { debug: true, disaggregate: false, returnFormat: 'OBJECTS' },
+      });
+    });
+  });
+
   it('should return error when query args fail validation', async () => {
     const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
     const callback = await Provider.from(queryDatasourceTool.callback);
@@ -106,7 +323,9 @@ describe('queryDatasourceTool', () => {
       {
         datasourceLuid: '',
         query: { fields: [{ fieldCaption: 'Category' }] },
+        workbookLuid: undefined,
         limit: undefined,
+        interpretFieldCaptionsAsFieldNames: undefined,
       },
       getMockRequestHandlerExtra(),
     );
@@ -156,7 +375,10 @@ describe('queryDatasourceTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ...mockVdsResponses.success,
+      mcp: { resultInfo: { returnedCount: 3, truncated: false } },
+    });
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -165,7 +387,7 @@ describe('queryDatasourceTool', () => {
         debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
-        rowLimit: 100,
+        rowLimit: 101,
       },
       query: {
         fields: [
@@ -189,7 +411,10 @@ describe('queryDatasourceTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ...mockVdsResponses.success,
+      mcp: { resultInfo: { returnedCount: 3, truncated: false } },
+    });
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -211,6 +436,118 @@ describe('queryDatasourceTool', () => {
           },
         ],
       },
+    });
+  });
+
+  describe('row limit truncation', () => {
+    const rows = (n: number): { data: Array<Record<string, unknown>> } => ({
+      data: Array.from({ length: n }, (_, i) => ({ Category: `C${i}`, 'SUM(Profit)': i })),
+    });
+
+    async function getParsed(args: Parameters<typeof getToolResult>[0]): Promise<any> {
+      const result = await getToolResult(args);
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return JSON.parse(result.content[0].text);
+    }
+
+    it('should report admin-cap truncation and trim to the cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(3);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
+      });
+    });
+
+    it('should keep the requested rowLimit within int32 for a maximal cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2147483647');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(2147483647);
+    });
+
+    it('should not report truncation when exactly the limit rows match', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '3');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({});
+
+      expect(parsed.data).toHaveLength(3);
+      expect(parsed.mcp).toEqual({ resultInfo: { returnedCount: 3, truncated: false } });
+    });
+
+    it('should report requested-limit when the caller limit binds under a larger cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '10');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({ limit: 2 });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(3);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'requested-limit' },
+      });
+    });
+
+    it('should send no rowLimit and no mcp key when no limit or cap applies', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+      const parsed = await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parsed).toEqual(mockVdsResponses.success);
+      expect(parsed).not.toHaveProperty('mcp');
+    });
+
+    it('should return context warnings and resultInfo together', async () => {
+      vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', 'true');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+      const parsed = await getParsed({
+        limit: 100,
+        query: {
+          fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Profit', function: 'SUM' }],
+          filters: [
+            {
+              field: { fieldCaption: 'Category' },
+              filterType: 'TOP',
+              howMany: 2,
+              direction: 'TOP',
+              fieldToMeasure: { fieldCaption: 'Profit', function: 'SUM' },
+            },
+            {
+              field: { fieldCaption: 'Region' },
+              filterType: 'SET',
+              values: ['East'],
+              exclude: false,
+            },
+          ],
+        },
+      });
+
+      expect(parsed.mcp.warnings).toHaveLength(1);
+      expect(parsed.mcp.warnings[0].type).toBe('MISSING_CONTEXT_ON_DIMENSION_FILTER');
+      expect(parsed.mcp.resultInfo).toEqual({ returnedCount: 3, truncated: false });
+    });
+
+    it('should trim and report admin-cap on versions that cannot send a rowLimit', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({ productVersion: testProductVersion2025_3 });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
+      });
     });
   });
 
@@ -364,7 +701,9 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
+          interpretFieldCaptionsAsFieldNames: undefined,
         },
         getMockRequestHandlerExtra(),
       );
@@ -411,7 +750,9 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
+          interpretFieldCaptionsAsFieldNames: undefined,
         },
         getMockRequestHandlerExtra(),
       );
@@ -452,7 +793,9 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
+          interpretFieldCaptionsAsFieldNames: undefined,
         },
         getMockRequestHandlerExtra(),
       );
@@ -465,8 +808,8 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should not run SET/MATCH filters validation when DISABLE_QUERY_VALIDATION_REQUESTS environment variable is true', async () => {
-      process.env.DISABLE_QUERY_VALIDATION_REQUESTS = 'true';
+    it('should not run SET/MATCH filters validation when DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS environment variable is true', async () => {
+      vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', 'true');
 
       const mockMainQueryResult = {
         data: [{ Region: 'East', 'SUM(Sales)': 100000 }],
@@ -484,14 +827,15 @@ describe('queryDatasourceTool', () => {
             fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
             filters: [
               {
-                field: { fieldCaption: 'Sales' },
-                filterType: 'QUANTITATIVE_NUMERICAL',
-                quantitativeFilterType: 'MIN',
-                min: 1000,
+                field: { fieldCaption: 'Region' },
+                filterType: 'SET',
+                values: ['East', 'Wast'],
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
+          interpretFieldCaptionsAsFieldNames: undefined,
         },
         getMockRequestHandlerExtra(),
       );
@@ -549,7 +893,9 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
+          interpretFieldCaptionsAsFieldNames: undefined,
         },
         getMockRequestHandlerExtra(),
       );
@@ -620,14 +966,68 @@ describe('queryDatasourceTool', () => {
 
     expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
   });
+
+  describe('embedded datasources under a project scope', () => {
+    const datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9';
+    const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
+    const workbookProjectId = 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d';
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_PROJECT_IDS', workbookProjectId);
+      mocks.mockRestQueryDatasource.mockResolvedValue({
+        id: datasourceLuid,
+        name: 'Embedded',
+        parentType: 'Workbook',
+        tags: {},
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: datasourceLuid } },
+      ]);
+      mocks.mockGetWorkbook.mockResolvedValue({
+        id: workbookLuid,
+        name: 'Workbook',
+        project: { id: workbookProjectId, name: 'Project' },
+        tags: {},
+      });
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+    });
+
+    it('should query an embedded datasource when its workbook is allowed', async () => {
+      const result = await getToolResult({ workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockQueryDatasource).toHaveBeenCalled();
+    });
+
+    it('should not query an embedded datasource without a workbookLuid', async () => {
+      const result = await getToolResult();
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'can only be queried by also providing the workbookLuid',
+      );
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function getToolResult({
   limit,
   productVersion,
+  workbookLuid,
+  query,
+  interpretFieldCaptionsAsFieldNames,
 }: {
+  query?: Query;
+  interpretFieldCaptionsAsFieldNames?: boolean;
   limit?: number;
   productVersion?: ProductVersion;
+  workbookLuid?: string;
 } = {}): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(
     new WebMcpServer(),
@@ -637,13 +1037,15 @@ async function getToolResult({
   return await callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
-      query: {
+      query: query ?? {
         fields: [
           { fieldCaption: 'Category' },
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
         ],
       },
+      workbookLuid,
       limit,
+      interpretFieldCaptionsAsFieldNames,
     },
     getMockRequestHandlerExtra(),
   );

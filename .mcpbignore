@@ -21,3 +21,14 @@ tableau-mcp.dxt
 tableau-mcp.mcpb
 *.pem
 *.tgz
+build/desktop/**/*
+build/resources/desktop/**/*
+build/index.desktop.js*
+build/index.combined.js*
+resources/desktop/**/*
+npm-pack.json
+vitest.globalSetup.ts
+build/sea/**/*
+sea-prep.*.blob
+sea-config.*.generated.json
+asset-manifest.*.generated.json

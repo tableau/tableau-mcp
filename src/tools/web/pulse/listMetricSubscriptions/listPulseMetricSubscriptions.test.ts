@@ -3,11 +3,12 @@ import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../../config.js';
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import type { PulseMetricSubscription } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_USER_LUID } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,
@@ -39,6 +40,10 @@ vi.mock('../../../../restApiInstance.js', () => ({
   ),
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('listPulseMetricSubscriptionsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -62,7 +67,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(false);
     expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalledWith(
-      'test-user-luid',
+      MOCK_USER_LUID,
     );
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);

@@ -81,6 +81,15 @@ describe('renderInteractiveVizTool', () => {
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
+    it('should be disabled when AUTH=passthrough, even with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
     it('should be disabled when AUTH=oauth with embedded authz server, even with mcp-apps enabled', async () => {
       vi.stubEnv('AUTH', 'oauth');
       vi.stubEnv('OAUTH_ISSUER', 'https://sso.online.tableau.com');
@@ -119,7 +128,18 @@ describe('renderInteractiveVizTool', () => {
     });
 
     it('should stay disabled when mcp-apps is off, regardless of auth type', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      mocks.mockIsFeatureEnabled.mockImplementation(async (name: string) => name !== 'mcp-apps');
+      vi.stubEnv('AUTH', 'uat');
+      vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+      vi.stubEnv('UAT_ISSUER', 'https://tableau-mcp.local/uat');
+      vi.stubEnv('UAT_USERNAME_CLAIM', 'test@example.com');
+      vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('should stay disabled when interactive-viz is off, even with mcp-apps on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (name: string) => name === 'mcp-apps');
       vi.stubEnv('AUTH', 'uat');
       vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
       vi.stubEnv('UAT_ISSUER', 'https://tableau-mcp.local/uat');

@@ -6,6 +6,8 @@ sidebar_position: 6
 
 `user-license-reclamation-apply`
 
+Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/user-license-reclamation-apply` (default arguments).
+
 A guided, **destructive** Tableau Cloud admin workflow that identifies inactive licensed users, surfaces their owned-content counts for review, and — only after explicit human approval — downgrades approved users to **Unlicensed** via `update-user`.
 
 :::warning[Admin Only · Destructive]

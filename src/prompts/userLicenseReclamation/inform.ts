@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { WebPromptFactory } from '../registry.js';
 
 export const LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT = 90;
@@ -57,7 +58,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     'list. Read-only — no user modifications are performed. ' +
     'Consider for general admin/site-health and cost/license questions.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const inactiveDays = args.inactiveDays
       ? parseInt(args.inactiveDays, 10)
@@ -189,7 +190,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       `Group the TS Events results by \`Actor User Name\` to determine if any candidate user has accessed content within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's \`name\` or \`email\` field from Step 1. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale \`lastLogin\` timestamp.`,
       '',
-      "If the TS Events query returns exactly 10000 rows, warn that results were truncated at the 10000-row limit: some candidates' Access events may be missing, so an active user could be wrongly kept as a candidate — narrow the scope with a smaller role set or candidate list and re-run. (With the `Actor User Name` scoping above this should not occur unless the candidate set itself has more than 10000 Access events in the window.)",
+      "If the TS Events query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true, warn that results were truncated at the row limit: some candidates' Access events may be missing, so an active user could be wrongly kept as a candidate — narrow the scope with a smaller role set or candidate list and re-run. (With the `Actor User Name` scoping above this should not occur unless the candidate set itself has more Access events in the window than the row limit.)",
       'Unlike the TS Users query in Step 3, 0 rows here is a VALID result — it means none of the scoped candidates had an Access event in the lookback window, so all candidates are correctly retained. But 0 rows ALSO results from leaving the `<REPLACE ...>` `Actor User Name` placeholder unsubstituted (the literal placeholder matches no actor): if you did not replace it with the exact Step-1 candidate names, do so and re-run before relying on the result, since an unsubstituted filter fails to rescue genuinely-active users.',
       '',
       '## Step 3 — Cross-reference Tableau Desktop / Prep activity',
@@ -204,7 +205,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       `Match each row to a candidate by \`User Email\` (against the candidate's \`email\`) or \`User Name\` (against the candidate's \`name\`). A candidate is **active** — and must be excluded from the final list — if either \`Tableau Desktop - Last Access Date\` OR \`Tableau Prep - Last Access Date\` is **non-null AND on or after ${cutoffIso}** (i.e. within the last ${inactiveDays} days).`,
       '',
-      'If the TS Users query returns exactly 10000 rows, warn that results were truncated at the 10000-row limit: some candidates may be missing their Desktop/Prep last-access date and could be falsely listed as inactive — narrow the scope with a smaller role set or candidate list. (With the `User Email` scoping above this should not occur unless the candidate set itself exceeds 10000.)',
+      'If the TS Users query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true, warn that results were truncated at the row limit: some candidates may be missing their Desktop/Prep last-access date and could be falsely listed as inactive — narrow the scope with a smaller role set or candidate list. (With the `User Email` scoping above this should not occur unless the candidate set itself exceeds the row limit.)',
       'If the TS Users query returns 0 rows, the `User Email` scoping was likely not applied — either the `<REPLACE ...>` placeholder was left unsubstituted, or no candidate email matched. TS Users is one row per user, so a real candidate set should return at least one row; 0 rows means the Desktop/Prep signal could NOT be confirmed for ANY candidate. Do NOT treat this as "no Desktop/Prep activity" (that would keep every candidate via the null = no-signal rule and reintroduce false positives). Warn that Desktop/Prep activity could not be confirmed for any candidate and the list may contain false positives; verify the placeholder was replaced with the exact Step-1 candidate emails and re-run before relying on the result.',
       '',
       '**Null handling — null is NOT activity.** A `null`, empty, or missing Desktop/Prep date is NOT evidence of activity: the user REMAINS a candidate. Only a recent *non-null* Desktop/Prep date rescues a user. (Many tenants do not collect Desktop/Prep telemetry, in which case these fields are null for every user — see the caveat note in Step 4.)',

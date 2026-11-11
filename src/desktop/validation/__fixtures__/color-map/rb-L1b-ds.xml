@@ -1,0 +1,43 @@
+<!-- Trimmed from live probe rb-L1b-ds.xml. Cut: <named-connections>, <relation>, <metadata-records>, all but three <cols> maps, most <column> siblings, groups, drill-paths, <semantic-values>, Parameters dependencies, <object-graph>. Kept verbatim: the root element, datasource-level <column-instance>, <layout> and <style>. -->
+<datasource inline='true' name='superstore' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <connection class='federated'>
+    <cols>
+      <map key='[Category]' value='[Orders].[Category]' />
+      <map key='[City]' value='[Orders].[City]' />
+      <map key='[Country/Region]' value='[Orders].[Country/Region]' />
+    </cols>
+  </connection>
+  <aliases enabled='yes' />
+  <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+  <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />
+  <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+  <column datatype='string' hidden='true' name='[Customer ID]' role='dimension' type='nominal' />
+  <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+  <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+  <style>
+    <style-rule element='mark'>
+      <encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#59a14f'>
+          <bucket>&quot;Furniture&quot;</bucket>
+        </map>
+        <map to='#9c755f'>
+          <bucket>&quot;Technology&quot;</bucket>
+        </map>
+        <map to='#b07aa1'>
+          <bucket>&quot;Office Supplies&quot;</bucket>
+        </map>
+      </encoding>
+      <encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#59a14f'>
+          <bucket>&quot;Furniture&quot;</bucket>
+        </map>
+        <map to='#9c755f'>
+          <bucket>&quot;Technology&quot;</bucket>
+        </map>
+        <map to='#b07aa1'>
+          <bucket>&quot;Office Supplies&quot;</bucket>
+        </map>
+      </encoding>
+    </style-rule>
+  </style>
+</datasource>

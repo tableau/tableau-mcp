@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 /**
@@ -25,7 +25,7 @@ describe('update-user', () => {
 
   beforeAll(async () => {
     client = new McpClient({
-      env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+      env: getAdminToolsEnv(),
     });
     await client.connect();
     const tools = await client.listTools();
@@ -33,7 +33,7 @@ describe('update-user', () => {
     if (!toolsAvailable) {
       console.warn(
         'Skipping update-user e2e tests — admin tools not registered. ' +
-          'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env and the caller is a site admin.',
+          'Ensure the caller is a site admin.',
       );
     }
   });

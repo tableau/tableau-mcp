@@ -116,11 +116,17 @@ The maximum number of rows to return. Applied when `kind` is `ts-events`, `ts-us
 `site-content`, or `job-performance`; **ignored** for `stale-content`.
 
 The effective row limit is the **tightest** of:
-1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
+1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`), or `MAX_RESULT_LIMIT` when no
+   per-tool entry is set
 2. The caller-supplied `limit`
 
+When a row limit applies, the response includes `mcp.resultInfo` with `returnedCount` and
+`truncated`, next to any `mcp.warnings`. If `truncated` is `true`, more rows matched;
+`truncationReason` is `admin-cap` when a server cap cut the results, or `requested-limit` when this
+argument did. `mcp.resultInfo` is absent when no row limit applies.
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)
 
 <hr />
 
@@ -153,6 +159,24 @@ Example: `["af59ee84-a375-4cb4-84b9-eaa7864f59fb"]`
 
 Example: `["Datasource"]`
 
+## Known field captions
+
+Field captions are dataset-specific and must match exactly. The tool description lists these
+captions so a model does not have to guess them.
+
+- `ts-events`: `Actor User Name`, `Event Type`, `Event Date`, `Item Type`, `Item Name`
+- `ts-users`: `User Email`, `User Name`, `Tableau Desktop - Last Access Date`,
+  `Tableau Prep - Last Access Date`
+- `site-content`: `Item Type`, `Item Name`, `Owner Email`, `Item Parent Project Name`
+- `job-performance`: `Item Name`, `Job Type`, `Job Result`, `Started At`, `Job Duration`,
+  `Job Execution Duration`, `Schedule Name`, `Was Manual Run`, `Error Message`,
+  `Extract File Size`
+
+The tool description renders this list from `KNOWN_FIELD_CAPTIONS` in `queryAdminInsights.ts`; a
+unit test keeps it a superset of the captions the packaged admin prompts send. These are not
+exhaustive; use [`get-datasource-metadata`](../data-qna/get-datasource-metadata.md) for the full
+list.
+
 ## Row cap (`stale-content`)
 
 The `stale-content` backend enforces a **server-side row cap** to protect the destructive
@@ -179,7 +203,11 @@ This is a **successful** result, not an error — only the row payload is withhe
   Management). Items beyond the lookback cannot be distinguished on last-access timestamps.
 - Field captions differ between datasources — e.g. `Item Id` (TS Events) vs `Item ID` (Site
   Content). Inspect with [`get-datasource-metadata`](../data-qna/get-datasource-metadata.md)
-  when in doubt.
+  when in doubt. See [Known field captions](#known-field-captions) for the captions the tool
+  description lists.
+- A VDS `Unknown Field` error means a `fieldCaption` (in `fields`, `filters`, or a calculation)
+  does not exist in that datasource. For the raw-query kinds the error message ends with a hint to
+  use the exact captions from the tool description; the query is not retried.
 - The `stale-content` backend excludes the Tableau-managed `Admin Insights` project by design.
 - `Last Accessed At` is `null` for never-accessed items; the stale-content backend ages those
   from `Created At` and flags them `neverAccessed: true`.
@@ -249,7 +277,10 @@ Example result:
       "Tableau Desktop - Last Access Date": "2026-07-28T09:14:00Z",
       "Tableau Prep - Last Access Date": null
     }
-  ]
+  ],
+  "mcp": {
+    "resultInfo": { "returnedCount": 1, "truncated": false }
+  }
 }
 ```
 

@@ -28,7 +28,7 @@ const variantPackageJsonOverrides = {
   desktop: {
     name: '@tableau/desktop-mcp-server',
     description:
-      'MCP server for Tableau Desktop Agent API - enables AI agents to interact with Tableau workbooks',
+      'MCP server for Tableau Desktop External Client API - enables AI agents to interact with Tableau workbooks',
     bin: {
       'tableau-desktop-mcp-server': './build/index.desktop.js',
     },
@@ -63,8 +63,9 @@ type PackageJson = z.infer<typeof packageJsonSchema>;
   const packageJson = { ...(await readPackageJson()), ...overrides };
   await writePackageJson(packageJson);
 
-  if (existsSync(join(repoRoot, `README.${variant}.md`))) {
-    await copyFile(join(repoRoot, `README.${variant}.md`), join(repoRoot, 'README.md'));
+  const variantReadme = join(repoRoot, 'docs', `README.${variant}.md`);
+  if (existsSync(variantReadme)) {
+    await copyFile(variantReadme, join(repoRoot, 'README.md'));
   }
 })().catch((error: unknown) => {
   console.error(error);

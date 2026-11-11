@@ -1,0 +1,438 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SpatialFileLayer />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Converting each unit on a map to a regular and equally-sized shape – good for representing voting regions with equal value.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <preferences>
+    <color-palette custom='true' name='Facebook Blue-Gray Diverging' type='ordered-diverging'>
+      <color>#080a10</color>
+      <color>#141823</color>
+      <color>#232937</color>
+      <color>#373e4d</color>
+      <color>#4e5665</color>
+      <color>#6a7180</color>
+      <color>#898f9c</color>
+      <color>#adb2bb</color>
+      <color>#d3d6db</color>
+      <color>#e9eaed</color>
+      <color>#f6f7f8</color>
+    </color-palette>
+  </preferences>
+  <datasources>
+    <datasource caption='LondonCrimes' inline='true' name='federated.1cil50k16r0j6o1feqp6r0ey3ij7' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='LondonCrimes' name='ogrdirect.0j6k4f41jj9yui1770ibl1ox6urv'>
+            <connection class='ogrdirect' directory='' ogr-grid-shift-folder='' tablename='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='ogrdirect.0j6k4f41jj9yui1770ibl1ox6urv' name='LondonCrimes.shp' table='[LondonCrimes.shp]' type='table'>
+          <columns>
+            <column datatype='string' name='Borough' ordinal='0' />
+            <column datatype='string' name='Crime_type' ordinal='1' />
+            <column datatype='string' name='GridName' ordinal='2' />
+            <column datatype='date' name='Date' ordinal='3' />
+            <column datatype='integer' name='Crimes' ordinal='4' />
+            <column datatype='spatial' name='Geometry' ordinal='5' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Borough</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Borough]</local-name>
+            <parent-name>[LondonCrimes.shp]</parent-name>
+            <remote-alias>Borough</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Crime_type</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Crime_type]</local-name>
+            <parent-name>[LondonCrimes.shp]</parent-name>
+            <remote-alias>Crime_type</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>GridName</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[GridName]</local-name>
+            <parent-name>[LondonCrimes.shp]</parent-name>
+            <remote-alias>GridName</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Date</remote-name>
+            <remote-type>133</remote-type>
+            <local-name>[Date]</local-name>
+            <parent-name>[LondonCrimes.shp]</parent-name>
+            <remote-alias>Date</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>date</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Crimes</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Crimes]</local-name>
+            <parent-name>[LondonCrimes.shp]</parent-name>
+            <remote-alias>Crimes</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='measure'>
+            <remote-name>Geometry</remote-name>
+            <remote-type>8</remote-type>
+            <local-name>[Geometry]</local-name>
+            <parent-name>[LondonCrimes.shp]</parent-name>
+            <remote-alias>Geometry</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Crime type' datatype='string' name='[Crime_type]' role='dimension' type='nominal' />
+      <column datatype='date' name='[Date]' role='dimension' type='ordinal' />
+      <column caption='Grid Name' datatype='string' name='[GridName]' role='dimension' type='nominal' />
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <column-instance column='[Date]' derivation='Year' name='[yr:Date:ok]' pivot='key' type='ordinal' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/14/2018 03:29:18 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='8111' timestamp-start='2018-07-14 15:29:18.273' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Borough</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Borough]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Borough</remote-alias>
+              <ordinal>0</ordinal>
+              <family>LondonCrimes.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>32</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Crime_type</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Crime_type]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Crime_type</remote-alias>
+              <ordinal>1</ordinal>
+              <family>LondonCrimes.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>GridName</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[GridName]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>GridName</remote-alias>
+              <ordinal>2</ordinal>
+              <family>LondonCrimes.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>108</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Date</remote-name>
+              <remote-type>133</remote-type>
+              <local-name>[Date]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Date</remote-alias>
+              <ordinal>3</ordinal>
+              <family>LondonCrimes.shp</family>
+              <local-type>date</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>12</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Crimes</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Crimes]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Crimes</remote-alias>
+              <ordinal>4</ordinal>
+              <family>LondonCrimes.shp</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>47</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Geometry</remote-name>
+              <remote-type>128</remote-type>
+              <local-name>[Geometry]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Geometry</remote-alias>
+              <ordinal>5</ordinal>
+              <family>LondonCrimes.shp</family>
+              <local-type>spatial</local-type>
+              <aggregation>Collect</aggregation>
+              <approx-count>1090</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+        <filter class='categorical' column='[Crime_type]'>
+          <groupfilter function='member' level='[Crime_type]' member='&quot;Criminal damage and arson&quot;' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+        </filter>
+        <filter class='categorical' column='[yr:Date:ok]'>
+          <groupfilter function='member' level='[yr:Date:ok]' member='2016' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+        </filter>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='ogrdirect.0j6k4f41jj9yui1770ibl1ox6urv' name='LondonCrimes.shp' table='[LondonCrimes.shp]' type='table'>
+                <columns>
+                  <column datatype='string' name='Borough' ordinal='0' />
+                  <column datatype='string' name='Crime_type' ordinal='1' />
+                  <column datatype='string' name='GridName' ordinal='2' />
+                  <column datatype='date' name='Date' ordinal='3' />
+                  <column datatype='integer' name='Crimes' ordinal='4' />
+                  <column datatype='spatial' name='Geometry' ordinal='5' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[my:Date:ok]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Borough:nk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Crime_type:nk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:GridName:nk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[yr:Date:ok]</field>
+        </color-one-way>
+      </highlight>
+      <default-map-tool-selection tool='2' />
+    </viewpoint>
+    <simple-id uuid='{438E925A-ADB1-45B4-A1E5-8D4C974AD79F}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='LondonCrimes' name='federated.1cil50k16r0j6o1feqp6r0ey3ij7' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.1cil50k16r0j6o1feqp6r0ey3ij7'>
+        <column datatype='string' name='[Borough]' role='dimension' type='nominal' />
+        <column caption='Crime type' datatype='string' name='[Crime_type]' role='dimension' type='nominal' />
+        <column datatype='integer' name='[Crimes]' role='measure' type='quantitative' />
+        <column datatype='spatial' name='[Geometry]' role='measure' type='nominal' />
+        <column caption='Grid Name' datatype='string' name='[GridName]' role='dimension' type='nominal' />
+        <column-instance column='[Geometry]' derivation='Collect' name='[clct:Geometry:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Borough]' derivation='None' name='[none:Borough:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Crime_type]' derivation='None' name='[none:Crime_type:nk]' pivot='key' type='nominal' />
+        <column-instance column='[GridName]' derivation='None' name='[none:GridName:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Crimes]' derivation='Sum' name='[sum:Crimes:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Crime_type:nk]'>
+        <groupfilter function='member' level='[none:Crime_type:nk]' member='&quot;Criminal damage and arson&quot;' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </filter>
+      <slices>
+        <column>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Crime_type:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[sum:Crimes:qk]' palette='Facebook Blue-Gray Diverging' reverse='true' type='interpolated' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='in-tooltip' field='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:GridName:nk]' value='false' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='9-dash-line' value='false' />
+        <format attr='enabled' id='9-dash-line-casing' value='false' />
+        <format attr='enabled' id='admin-0-boundaries' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-sub' value='false' />
+        <format attr='enabled' id='admin-0-label-1st-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress-bg' value='false' />
+        <format attr='enabled' id='admin-1-label-1st-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-6th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-7th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-8th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-9th-tier' value='false' />
+        <format attr='enabled' id='admin1-water-lines-usa-tableau' value='false' />
+        <format attr='enabled' id='aeroway-polygon' value='false' />
+        <format attr='enabled' id='aeroway-runway' value='false' />
+        <format attr='enabled' id='aeroway-taxiway' value='false' />
+        <format attr='enabled' id='background' value='false' />
+        <format attr='enabled' id='barrier_line-land-line' value='false' />
+        <format attr='enabled' id='barrier_line-land-polygon' value='false' />
+        <format attr='enabled' id='built-up-area' value='false' />
+        <format attr='enabled' id='industrial' value='false' />
+        <format attr='enabled' id='landcover_crop' value='false' />
+        <format attr='enabled' id='landcover_grass' value='false' />
+        <format attr='enabled' id='landcover_scrub' value='false' />
+        <format attr='enabled' id='landcover_wood' value='false' />
+        <format attr='enabled' id='national_park' value='false' />
+        <format attr='enabled' id='national_park-stroke' value='false' />
+        <format attr='enabled' id='parks' value='false' />
+        <format attr='enabled' id='parks-stroke' value='false' />
+        <format attr='enabled' id='pitch' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-1st-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-2nd-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-3rd-tier' value='false' />
+        <format attr='enabled' id='water' value='false' />
+        <format attr='enabled' id='waterway-river-canal' value='false' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+        <format attr='map-snap-zoom' value='true' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[sum:Crimes:qk]' />
+          <lod column='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[clct:Geometry:nk]' />
+          <lod column='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:GridName:nk]' />
+          <lod column='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Borough:nk]' />
+          <geometry column='[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[clct:Geometry:nk]' />
+        </encodings>
+        <customized-tooltip show-buttons='false'>
+          <formatted-text>
+            <run bold='true' fontsize='12'>&lt;[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Borough:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#787878'>Crimes:&#9;</run>
+            <run bold='true'>&lt;[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[sum:Crimes:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+      </pane>
+    </panes>
+    <rows>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[Latitude (generated)]</rows>
+    <cols>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

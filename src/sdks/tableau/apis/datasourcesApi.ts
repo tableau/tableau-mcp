@@ -2,7 +2,7 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { pathParam } from '../../routeSafety/ids.js';
-import { dataSourceSchema, publishedDataSourceSchema } from '../types/dataSource.js';
+import { dataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -26,7 +26,8 @@ const listDatasourcesEndpoint = makeEndpoint({
   response: z.object({
     pagination: paginationSchema,
     datasources: z.object({
-      datasource: z.optional(z.array(publishedDataSourceSchema)),
+      // Rows can lack `project` (seen on Tableau Cloud for a data source after it was deleted).
+      datasource: z.optional(z.array(dataSourceSchema)),
     }),
   }),
 });
@@ -81,10 +82,24 @@ const addTagsToDatasourceEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const deleteTagFromDatasourceEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/datasources/:datasourceId/tags/:tagName',
+  alias: 'deleteTagFromDatasource',
+  description: 'Removes a single tag (by label) from the specified data source.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('datasourceId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
+});
+
 const datasourcesApi = makeApi([
   listDatasourcesEndpoint,
   queryDatasourceEndpoint,
   deleteDatasourceEndpoint,
   addTagsToDatasourceEndpoint,
+  deleteTagFromDatasourceEndpoint,
 ]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;

@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from '../../../../config.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -31,9 +30,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
     flowWriteToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -75,23 +72,24 @@ describe('cancelFlowRunTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the flow-tools feature flag is off', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const tool = getCancelFlowRunTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
-
-  it('is disabled when the flow write flag is off (state-mutating tool is opt-in)', async () => {
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: true,
-      flowWriteToolsEnabled: false,
-      productTelemetryEnabled: false,
-      productTelemetryEndpoint: 'https://test.com',
-      server: 'https://test.tableau.com',
-    } as unknown as ReturnType<typeof getConfig>);
-    const tool = getCancelFlowRunTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
+  it.each(
+    [undefined, false, true].flatMap((writeEnv) =>
+      [false, true].map((writeFlag) => ({ writeEnv, writeFlag })),
+    ),
+  )(
+    'resolves write availability for write env=$writeEnv, write FF=$writeFlag',
+    async ({ writeEnv, writeFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowWriteToolsEnabled: writeEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-write-tools' && writeFlag,
+      );
+      const tool = getCancelFlowRunTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!(writeEnv ?? writeFlag));
+    },
+  );
 
   it('previews without requesting cancellation and returns a confirmation token', async () => {
     const result = await getToolResult({ flowRunId: FLOW_RUN_ID });

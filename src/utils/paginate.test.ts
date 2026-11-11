@@ -715,6 +715,7 @@ describe('getPage', () => {
     expect(result).toEqual({
       data,
       totalAvailable: 3,
+      cappedByMaxResultLimit: false,
     });
     expect(getDataFn).toHaveBeenCalledTimes(1);
     expect(getDataFn).toHaveBeenCalledWith({ pageSize: 1000, pageNumber: 1 });
@@ -855,6 +856,106 @@ describe('getPage', () => {
     );
 
     expect(getDataFn).not.toHaveBeenCalled();
+  });
+
+  describe('cappedByMaxResultLimit (the cap hides items from the whole set)', () => {
+    function mockPage({
+      pageNumber,
+      count,
+      rawTotal,
+    }: {
+      pageNumber: number;
+      count: number;
+      rawTotal: number;
+    }): ReturnType<typeof vi.fn> {
+      const start = (pageNumber - 1) * 1000;
+      return vi.fn().mockResolvedValue({
+        pagination: { pageNumber, pageSize: 1000, totalAvailable: rawTotal },
+        data: Array.from({ length: count }, (_, i) => ({ id: start + i })),
+      });
+    }
+
+    it('is false with no cap, even when many more items exist', async () => {
+      const getDataFn = mockPage({ pageNumber: 1, count: 1000, rawTotal: 5000 });
+
+      const result = await getPage({ pageNumber: 1, maxResultLimit: null, getDataFn });
+
+      expect(result.cappedByMaxResultLimit).toBe(false);
+      expect(result.totalAvailable).toBe(5000);
+    });
+
+    it('is true on page 1 when the raw total exceeds the cap', async () => {
+      const getDataFn = mockPage({ pageNumber: 1, count: 1000, rawTotal: 2600 });
+
+      const result = await getPage({ pageNumber: 1, maxResultLimit: 700, getDataFn });
+
+      expect(result.cappedByMaxResultLimit).toBe(true);
+      expect(result.data).toHaveLength(700);
+      expect(result.totalAvailable).toBe(700);
+    });
+
+    it('is true on a full page before the cap and on the cap-trimmed last page', async () => {
+      const fullPage = await getPage({
+        pageNumber: 8,
+        maxResultLimit: 8700,
+        getDataFn: mockPage({ pageNumber: 8, count: 1000, rawTotal: 10000 }),
+      });
+      const trimmedPage = await getPage({
+        pageNumber: 9,
+        maxResultLimit: 8700,
+        getDataFn: mockPage({ pageNumber: 9, count: 1000, rawTotal: 10000 }),
+      });
+
+      expect(fullPage.data).toHaveLength(1000);
+      expect(fullPage.cappedByMaxResultLimit).toBe(true);
+      expect(trimmedPage.data).toHaveLength(700);
+      expect(trimmedPage.cappedByMaxResultLimit).toBe(true);
+    });
+
+    it('is false when the raw total equals the cap (nothing is hidden)', async () => {
+      const getDataFn = mockPage({ pageNumber: 3, count: 600, rawTotal: 2600 });
+
+      const result = await getPage({ pageNumber: 3, maxResultLimit: 2600, getDataFn });
+
+      expect(result.cappedByMaxResultLimit).toBe(false);
+      expect(result.data).toHaveLength(600);
+      expect(result.totalAvailable).toBe(2600);
+    });
+
+    it('is false for a naturally short last page under a larger cap', async () => {
+      const getDataFn = mockPage({ pageNumber: 5, count: 250, rawTotal: 4250 });
+
+      const result = await getPage({ pageNumber: 5, maxResultLimit: 10000, getDataFn });
+
+      expect(result.cappedByMaxResultLimit).toBe(false);
+      expect(result.totalAvailable).toBe(4250);
+    });
+
+    it('ignores the caller limit: true under a binding cap, false without one', async () => {
+      const underCap = await getPage({
+        limit: 1,
+        maxResultLimit: 700,
+        getDataFn: mockPage({ pageNumber: 1, count: 1000, rawTotal: 2600 }),
+      });
+      const limitOnly = await getPage({
+        limit: 1,
+        getDataFn: mockPage({ pageNumber: 1, count: 1000, rawTotal: 2600 }),
+      });
+      const limitUnderNonBindingCap = await getPage({
+        limit: 10,
+        maxResultLimit: 700,
+        getDataFn: mockPage({ pageNumber: 1, count: 100, rawTotal: 100 }),
+      });
+
+      expect(underCap.data).toHaveLength(1);
+      expect(underCap.totalAvailable).toBe(700);
+      expect(underCap.cappedByMaxResultLimit).toBe(true);
+      expect(limitOnly.data).toHaveLength(1);
+      expect(limitOnly.totalAvailable).toBe(2600);
+      expect(limitOnly.cappedByMaxResultLimit).toBe(false);
+      expect(limitUnderNonBindingCap.data).toHaveLength(10);
+      expect(limitUnderNonBindingCap.cappedByMaxResultLimit).toBe(false);
+    });
   });
 });
 

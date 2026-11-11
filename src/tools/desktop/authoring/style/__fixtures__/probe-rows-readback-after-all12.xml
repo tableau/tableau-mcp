@@ -1,0 +1,55 @@
+<dashboard enable-sort-zone-taborder='true' name='Probe Rows' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <style />
+  <size maxheight='1000' maxwidth='1400' minheight='1000' minwidth='1400' sizing-mode='fixed' />
+  <zones>
+    <zone h='100000' id='9' type-v2='layout-basic' w='100000' x='0' y='0'>
+      <zone h='100000' id='13' param='vert' type-v2='layout-flow' w='100000' x='0' y='0'>
+        <zone h='3700' id='10' type-v2='text' w='100000' x='0' y='0'>
+          <formatted-text>
+            <run bold='true' fontalignment='1' fontsize='16'>Probe Rows</run>
+          </formatted-text>
+          <zone-style>
+            <format attr='border-color' value='#000000' />
+            <format attr='border-style' value='none' />
+            <format attr='border-width' value='0' />
+            <format attr='corner-radius' value='12' />
+            <format attr='margin' value='4' />
+          </zone-style>
+        </zone>
+        <zone h='42671' id='11' name='bar chart of revenue by region' w='100000' x='0' y='3700'>
+          <layout-cache cell-count-h='3' non-cell-size-h='98' type-h='cell' type-w='fixed' />
+          <zone-style>
+            <format attr='border-color' value='#000000' />
+            <format attr='border-style' value='none' />
+            <format attr='border-width' value='0' />
+            <format attr='corner-radius' value='12' />
+            <format attr='margin' value='4' />
+          </zone-style>
+        </zone>
+        <zone h='53628' id='12' name='bar chart of cogs by product_line' w='100000' x='0' y='46371'>
+          <layout-cache cell-count-h='4' non-cell-size-h='98' type-h='cell' type-w='fixed' />
+          <zone-style>
+            <format attr='border-color' value='#000000' />
+            <format attr='border-style' value='none' />
+            <format attr='border-width' value='0' />
+            <format attr='corner-radius' value='12' />
+            <format attr='margin' value='4' />
+          </zone-style>
+        </zone>
+        <zone-style>
+          <format attr='border-color' value='#444444' />
+          <format attr='border-style' value='none' />
+          <format attr='border-width' value='0' />
+          <format attr='corner-radius' value='12' />
+        </zone-style>
+      </zone>
+      <zone-style>
+        <format attr='border-color' value='#444444' />
+        <format attr='border-style' value='none' />
+        <format attr='border-width' value='0' />
+        <format attr='corner-radius' value='12' />
+      </zone-style>
+    </zone>
+  </zones>
+  <simple-id uuid='{A46A0CC5-B656-4D12-8621-F2CC33A143E1}' />
+</dashboard>

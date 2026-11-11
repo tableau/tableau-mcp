@@ -1,0 +1,59 @@
+Tableau MCP hands files to and from your agent through short-lived presigned S3 URLs. These
+tools use them:
+
+- [`scaffold-data-app`](/tools/data-apps/scaffold-data-app.md) returns an `s3URL` the agent
+  **downloads** the starter template from.
+- [`request-workbook-upload`](/tools/workbooks/request-workbook-upload.md) returns an `uploadUrl`
+  the agent **uploads** the workbook to before `publish-workbook`.
+
+The agent's own environment makes these requests, not the Tableau MCP server. If that environment
+restricts outbound network access (a sandbox, a code-execution container, or an organization
+allowlist), you must allow the S3 host for your Tableau pod. This is a **client configuration
+step**: nothing on the Tableau side can change it.
+
+If the host is blocked, the download or upload fails with a network or `403` error. Allow the host
+and retry. A `403` on the upload `PUT` can also mean the body size differs from `fileSizeBytes`
+(S3 `SignatureDoesNotMatch`). Don't work around the failure with a custom script against the
+Tableau REST API, because that bypasses the checks and consent step in the MCP publish flow.
+
+Find your pod in your site URL (for `https://10ax.online.tableau.com`, the pod is `10ax`), then
+allow its host.
+
+### Production pods
+
+| Pod | S3 host to allow |
+| --- | --- |
+| UWC | `uwc-tabmcp-content.s3.us-west-2.amazonaws.com` |
+| UW2B | `uw2b-tabmcp-content.s3.us-west-2.amazonaws.com` |
+| CAA | `caa-tabmcp-content.s3.ca-central-1.amazonaws.com` |
+| UEA | `uea-tabmcp-content.s3.us-east-1.amazonaws.com` |
+| 10AY | `10ay-tabmcp-content.s3.us-west-2.amazonaws.com` |
+| UEB | `ueb-tabmcp-content.s3.us-east-1.amazonaws.com` |
+| DUB01 | `dub01-tabmcp-content.s3.eu-central-1.amazonaws.com` |
+| 10AZ | `10az-tabmcp-content.s3.us-west-2.amazonaws.com` |
+| UKA | `uka-tabmcp-content.s3.eu-west-2.amazonaws.com` |
+| UE1 | `ue1-tabmcp-content.s3.us-east-1.amazonaws.com` |
+| EW1A | `ew1a-tabmcp-content.s3.eu-central-1.amazonaws.com` |
+| ANAA | `anaa-tabmcp-content.s3.ap-northeast-1.amazonaws.com` |
+| ASAA | `asaa-tabmcp-content.s3.ap-southeast-2.amazonaws.com` |
+| 10AX | `10ax-tabmcp-content.s3.us-west-2.amazonaws.com` |
+| SING | `sing-tabmcp-content.s3.ap-southeast-1.amazonaws.com` |
+| UEC | `uec-tabmcp-content.s3.us-east-1.amazonaws.com` |
+| INDO | `indo-tabmcp-content.s3.ap-southeast-3.amazonaws.com` |
+| PDCHA | `pdcha-tabmcp-content.s3.eu-central-2.amazonaws.com` |
+| PDINA | `pdina-tabmcp-content.s3.ap-south-2.amazonaws.com` |
+| PDKRA | `pdkra-tabmcp-content.s3.ap-northeast-2.amazonaws.com` |
+
+### Using your own blob storage
+
+If you run your own Tableau MCP server and set
+[`MCP_S3_BUCKET`](/configuration/mcp-config/env-vars.md#mcp_s3_bucket), the pod hosts above don't
+apply. Presigned URLs point at your bucket instead, so allow your bucket's host:
+
+```text
+<your-bucket>.s3.<region>.amazonaws.com
+```
+
+Use the bucket name from `MCP_S3_BUCKET` and the region from `AWS_DEFAULT_REGION`. If you're not
+sure of the exact host, call `request-workbook-upload` once and read the host from the returned
+`uploadUrl`. To cover several buckets in one region, allow `*.s3.<region>.amazonaws.com`.

@@ -48,7 +48,7 @@ describe('publish-workbook local file', () => {
 
   beforeAll(async () => {
     await buildVariant('default');
-    client = new McpClient({ env: getPublishWorkbookSmokeEnv() });
+    client = new McpClient({ env: getDefaultEnv() });
     await client.connect();
   });
 
@@ -194,15 +194,5 @@ function getPublishWorkbookSmokeConfig(): PublishWorkbookSmokeConfig {
     workbookFilePath: process.env.PUBLISH_WORKBOOK_E2E_FILE?.trim() || defaultWorkbookFilePath,
     workbookName: `${process.env.PUBLISH_WORKBOOK_E2E_NAME?.trim() || 'Codex Publish Workbook E2E'} ${runId}`,
     projectId: process.env.PUBLISH_WORKBOOK_E2E_PROJECT_ID?.trim() || defaultProjectId,
-  };
-}
-
-function getPublishWorkbookSmokeEnv(): Record<string, string> {
-  return {
-    ...getDefaultEnv(),
-    FEATURE_GATE_PROVIDER: 'custom',
-    FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
-      module: './tests/e2e/fixtures/authoringToolsFeatureGate.cjs',
-    }),
   };
 }

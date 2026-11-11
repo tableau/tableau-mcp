@@ -59,6 +59,9 @@ describe('renderConfirmInstructions', () => {
     expect(text).toContain('`delete-workbook`');
     expect(text).toContain('`confirm: true`');
     expect(text).toContain('pending-deletion tag');
+    expect(text).toContain('`cleanupDate`');
+    expect(text).toContain('still stale');
+    expect(text).not.toContain('same `tag` value');
   });
 
   it('forbids auto-confirming and batch-confirming', () => {

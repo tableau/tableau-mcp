@@ -2,7 +2,7 @@
 
 ## Context
 
-`render-interactive-viz` (`/Users/j.song/work/orchestrator/tableau-mcp/src/tools/web/renderInteractiveViz/renderInteractiveViz.ts`) renders a live, interactive embedded Tableau viz using the MCP-Apps embed flow. Today it is gated only on the `mcp-apps` feature flag:
+`render-interactive-viz` (`src/tools/web/renderInteractiveViz/renderInteractiveViz.ts`) renders a live, interactive embedded Tableau viz using the MCP-Apps embed flow. Today it is gated only on the `mcp-apps` feature flag:
 
 ```ts
 disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('mcp-apps'))),

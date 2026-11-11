@@ -6,6 +6,8 @@ sidebar_position: 5
 
 `user-license-reclamation-inform`
 
+Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/user-license-reclamation-inform` (default arguments).
+
 A read-only Tableau Cloud admin workflow that identifies inactive licensed users who are candidates for downgrade to Unlicensed.
 
 :::warning[Admin Only]

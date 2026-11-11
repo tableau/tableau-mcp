@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import invariant from '../../../src/utils/invariant.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 /**
@@ -27,7 +27,7 @@ describe('update-cloud-extract-refresh-task', () => {
 
   beforeAll(async () => {
     client = new McpClient({
-      env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+      env: getAdminToolsEnv(),
     });
     await client.connect();
     const tools = await client.listTools();
@@ -35,7 +35,7 @@ describe('update-cloud-extract-refresh-task', () => {
     if (!toolsAvailable) {
       console.warn(
         'Skipping update-cloud-extract-refresh-task e2e tests — admin tools not registered. ' +
-          'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env and the caller is a site admin.',
+          'Ensure the caller is a site admin.',
       );
     }
   });

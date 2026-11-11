@@ -1,8 +1,13 @@
 import { generateKeyPairSync } from 'crypto';
 import express from 'express';
-import request from 'supertest';
 
+import * as loggerModule from '../../logging/logger.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';
+import {
+  closeLoopbackServer,
+  default as request,
+  startLoopbackServer,
+} from '../../testLoopbackRequest.js';
 import { token } from './token.js';
 import { AuthorizationCode, RefreshTokenData } from './types.js';
 
@@ -53,6 +58,10 @@ class FakeSessionStore<V> implements SessionStore<V> {
   }
 }
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('refresh_token rotation write ordering', () => {
   const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 
@@ -79,7 +88,10 @@ describe('refresh_token rotation write ordering', () => {
     tableauClientId: 'tableau-client',
   };
 
-  beforeEach(() => {
+  afterEach(closeLoopbackServer);
+
+  beforeEach(async () => {
+    await startLoopbackServer();
     vi.clearAllMocks();
 
     authorizationCodes = new FakeSessionStore<AuthorizationCode>();

@@ -1,10 +1,9 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { STALE_CONTENT_MIN_AGE_DAYS_DEFAULT } from '../../overridableConfig.js';
 import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { WebPromptFactory } from '../registry.js';
-
-const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
 
 /**
  * Above this many report rows, the workflow refuses to tag/delete in one pass and asks the user to
@@ -67,21 +66,6 @@ const argsSchema = {
       'Optional comma-separated subset of content types to clean up. Supported: ' +
         `${ALL_CONTENT_TYPES.join(', ')}. Defaults to all supported types.`,
     ),
-  tag: z
-    .string()
-    .max(200)
-    // Constrain to a safe tag character class. `tag` is interpolated into the workflow prompt text,
-    // so restricting it to alphanumerics/space/underscore/dash closes a prompt-injection vector
-    // (e.g. a value with quotes/backticks trying to coerce the model into auto-confirming).
-    .regex(
-      /^[A-Za-z0-9 _-]+$/,
-      'tag must contain only letters, numbers, spaces, underscores, and dashes',
-    )
-    .optional()
-    .describe(
-      'Pending-deletion label applied during the tag/preview phase (reversible, visible in the ' +
-        `Tableau UI). Letters, numbers, spaces, underscores, and dashes only. Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
-    ),
   // MCP prompt arguments are string-only over the wire (the GetPrompt request carries
   // `arguments: { [key]: string }`), so this is a string enum rather than z.boolean(). Parsed to a
   // boolean below via `args.dryRun !== 'false'`.
@@ -103,7 +87,7 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
     '(all read-only), then — only after a required human-in-the-loop approval — tag the approved ' +
     'items pending-deletion (reversible) and delete them to the recycle bin. Admin-only.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const minAgeDays = args.minAgeDays
       ? parseInt(args.minAgeDays, 10)
@@ -138,7 +122,6 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
       return { messages: [{ role: 'user', content: { type: 'text', text } }] };
     }
     const itemTypes: ContentType[] = requestedTypes.length > 0 ? requestedTypes : ALL_CONTENT_TYPES;
-    const tag = args.tag?.trim() ? args.tag.trim() : DEFAULT_PENDING_DELETION_TAG;
     const dryRun = args.dryRun !== 'false';
 
     const reportArgs: Record<string, unknown> = { kind: 'stale-content', minAgeDays, itemTypes };
@@ -220,15 +203,31 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
         : [
             '**Step 5 — Tag approved items (reversible).** ONLY for the items the user explicitly approved above, ' +
               'call `delete-content` with `confirm` omitted, `resourceType` from the routing table, ' +
-              `\`resourceId\` set to the resolved LUID, and \`tag: "${tag}"\`. This tags the item '${tag}' (reversible, visible in the ` +
-              'Tableau UI). Nothing is deleted in this step. The tag is the server-side record that the preview ran; ' +
-              'the delete step verifies it. Do NOT tag any item the user did not approve.',
+              `\`resourceId\` set to the resolved LUID, and \`minAgeDays: ${minAgeDays}\`. The server re-checks that the ` +
+              'item is still stale and, if so, tags it `pending-deletion-YYYY-MM-DD` (today, UTC — reversible, visible in ' +
+              'the Tableau UI). Nothing is deleted in this step. Record the `cleanupDate` each preview reports: that date ' +
+              'identifies this cleanup batch and the delete step must pass it back. If a preview is rejected because the ' +
+              'item is no longer stale (or its staleness cannot be verified), tell the user and drop that item from the ' +
+              'batch. Do NOT tag any item the user did not approve.',
             '',
-            '**Step 6 — Grace check.** Before deleting, confirm with the user that the grace/notification window has elapsed ' +
-              'and re-verify the items are still the intended, still-stale targets.',
+            '**Step 6 — Grace check.** Before deleting, confirm with the user that the grace/notification window has elapsed. ' +
+              'For any item the user now wants to keep, call `delete-content` with `action: "remove-pending-tags"`, its `resourceType`, ' +
+              '`resourceIds: [<LUID>]`, and the batch `cleanupDate`, and drop it from the batch. A batch expires after the ' +
+              'server limit (PENDING_DELETION_MAX_AGE_DAYS, default 30 days): if the grace window is longer, the delete ' +
+              'step is rejected and the items must be re-previewed to open a new batch.',
             '',
             '**Step 7 — Delete (confirmed).**',
             confirmInstructions,
+            'If a confirm is rejected because the item was used since the batch was assessed, do NOT retry it: report it ' +
+              'and leave it for Step 8. If it is rejected because the batch expired, nothing was deleted: tell the user, ' +
+              'clear the old markers in Step 8, and offer to start a new batch from Step 5.',
+            '',
+            '**Step 8 — Clear residue.** Call `list-workbooks` and `list-datasources` with `filter: "tags:eq:pending-deletion-<cleanupDate>"` ' +
+              '(the batch `cleanupDate`) to find items still marked (blocked, kept, or not confirmed). To also catch ' +
+              'markers from earlier batches, use `filter: "tags:in:[pending-deletion,pending-deletion-<date>,...]"` with ' +
+              'one label per day of the last 30 days (at most 25 labels per call). Show the items to the user and, for ' +
+              'those the user does not want to delete, call `delete-content` with `action: "remove-pending-tags"` ' +
+              '(`resourceType`, `resourceIds`) so no stale marker is left behind.',
             '',
             'Deleted workbooks and data sources are moved to the Tableau recycle bin and can be restored for a limited time ' +
               'before permanent removal.',
@@ -237,6 +236,7 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
       '**Fixed notes**',
       '- No content is written (tagged or deleted) until the user approves a specific item set at the Step 4 break.',
       '- This workflow only deletes items the user explicitly approved; tagged-but-unapproved items are never created.',
+      '- A pending-deletion tag authorizes only its own cleanup batch, and every delete re-checks staleness.',
       "- Deletion uses Tableau's recycle bin (soft delete) — recoverable for a limited time.",
       '- Notification is report-only; no emails are sent by this workflow.',
       '- Admin-only, Tableau Cloud. Items skipped as unresolved/ambiguous are never deleted.',

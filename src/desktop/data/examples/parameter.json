@@ -1,0 +1,78 @@
+{
+  "_description": "Parameter definition and usage in a calculated field. Parameters live in a special datasource named 'Parameters'. Reference with [Parameters].[Parameter N].",
+  "_feature": "parameter,calculated-field",
+  "parameter_datasource": {
+    "_description": "The Parameters datasource is a special built-in datasource. Add parameter columns to it.",
+    "type": "datasource",
+    "attrs": {
+      "name": "Parameters",
+      "inline": "true"
+    },
+    "children": [
+      {
+        "type": "column",
+        "attrs": {
+          "caption": "Top N",
+          "datatype": "integer",
+          "name": "[Parameter 1]",
+          "param-domain-type": "range",
+          "role": "measure",
+          "type": "quantitative",
+          "value": "10"
+        },
+        "children": [
+          {
+            "type": "calculation",
+            "attrs": {
+              "class": "tableau",
+              "formula": "10"
+            }
+          },
+          {
+            "type": "range",
+            "attrs": {
+              "granularity": "1",
+              "max": "100",
+              "min": "1"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "calc_using_parameter": {
+    "_description": "A calculated field in a regular datasource that references the parameter",
+    "type": "column",
+    "attrs": {
+      "caption": "Is Top N",
+      "datatype": "boolean",
+      "name": "[Calculation_TopN_Check]",
+      "role": "dimension",
+      "type": "nominal"
+    },
+    "children": [
+      {
+        "type": "calculation",
+        "attrs": {
+          "class": "tableau",
+          "formula": "RANK(SUM([Sales])) <= [Parameters].[Parameter 1]"
+        }
+      }
+    ]
+  },
+  "parameter_types": {
+    "integer_range": { "datatype": "integer", "param-domain-type": "range", "min": "1", "max": "100" },
+    "float_range": { "datatype": "real", "param-domain-type": "range", "min": "0.0", "max": "1.0" },
+    "string_list": { "datatype": "string", "param-domain-type": "list" },
+    "boolean": { "datatype": "boolean", "param-domain-type": "all" },
+    "all_values": { "datatype": "integer", "param-domain-type": "all", "note": "No min/max/list constraint" }
+  },
+  "notes": {
+    "datasource_name": "Parameters datasource name is ALWAYS exactly 'Parameters' (capital P)",
+    "column_name_format": "[Parameter 1], [Parameter 2], etc. — Tableau auto-numbers them",
+    "reference_in_calc": "[Parameters].[Parameter N] — always reference by datasource name + column name",
+    "value_attr": "Current parameter value is stored in the 'value' attribute of the column node",
+    "param_domain_type_values": ["all", "list", "range"],
+    "formula_attr": "The calculation formula just echoes the default value: formula='10' for default=10"
+  }
+}
