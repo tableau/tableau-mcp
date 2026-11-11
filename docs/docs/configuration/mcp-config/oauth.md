@@ -467,9 +467,7 @@ type. `SessionStore<V>` preserves the existing provider hooks and uses the gener
 [`KeyValueStore<V>`](https://github.com/tableau/tableau-mcp/blob/main/src/storage/keyValueStore.ts)
 interface, available at `@tableau/mcp-server/storage/keyValueStore`. Existing providers
 and imports continue to work. Namespace configuration and the optional `init`/`close` hooks
-remain on `SessionStore`; `KeyValueStore` contains only storage operations. The optional
-`compareAndDelete` capability is only required by callers that need conditional consumption;
-those callers must reject providers without it.
+remain on `SessionStore`; `KeyValueStore` contains only storage operations.
 
 `consume` must be implemented as a truly atomic operation against the backing store
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for

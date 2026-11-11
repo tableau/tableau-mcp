@@ -200,17 +200,12 @@ function createPrefixedStore<V>(
   const shared = store as SessionStore<V>;
 
   shared.configureNamespace?.(namespace, options);
-  const compareAndDelete = shared.compareAndDelete?.bind(shared);
 
   return {
     get: (key) => shared.get(`${prefix}${key}`),
     set: (key, value) => shared.set(`${prefix}${key}`, value),
     delete: (key) => shared.delete(`${prefix}${key}`),
     consume: (key) => shared.consume(`${prefix}${key}`),
-    ...(compareAndDelete && {
-      compareAndDelete: (key: string, expectedValue: V) =>
-        compareAndDelete(`${prefix}${key}`, expectedValue),
-    }),
   };
 }
 

@@ -18,7 +18,6 @@ import {
 import { isSessionStoreProvider, sessionStoreProviderSchema } from './types.js';
 
 const FAKE_STORE_MODULE = './src/sessionStore/__fixtures__/fakeSessionStore.cjs';
-const CONDITIONAL_STORE_MODULE = './src/sessionStore/__fixtures__/conditionalSessionStore.cjs';
 const CONFIGURE_NAMESPACE_STORE_MODULE =
   './src/sessionStore/__fixtures__/configureNamespaceSessionStore.cjs';
 const LIFECYCLE_STORE_MODULE = './src/sessionStore/__fixtures__/lifecycleSessionStore.cjs';
@@ -208,57 +207,6 @@ describe('SessionStore init', () => {
       await expect(sessions.get('same-key')).resolves.toEqual({ userId: 'user-1' });
       await expect(proofs.consume('same-key')).resolves.toBe('proof');
       await expect(sessions.get('same-key')).resolves.toEqual({ userId: 'user-1' });
-      // Missing capability stays absent so callers can detect unsupported operations.
-      expect(proofs.compareAndDelete).toBeUndefined();
-    });
-
-    it('preserves conditional consumption and namespace isolation through the wrapper', async () => {
-      useCustomStore(CONDITIONAL_STORE_MODULE);
-      const proofs = createNamespacedStore<string>('proofs', { ttlMs: 1000 });
-      const other = createNamespacedStore<string>('other', { ttlMs: 1000 });
-      const compareAndDelete = proofs.compareAndDelete;
-      if (!compareAndDelete) throw new Error('Conditional consumption is required');
-
-      await proofs.set('key', 'expected');
-      await other.set('key', 'expected');
-      await expect(compareAndDelete('missing', 'expected')).resolves.toBe(false);
-      await expect(compareAndDelete('key', 'wrong')).resolves.toBe(false);
-      await expect(proofs.get('key')).resolves.toBe('expected');
-      await expect(compareAndDelete('key', 'expected')).resolves.toBe(true);
-      await expect(compareAndDelete('key', 'expected')).resolves.toBe(false);
-      await expect(proofs.get('key')).resolves.toBeUndefined();
-      await expect(other.get('key')).resolves.toBe('expected');
-    });
-
-    it('allows only one conditional consumer across wrappers sharing a provider', async () => {
-      useCustomStore(CONDITIONAL_STORE_MODULE);
-      const first = createNamespacedStore<string>('proofs', { ttlMs: 1000 });
-      const second = createNamespacedStore<string>('proofs', { ttlMs: 1000 });
-      const consumeFirst = first.compareAndDelete;
-      const consumeSecond = second.compareAndDelete;
-      if (!consumeFirst || !consumeSecond) {
-        throw new Error('Conditional consumption is required');
-      }
-
-      await first.set('key', 'proof');
-      const results = await Promise.all([
-        consumeFirst('key', 'proof'),
-        consumeSecond('key', 'proof'),
-      ]);
-      expect(results.filter(Boolean)).toHaveLength(1);
-      await expect(first.get('key')).resolves.toBeUndefined();
-    });
-
-    it('does not delete a newer value when a caller presents the previous value', async () => {
-      useCustomStore(CONDITIONAL_STORE_MODULE);
-      const store = createNamespacedStore<string>('proofs', { ttlMs: 1000 });
-      const compareAndDelete = store.compareAndDelete;
-      if (!compareAndDelete) throw new Error('Conditional consumption is required');
-
-      await store.set('key', 'old-proof');
-      await store.set('key', 'new-proof');
-      await expect(compareAndDelete('key', 'old-proof')).resolves.toBe(false);
-      await expect(store.get('key')).resolves.toBe('new-proof');
     });
   });
 
