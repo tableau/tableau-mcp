@@ -7,15 +7,29 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { Group } from '../../../sdks/tableau/types/group.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { paginateWithMetadata } from '../../../utils/paginate.js';
+import { MAX_PAGE_SIZE, paginateWithMetadata } from '../../../utils/paginate.js';
 import { assertAdmin } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
+import { classifyUsersTruncation, ListUsersTruncationReason } from './listUsers.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
   pageSize: z.number().int().positive().optional(),
   limit: z.number().int().positive().optional(),
 };
+
+/**
+ * Default cap on returned groups when the caller passes no `limit`. An unbounded call on a large
+ * site can overflow the MCP response-size limit; the transport then silently truncates it and a
+ * model may report totals from a list it never fully received. Mirrors `list-users`.
+ */
+const DEFAULT_RESULT_LIMIT = 100;
+
+/**
+ * Hard per-call ceiling, applied even to an explicit `limit`, so "pass a higher limit" can't
+ * re-trigger the overflow above. An admin-configured MAX_RESULT_LIMITS still wins when tighter.
+ */
+const MAX_GROUPS_PER_CALL = MAX_PAGE_SIZE;
 
 export const getListGroupsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
@@ -36,14 +50,14 @@ export const getListGroupsTool = (server: WebMcpServer): WebTool<typeof paramsSc
   **Parameters:**
   - \`filter\` (optional) – A Tableau REST API filter expression with format \`field:operator:value\` (for example \`name:eq:Sales\`). The filter is applied by Tableau, not by this tool. Multiple expressions are comma-separated.
   - \`pageSize\` (optional) – Number of groups to fetch from the API per page (default 100, max 1000).
-  - \`limit\` (optional) – Maximum number of groups to return.
+  - \`limit\` (optional) – Maximum number of groups to return. **If omitted, a default limit of ${DEFAULT_RESULT_LIMIT} is applied** so an unbounded call on a large site returns a bounded page flagged \`truncated:true\` with \`truncationReason:"default-limit"\`. A single call returns at most ${MAX_GROUPS_PER_CALL} groups: a larger \`limit\` is clamped to that ceiling and reported as \`truncationReason:"max-limit"\`. Use \`filter\` to target specific groups.
 
-  **Response:** A JSON object \`{ groups: [...], totalAvailable: number, truncated: boolean }\`. Each group in \`groups\` includes:
+  **Response:** A JSON object \`{ groups: [...], totalAvailable: number, truncated: boolean, truncationReason?: string }\`. Each group in \`groups\` includes:
   - \`id\` – group ID
   - \`name\` – group name
   - \`domain.name\` – domain of the group (\`local\` for local groups)
 
-  \`totalAvailable\` is the number of groups Tableau reports for the request. \`truncated\` is \`true\` when a \`limit\` (or a configured result limit) cut the list short, so \`groups\` is only a partial list. Do not report a truncated list as complete.
+  \`totalAvailable\` is the number of groups Tableau reports for the request. \`truncated\` is \`true\` when a limit cut the list short, so \`groups\` is only a partial list. \`truncationReason\` (only when truncated) is \`"requested-limit"\` (your \`limit\`), \`"admin-cap"\` (a configured MAX_RESULT_LIMITS cap), \`"default-limit"\` (no \`limit\` was passed, so the default of ${DEFAULT_RESULT_LIMIT} applied) or \`"max-limit"\` (your \`limit\` exceeded ${MAX_GROUPS_PER_CALL} and was clamped). Do not report a truncated list as complete or as site-wide totals; narrow with \`filter\` to reach specific groups.
   `,
     paramsSchema,
     annotations: {
@@ -69,16 +83,18 @@ export const getListGroupsTool = (server: WebMcpServer): WebTool<typeof paramsSc
                 throw new Error(adminResult.error);
               }
 
-              // The tighter of the caller's limit and any admin-configured MAX_RESULT_LIMITS wins.
+              // The caller's limit (or the default), clamped by the hard per-call ceiling and any
+              // admin-configured MAX_RESULT_LIMITS, whichever is tighter.
               const maxResultLimit = configWithOverrides.getMaxResultLimit(listGroupsTool.name);
-              const limits = [args.limit, maxResultLimit].filter(
-                (limit): limit is number => limit != null,
-              );
-              const limit = limits.length > 0 ? Math.min(...limits) : undefined;
+              const ceiling =
+                maxResultLimit !== null
+                  ? Math.min(MAX_GROUPS_PER_CALL, maxResultLimit)
+                  : MAX_GROUPS_PER_CALL;
+              const effectiveLimit = Math.min(ceiling, args.limit ?? DEFAULT_RESULT_LIMIT);
 
               const { items, totalAvailable, truncatedByLimit } = await paginateWithMetadata<Group>(
                 {
-                  pageConfig: { pageSize: args.pageSize, limit },
+                  pageConfig: { pageSize: args.pageSize, limit: effectiveLimit },
                   getDataFn: async (pageConfig) => {
                     const { groups, pagination } = await restApi.usersMethods.listGroups({
                       siteId: restApi.siteId,
@@ -99,7 +115,20 @@ export const getListGroupsTool = (server: WebMcpServer): WebTool<typeof paramsSc
                 },
               );
 
-              return { groups: items, totalAvailable, truncated: truncatedByLimit };
+              const { truncated, truncationReason } = classifyUsersTruncation({
+                truncatedByLimit,
+                callerLimit: args.limit,
+                adminCap: maxResultLimit,
+                hardCeiling: MAX_GROUPS_PER_CALL,
+                effectiveLimit,
+              });
+
+              return {
+                groups: items,
+                totalAvailable,
+                truncated,
+                ...(truncationReason && { truncationReason }),
+              };
             },
           });
 
@@ -117,6 +146,7 @@ interface ListGroupsToolResult {
   groups: Array<Group>;
   totalAvailable: number;
   truncated: boolean;
+  truncationReason?: ListUsersTruncationReason;
 }
 
 export function constrainGroups(

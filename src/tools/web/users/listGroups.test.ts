@@ -143,6 +143,42 @@ describe('listGroupsTool', () => {
     expect(parsed.groups.map((g: any) => g.id)).toEqual(['g-0', 'g-1']);
     expect(parsed.totalAvailable).toBe(3);
     expect(parsed.truncated).toBe(true);
+    expect(parsed.truncationReason).toBe('requested-limit');
+  });
+
+  it('should apply a default limit of 100 when no limit is passed', async () => {
+    const groups = Array.from({ length: 100 }, (_, i) => ({ ...mockGroup, id: `g-${i}` }));
+    mocks.mockListGroups.mockResolvedValue({
+      groups,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 150 },
+    });
+
+    const result = await getToolResult({});
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.groups).toHaveLength(100);
+    expect(parsed.totalAvailable).toBe(150);
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.truncationReason).toBe('default-limit');
+    expect(mocks.mockListGroups).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clamp a limit above the per-call ceiling and report max-limit', async () => {
+    const groups = Array.from({ length: 1000 }, (_, i) => ({ ...mockGroup, id: `g-${i}` }));
+    mocks.mockListGroups.mockResolvedValue({
+      groups,
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 1500 },
+    });
+
+    const result = await getToolResult({ limit: 5000, pageSize: 1000 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.groups).toHaveLength(1000);
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.truncationReason).toBe('max-limit');
+    expect(mocks.mockListGroups).toHaveBeenCalledTimes(1);
   });
 
   it('should apply the MAX_RESULT_LIMITS cap when it is tighter than the caller limit', async () => {
@@ -163,6 +199,7 @@ describe('listGroupsTool', () => {
       const parsed = JSON.parse(`${result.content[0].text}`);
       expect(parsed.groups).toHaveLength(1);
       expect(parsed.truncated).toBe(true);
+      expect(parsed.truncationReason).toBe('admin-cap');
     } finally {
       vi.unstubAllEnvs();
       stubDefaultEnvVars();
@@ -183,13 +220,14 @@ describe('listGroupsTool', () => {
         pagination: { pageNumber: 2, pageSize: 100, totalAvailable: 150 },
       });
 
-    const result = await getToolResult({ pageSize: 100 });
+    const result = await getToolResult({ pageSize: 100, limit: 150 });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
     expect(parsed.groups).toHaveLength(150);
     expect(parsed.totalAvailable).toBe(150);
     expect(parsed.truncated).toBe(false);
+    expect(parsed.truncationReason).toBeUndefined();
     expect(mocks.mockListGroups).toHaveBeenCalledTimes(2);
   });
 });
