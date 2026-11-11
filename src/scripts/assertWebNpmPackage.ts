@@ -26,6 +26,7 @@ const expectedBuildFiles = [
   'build/index.js',
   'build/index.js.map',
   'build/sessionStore/sessionStore.d.ts',
+  'build/storage/keyValueStore.d.ts',
   'build/telemetry/telemetryProvider.d.ts',
   'build/telemetry/tracing.js',
   'build/telemetry/tracing.js.map',

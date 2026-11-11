@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import type { KeyValueStore } from '../storage/keyValueStore.js';
 import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 import type { SessionStore } from './sessionStore.js';
@@ -194,17 +195,22 @@ function createPrefixedStore<V>(
   namespace: string,
   store: SessionStore<unknown>,
   options: { ttlMs: number; maxSize?: number },
-): SessionStore<V> {
+): KeyValueStore<V> {
   const prefix = `${namespace}:`;
   const shared = store as SessionStore<V>;
 
   shared.configureNamespace?.(namespace, options);
+  const compareAndDelete = shared.compareAndDelete?.bind(shared);
 
   return {
     get: (key) => shared.get(`${prefix}${key}`),
     set: (key, value) => shared.set(`${prefix}${key}`, value),
     delete: (key) => shared.delete(`${prefix}${key}`),
     consume: (key) => shared.consume(`${prefix}${key}`),
+    ...(compareAndDelete && {
+      compareAndDelete: (key: string, expectedValue: V) =>
+        compareAndDelete(`${prefix}${key}`, expectedValue),
+    }),
   };
 }
 
@@ -225,7 +231,7 @@ function createPrefixedStore<V>(
 export function createNamespacedStore<V>(
   namespace: string,
   options: { ttlMs: number; maxSize?: number },
-): SessionStore<V> {
+): KeyValueStore<V> {
   if (state === null) {
     initializeSessionStore();
   }

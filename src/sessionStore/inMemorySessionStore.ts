@@ -1,5 +1,5 @@
+import type { KeyValueStore } from '../storage/keyValueStore.js';
 import { ExpiringMap } from '../utils/expiringMap.js';
-import type { SessionStore } from './sessionStore.js';
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout#maximum_delay_value
 const MAX_SIGNED_INT32 = 2 ** 31 - 1;
@@ -7,18 +7,27 @@ const REFRESH_MARGIN_MS = 60_000;
 const CHUNK_MS = MAX_SIGNED_INT32 - REFRESH_MARGIN_MS;
 
 /**
- * In-memory session store backed by a single ExpiringMap.
+ * In-memory store backed by a Map, or an ExpiringMap when a TTL is configured.
  *
- * Composes (does not extend) ExpiringMap so it exposes only the SessionStore contract.
+ * Exposes only the KeyValueStore contract.
  * Used as the default provider: each namespace gets its own isolated instance.
  */
-export class InMemorySessionStore<V> implements SessionStore<V> {
-  private readonly map: ExpiringMap<string, V>;
+export class InMemorySessionStore<V> implements KeyValueStore<V> {
+  private readonly map: Map<string, V>;
   private readonly refreshTimers = new Map<string, NodeJS.Timeout>();
-  private readonly ttlMs: number;
+  private readonly ttlMs?: number;
+  private readonly maxSize?: number;
 
-  constructor(options: { ttlMs: number; maxSize?: number }) {
+  constructor(options: { ttlMs?: number; maxSize?: number } = {}) {
     this.ttlMs = options.ttlMs;
+    this.maxSize = options.maxSize;
+    if (options.ttlMs === undefined) {
+      if (options.maxSize !== undefined && options.maxSize <= 0) {
+        throw new Error('Max size must be greater than 0');
+      }
+      this.map = new Map();
+      return;
+    }
     // scheduleSet() always passes an explicit (possibly chunked) expirationTimeMs, so this
     // default is never used. ExpiringMap's constructor rejects defaultExpirationTimeMs <= 0,
     // so a valid non-zero placeholder is needed.
@@ -37,7 +46,15 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
   }
 
   set(key: string, value: V): Promise<void> {
-    this.scheduleSet(key, value, this.ttlMs);
+    if (this.ttlMs === undefined) {
+      this.map.set(key, value);
+      if (this.maxSize !== undefined && this.map.size > this.maxSize) {
+        const oldestKey = this.map.keys().next().value;
+        if (oldestKey !== undefined) this.map.delete(oldestKey);
+      }
+    } else {
+      this.scheduleSet(key, value, this.ttlMs);
+    }
     return Promise.resolve();
   }
 
@@ -63,6 +80,10 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
    * every individual ExpiringMap.set() call stays under it.
    */
   private scheduleSet(key: string, value: V, ttlMs: number): void {
+    const map = this.map;
+    if (!(map instanceof ExpiringMap)) {
+      throw new Error('Cannot schedule expiration without an expiring map');
+    }
     this.clearRefreshTimer(key);
 
     if (ttlMs <= CHUNK_MS) {
@@ -70,11 +91,11 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
       // ttlMs <= 0 to represent "already expired" (e.g. tests simulating an expired token via
       // a zero timeout config) and rely on their own expiresAt field for the actual rejection,
       // not on the store evicting the entry at exactly the right instant.
-      this.map.set(key, value, Math.max(ttlMs, 1));
+      map.set(key, value, Math.max(ttlMs, 1));
       return;
     }
 
-    this.map.set(key, value, CHUNK_MS + REFRESH_MARGIN_MS);
+    map.set(key, value, CHUNK_MS + REFRESH_MARGIN_MS);
     const remaining = ttlMs - CHUNK_MS;
     const timer = setTimeout(() => {
       this.refreshTimers.delete(key);

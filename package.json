@@ -32,6 +32,9 @@
     },
     "./sessionStore/sessionStore": {
       "types": "./build/sessionStore/sessionStore.d.ts"
+    },
+    "./storage/keyValueStore": {
+      "types": "./build/storage/keyValueStore.d.ts"
     }
   },
   "scripts": {
