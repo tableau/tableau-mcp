@@ -291,7 +291,7 @@ const toolScopeMap: Record<
   },
   'list-groups': {
     mcp: ['tableau:mcp:users:read'],
-    api: new Set(['tableau:groups:read', 'tableau:users:read']),
+    api: new Set(['tableau:groups:read', 'tableau:users:read', 'tableau:mcp_site_settings:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
