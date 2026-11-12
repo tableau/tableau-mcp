@@ -16,6 +16,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { type TransportName } from '../../../transports.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
+import { deleteStagedUpload } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
@@ -30,7 +31,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Staged data source upload id returned by request-datasource-upload. Use this for hosted clients that cannot pass a local path.',
+      'Staged data source upload id returned by request-datasource-upload. Use this for hosted clients that cannot pass a local path. The upload id will be deleted upon successful publish.',
     ),
   datasourceFilePath: z
     .string()
@@ -136,6 +137,12 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
                 projectId,
                 overwrite,
               });
+
+              await deleteStagedUpload(
+                resolvedDatasourceFile.stagedKey,
+                extra.config.bucketS3,
+                'publish-datasource',
+              );
 
               return new Ok({
                 status: 'published' as const,
