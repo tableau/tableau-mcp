@@ -154,4 +154,30 @@ describe('bind-template offered sorted-bar replacement on the full template cata
     expect(sheet).toMatch(/<rows>\[Superstore\]\.\[none:Region:nk\]<\/rows>/);
     expect(sheet).toMatch(/<cols>\[Superstore\]\.\[sum:Sales:qk\]<\/cols>/);
   });
+
+  it('a pie on a measure captioned "Top 5 Sales" gets the plain offer, never a call that adds top_n', async () => {
+    const h = makeHarness(
+      wb(ds('Superstore', `${dim}${meas('Metric', 'Top 5 Sales')}`)),
+      ['Superstore'],
+      ['Metric'],
+    );
+    const body = await h.call({
+      ask: 'top5 caption pie',
+      proposal: {
+        template: 'part-to-whole-pie-chart',
+        title: 'pie',
+        confidence: 0.9,
+        bindings: [
+          { slot_id: 'field_base_1', field: '[Superstore].[none:Region:nk]' },
+          { slot_id: 'field_base_2', field: '[Superstore].[sum:Metric:qk]' },
+        ],
+      },
+    });
+    expect(body).toMatchObject({ applied: true, pie_slice_warning: { rows: 13 } });
+    const offer = /call bind-template with ask "([^"]+)" and target_worksheet "([^"]+)"/.exec(
+      body.guidance,
+    );
+    expect(offer, body.guidance).toBeNull();
+    expect(body.guidance).toContain('A sorted bar would read better; offer it to the user.');
+  });
 });

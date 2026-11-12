@@ -614,7 +614,16 @@ async function pieSliceWarningFor({
     try {
       const dry = await dryBindOffer(offeredAsk);
       const want = pieRefKeys();
-      if (dry?.status === 'bound' && dry.args.template_name === 'ranking-ordered-bar' && want) {
+      // attachAskModifiers parses caption words ("Top 5 Sales") into top_n/filters; the pie had none.
+      const addsModifiers =
+        dry?.status === 'bound' &&
+        (dry.args.top_n !== undefined || (dry.args.filters?.length ?? 0) > 0);
+      if (
+        dry?.status === 'bound' &&
+        !addsModifiers &&
+        dry.args.template_name === 'ranking-ordered-bar' &&
+        want
+      ) {
         const got = Object.values(dry.args.field_mapping)
           .map((v) => parseCanonicalColumnRef(decodeXmlEntities(v)))
           .map((r) => (r ? refKey(r) : '?'))
