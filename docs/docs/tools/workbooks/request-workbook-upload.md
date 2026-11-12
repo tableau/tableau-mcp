@@ -6,7 +6,7 @@ sidebar_position: 4
 
 Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook
 bytes to the returned URL, then call [Publish Workbook](publish-workbook.md) with the returned
-`workbookUploadId`.
+`workbookUploadId`. Each upload id can be published once.
 
 This tool exists for hosted MCP clients that cannot pass a local file path on the MCP server's
 filesystem — the client uploads workbook bytes directly to S3 using the presigned URL, and hands
@@ -45,7 +45,8 @@ Example: `482133`
 The tool returns a presigned S3 `PUT` URL and an opaque `workbookUploadId`. Upload the raw workbook
 bytes to `uploadUrl` with the given `requiredHeaders` before `expiresAt`, then pass
 `workbookUploadId` to [Publish Workbook](publish-workbook.md). The upload is not visible to Tableau
-until `publish-workbook` is called — this tool only stages the bytes.
+until `publish-workbook` is called — this tool only stages the bytes. The staged upload is deleted
+after a successful publish, so publishing again requires a new upload.
 
 The URL is signed for exactly `fileSizeBytes` bytes. S3 rejects an upload of any other size with
 `403`, so send `Content-Length` as returned in `requiredHeaders`.
