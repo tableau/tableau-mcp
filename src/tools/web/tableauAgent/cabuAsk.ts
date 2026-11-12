@@ -37,7 +37,9 @@ export const getCabuAskTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     disabled: new Provider(async () => !(await isTableauAgentToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     description: `
-Asks CABU (Tableau Agent's natural-language Q&A over a published data source) a question within a conversation already started by \`cabu-start-conversation\`.
+Asks Tableau Agent a question in a conversation already started by \`cabu-start-conversation\`. This tool is part of Tableau Agent: it uses CABU, Tableau Agent's natural-language Q&A service.
+
+**Tableau Agent answers with its own LLM.** The question is sent to Tableau Agent. The LLM that backs Tableau Agent, not you, interprets the question, decides how to query the data, and writes the answer text this tool returns. When you pass the answer on to the user, say that it came from Tableau Agent.
 
 **When to use:** only to continue a CABU conversation that the user explicitly asked for (see \`cabu-start-conversation\`). For ordinary questions about the data in a data source, use \`get-datasource-metadata\` and \`query-datasource\` instead.
 

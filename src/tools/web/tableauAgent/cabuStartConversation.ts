@@ -33,7 +33,9 @@ export const getCabuStartConversationTool = (
     disabled: new Provider(async () => !(await isTableauAgentToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     description: `
-Starts a new conversation with CABU (Tableau Agent's natural-language Q&A over a published data source), scoped to one data source. Use \`search-content\` or \`list-datasources\` first to find the \`datasourceLuid\` of the data source you want to ask about.
+Starts a new Tableau Agent conversation about one published data source. This tool is part of Tableau Agent: it uses CABU, Tableau Agent's natural-language Q&A service. Use \`search-content\` or \`list-datasources\` first to find the \`datasourceLuid\` of the data source you want to ask about.
+
+**Tableau Agent answers with its own LLM.** Questions asked in this conversation (through \`cabu-ask\`) are sent to Tableau Agent. The LLM that backs Tableau Agent, not you, interprets each question, decides how to query the data, and writes the answer. When you pass an answer on to the user, say that it came from Tableau Agent.
 
 **When to use:** only when the user explicitly asks for Tableau Agent or CABU, or asks to hand a question off to Tableau's own agent so it does the analysis server-side.
 
