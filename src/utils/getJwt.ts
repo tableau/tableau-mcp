@@ -34,6 +34,7 @@ export async function getJwt({
           alg: 'HS256',
           typ: 'JWT',
           kid: config.secretId,
+          iss: config.clientId,
         }
       : {
           alg: 'RS256',
