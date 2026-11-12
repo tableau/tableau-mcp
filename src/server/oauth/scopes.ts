@@ -765,6 +765,24 @@ export async function getSupportedApiScopes(
 }
 
 /**
+ * The explicit scopes the server supports, split by kind. MCP scopes are never collapsed into
+ * {@link MCP_WILDCARD_SCOPE}. An API scope is optional only when no enabled tool requires it.
+ */
+export async function getScopeInfo(clientId?: string): Promise<{
+  mcpScopes: McpScope[];
+  requiredApiScopes: TableauApiScope[];
+  optionalApiScopes: TableauApiScope[];
+}> {
+  const requiredApiScopes = await getSupportedApiScopes(clientId, { includeOptionalScopes: false });
+  const allApiScopes = await getSupportedApiScopes(clientId);
+  return {
+    mcpScopes: await getSupportedMcpScopes(clientId),
+    requiredApiScopes,
+    optionalApiScopes: allApiScopes.filter((scope) => !requiredApiScopes.includes(scope)),
+  };
+}
+
+/**
  * Every scope the embedded authorization server accepts in an authorize or token request: each
  * explicit MCP scope, the MCP wildcard when enabled, and (when `includeApiScopes`) the Tableau API
  * scopes. A request for any other scope is rejected with `invalid_scope`.

@@ -7,6 +7,7 @@ import {
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
   getScopeGrantCheck,
+  getScopeInfo,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
@@ -1428,6 +1429,40 @@ describe('scopes', () => {
 
       await expect(isValidScope('invalid:scope')).resolves.toBe(false);
       await expect(isValidScope('tableau:invalid:scope')).resolves.toBe(false);
+    });
+  });
+
+  describe('getScopeInfo', () => {
+    beforeEach(() => {
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+    });
+
+    it('lists the explicit MCP scopes even with the mcp-wildcard-scope flag on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'mcp-wildcard-scope',
+      );
+
+      const { mcpScopes } = await getScopeInfo();
+
+      expect(mcpScopes).toEqual(await getSupportedMcpScopes());
+      expect(mcpScopes).toContain('tableau:mcp:datasource:read');
+      expect(mcpScopes).not.toContain(MCP_WILDCARD_SCOPE);
+    });
+
+    it('lists an optional API scope only as optional', async () => {
+      const { requiredApiScopes, optionalApiScopes } = await getScopeInfo(claudeClientId);
+
+      expect(optionalApiScopes).toEqual(['tableau:permissions:read']);
+      expect(requiredApiScopes).not.toContain('tableau:permissions:read');
+      expect(requiredApiScopes).toEqual(
+        await getSupportedApiScopes(claudeClientId, { includeOptionalScopes: false }),
+      );
+    });
+
+    it('lists no optional API scopes when no enabled tool has one', async () => {
+      const { optionalApiScopes } = await getScopeInfo(slackClientId);
+
+      expect(optionalApiScopes).toEqual([]);
     });
   });
 });

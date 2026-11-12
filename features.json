@@ -19,5 +19,5 @@
   "activity-log": false,
   "admin-tools": false,
   "disable-strict-scope-match": false,
-  "mcp-wildcard-scope": false
+  "mcp-wildcard-scope": true
 }

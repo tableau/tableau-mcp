@@ -1,6 +1,12 @@
 import { generateKeyPairSync } from 'crypto';
+import express from 'express';
 
 import { getConfig } from '../../config.js';
+import {
+  closeLoopbackServer,
+  default as request,
+  startLoopbackServer,
+} from '../../testLoopbackRequest.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   createOAuthProvider,
@@ -46,5 +52,32 @@ describe('createOAuthProvider', () => {
     vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
 
     expect(createOAuthProvider(getConfig())).toBeInstanceOf(ExternalOAuthProvider);
+  });
+});
+
+describe('OAuthProvider.setupRoutes', () => {
+  beforeEach(async () => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
+    vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+    await startLoopbackServer();
+  });
+
+  afterEach(async () => {
+    await closeLoopbackServer();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  it('serves /scopeInfo', async () => {
+    const app = express();
+    new TableauOAuthProvider().setupRoutes(app);
+
+    const response = await request(app).get('/scopeInfo');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ mcpScopes: [], requiredApiScopes: [], optionalApiScopes: [] });
   });
 });
