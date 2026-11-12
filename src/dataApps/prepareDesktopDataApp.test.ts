@@ -70,6 +70,34 @@ describe('prepareDesktopDataApp', () => {
     expect(manifest).toContain('Sales Demo');
   });
 
+  it('splits a long name into package id parts and writes the same id everywhere', async () => {
+    const template = (await resolveTemplatePackageDir())!;
+    const result = await prepareDesktopDataApp({
+      workspaceRoot: workspace,
+      worksheetFile: join(cache, 'sheet.xml'),
+      templatePackageDir: template,
+      datappName: 'Superstore Regional Sales and Profit Trends-long-app-name-default-r01-1d42',
+      worksheetId: '{SHEET-GUID-1}',
+      datasourceId: 'Sales%20West',
+      datasources,
+      worksheets,
+    });
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+
+    const { packageId, sourceDir, worksheetFile } = result.value;
+    expect(packageId).toMatch(
+      /^com\.tableau\.mcp\.superstore\.regional-sales-and-profit-trends\.long-app-name-default-r01-1d42\.[0-9a-f]{8}$/,
+    );
+    expect(await readFile(worksheetFile, 'utf8')).toContain(`add-in-id='${packageId}'`);
+    expect(await readFile(join(sourceDir, 'manifest.json'), 'utf8')).toContain(
+      `"id": "${packageId}"`,
+    );
+    expect(await readFile(join(sourceDir, 'extensions', 'data-app.trex'), 'utf8')).toContain(
+      `<worksheet-extension id="${packageId}"`,
+    );
+  });
+
   it('writes the live sheet name so apply-worksheet does not hit name-differs', async () => {
     const template = (await resolveTemplatePackageDir())!;
     const result = await prepareDesktopDataApp({
