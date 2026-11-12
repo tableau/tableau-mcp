@@ -120,6 +120,11 @@ export function pieSliceGateDetail(blockers: readonly Blocker[]): string | undef
   return blockers.find((b) => b.pie_slice_gate === true)?.detail;
 }
 
+/** The internal datasource name of the pie slice field the gate blocked on. */
+export function pieSliceGateDatasource(blockers: readonly Blocker[]): string | undefined {
+  return blockers.find((b) => b.pie_slice_gate === true)?.datasource;
+}
+
 /** True when the too-many-slices pie gate is the ONLY blocker, so user confirmation can lift it. */
 export function onlyPieSliceGate(blockers: readonly Blocker[]): boolean {
   return blockers.length > 0 && blockers.every((b) => b.pie_slice_gate === true);
@@ -137,6 +142,8 @@ export interface Blocker {
   candidates?: string[];
   /** Marks the too-many-slices pie blocker so callers can steer to a sorted bar. */
   pie_slice_gate?: true;
+  /** Internal datasource name of the pie slice field; ties a keep_large_pie grant to its source. */
+  datasource?: string;
 }
 
 export type ValidateResult =
@@ -833,6 +840,7 @@ export function validateBinding(
       blockers.push({
         code: 'kind-mismatch',
         pie_slice_gate: true,
+        datasource: slice.datasource,
         slot_id: sliceSlot?.slot_id,
         detail:
           `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
