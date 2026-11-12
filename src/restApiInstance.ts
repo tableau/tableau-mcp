@@ -35,6 +35,7 @@ type JwtScopes =
   | 'tableau:entitlements:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
+  | 'tableau:views:embed_authoring'
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'

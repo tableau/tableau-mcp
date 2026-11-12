@@ -420,3 +420,37 @@ export class DataAppTemplateUnavailableError extends McpToolError {
     super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
   }
 }
+
+/** A CABU turn's SSE stream reported a CES-side `error` event (`error_code`/`error_details`). */
+export class CabuResponseError extends McpToolError {
+  constructor(errorCode?: string, errorDetails?: string) {
+    super({
+      type: 'cabu-response-error',
+      message: [
+        'CABU could not answer this question.',
+        errorCode ? `Error code: ${errorCode}.` : undefined,
+        errorDetails,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      statusCode: 502,
+      internalError: errorCode,
+      internalErrorDetails: errorDetails,
+    });
+  }
+}
+
+/**
+ * A CABU turn's SSE stream ended without ever emitting a terminal `complete` or `error` event --
+ * e.g. a dropped connection. There is no protocol error to report, just an unconfirmed answer.
+ */
+export class CabuStreamIncompleteError extends McpToolError {
+  constructor() {
+    super({
+      type: 'cabu-stream-incomplete',
+      message:
+        'The CABU response stream ended before completing. The answer is unconfirmed; try asking again.',
+      statusCode: 504,
+    });
+  }
+}

@@ -15,6 +15,7 @@ import {
   AuthenticatedAuthenticationMethods,
   AuthenticationMethods,
 } from './methods/authenticationMethods.js';
+import CabuMethods from './methods/cabuMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import FlowDocumentMethods from './methods/flowDocumentMethods.js';
@@ -155,6 +156,19 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, authenticatedServerMethods.interceptors);
     return authenticatedServerMethods;
+  }
+
+  get cabuMethods(): CabuMethods {
+    // CABU lives directly under the CES voltron resource tree, not under the versioned REST API
+    // or `contentExplorationMethods`'s unrelated `/api/-/search` content-exploration endpoint
+    // (same name, different feature) -- see `.work/specs/W-24280234-cabu-tools.md`.
+    const baseUrl = `${RestApi.host}/content-exploration/analytics-assistant/cabu`;
+    const cabuMethods = new CabuMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, cabuMethods.interceptors);
+    return cabuMethods;
   }
 
   get contentExplorationMethods(): ContentExplorationMethods {

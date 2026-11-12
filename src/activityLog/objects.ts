@@ -109,6 +109,9 @@ export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> 
   'inspect-knowledge-context': null,
   'manage-knowledge-context': null,
   'scaffold-data-app': null,
+  'cabu-start-conversation': idIn('datasource', 'datasourceLuid'),
+  // `conversationId`/`utteranceArgs` are CABU's own identifiers, not a Tableau content LUID.
+  'cabu-ask': null,
 };
 
 /**
