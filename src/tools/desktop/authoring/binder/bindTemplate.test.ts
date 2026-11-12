@@ -3873,6 +3873,110 @@ describe('bindTemplateTool bind recovery gate', () => {
       expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     });
 
+    describe('exits before the binder leave the confirmation intact', () => {
+      const confirmed = (session: string, getExecutor: any): Promise<CallToolResult> =>
+        getToolResult({
+          session,
+          ask,
+          proposal: pieProposal,
+          auto_apply: true,
+          keep_large_pie: true,
+          getExecutor,
+        });
+
+      it('replays a confirmed pie after getWorkbookXml fails', async () => {
+        const { getExecutor, applyWorkbookDocument } = setup();
+        const session = 'pie-keep-preflight-err';
+        await getToolResult({ session, ask, getExecutor });
+        await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+        const read = vi.mocked(getWorkbookXmlModule.getWorkbookXml);
+        const original = read.getMockImplementation()!;
+        read.mockImplementationOnce(async () => Err('workbook read failed' as any));
+        const failed = await confirmed(session, getExecutor);
+        expect(failed.isError).toBe(true);
+        read.mockImplementation(original);
+        const retry = await confirmed(session, getExecutor);
+        expect(retry.isError, JSON.stringify(retry)).toBe(false);
+        expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+          keepLargePie: true,
+        });
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+
+      it('replays a confirmed pie after getExecutor throws', async () => {
+        const { getExecutor, applyWorkbookDocument } = setup();
+        const session = 'pie-keep-executor-throw';
+        await getToolResult({ session, ask, getExecutor });
+        await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+        getExecutor.mockRejectedValueOnce(new Error('desktop unavailable'));
+        const failed = await confirmed(session, getExecutor);
+        expect(failed.isError).toBe(true);
+        const retry = await confirmed(session, getExecutor);
+        expect(retry.isError, JSON.stringify(retry)).toBe(false);
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets an ordinary Call 2 retry after getWorkbookXml fails', async () => {
+        const { getExecutor, applyWorkbookDocument } = setupAutoApplyMocks({
+          bind: boundPie(),
+          inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+          workbookReads: [M7_WORKBOOK_XML],
+          structuralReadback: true,
+        });
+        vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(pieDeclined());
+        const session = 'pie-keep-ordinary-call2';
+        await getToolResult({ session, ask, getExecutor });
+        const read = vi.mocked(getWorkbookXmlModule.getWorkbookXml);
+        const original = read.getMockImplementation()!;
+        read.mockImplementationOnce(async () => Err('workbook read failed' as any));
+        const failed = await getToolResult({
+          session,
+          ask,
+          proposal: pieProposal,
+          auto_apply: true,
+          getExecutor,
+        });
+        expect(failed.isError).toBe(true);
+        read.mockImplementation(original);
+        const retry = await getToolResult({
+          session,
+          ask,
+          proposal: pieProposal,
+          auto_apply: true,
+          getExecutor,
+        });
+        expect(retry.isError, JSON.stringify(retry)).toBe(false);
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+
+      it('blocks a concurrent duplicate of an in-flight confirmed call with the duplicate block', async () => {
+        const { getExecutor, applyWorkbookDocument } = setup();
+        const session = 'pie-keep-concurrent';
+        await getToolResult({ session, ask, getExecutor });
+        await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+        const realExecutor = await getExecutor(session);
+        let resolveExecutor!: (executor: object) => void;
+        getExecutor.mockReturnValueOnce(
+          new Promise<object>((resolve) => {
+            resolveExecutor = resolve;
+          }),
+        );
+        const executorCalls = getExecutor.mock.calls.length;
+        const inFlight = confirmed(session, getExecutor);
+        await vi.waitFor(() => expect(getExecutor).toHaveBeenCalledTimes(executorCalls + 1));
+        const duplicate = await confirmed(session, getExecutor);
+        expect(duplicate.isError).toBe(true);
+        invariant(duplicate.content[0].type === 'text');
+        const duplicateBody = JSON.parse(duplicate.content[0].text);
+        expect(duplicateBody.reason).toBe('fallback_required');
+        expect(duplicateBody.reason).not.toBe('pie_slice_limit');
+        resolveExecutor(realExecutor);
+        const done = await inFlight;
+        expect(done.isError, JSON.stringify(done)).toBe(false);
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('declines keep_large_pie under requireCompleteRequest without minting coverage', async () => {
       vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
       const result = await getToolResult({
