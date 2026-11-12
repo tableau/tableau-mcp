@@ -20,6 +20,7 @@ import {
   summarizeSchema,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../../desktop/binder/binder.js';
+import { PIE_SLICE_WORKABLE_MAX } from '../../../../desktop/binder/cardinality.js';
 import {
   type ExactFilterIntent,
   type ExactFilterValueConstraint,
@@ -266,6 +267,7 @@ type AppliedFastPathResult = {
   summary_rows_scope?: SummaryDataReadScope;
   summary_rows_error?: string;
   truncated?: true;
+  pie_slice_warning?: PieSliceWarning;
   /**
    * What the ask asked for vs what this bind built. Present ONLY when something the ask
    * asked for is missing from the sheet — a complete bind still returns the trimmed shape.
@@ -358,7 +360,7 @@ const WATERFALL_SORT_HINT =
 // verbatim, so this directly contradicts the bundled skill's "adapt fields/formatting".
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
-const POST_APPLY_UNCERTAINTY_GUIDANCE =
+export const POST_APPLY_UNCERTAINTY_GUIDANCE =
   'Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
 // agent must NOT hand-author another one. These clauses are appended only for splices the
@@ -459,6 +461,13 @@ function currencyHeterogeneityCaveat(
   };
 }
 
+type PieSliceWarning = {
+  field: string;
+  rows: number;
+  max: number;
+  rows_exceed_preview: boolean;
+};
+
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
   'summary_rows' | 'summary_rows_order' | 'summary_rows_scope' | 'summary_rows_error' | 'truncated'
@@ -530,6 +539,121 @@ function capSummaryRows(
   };
 }
 
+async function pieSliceWarningFor({
+  rows,
+  args,
+  templateSnapshot,
+  schemaSummary,
+  sheetName,
+  uncertain,
+  unfilledEncodings,
+  dryBindOffer,
+}: {
+  rows: number;
+  /** Binds the exact offered ask the way the follow-up call will; undefined if it cannot. */
+  dryBindOffer?: (ask: string) => Promise<BinderResult>;
+  uncertain: boolean;
+  unfilledEncodings: boolean;
+  args: BoundResult['args'];
+  templateSnapshot: TemplateRuntimeSnapshot;
+  schemaSummary: SchemaSummary;
+  sheetName: string;
+}): Promise<{ flag: PieSliceWarning; guidance: string }> {
+  type Slot = TemplateRuntimeSnapshot['descriptor']['slots'][number];
+  const resolveSlot = (
+    slot: Slot,
+  ): { ref: CanonicalColumnRef; field?: SchemaField } | undefined => {
+    const key = slot.qualified_key_required
+      ? `${slot.template_field}@${slot.derivation}`
+      : slot.template_field;
+    const mapped = args.field_mapping[key];
+    const ref = mapped === undefined ? null : parseCanonicalColumnRef(decodeXmlEntities(mapped));
+    if (!ref) return undefined;
+    return { ref, field: schemaSummary.fields.find((f) => refMatchesSchemaField(ref, f)) };
+  };
+  const captionFor = (pick: (slot: Slot) => boolean): string | undefined => {
+    const slot = templateSnapshot.descriptor.slots.find((s) => s.bindable && pick(s));
+    const field = slot ? resolveSlot(slot)?.field : undefined;
+    return field ? (field.caption ?? field.name) : undefined;
+  };
+  const sliceCaption = captionFor((s) => s.kind === 'categorical' && s.role.includes('color'));
+  const measureCaption = captionFor((s) => s.kind === 'quantitative');
+  // The offered bar ask re-binds from words alone, so it would silently drop filters and top_n.
+  const offerWouldDropSemantics = (args.filters?.length ?? 0) > 0 || args.top_n !== undefined;
+  const offeredAsk =
+    sliceCaption !== undefined && measureCaption !== undefined
+      ? `sorted bar chart of ${measureCaption} by ${sliceCaption}`
+      : undefined;
+  // Words are not proof: only name the ask when a dry bind of it lands on the pie's exact fields.
+  const pieRefKeys = (): string[] | undefined => {
+    const keys: string[] = [];
+    for (const slot of templateSnapshot.descriptor.slots) {
+      if (!slot.bindable) continue;
+      if (
+        slot.kind !== 'quantitative' &&
+        !(slot.kind === 'categorical' && slot.role.includes('color'))
+      ) {
+        continue;
+      }
+      const ref = resolveSlot(slot)?.ref;
+      if (!ref) return undefined;
+      keys.push(refKey(ref));
+    }
+    return keys.sort();
+  };
+  const refKey = (ref: CanonicalColumnRef): string =>
+    `${ref.datasource.toLowerCase()}|${ref.localFieldName}|${ref.derivation}`;
+  let offerVerified = false;
+  if (
+    offeredAsk !== undefined &&
+    dryBindOffer !== undefined &&
+    !uncertain &&
+    !unfilledEncodings &&
+    !offerWouldDropSemantics
+  ) {
+    try {
+      const dry = await dryBindOffer(offeredAsk);
+      const want = pieRefKeys();
+      // attachAskModifiers parses caption words ("Top 5 Sales") into top_n/filters; the pie had none.
+      const addsModifiers =
+        dry?.status === 'bound' &&
+        (dry.args.top_n !== undefined || (dry.args.filters?.length ?? 0) > 0);
+      if (
+        dry?.status === 'bound' &&
+        !addsModifiers &&
+        dry.args.template_name === 'ranking-ordered-bar' &&
+        want
+      ) {
+        const got = Object.values(dry.args.field_mapping)
+          .map((v) => parseCanonicalColumnRef(decodeXmlEntities(v)))
+          .map((r) => (r ? refKey(r) : '?'))
+          .sort();
+        offerVerified = want.length === 2 && JSON.stringify(got) === JSON.stringify(want);
+      }
+    } catch {
+      /* fail-open to the plain offer */
+    }
+  }
+  const sliceField = sliceCaption ?? 'the slice field';
+  const exceedsPreview = rows > SUMMARY_ROWS_MAX_ROWS;
+  const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
+  const offer = !offerVerified
+    ? 'A sorted bar would read better; offer it to the user.'
+    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and target_worksheet "${sheetName}".`;
+  return {
+    flag: {
+      field: sliceField,
+      rows,
+      max: PIE_SLICE_WORKABLE_MAX,
+      rows_exceed_preview: exceedsPreview,
+    },
+    guidance: uncertain
+      ? `The pie has ${count} slices of ${sliceField}, above the workable maximum of ${PIE_SLICE_WORKABLE_MAX}. Tell the user this. ${offer}`
+      : `The pie is already on the sheet and has ${count} slices of ${sliceField}, above the workable maximum of ${PIE_SLICE_WORKABLE_MAX}. ` +
+        `Tell the user this. ${offer}`,
+  };
+}
+
 function boundedSummaryRowsError(reason: string): string {
   return reason.length <= SUMMARY_ROWS_ERROR_MAX_CHARS
     ? reason
@@ -544,7 +668,7 @@ async function readAppliedSummaryRows({
   executor: ExternalApiToolExecutor;
   signal: AbortSignal;
   worksheetName: string;
-}): Promise<SummaryRowsEnrichment> {
+}): Promise<{ enrichment: SummaryRowsEnrichment; rawRowCount?: number }> {
   const timeoutController = new AbortController();
   const onAbort = (): void => timeoutController.abort(signal.reason);
   if (signal.aborted) {
@@ -582,21 +706,28 @@ async function readAppliedSummaryRows({
     if (result.isErr()) {
       throwIfSessionFatalError(result.error.error);
       return {
-        summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
+        enrichment: {
+          summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
+        },
       };
     }
-    return capSummaryRows(
-      result.value.columns,
-      result.value.rows,
-      result.value.rowOrder,
-      result.value.readScope,
-    );
+    return {
+      enrichment: capSummaryRows(
+        result.value.columns,
+        result.value.rows,
+        result.value.rowOrder,
+        result.value.readScope,
+      ),
+      rawRowCount: result.value.rows.length,
+    };
   } catch (error) {
     throwIfSessionFatalError(error);
     return {
-      summary_rows_error: boundedSummaryRowsError(
-        deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
-      ),
+      enrichment: {
+        summary_rows_error: boundedSummaryRowsError(
+          deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
+        ),
+      },
     };
   } finally {
     if (timeout !== undefined) {
@@ -2551,8 +2682,11 @@ async function performAutoApply({
   trustedDeterministicApply,
   idempotencyKey,
   deterministicBindingFields,
+  keepLargePie,
+  dryBindOffer,
   reportProgress,
 }: {
+  dryBindOffer?: (ask: string) => Promise<BinderResult>;
   res: BoundResult;
   base: BindTemplateToolResultBase;
   ask: string;
@@ -2571,6 +2705,8 @@ async function performAutoApply({
   trustedDeterministicApply?: boolean;
   idempotencyKey?: string;
   deterministicBindingFields?: string[];
+  /** The user explicitly chose a pie above the slice limit; do not warn about it again. */
+  keepLargePie?: boolean;
   reportProgress: (progress: 1 | 2 | 3, message: string) => Promise<void>;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
@@ -2895,13 +3031,14 @@ async function performAutoApply({
   // authored calculations and worksheet. Avoid a second summary-data round trip;
   // the live worksheet remains the source of truth after datasource refreshes.
   // Ordinary binds keep their existing summary-read behavior unchanged.
-  const summaryRows: Awaited<ReturnType<typeof readAppliedSummaryRows>> = !trustedDeterministicApply
+  const summaryRead: Awaited<ReturnType<typeof readAppliedSummaryRows>> = !trustedDeterministicApply
     ? await readAppliedSummaryRows({
         executor,
         signal,
         worksheetName: literalTitle,
       })
-    : {};
+    : { enrichment: {} };
+  const summaryRows = summaryRead.enrichment;
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
@@ -2924,8 +3061,25 @@ async function performAutoApply({
       usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const coreNeedsFollowUp =
+  const pieSliceWarning =
+    keepLargePie !== true &&
+    args.template_name === 'part-to-whole-pie-chart' &&
+    summaryRead.rawRowCount !== undefined &&
+    summaryRead.rawRowCount > PIE_SLICE_WORKABLE_MAX
+      ? await pieSliceWarningFor({
+          dryBindOffer,
+          rows: summaryRead.rawRowCount,
+          args,
+          templateSnapshot,
+          schemaSummary,
+          sheetName: literalTitle,
+          uncertain: promiseOutcome === 'failed' || postApplyUncertain,
+          unfilledEncodings: unfilledEncodings !== undefined,
+        })
+      : undefined;
+  const followUpBesidesPie =
     incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+  const coreNeedsFollowUp = followUpBesidesPie || pieSliceWarning !== undefined;
   const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
@@ -2972,11 +3126,11 @@ async function performAutoApply({
     verificationReport.ok === true &&
     verificationReport.status === 'passed' &&
     nativeFindings.length === 0;
-  const completionEligible =
+  const completionEligibleBesidesPie =
     res.requestCoverage !== undefined &&
     !trustedDeterministicApply &&
     args.sheet_type === 'worksheet' &&
-    !coreNeedsFollowUp &&
+    !followUpBesidesPie &&
     documentWarnings.length === 0 &&
     !emptySummaryReadback &&
     !summaryReadbackTimedOut &&
@@ -2998,16 +3152,17 @@ async function performAutoApply({
     res.encodings.unfilled.length === 0 &&
     (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
     readbackEvidence === '';
+  const completionEligible = completionEligibleBesidesPie && pieSliceWarning === undefined;
   const caveats: CompletionCaveat[] = [];
   if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
   if (nativeFieldUnverified) caveats.push('field_validation_unverified');
   caveats.push('query_render_unverified');
   if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
-  const operationEligible =
+  const operationEligibleBesidesPie =
     !trustedDeterministicApply &&
     res.requestCoverage === undefined &&
     args.sheet_type === 'worksheet' &&
-    !coreNeedsFollowUp &&
+    !followUpBesidesPie &&
     documentWarnings.length === 0 &&
     !emptySummaryReadback &&
     !summaryReadbackTimedOut &&
@@ -3021,16 +3176,31 @@ async function performAutoApply({
     verification.status === 'passed' &&
     verification.findings.length === 0 &&
     (nativeFieldVerified || nativeFieldUnverified);
+  const operationEligible = operationEligibleBesidesPie && pieSliceWarning === undefined;
   const evidenceEligible = completionEligible || operationEligible;
   const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;
-  const settledGuidance =
+  // "Nothing more is needed" is only true when the pie is the sole reason this apply is not done.
+  const pieIsSoleFollowUp =
+    (completionEligibleBesidesPie || operationEligibleBesidesPie) &&
+    !appliedDefault &&
+    currencyGuidance === '' &&
+    readbackEvidence === '';
+  const pieGuidance = pieSliceWarning
+    ? ` ${pieSliceWarning.guidance}${pieIsSoleFollowUp ? ' If the user wants the pie, nothing more is needed.' : ''}`
+    : '';
+  const settledGuidance = `${
     documentWarnings.length > 0
       ? guidance
       : completionEvidenceWithheld
-        ? `${receiptText} Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+        ? `${receiptText} ${
+            pieSliceWarning && completionEligibleBesidesPie
+              ? 'Completion evidence was withheld only because of the pie slice count below.'
+              : 'Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.'
+          }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
         : evidenceEligible && summaryPreviewUnavailable
           ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
-          : guidance;
+          : guidance
+  }${pieGuidance}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
@@ -3055,6 +3225,7 @@ async function performAutoApply({
       : { bind: bindMs, inject: injectMs, apply: applyMs },
     verification: receiptInput.readback,
     ...summaryRows,
+    ...(pieSliceWarning ? { pie_slice_warning: pieSliceWarning.flag } : {}),
     ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
     ...(evidenceEligible
       ? {
@@ -4151,6 +4322,19 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 deterministicBindingFields: trustedDeterministicApply
                   ? proposal?.bindings.map((binding) => binding.field)
                   : undefined,
+                keepLargePie: largePieConfirmed,
+                dryBindOffer: async (offeredAsk) => {
+                  // The follow-up call has no proposal and no complete-request flag, so use its catalog.
+                  const followUp = createPuppetCompatibilityProjection(
+                    loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true }),
+                  );
+                  const dry = await bindTemplate({
+                    ask: offeredAsk,
+                    workbookXml,
+                    manifests: followUp.descriptors,
+                  });
+                  return followUp.expandBinderResult(dry, schemaSummary);
+                },
                 reportProgress,
                 // Honor skip_validation only for a server-trusted caller (config gate set by the
                 // deterministic spawner). An untrusted LLM turn that passes the flag gets full

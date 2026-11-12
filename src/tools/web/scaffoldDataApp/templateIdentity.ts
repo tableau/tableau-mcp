@@ -97,13 +97,38 @@ export function slug(name: string): string {
 }
 
 /**
+ * Publish fails when the package folder's name has more than 32 characters after its last dot.
+ */
+const MAX_PACKAGE_ID_PART_LENGTH = 32;
+
+/**
+ * Splits a slug at hyphens into package id parts of at most 32 characters.
+ */
+export function packageIdParts(slugged: string): string[] {
+  const words = slugged
+    .split('-')
+    .flatMap((word) => word.match(new RegExp(`.{1,${MAX_PACKAGE_ID_PART_LENGTH}}`, 'g')) ?? []);
+  const parts: string[] = [];
+  for (let i = words.length - 1; i >= 0; i--) {
+    const word = words[i];
+    if (parts.length && word.length + 1 + parts[0].length <= MAX_PACKAGE_ID_PART_LENGTH) {
+      parts[0] = `${word}-${parts[0]}`;
+    } else {
+      parts.unshift(word);
+    }
+  }
+  return parts;
+}
+
+/**
  * Derives the data app identity from the requested name. `displayName` is the
- * name verbatim; `packageId` is a deterministic `com.tableau.mcp.<slug>`; `version`
- * and `author` are the fixed defaults.
+ * name verbatim; `packageId` is a deterministic `com.tableau.mcp.<slug>`, with a slug longer than
+ * 32 characters split into dot-separated parts (see `packageIdParts`); `version` and `author` are
+ * the fixed defaults.
  */
 export function deriveIdentity(datappName: string): DataAppIdentity {
   return {
-    packageId: `com.tableau.mcp.${slug(datappName)}`,
+    packageId: `com.tableau.mcp.${packageIdParts(slug(datappName)).join('.')}`,
     displayName: datappName,
     version: DEFAULT_VERSION,
     author: DEFAULT_AUTHOR,
