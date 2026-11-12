@@ -4,6 +4,7 @@ import {
   buildTextReplacements,
   deriveIdentity,
   MANIFEST_RELPATH,
+  packageIdParts,
   slug,
   TEMPLATE_TWB_FILENAME,
   TREX_RELPATH,
@@ -27,6 +28,30 @@ describe('slug', () => {
   });
 });
 
+describe('packageIdParts', () => {
+  it('keeps a slug of up to 32 characters as one part', () => {
+    expect(packageIdParts('sales-demo')).toEqual(['sales-demo']);
+    expect(packageIdParts('abcdefghij-abcdefghij-abcdefghij')).toEqual([
+      'abcdefghij-abcdefghij-abcdefghij',
+    ]);
+  });
+
+  it('splits longer slugs at hyphens, packing words from the end', () => {
+    expect(packageIdParts('abcdefghij-abcdefghij-abcdefghij-k')).toEqual([
+      'abcdefghij',
+      'abcdefghij-abcdefghij-k',
+    ]);
+    expect(packageIdParts('superstore-regional-sales-profit-app')).toEqual([
+      'superstore',
+      'regional-sales-profit-app',
+    ]);
+  });
+
+  it('cuts a word longer than 32 characters', () => {
+    expect(packageIdParts('a'.repeat(40))).toEqual(['a'.repeat(32), 'a'.repeat(8)]);
+  });
+});
+
 describe('deriveIdentity', () => {
   it('derives packageId and displayName', () => {
     const identity = deriveIdentity('Sales Demo');
@@ -36,6 +61,28 @@ describe('deriveIdentity', () => {
       version: '1.0.0',
       author: 'Tableau MCP',
     });
+  });
+
+  it('splits a long name into dot-separated parts', () => {
+    expect(
+      deriveIdentity('Superstore Regional Sales and Profit Trends-long-app-name-default-r01-1d42')
+        .packageId,
+    ).toBe(
+      'com.tableau.mcp.superstore.regional-sales-and-profit-trends.long-app-name-default-r01-1d42',
+    );
+  });
+
+  it.each([
+    'Quarterly Regional Sales and Profit Performance Review Dashboard for the Western Sales Team 2026 v2',
+    'Supercalifragilisticexpialidocious Supercalifragilisticexpialidocious Dashboard App',
+    'a'.repeat(100),
+  ])('keeps every part of a long name within Tableau limits: %s', (name) => {
+    const { packageId } = deriveIdentity(name);
+    // ExtensionManifest.xsd Extension-Id-ST pattern.
+    expect(packageId).toMatch(/^[A-Za-z]{2,6}(\.[A-Za-z0-9-]{1,63})+$/);
+    for (const part of packageId.split('.')) {
+      expect(part.length).toBeLessThanOrEqual(32);
+    }
   });
 });
 
