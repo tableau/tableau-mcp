@@ -427,4 +427,28 @@ describe('keep_large_pie grant is tied to the blocked datasource and target', ()
     );
     expect(same.status, JSON.stringify(same)).toBe('bound');
   });
+
+  it('does not let a paused call on another datasource borrow a grant written meanwhile', async () => {
+    let releaseRead!: (result: ReturnType<typeof Ok<string>>) => void;
+    const pendingRead = new Promise<ReturnType<typeof Ok<string>>>((resolve) => {
+      releaseRead = resolve;
+    });
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReturnValueOnce(pendingRead);
+    const beta = withAsk({ datasource: 'federated.b', keep_large_pie: true });
+    await vi.waitFor(() => expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1));
+    await blockOn('federated.a');
+    releaseRead(Ok(PIE_XML));
+    const betaResult = await beta;
+    expect(betaResult.isError).toBe(true);
+    expect(betaResult.content[0]).toMatchObject({
+      text: expect.stringContaining('must match the retained'),
+    });
+    const betaCalls = vi
+      .mocked(binderModule.bindTemplate)
+      .mock.calls.filter(([args]) => args.datasource === 'federated.b');
+    expect(betaCalls).toHaveLength(0);
+    const alpha = body(await withAsk({ datasource: 'federated.a', keep_large_pie: true }));
+    expect(alpha.status, JSON.stringify(alpha)).toBe('bound');
+    expect(alpha.args.template_parameters.DATASOURCE).toBe('federated.a');
+  });
 });

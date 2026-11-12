@@ -3537,7 +3537,12 @@ describe('bindTemplateTool bind recovery gate', () => {
         status: 'escalate',
         reason: 'kind-mismatch',
         blockers: [
-          { code: 'kind-mismatch', detail: pieDetail, pie_slice_gate: true },
+          {
+            code: 'kind-mismatch',
+            detail: pieDetail,
+            pie_slice_gate: true,
+            datasource: 'M7',
+          },
           { code: 'kind-mismatch', detail: 'unrelated blocker' },
         ],
       });
@@ -3675,7 +3680,14 @@ describe('bindTemplateTool bind recovery gate', () => {
     const pieOnlyEscalate: BinderResult = {
       status: 'escalate',
       reason: 'kind-mismatch',
-      blockers: [{ code: 'kind-mismatch', detail: pieDetail, pie_slice_gate: true }],
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail: pieDetail,
+          pie_slice_gate: true,
+          datasource: 'M7',
+        },
+      ],
     };
     const pieProposal: BindingProposal & { confidence: number } = {
       template: 'part-to-whole-pie-chart',
@@ -3977,23 +3989,26 @@ describe('bindTemplateTool bind recovery gate', () => {
         const session = 'pie-keep-concurrent';
         await getToolResult({ session, ask, getExecutor });
         await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
-        const realExecutor = await getExecutor(session);
-        let resolveExecutor!: (executor: object) => void;
-        getExecutor.mockReturnValueOnce(
-          new Promise<object>((resolve) => {
-            resolveExecutor = resolve;
-          }),
-        );
-        const executorCalls = getExecutor.mock.calls.length;
+        // A datasource-scoped grant reserves after the workbook read, so pause at the binder.
+        const bind = vi.mocked(binderModule.bindTemplate);
+        let releaseBind!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          releaseBind = resolve;
+        });
+        bind.mockImplementationOnce(async () => {
+          await gate;
+          return boundPie();
+        });
+        const bindCalls = bind.mock.calls.length;
         const inFlight = confirmed(session, getExecutor);
-        await vi.waitFor(() => expect(getExecutor).toHaveBeenCalledTimes(executorCalls + 1));
+        await vi.waitFor(() => expect(bind).toHaveBeenCalledTimes(bindCalls + 1));
         const duplicate = await confirmed(session, getExecutor);
         expect(duplicate.isError).toBe(true);
         invariant(duplicate.content[0].type === 'text');
         const duplicateBody = JSON.parse(duplicate.content[0].text);
         expect(duplicateBody.reason).toBe('fallback_required');
         expect(duplicateBody.reason).not.toBe('pie_slice_limit');
-        resolveExecutor(realExecutor);
+        releaseBind();
         const done = await inFlight;
         expect(done.isError, JSON.stringify(done)).toBe(false);
         expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
