@@ -10859,6 +10859,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
           detail:
             'pie slice field "Region" has 49 distinct values, above the workable maximum of 12',
           pie_slice_gate: true,
+          datasource: 'Superstore',
         },
       ],
     };
