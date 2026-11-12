@@ -37,9 +37,11 @@ Starts a new Tableau Agent conversation about one published data source. This to
 
 **Tableau Agent answers with its own LLM.** Questions asked in this conversation (through \`cabu-ask\`) are sent to Tableau Agent. The LLM that backs Tableau Agent, not you, interprets each question, decides how to query the data, and writes the answer. When you pass an answer on to the user, say that it came from Tableau Agent.
 
-**When to use:** only when the user explicitly asks for Tableau Agent or CABU, or asks to hand a question off to Tableau's own agent so it does the analysis server-side.
+**When to use:** only when the user explicitly opts in to Tableau Agent, for example "ask Tableau Agent...", "use Tableau Agent for this", or "use CABU". The user must ask for Tableau Agent by name or clearly ask to hand the question to Tableau's own agent. Never call this tool on your own initiative: a data question, even a complex one, is not an opt-in, and neither is the fact that this tool is available.
 
-**When NOT to use:** for ordinary questions about the data in a data source (totals, breakdowns, top-N, trends, filters). Answer those with \`get-datasource-metadata\` and \`query-datasource\` instead; they are the default way to query data.
+**When NOT to use:**
+- For ordinary questions about the data in a data source (totals, breakdowns, top-N, trends, filters) when the user has not opted in. Answer those with \`get-datasource-metadata\` and \`query-datasource\`; they are the default way to query data.
+- To continue a conversation that is already open. Once the user has opted in and this tool has started a conversation for a data source, send every follow-up question about that data source to \`cabu-ask\` with the same \`conversationId\` and \`utteranceArgs\`. Call this tool again only if the user asks to start over, or explicitly asks Tableau Agent about a different data source.
 
 Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of these, unmodified, to every \`cabu-ask\` call that continues this conversation -- \`utteranceArgs\` is required on every turn, not just the first.
 

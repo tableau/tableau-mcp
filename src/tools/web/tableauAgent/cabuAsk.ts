@@ -41,7 +41,11 @@ Asks Tableau Agent a question in a conversation already started by \`cabu-start-
 
 **Tableau Agent answers with its own LLM.** The question is sent to Tableau Agent. The LLM that backs Tableau Agent, not you, interprets the question, decides how to query the data, and writes the answer text this tool returns. When you pass the answer on to the user, say that it came from Tableau Agent.
 
-**When to use:** only to continue a CABU conversation that the user explicitly asked for (see \`cabu-start-conversation\`). For ordinary questions about the data in a data source, use \`get-datasource-metadata\` and \`query-datasource\` instead.
+**When to use:** for every question about the data source in a Tableau Agent conversation that the user explicitly opted in to and \`cabu-start-conversation\` started. After that opt-in, keep sending the user's follow-up questions about that data source here, even when they don't mention Tableau Agent again (for example "now just the West region" or "break that down by category"). Do not switch those follow-ups to \`query-datasource\`, and do not start a new conversation for them.
+
+**When NOT to use:**
+- Before the user has opted in. Never call this tool, or \`cabu-start-conversation\`, unless the user has explicitly asked for Tableau Agent; ordinary data questions go to \`get-datasource-metadata\` and \`query-datasource\`.
+- After the user asks to stop using Tableau Agent, or for questions about a data source that has no open Tableau Agent conversation.
 
 **Parameters:**
 
