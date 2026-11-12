@@ -473,6 +473,9 @@ interface, available at `@tableau/mcp-server/storage/keyValueStore`. Existing pr
 and imports continue to work. Namespace configuration and the optional `init`/`close` hooks
 remain on `SessionStore`; `KeyValueStore` contains only storage operations.
 
+The `SessionStore` type and legacy session-store lifecycle/factory function names are deprecated;
+use the generic storage API for new code. Existing providers and aliases remain supported.
+
 `consume` must be implemented as a truly atomic operation against the backing store
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
 Redis, or a transaction for a relational store).

@@ -20,6 +20,11 @@ When `KV_STORE_PROVIDER` is set, its settings take precedence as a pair. Otherwi
 `SESSION_STORE_PROVIDER` and `SESSION_STORE_PROVIDER_CONFIG` settings are used. The legacy
 configuration and imports remain supported; callers do not need separate provider systems.
 
+The legacy `SessionStore` type and session-store lifecycle/factory function names are deprecated
+in favor of the generic storage API. Existing aliases remain available. Server startup calls
+`await connectKeyValueStore()`, which selects and constructs the configured provider when
+needed, then awaits its optional `init()` hook.
+
 Invalid KV provider settings, module-loading errors, and missing required methods fail startup.
 An explicitly configured custom provider is never silently replaced with memory.
 
