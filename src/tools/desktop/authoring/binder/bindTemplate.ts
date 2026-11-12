@@ -1273,6 +1273,8 @@ function largePieConfirmedBy(
   currentProposalSignature: string | undefined,
   keepLargePie: boolean | undefined,
   targetWorksheet: string | undefined,
+  // Resolved internal name; omit before the workbook read, when a caption cannot be compared yet.
+  resolvedDatasource?: string,
 ): boolean {
   const grant = record?.largePieConfirmation;
   return (
@@ -1284,7 +1286,8 @@ function largePieConfirmedBy(
     // A tagged grant is borrowed by an in-flight confirmed call; a duplicate must not reuse it.
     grant.reservationId === undefined &&
     grant.proposalSignature === currentProposalSignature &&
-    grant.targetWorksheet === targetWorksheet
+    grant.targetWorksheet === targetWorksheet &&
+    (resolvedDatasource === undefined || grant.datasource === resolvedDatasource)
   );
 }
 
@@ -1295,6 +1298,7 @@ function recoveryGateBlock(
   askKey: string,
   targetWorksheet: string | undefined,
   keepLargePie?: boolean,
+  resolvedDatasource?: string,
 ): StructuredBindTemplateToolResult | undefined {
   if (!record) {
     return undefined;
@@ -1305,7 +1309,15 @@ function recoveryGateBlock(
     record.largePieConfirmation !== undefined &&
     record.largePieConfirmation.reservationId === undefined
   ) {
-    if (largePieConfirmedBy(record, currentProposalSignature, keepLargePie, targetWorksheet)) {
+    if (
+      largePieConfirmedBy(
+        record,
+        currentProposalSignature,
+        keepLargePie,
+        targetWorksheet,
+        resolvedDatasource,
+      )
+    ) {
       return undefined;
     }
     // Any other follow-up keeps the pie choice open; the artifact path would re-block the pie.
@@ -3596,6 +3608,15 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                     resolvedSession,
                     askKey,
                   );
+                  const grantedDatasource = currentRecovery?.largePieConfirmation?.datasource;
+                  if (
+                    grantedDatasource !== undefined &&
+                    effectiveDatasource !== grantedDatasource
+                  ) {
+                    return new ArgsValidationError(
+                      `datasource must match the retained bind-template datasource "${grantedDatasource}"`,
+                    ).toErr();
+                  }
                   if (currentRecovery !== priorRecovery) {
                     const blocked = recoveryGateBlock(
                       currentRecovery,
@@ -3604,6 +3625,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                       askKey,
                       target_worksheet,
                       keep_large_pie,
+                      effectiveDatasource,
                     );
                     if (blocked) {
                       return new IncompleteOperationError(blocked).toErr();
@@ -3614,6 +3636,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                     currentProposalSignature,
                     keep_large_pie,
                     target_worksheet,
+                    effectiveDatasource,
                   );
                   admission.reservationId = sessionRouteState.reserveBindRecoveryAdmission(
                     resolvedSession,
@@ -3902,17 +3925,16 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                     currentProposalSignature,
                     reservationId: admission.reservationId,
                   });
-                  if (currentProposalSignature !== undefined) {
+                  const pieDatasource =
+                    res.status === 'escalate' ? pieSliceGateDatasource(res.blockers) : undefined;
+                  if (currentProposalSignature !== undefined && pieDatasource !== undefined) {
                     sessionRouteState.grantLargePieConfirmation(
                       resolvedSession,
                       askKey,
                       currentProposalSignature,
                       pieDetail,
                       {
-                        datasource:
-                          res.status === 'escalate'
-                            ? pieSliceGateDatasource(res.blockers)
-                            : undefined,
+                        datasource: pieDatasource,
                         targetWorksheet: target_worksheet,
                       },
                     );

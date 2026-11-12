@@ -172,7 +172,7 @@ export interface BindRecoveryRecord {
     proposalSignature: string;
     detail: string;
     /** Internal datasource name the blocked pie was bound on; a replay must stay on it. */
-    datasource?: string;
+    datasource: string;
     /** Raw target_worksheet of the blocked call; a replay must repeat it. */
     targetWorksheet?: string;
     /** Set while the confirmed call that borrowed this grant is in flight; only an untagged grant is honored. */
@@ -894,7 +894,7 @@ export class SessionRouteStateStore {
     ask: string,
     proposalSignature: string,
     detail: string,
-    scope?: { datasource?: string; targetWorksheet?: string },
+    scope: { datasource: string; targetWorksheet?: string },
   ): boolean {
     const state = this.get(sessionId);
     const record = state?.bindRecoveryByAsk.get(ask);
@@ -911,8 +911,8 @@ export class SessionRouteStateStore {
       largePieConfirmation: {
         proposalSignature,
         detail,
-        ...(scope?.datasource !== undefined ? { datasource: scope.datasource } : {}),
-        ...(scope?.targetWorksheet !== undefined ? { targetWorksheet: scope.targetWorksheet } : {}),
+        datasource: scope.datasource,
+        ...(scope.targetWorksheet !== undefined ? { targetWorksheet: scope.targetWorksheet } : {}),
       },
     });
   }

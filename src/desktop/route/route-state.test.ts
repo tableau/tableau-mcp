@@ -824,7 +824,7 @@ describe('SessionRouteStateStore', () => {
         proposalSignature: 'P',
         reservationId: c2,
       });
-      store.grantLargePieConfirmation('s', 'a', 'P', 'too many');
+      store.grantLargePieConfirmation('s', 'a', 'P', 'too many', { datasource: 'federated.a' });
       return store;
     };
 
