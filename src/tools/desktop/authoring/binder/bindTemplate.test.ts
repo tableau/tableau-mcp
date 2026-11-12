@@ -4376,7 +4376,14 @@ function setupAutoApplyMocks({
     }
     return Ok(liveXml);
   });
-  vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
+  // The offered-bar dry bind lands on the stock SUM bar over Region and Sales, as the real binder does for a clean ask.
+  vi.mocked(binderModule.bindTemplate).mockImplementation(async (args) =>
+    bind.status === 'bound' &&
+    bind.args.template_name === 'part-to-whole-pie-chart' &&
+    args.ask.startsWith('sorted bar chart of ')
+      ? { ...bind, args: { ...boundPieResult.args, template_name: 'ranking-ordered-bar' } }
+      : bind,
+  );
   const template = bind.status === 'bound' ? bind.args.template_name : 'bar-basic';
   const catalog = mockedRuntimeCatalog();
   const base = catalog.get(template) ?? catalog.get('ranking-ordered-bar');
@@ -10955,7 +10962,10 @@ describe('bindTemplateTool pie slice count after apply', () => {
     withBothTemplates();
     const mocked = vi.mocked(binderModule.bindTemplate);
     if (viaCall2) mocked.mockResolvedValueOnce(proposeResult);
-    mocked.mockResolvedValueOnce(boundPieResult).mockResolvedValueOnce(boundBarResult);
+    // Order: [propose], pie bind, [Call-2 dry re-classify], the offered-bar dry bind, the real rebuild.
+    mocked.mockResolvedValueOnce(boundPieResult);
+    if (viaCall2) mocked.mockResolvedValueOnce(boundBarResult);
+    mocked.mockResolvedValueOnce(boundBarResult).mockResolvedValueOnce(boundBarResult);
     const getExecutor = summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) });
     const ask = 'pie chart of Sales by Region';
     await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
@@ -10976,6 +10986,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
       getExecutor,
     });
     invariant(rebuild.content[0].type === 'text');
+    expect(mocked).toHaveBeenCalledTimes(viaCall2 ? 5 : 3);
     return JSON.parse(rebuild.content[0].text);
   }
 

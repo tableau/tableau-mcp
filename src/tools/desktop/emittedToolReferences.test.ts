@@ -169,6 +169,8 @@ const NON_TOOL_VOCABULARY = [
   'print-prepared',
   'prior-version',
   'quantitative-or-categorical',
+  // Template id compared in code, not emitted guidance.
+  'ranking-ordered-bar',
   're-call',
   're-enables',
   're-read',

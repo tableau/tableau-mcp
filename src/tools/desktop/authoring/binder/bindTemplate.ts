@@ -29,7 +29,6 @@ import {
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
 import {
-  effectiveSlotDerivation,
   onlyPieSliceGate,
   PIE_TEMPLATE_NAME,
   pieSliceGateDetail,
@@ -539,7 +538,7 @@ function capSummaryRows(
   };
 }
 
-function pieSliceWarningFor({
+async function pieSliceWarningFor({
   rows,
   args,
   templateSnapshot,
@@ -547,15 +546,18 @@ function pieSliceWarningFor({
   sheetName,
   uncertain,
   unfilledEncodings,
+  dryBindOffer,
 }: {
   rows: number;
+  /** Binds the exact offered ask the way the follow-up call will; undefined if it cannot. */
+  dryBindOffer?: (ask: string) => Promise<BinderResult>;
   uncertain: boolean;
   unfilledEncodings: boolean;
   args: BoundResult['args'];
   templateSnapshot: TemplateRuntimeSnapshot;
   schemaSummary: SchemaSummary;
   sheetName: string;
-}): { flag: PieSliceWarning; guidance: string } {
+}): Promise<{ flag: PieSliceWarning; guidance: string }> {
   type Slot = TemplateRuntimeSnapshot['descriptor']['slots'][number];
   const resolveSlot = (
     slot: Slot,
@@ -575,31 +577,59 @@ function pieSliceWarningFor({
   };
   const sliceCaption = captionFor((s) => s.kind === 'categorical' && s.role.includes('color'));
   const measureCaption = captionFor((s) => s.kind === 'quantitative');
-  // The offered bar ask re-binds from words alone, so it would silently drop filters, top_n,
-  // and any non-default aggregation the pie carries.
-  const offerWouldDropSemantics =
-    (args.filters?.length ?? 0) > 0 ||
-    args.top_n !== undefined ||
-    templateSnapshot.descriptor.slots.some((slot) => {
-      if (!slot.bindable) return false;
-      const resolved = resolveSlot(slot);
-      if (!resolved?.field || resolved.field.isAggregated || resolved.ref.derivation === 'usr') {
-        return false;
+  // The offered bar ask re-binds from words alone, so it would silently drop filters and top_n.
+  const offerWouldDropSemantics = (args.filters?.length ?? 0) > 0 || args.top_n !== undefined;
+  const offeredAsk =
+    sliceCaption !== undefined && measureCaption !== undefined
+      ? `sorted bar chart of ${measureCaption} by ${sliceCaption}`
+      : undefined;
+  // Words are not proof: only name the ask when a dry bind of it lands on the pie's exact fields.
+  const pieRefKeys = (): string[] | undefined => {
+    const keys: string[] = [];
+    for (const slot of templateSnapshot.descriptor.slots) {
+      if (!slot.bindable) continue;
+      if (
+        slot.kind !== 'quantitative' &&
+        !(slot.kind === 'categorical' && slot.role.includes('color'))
+      ) {
+        continue;
       }
-      return resolved.ref.derivation !== effectiveSlotDerivation(slot, resolved.field);
-    });
+      const ref = resolveSlot(slot)?.ref;
+      if (!ref) return undefined;
+      keys.push(refKey(ref));
+    }
+    return keys.sort();
+  };
+  const refKey = (ref: CanonicalColumnRef): string =>
+    `${ref.datasource.toLowerCase()}|${ref.localFieldName}|${ref.derivation}`;
+  let offerVerified = false;
+  if (
+    offeredAsk !== undefined &&
+    dryBindOffer !== undefined &&
+    !uncertain &&
+    !unfilledEncodings &&
+    !offerWouldDropSemantics
+  ) {
+    try {
+      const dry = await dryBindOffer(offeredAsk);
+      const want = pieRefKeys();
+      if (dry?.status === 'bound' && dry.args.template_name === 'ranking-ordered-bar' && want) {
+        const got = Object.values(dry.args.field_mapping)
+          .map((v) => parseCanonicalColumnRef(decodeXmlEntities(v)))
+          .map((r) => (r ? refKey(r) : '?'))
+          .sort();
+        offerVerified = want.length === 2 && JSON.stringify(got) === JSON.stringify(want);
+      }
+    } catch {
+      /* fail-open to the plain offer */
+    }
+  }
   const sliceField = sliceCaption ?? 'the slice field';
   const exceedsPreview = rows > SUMMARY_ROWS_MAX_ROWS;
   const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
-  // Unresolved captions would route the ask to propose, not bind, so only name the ask when both resolved.
-  const offer =
-    sliceCaption === undefined ||
-    measureCaption === undefined ||
-    uncertain ||
-    unfilledEncodings ||
-    offerWouldDropSemantics
-      ? 'A sorted bar would read better; offer it to the user.'
-      : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of ${measureCaption} by ${sliceCaption}" and target_worksheet "${sheetName}".`;
+  const offer = !offerVerified
+    ? 'A sorted bar would read better; offer it to the user.'
+    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and target_worksheet "${sheetName}".`;
   return {
     flag: {
       field: sliceField,
@@ -2621,8 +2651,10 @@ async function performAutoApply({
   idempotencyKey,
   deterministicBindingFields,
   keepLargePie,
+  dryBindOffer,
   reportProgress,
 }: {
+  dryBindOffer?: (ask: string) => Promise<BinderResult>;
   res: BoundResult;
   base: BindTemplateToolResultBase;
   ask: string;
@@ -3002,7 +3034,8 @@ async function performAutoApply({
     args.template_name === 'part-to-whole-pie-chart' &&
     summaryRead.rawRowCount !== undefined &&
     summaryRead.rawRowCount > PIE_SLICE_WORKABLE_MAX
-      ? pieSliceWarningFor({
+      ? await pieSliceWarningFor({
+          dryBindOffer,
           rows: summaryRead.rawRowCount,
           args,
           templateSnapshot,
@@ -4197,6 +4230,18 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ? proposal?.bindings.map((binding) => binding.field)
               : undefined,
             keepLargePie: largePieConfirmed,
+            dryBindOffer: async (offeredAsk) => {
+              // The follow-up call has no proposal and no complete-request flag, so use its catalog.
+              const followUp = createPuppetCompatibilityProjection(
+                loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true }),
+              );
+              const dry = await bindTemplate({
+                ask: offeredAsk,
+                workbookXml,
+                manifests: followUp.descriptors,
+              });
+              return followUp.expandBinderResult(dry, schemaSummary);
+            },
             reportProgress,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
