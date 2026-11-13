@@ -67,6 +67,19 @@ export function validateFilters(filters: Filter[] | undefined, rules: ToolRules)
     );
   }
 
+  {
+    // CONDITION filters need exactly one of condition or calculation.
+    const invalidConditionFilters = filters
+      .filter((f) => f.filterType === 'CONDITION' && !f.condition === !f.calculation)
+      .map(getFilterFieldLabel);
+
+    if (invalidConditionFilters.length > 0) {
+      throw new Error(
+        `The query must not include CONDITION filters that have both or neither of the condition and calculation properties. Provide exactly one. The following CONDITION filters are invalid: ${invalidConditionFilters.join(', ')}.`,
+      );
+    }
+  }
+
   if (rules.restrictFunctionsAndCalculationsInFilters) {
     // Set, Match, and Relative Date filters can't have functions or calculations.
     const setFiltersWithFunctionsOrCalculations = filters.filter((filter) => {
@@ -236,6 +249,12 @@ function validateFilterField(field: FilterField): Result<void, string> {
   }
 
   return Ok.EMPTY;
+}
+
+function getFilterFieldLabel(filter: Filter): string {
+  return 'fieldCaption' in filter.field
+    ? `"${filter.field.fieldCaption}"`
+    : `calculation "${filter.field.calculation}"`;
 }
 
 function hasEmptyFieldCaption(field: FilterField): boolean {
