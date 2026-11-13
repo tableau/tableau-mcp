@@ -178,16 +178,32 @@ function sha256(fields: ReadonlyArray<string>): string {
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 
+// Provider errors can carry credentials in any field, so only identifier-shaped values are logged.
+function safeIdentifier(value: unknown): string | undefined {
+  const text = typeof value === 'number' ? String(value) : value;
+  return typeof text === 'string' && /^[\w.-]{1,64}$/.test(text) ? text : undefined;
+}
+
 // Store failures surface as a fixed message so backend details (hosts, ports) never reach a client.
-async function withStore<T>(operation: () => Promise<T>): Promise<T> {
+async function withStore<T>(
+  namespace: string,
+  operation: 'set' | 'consume',
+  run: () => Promise<T>,
+): Promise<T> {
   try {
-    return await operation();
-  } catch {
-    // Provider errors can contain credentials in their message, stack, or arbitrary fields.
+    return await run();
+  } catch (error) {
+    const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
     log({
       message: 'Preview evidence store operation failed',
       level: 'error',
       logger: 'mutation-guard',
+      data: {
+        namespace,
+        operation,
+        errorName: safeIdentifier(name),
+        errorCode: safeIdentifier(code),
+      },
     });
     throw new EvidenceStoreUnavailableError();
   }
@@ -195,7 +211,9 @@ async function withStore<T>(operation: () => Promise<T>): Promise<T> {
 
 async function recordProof(namespace: string, key: string, secret = ''): Promise<void> {
   const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
-  await withStore(() => getProofStore(namespace).set(key, `${expiresAtMs}.${secret}`));
+  await withStore(namespace, 'set', () =>
+    getProofStore(namespace).set(key, `${expiresAtMs}.${secret}`),
+  );
 }
 
 function matchesProof(stored: unknown, secret: string): stored is string {
@@ -218,7 +236,7 @@ function matchesProof(stored: unknown, secret: string): stored is string {
 // Consume, then check: one atomic store call keeps a token single-use across replicas. A wrong token
 // burns the pending proof, but the key is scoped to the caller's own preview, so they re-preview.
 async function consumeProof(namespace: string, key: string, secret = ''): Promise<boolean> {
-  const stored = await withStore(() => getProofStore(namespace).consume(key));
+  const stored = await withStore(namespace, 'consume', () => getProofStore(namespace).consume(key));
   return matchesProof(stored, secret);
 }
 
