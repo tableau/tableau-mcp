@@ -720,9 +720,10 @@ the preview.
 Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
 time between preview and confirmation.
 
-Preview tokens are kept in the session store. When more than one server process handles requests,
-set [`SESSION_STORE_PROVIDER`](oauth#session_store_provider) to `custom` so a confirmed call can
-reach any replica. Otherwise it is rejected unless it lands on the process that ran the preview.
+Preview tokens are kept in the [key-value store](storage.md). When more than one server process
+handles requests, set `KV_STORE_PROVIDER` to `custom` with a backend shared by every replica so a
+confirmed call can reach any of them. Otherwise it is rejected unless it lands on the process that
+ran the preview.
 
 <hr />
 
