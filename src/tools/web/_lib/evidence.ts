@@ -167,6 +167,11 @@ function getProofStore(namespace: string): KeyValueStore<string> {
   return store;
 }
 
+/** Drop memoized proof stores so the next call picks up the current provider. For tests. */
+export function resetPreviewProofStores(): void {
+  proofStores.clear();
+}
+
 function sha256(fields: ReadonlyArray<string>): string {
   // JSON keeps a delimiter inside one field from shifting into the next; hashing bounds key length
   // and keeps raw ids and nonces out of a shared backend.
