@@ -107,7 +107,7 @@ vi.mock('./server/express.js', () => ({
   }),
 }));
 
-vi.mock('./storage/init.js', () => ({
+vi.mock('./storage/storageProvider.js', () => ({
   connectKeyValueStore: vi.fn(async () => {
     await startupState.connectPromise;
     startupState.sessionStoreConnected = true;
@@ -127,7 +127,7 @@ import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger } from './logging/fileLogger.js';
 import { startExpressServer } from './server/express.js';
-import { connectKeyValueStore } from './storage/init.js';
+import { connectKeyValueStore } from './storage/storageProvider.js';
 
 function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void } {
   let reject!: (reason?: unknown) => void;

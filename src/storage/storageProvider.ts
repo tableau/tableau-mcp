@@ -1,3 +1,4 @@
+/** Configured KV provider loading, lifecycle, and namespaced store factories. */
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
@@ -30,7 +31,7 @@ function validateProvider(provider: unknown): asserts provider is StoreProvider 
 }
 
 /** Select memory or an operator-supplied module. Explicit custom-provider failures are fatal. */
-export function initializeKeyValueStore(): void {
+function initializeKeyValueStore(): void {
   const config = getConfig();
   // sessionStore supports existing integrations supplying the legacy configuration property.
   const storeConfig = config.keyValueStore ?? config.sessionStore;
@@ -110,3 +111,6 @@ export function createNamespacedKeyValueStore<V>(
 export function resetKeyValueStore(): void {
   state = null;
 }
+
+/** @deprecated Retained for session-store compatibility. New code should await connectKeyValueStore. */
+export const initializeSessionStore = initializeKeyValueStore;

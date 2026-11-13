@@ -6,14 +6,13 @@ vi.mock('../config.js', () => ({
 
 import { type Config, getConfig } from '../config.js';
 import { createNamespacedStore } from '../sessionStore/init.js';
+import type { KeyValueStore } from './keyValueStore.js';
 import {
   connectKeyValueStore,
   createNamespacedKeyValueStore,
   disconnectKeyValueStore,
-  initializeKeyValueStore,
   resetKeyValueStore,
-} from './init.js';
-import type { KeyValueStore } from './keyValueStore.js';
+} from './storageProvider.js';
 
 const MODULE = './src/storage/__fixtures__/keyValueStore.cjs';
 
@@ -59,7 +58,7 @@ describe('bring-your-own KV storage', () => {
 
   it.each([MODULE, resolve(MODULE)])('loads a named KV provider from %s', async (module) => {
     useCustomProvider({ module, table: 'test-table' });
-    initializeKeyValueStore();
+    await connectKeyValueStore();
     const store: KeyValueStore<string> = createNamespacedKeyValueStore('settings');
     await store.set('key', 'value');
     await expect(store.get('key')).resolves.toBe('value');
@@ -104,9 +103,9 @@ describe('bring-your-own KV storage', () => {
     );
   });
 
-  it('propagates custom module-loading failures', () => {
+  it('propagates custom module-loading failures during connection', async () => {
     useCustomProvider({ module: './nonexistent-kv-provider.cjs' });
-    expect(() => initializeKeyValueStore()).toThrow(
+    await expect(connectKeyValueStore()).rejects.toThrow(
       /Failed to load custom key-value store provider/,
     );
   });

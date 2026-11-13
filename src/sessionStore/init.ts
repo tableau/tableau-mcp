@@ -2,21 +2,20 @@ import {
   connectKeyValueStore,
   createNamespacedKeyValueStore,
   disconnectKeyValueStore,
-  initializeKeyValueStore,
+  initializeSessionStore,
   resetKeyValueStore,
-} from '../storage/init.js';
+} from '../storage/storageProvider.js';
 
-/** @deprecated Use connectKeyValueStore from storage/init instead. */
+export { initializeSessionStore };
+
+/** @deprecated Use connectKeyValueStore from storage/storageProvider instead. */
 export const connectSessionStore = connectKeyValueStore;
 
-/** @deprecated Use createNamespacedKeyValueStore from storage/init instead. */
+/** @deprecated Use createNamespacedKeyValueStore from storage/storageProvider instead. */
 export const createNamespacedStore = createNamespacedKeyValueStore;
 
-/** @deprecated Use disconnectKeyValueStore from storage/init instead. */
+/** @deprecated Use disconnectKeyValueStore from storage/storageProvider instead. */
 export const disconnectSessionStore = disconnectKeyValueStore;
 
-/** @deprecated Use initializeKeyValueStore from storage/init instead. */
-export const initializeSessionStore = initializeKeyValueStore;
-
-/** @deprecated Use resetKeyValueStore from storage/init instead. */
+/** @deprecated Use resetKeyValueStore from storage/storageProvider instead. */
 export const resetSessionStore = resetKeyValueStore;

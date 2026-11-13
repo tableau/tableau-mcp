@@ -53,7 +53,8 @@ decoding values is the provider's responsibility.
 
 ## Namespaces and expiration
 
-Server code obtains a scoped store with `createNamespacedKeyValueStore(namespace, options)`.
+Server code obtains a scoped store with `createNamespacedKeyValueStore(namespace, options)`
+from `src/storage/storageProvider.ts`.
 Custom providers receive keys prefixed with `<namespace>:`. One custom provider instance is
 shared across namespaces. Memory stores are independent per factory call.
 

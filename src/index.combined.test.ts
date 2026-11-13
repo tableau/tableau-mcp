@@ -91,7 +91,7 @@ vi.mock('./sdks/tableau/restApi.js', () => ({
   RestApi: { host: '' },
 }));
 
-vi.mock('./storage/init.js', () => ({
+vi.mock('./storage/storageProvider.js', () => ({
   connectKeyValueStore: vi.fn(async () => {
     startupState.sessionStoreConnected = true;
   }),
@@ -131,7 +131,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
-import { connectKeyValueStore } from './storage/init.js';
+import { connectKeyValueStore } from './storage/storageProvider.js';
 
 function deferred<T>(): {
   promise: Promise<T>;

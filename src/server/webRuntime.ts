@@ -4,7 +4,7 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import { connectKeyValueStore, disconnectKeyValueStore } from '../storage/init.js';
+import { connectKeyValueStore, disconnectKeyValueStore } from '../storage/storageProvider.js';
 
 // Minimal shutdown hook: release the KV store's backend resources and flush the Activity Log
 // on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
