@@ -1,6 +1,9 @@
 // An operator-supplied module implementing only the four public KV operations.
 class KeyValueStore {
   constructor(config) {
+    if (config.throwInConstructor) {
+      throw new Error(JSON.stringify(config), { cause: new Error(config.credential) });
+    }
     this.map = new Map();
     globalThis.__keyValueProviderConfig = config;
     if (config.omitConsume) this.consume = undefined;

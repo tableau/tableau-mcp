@@ -1,3 +1,5 @@
+import { inspect } from 'node:util';
+
 import { resolve } from 'path';
 
 vi.mock('../config.js', () => ({
@@ -141,7 +143,7 @@ describe('bring-your-own KV storage', () => {
   it('rejects a provider missing required operations without falling back to memory', () => {
     useCustomProvider({ module: MODULE, omitConsume: true });
     expect(() => createNamespacedKeyValueStore('settings', { ttlMs: 1000 })).toThrow(
-      'Custom provider missing required method: consume',
+      'Failed to load custom key-value store provider',
     );
   });
 
@@ -151,6 +153,32 @@ describe('bring-your-own KV storage', () => {
       /Failed to load custom key-value store provider/,
     );
   });
+
+  it.each(['module', 'constructor'] as const)(
+    'does not expose provider configuration through %s failures',
+    async (failure) => {
+      const privateMarker = 'PRIVATE_KV_PROVIDER_TEST_MARKER';
+      useCustomProvider({
+        module: failure === 'module' ? `./${privateMarker}.cjs` : MODULE,
+        credential: privateMarker,
+        throwInConstructor: failure === 'constructor',
+      });
+
+      const error = await connectKeyValueStore().catch((error: unknown) => error);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toHaveProperty(
+        'message',
+        'Failed to load custom key-value store provider. Check its module export and configuration.',
+      );
+      expect(inspect(error)).not.toContain(privateMarker);
+      expect(error).not.toHaveProperty('cause');
+      expect(log).not.toHaveBeenCalled();
+      expect(() => createNamespacedKeyValueStore('settings', { ttlMs: 1000 })).toThrow(
+        'Failed to load custom key-value store provider',
+      );
+    },
+  );
 
   it.each(['memory', 'custom'] as const)(
     'logs only lifecycle events without storage data for %s',

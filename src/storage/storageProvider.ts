@@ -88,9 +88,10 @@ function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
     const provider: unknown = new ProviderClass(config);
     validateProvider(provider);
     return provider;
-  } catch (error) {
+  } catch {
+    // Module and constructor errors may echo configuration. Do not retain a raw cause.
     throw new Error(
-      `Failed to load custom key-value store provider from "${modulePath}": ${error}`,
+      'Failed to load custom key-value store provider. Check its module export and configuration.',
     );
   }
 }

@@ -1,3 +1,5 @@
+import { inspect } from 'node:util';
+
 import { Config } from './config.js';
 import * as logger from './logging/logger.js';
 import { stubDefaultEnvVars } from './testShared.js';
@@ -1319,6 +1321,24 @@ describe('Config', () => {
         vi.stubEnv('KV_STORE_PROVIDER', 'custom');
         vi.stubEnv('KV_STORE_PROVIDER_CONFIG', value);
         expect(() => new Config()).toThrow();
+      },
+    );
+
+    it.each(['KV_STORE_PROVIDER', 'SESSION_STORE_PROVIDER'] as const)(
+      'does not expose malformed JSON from %s_CONFIG in errors',
+      async (variable) => {
+        const privateMarker = 'PRIVATE_KV_CONFIG_TEST_MARKER';
+        vi.stubEnv(variable, 'custom');
+        vi.stubEnv(`${variable}_CONFIG`, `${privateMarker}{"module":"./provider.cjs"}`);
+
+        const error = await Promise.resolve()
+          .then(() => new Config())
+          .catch((error: unknown) => error);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error).toHaveProperty('message', `${variable}_CONFIG is not valid JSON`);
+        expect(inspect(error)).not.toContain(privateMarker);
+        expect(error).not.toHaveProperty('cause');
       },
     );
 

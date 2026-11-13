@@ -379,13 +379,20 @@ export class Config extends BaseConfig {
       ? keyValueStoreProviderConfig
       : sessionStoreProviderConfig;
     if (storeProvider === 'custom') {
+      const variable = useKeyValueSettings ? 'KV_STORE_PROVIDER' : 'SESSION_STORE_PROVIDER';
       if (!storeProviderConfig) {
-        const variable = useKeyValueSettings ? 'KV_STORE_PROVIDER' : 'SESSION_STORE_PROVIDER';
         throw new Error(`${variable}_CONFIG is required when ${variable} is "custom"`);
+      }
+      let parsedConfig: unknown;
+      try {
+        parsedConfig = JSON.parse(storeProviderConfig);
+      } catch {
+        // JSON.parse errors can include raw configuration, including credentials.
+        throw new Error(`${variable}_CONFIG is not valid JSON`);
       }
       this.keyValueStore = {
         provider: 'custom',
-        providerConfig: keyValueStoreProviderConfigSchema.parse(JSON.parse(storeProviderConfig)),
+        providerConfig: keyValueStoreProviderConfigSchema.parse(parsedConfig),
       };
     } else {
       this.keyValueStore = {

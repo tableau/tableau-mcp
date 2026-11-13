@@ -28,6 +28,11 @@ needed, then awaits its optional `init()` hook.
 Invalid KV provider settings, module-loading errors, and missing required methods fail startup.
 An explicitly configured custom provider is never silently replaced with memory.
 
+Malformed provider JSON errors identify the setting without echoing its value. Module-loading
+and constructor failures use a fixed error message without the original error or module path.
+Providers must also keep configuration values and credentials out of their own errors and
+logs, including errors from optional lifecycle hooks.
+
 ## Provider contract
 
 Import the public, dependency-free interface and implement it on your provider class:
