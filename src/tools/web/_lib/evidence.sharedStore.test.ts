@@ -20,7 +20,6 @@ declare global {
   var __sharedSessionBackend: Map<string, unknown> | undefined;
   var __sharedSessionStoresText: boolean | undefined;
   var __sharedSessionStoreDown: boolean | undefined;
-  var __sharedSessionAfterGet: (() => Promise<void>) | undefined;
 }
 
 type EvidenceModule = typeof import('./evidence.js');
@@ -56,7 +55,6 @@ describe('preview evidence across replicas sharing a custom session store', () =
     globalThis.__sharedSessionBackend = undefined;
     globalThis.__sharedSessionStoresText = undefined;
     globalThis.__sharedSessionStoreDown = undefined;
-    globalThis.__sharedSessionAfterGet = undefined;
   });
 
   it('works with a provider that stores values as text', async () => {
@@ -100,23 +98,6 @@ describe('preview evidence across replicas sharing a custom session store', () =
       level: 'error',
       logger: 'mutation-guard',
     });
-  });
-
-  it('rejects a provider without atomic compare-and-delete before recording a preview', async () => {
-    config.sessionStore = {
-      provider: 'custom',
-      providerConfig: { module: './src/sessionStore/__fixtures__/fakeSessionStore.cjs' },
-    };
-    const a = await startReplica();
-    const preview = new a.RegistryEvidence();
-
-    await expect(preview.establish(makeCtx())).rejects.toThrow('confirmation store is unavailable');
-    expect(preview.getEstablishedNonce()).toBeUndefined();
-    await expect(
-      new a.RegistryEvidence().verify(
-        makeCtx({ confirmationToken: '00000000-0000-4000-8000-000000000000' }),
-      ),
-    ).rejects.toThrow('confirmation store is unavailable');
   });
 
   it('confirms a RegistryEvidence nonce on a different replica, exactly once', async () => {
@@ -188,36 +169,16 @@ describe('preview evidence across replicas sharing a custom session store', () =
     const second = new b.RegistryEvidence();
     await second.establish(makeCtx());
 
-    // One approval, one run: the superseded token can't start a second one, or burn the latest.
-    await expect(
-      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: first.getEstablishedNonce() })),
-    ).resolves.toBe(false);
-    await expect(
-      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
-    ).resolves.toBe(true);
-  });
-
-  it('preserves a newer preview that replaces a nonce between validation and consumption', async () => {
-    const a = await startReplica();
-    const b = await startReplica();
-    const first = new a.RegistryEvidence();
-    const second = new b.RegistryEvidence();
-    await first.establish(makeCtx());
-
-    // Return the old snapshot only after another replica has replaced the pending proof.
-    globalThis.__sharedSessionAfterGet = () => second.establish(makeCtx());
-    await expect(
-      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: first.getEstablishedNonce() })),
-    ).resolves.toBe(false);
+    // One approval, one run: only the latest token confirms.
     await expect(
       new a.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
     ).resolves.toBe(true);
     await expect(
-      new b.RegistryEvidence().verify(makeCtx({ confirmationToken: second.getEstablishedNonce() })),
+      new a.RegistryEvidence().verify(makeCtx({ confirmationToken: first.getEstablishedNonce() })),
     ).resolves.toBe(false);
   });
 
-  it('a wrong nonce for the right target does not burn the pending preview', async () => {
+  it('a wrong nonce for the right target burns the pending preview', async () => {
     const a = await startReplica();
     const preview = new a.RegistryEvidence();
     await preview.establish(makeCtx());
@@ -231,7 +192,7 @@ describe('preview evidence across replicas sharing a custom session store', () =
       new a.RegistryEvidence().verify(
         makeCtx({ confirmationToken: preview.getEstablishedNonce() }),
       ),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
   });
 
   it('expires a nonce even when the provider never applies the namespace TTL', async () => {

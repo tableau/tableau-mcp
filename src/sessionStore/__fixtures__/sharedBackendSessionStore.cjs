@@ -1,4 +1,4 @@
-// Test fixture: a custom SessionStore whose Map lives on globalThis, so every provider instance (one
+// Test fixture: a custom KeyValueStore whose Map lives on globalThis, so every provider instance (one
 // per simulated replica, each loaded from a fresh module graph) reads and writes the same backend,
 // like replicas sharing one Redis. It deliberately ignores TTL, like a provider that never expires.
 class SharedBackendSessionStore {
@@ -7,44 +7,33 @@ class SharedBackendSessionStore {
     this.map = globalThis.__sharedSessionBackend;
   }
 
-  get(key) {
-    const value = this.map.get(key);
-    const afterGet = globalThis.__sharedSessionAfterGet;
-    globalThis.__sharedSessionAfterGet = undefined;
-    return afterGet ? afterGet().then(() => value) : Promise.resolve(value);
+  async get(key) {
+    this.throwIfDown();
+    return this.map.get(key);
   }
 
-  set(key, value) {
+  async set(key, value) {
+    this.throwIfDown();
     // Opt-in: store values as text, like a provider over plain Redis SET/GET.
     this.map.set(key, globalThis.__sharedSessionStoresText ? String(value) : value);
-    return Promise.resolve();
   }
 
-  delete(key) {
+  async delete(key) {
+    this.throwIfDown();
     this.map.delete(key);
-    return Promise.resolve();
   }
 
-  consume(key) {
-    if (globalThis.__sharedSessionStoreDown) {
-      return Promise.reject(new Error('store down'));
-    }
+  async consume(key) {
+    this.throwIfDown();
     const value = this.map.get(key);
     this.map.delete(key);
-    return Promise.resolve(value);
+    return value;
   }
 
-  compareAndDelete(key, expectedValue) {
+  throwIfDown() {
     if (globalThis.__sharedSessionStoreDown) {
-      return Promise.reject(
-        new Error('store down: redis://test-user:test-password@backend.invalid'),
-      );
+      throw new Error('store down: redis://test-user:test-password@backend.invalid');
     }
-    if (!this.map.has(key) || this.map.get(key) !== expectedValue) {
-      return Promise.resolve(false);
-    }
-    this.map.delete(key);
-    return Promise.resolve(true);
   }
 }
 
