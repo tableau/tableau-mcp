@@ -249,9 +249,6 @@ export async function guardMutation<TTarget>({
     try {
       await evidence.establish(evidenceCtx);
     } catch (error) {
-      if (!(error instanceof McpToolError)) {
-        throw error;
-      }
       emitAuditRecord({
         actor,
         tool,
@@ -260,9 +257,12 @@ export async function guardMutation<TTarget>({
         target,
         confirmationEvidence: evidenceDescriptor,
         result: 'denied',
-        denyReason: error.type,
+        denyReason: error instanceof McpToolError ? error.type : 'evidence-establish-failed',
       });
-      return error.toErr();
+      if (error instanceof McpToolError) {
+        return error.toErr();
+      }
+      throw error;
     }
   }
 

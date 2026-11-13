@@ -179,6 +179,18 @@ describe('guardMutation', () => {
     expect(record.phase).toBe('preview');
   });
 
+  it('on preview, an unexpected establish failure rethrows after one DENIED audit', async () => {
+    const error = new Error('Tableau tag write failed');
+    const evidence = makeEvidence({ establish: vi.fn().mockRejectedValue(error) });
+
+    await expect(run({ phase: 'preview', evidence })).rejects.toBe(error);
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    const record = auditRecordSchema.parse(audits[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('evidence-establish-failed');
+  });
+
   it('preserves the denial reason of a typed evidence error', async () => {
     const error = new McpToolError({
       type: 'tableau-service-unavailable',
