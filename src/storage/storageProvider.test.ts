@@ -69,6 +69,28 @@ describe('bring-your-own KV storage', () => {
     });
   });
 
+  describe.each(['memory', 'custom'] as const)('%s namespace validation', (provider) => {
+    it.each(['', ':', 'settings:admin', undefined, null, 42])(
+      'rejects an invalid namespace before initializing the provider: %j',
+      (namespace) => {
+        if (provider === 'custom') useCustomProvider({ module: MODULE });
+        expect(() =>
+          Reflect.apply(createNamespacedKeyValueStore, undefined, [namespace, { ttlMs: 1000 }]),
+        ).toThrow('Namespace must be a non-empty string without ":".');
+        expect(getConfig).not.toHaveBeenCalled();
+        expect(globalThis.__keyValueProviderConfig).toBeUndefined();
+      },
+    );
+
+    it('applies the same namespace rules to the legacy session factory', () => {
+      if (provider === 'custom') useCustomProvider({ module: MODULE });
+      expect(() => createNamespacedStore('settings:admin', { ttlMs: 1000 })).toThrow(
+        'Namespace must be a non-empty string without ":".',
+      );
+      expect(getConfig).not.toHaveBeenCalled();
+    });
+  });
+
   it('honors an explicit namespace TTL on memory stores', async () => {
     const store = createNamespacedKeyValueStore<string>('temporary', { ttlMs: 1000 });
     await store.set('key', 'value');
@@ -92,10 +114,10 @@ describe('bring-your-own KV storage', () => {
     useCustomProvider({ module: MODULE });
     const generic = createNamespacedKeyValueStore<string>('shared', { ttlMs: 1000 });
     const legacy = createNamespacedStore<string>('shared', { ttlMs: 1000 });
-    await generic.set('key', 'value');
-    await expect(legacy.get('key')).resolves.toBe('value');
-    await expect(legacy.consume('key')).resolves.toBe('value');
-    await expect(generic.get('key')).resolves.toBeUndefined();
+    await generic.set('site:user:key', 'value');
+    await expect(legacy.get('site:user:key')).resolves.toBe('value');
+    await expect(legacy.consume('site:user:key')).resolves.toBe('value');
+    await expect(generic.get('site:user:key')).resolves.toBeUndefined();
   });
 
   it('isolates namespaces and preserves atomic consumption for custom providers', async () => {

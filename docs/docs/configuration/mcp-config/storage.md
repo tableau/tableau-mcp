@@ -55,8 +55,11 @@ decoding values is the provider's responsibility.
 
 Server code obtains a scoped store with `createNamespacedKeyValueStore(namespace, options)`
 from `src/storage/storageProvider.ts`.
-Custom providers receive keys prefixed with `<namespace>:`. One custom provider instance is
-shared across namespaces. Memory stores are independent per factory call.
+Namespaces must be non-empty strings without `:`; invalid names are rejected before provider
+initialization. Custom providers receive keys prefixed with `<namespace>:`, so the namespace
+is the text before the first colon. Keys may contain colons and are passed through unchanged
+after that prefix. One custom provider instance is shared across namespaces. Memory stores
+are independent per factory call.
 
 Every namespace requires an explicit, finite `ttlMs` in milliseconds when it is created;
 `maxSize` remains optional. Server code supplies each namespace's lifetime, so deployments do

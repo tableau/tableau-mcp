@@ -98,12 +98,16 @@ function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
 /**
  * Create a namespace using the configured backend. Memory instances remain independent;
  * custom providers share one backend with prefixed keys and optional namespace configuration.
+ * Namespaces must be non-empty strings without colons; keys may contain colons.
  * Every namespace requires an explicit TTL in milliseconds, matching the legacy session contract.
  */
 export function createNamespacedKeyValueStore<V>(
   namespace: string,
   options: NamespaceOptions,
 ): KeyValueStore<V> {
+  if (typeof namespace !== 'string' || namespace.length === 0 || namespace.includes(':')) {
+    throw new Error('Namespace must be a non-empty string without ":".');
+  }
   if (!Number.isFinite(options?.ttlMs)) {
     throw new Error('ttlMs must be a finite number.');
   }
