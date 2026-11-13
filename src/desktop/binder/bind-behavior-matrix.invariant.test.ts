@@ -6,6 +6,7 @@ import { createPuppetCompatibilityProjection } from '../templates/puppetCompatib
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate } from './binder.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
+import type { BindingProposal } from './validate.js';
 
 // BIND BEHAVIOR MATRIX (the ww-ou-arrow regression lock).
 //
@@ -57,11 +58,14 @@ const WATERFALL_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
 </workbook>`;
 
 let manifests: Map<string, RuntimeTemplateDescriptor>;
+let allManifests: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
-  manifests = createPuppetCompatibilityProjection(
+  const projection = createPuppetCompatibilityProjection(
     loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true, includeExternal: false }),
-  ).descriptors;
+  );
+  manifests = projection.descriptors;
+  allManifests = projection.allDescriptors;
 });
 
 function bind(ask: string, workbookXml: string = FIXTURE): ReturnType<typeof bindTemplate> {
@@ -72,6 +76,17 @@ function withApproxCount(field: string, count: number): string {
   const localName = `<local-name>[${field}]</local-name>`;
   if (!FIXTURE.includes(localName)) throw new Error(`Missing fixture metadata for ${field}`);
   return FIXTURE.replace(localName, `${localName}<approx-count>${count}</approx-count>`);
+}
+
+function withExtractApproxCount(field: string, count: number): string {
+  const start = FIXTURE.indexOf("<datasource inline='true' name='Sample - Superstore'");
+  const end = FIXTURE.indexOf('</datasource>', start);
+  if (start < 0 || end < 0) throw new Error('Missing fixture datasource');
+  const extract =
+    "<extract enabled='true'><connection class='hyper'><metadata-records>" +
+    `<metadata-record class='column'><local-name>[${field}]</local-name><parent-name>[Extract].[Extract]</parent-name>` +
+    `<approx-count>${count}</approx-count></metadata-record></metadata-records></connection></extract>`;
+  return FIXTURE.slice(0, end) + extract + FIXTURE.slice(end);
 }
 
 // ── KNOWN ONE-SHOTS (bound, used_llm=false, correct template) ─────────────────
@@ -418,6 +433,212 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       expect(res.status, JSON.stringify(res)).toBe(expectedStatus);
     },
   );
+
+  it('uses extract approx-counts to refuse a too-many-slices pie and steer to a sorted bar', async () => {
+    const res = await bind(
+      'pie chart of Sales by State/Province',
+      withExtractApproxCount('State/Province', 49),
+    );
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status !== 'propose') return;
+    expect(res.decline_reason.detail).toContain('"State/Province"');
+    expect(res.decline_reason.detail).toContain('49');
+    expect(res.decline_reason.detail).toContain('sorted bar');
+    expect(res.decline_reason.detail).toContain('ranking-ordered-bar');
+    expect(res.decline_reason.detail).not.toContain('lower-cardinality');
+  });
+
+  it('offers ranking-ordered-bar as a Call 2 choice when the pie gate fires', async () => {
+    const res = await bind(
+      'pie chart of Sales by State/Province',
+      withExtractApproxCount('State/Province', 49),
+    );
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status !== 'propose') return;
+    const bar = res.llm_input.candidate_templates.find((t) => t.template === 'ranking-ordered-bar');
+    expect(bar).toBeDefined();
+    expect(res.llm_input.fields.map((f) => f.name)).toEqual(
+      expect.arrayContaining(['State/Province', 'Sales']),
+    );
+    const proposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Sales by State/Province',
+      confidence: 1,
+      bindings: [
+        { slot_id: 'field_base_1', field: 'State/Province' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+    };
+    const call2 = await bindTemplate({
+      ask: 'pie chart of Sales by State/Province',
+      workbookXml: withExtractApproxCount('State/Province', 49),
+      manifests,
+      proposal,
+    });
+    expect(call2.status, JSON.stringify(call2)).toBe('bound');
+    if (call2.status === 'bound') expect(call2.args.template_name).toBe('ranking-ordered-bar');
+  });
+
+  it('shows the injected llmPropose path the ranking-ordered-bar when the pie gate fires', async () => {
+    let seen: string[] = [];
+    const res = await bindTemplate({
+      ask: 'pie chart of Sales by State/Province',
+      workbookXml: withExtractApproxCount('State/Province', 49),
+      manifests,
+      llmPropose: async (input) => {
+        seen = input.candidate_templates.map((t) => t.template);
+        return {
+          template: 'ranking-ordered-bar',
+          title: 'Sales by State/Province',
+          confidence: 1,
+          bindings: [
+            { slot_id: 'field_base_1', field: 'State/Province' },
+            { slot_id: 'field_base_2', field: 'Sales' },
+          ],
+        };
+      },
+    });
+    expect(seen).toContain('ranking-ordered-bar');
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.used_llm).toBe(true);
+    expect(res.args.template_name).toBe('ranking-ordered-bar');
+    expect(Object.values(res.args.field_mapping)).toEqual(
+      expect.arrayContaining([
+        '[Sample - Superstore].[none:State/Province:nk]',
+        '[Sample - Superstore].[sum:Sales:qk]',
+      ]),
+    );
+  });
+
+  describe('keep_large_pie (user-confirmed large pie)', () => {
+    const ask = 'pie chart of Sales by State/Province';
+    const pie = (measure = 'Sales'): BindingProposal => ({
+      template: 'part-to-whole-pie-chart',
+      title: 'Sales by State/Province',
+      confidence: 1,
+      bindings: [
+        { slot_id: 'field_base_1', field: 'State/Province' },
+        { slot_id: 'field_base_2', field: measure },
+      ],
+    });
+    const call2 = (
+      proposal: BindingProposal,
+      extra: { keepLargePie?: boolean; ask?: string; requireCompleteRequest?: boolean } = {},
+    ): ReturnType<typeof bindTemplate> =>
+      bindTemplate({
+        ask: extra.ask ?? ask,
+        workbookXml: withExtractApproxCount('State/Province', 49),
+        manifests: allManifests,
+        proposal,
+        ...(extra.keepLargePie !== undefined ? { keepLargePie: extra.keepLargePie } : {}),
+        ...(extra.requireCompleteRequest ? { requireCompleteRequest: true } : {}),
+      });
+
+    it('blocks a 49-slice State pie on Call 2 without the flag', async () => {
+      const res = await call2(pie());
+      expect(res.status, JSON.stringify(res)).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.blockers).toHaveLength(1);
+      expect(res.blockers[0].pie_slice_gate).toBe(true);
+      expect(res.blockers[0].detail).toContain('49');
+      expect(res.blockers[0].detail).toContain('ranking-ordered-bar');
+    });
+
+    it('binds the same 49-slice pie proposal when the user confirmed keep_large_pie', async () => {
+      const res = await call2(pie(), { keepLargePie: true });
+      expect(res.status, JSON.stringify(res)).toBe('bound');
+      if (res.status !== 'bound') return;
+      expect(res.used_llm).toBe(true);
+      expect(res.args.template_name).toBe('part-to-whole-pie-chart');
+      expect(Object.values(res.args.field_mapping)).toEqual(
+        expect.arrayContaining(['[Sample - Superstore].[none:State/Province:nk]']),
+      );
+    });
+
+    it('still blocks an explicit donut ask with the flag set', async () => {
+      const res = await call2(pie(), {
+        keepLargePie: true,
+        ask: 'donut chart of Sales by State/Province',
+      });
+      expect(res.status, JSON.stringify(res)).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.blockers.map((b) => b.detail).join(' ')).toContain('donut');
+      expect(res.blockers.some((b) => b.pie_slice_gate)).toBe(false);
+    });
+
+    it('has no effect on a non-pie template', async () => {
+      const bar: BindingProposal = { ...pie(), template: 'ranking-ordered-bar' };
+      const plain = await call2(bar);
+      const flagged = await call2(bar, { keepLargePie: true });
+      expect(flagged.status, JSON.stringify(flagged)).toBe('bound');
+      expect(flagged).toEqual(plain);
+    });
+
+    it('does not bypass other blockers', async () => {
+      const res = await call2(pie('No Such Measure'), { keepLargePie: true });
+      expect(res.status, JSON.stringify(res)).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.reason).toBe('field-not-found');
+    });
+
+    it('never mints request coverage for a flagged complete-request call', async () => {
+      const res = await call2(pie(), { keepLargePie: true, requireCompleteRequest: true });
+      expect(res.status).toBe('escalate');
+      if (res.status !== 'escalate') return;
+      expect(res.reason).toBe('request-not-covered');
+    });
+
+    it('tells Call 1 to warn and offer, keeping the pie only on explicit user say-so', async () => {
+      const res = await bind(ask, withExtractApproxCount('State/Province', 49));
+      expect(res.status, JSON.stringify(res)).toBe('propose');
+      if (res.status !== 'propose') return;
+      expect(res.decline_reason.detail).toContain('keep_large_pie:true');
+      expect(res.decline_reason.detail).toContain('explicitly');
+      expect(res.decline_reason.detail).toContain('blocks it once');
+      expect(res.decline_reason.detail).toContain('Never set keep_large_pie');
+      expect(res.decline_reason.detail).not.toContain('Stop calling');
+      expect(res.decline_reason.detail).not.toContain('build-worksheets-from-templates');
+    });
+  });
+
+  it('still binds a low-cardinality pie when the extract count is small', async () => {
+    const res = await bind('pie chart of Sales by Category', withExtractApproxCount('Category', 3));
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status === 'bound') expect(res.args.template_name).toBe('part-to-whole-pie-chart');
+  });
+
+  it('warns on a bar bound to a high-count extract dimension', async () => {
+    const res = await bind(
+      'bar chart of Sales by Product Name',
+      withExtractApproxCount('Product Name', 1850),
+    );
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(JSON.stringify(res.advisories ?? [])).toContain('1850');
+  });
+
+  it('keeps cardinality advice as an advisory that does not break complete-request coverage', async () => {
+    const ask = 'bar chart of Sales by State/Province';
+    const baseline = await bindTemplate({
+      ask,
+      workbookXml: FIXTURE,
+      manifests,
+      requireCompleteRequest: true,
+    });
+    expect(baseline.status, JSON.stringify(baseline)).toBe('bound');
+    const res = await bindTemplate({
+      ask,
+      workbookXml: withExtractApproxCount('State/Province', 80),
+      manifests,
+      requireCompleteRequest: true,
+    });
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.requestCoverage).toBeDefined();
+    expect(res.warnings).toBeUndefined();
+    expect(JSON.stringify(res.advisories)).toContain('80');
+  });
 
   it('does not fabricate missing pie cardinality metadata', async () => {
     const res = await bind('pie chart of Sales by Product Name');

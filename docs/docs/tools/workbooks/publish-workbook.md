@@ -68,6 +68,7 @@ Exactly one of these must be provided — providing both, or neither, returns an
 
 The staged workbook upload id returned by [Request Workbook Upload](request-workbook-upload.md). Use
 this for hosted clients that cannot pass a local path. Requires `MCP_S3_BUCKET` to be configured.
+Each upload id can be published once: the staged upload is deleted after a successful publish.
 
 Example: `123e4567-e89b-42d3-a456-426614174000`
 
@@ -126,8 +127,9 @@ For Personal Space publishes, the tool returns an error without publishing anyth
 
 In addition, some servers accept the request but silently land the workbook in a default project
 instead of honoring the Personal Space target. In that case the workbook **is** actually published —
-just to an unintended location — and the tool still returns an error so you can delete it there if
-unwanted, or republish by passing an explicit `projectId`.
+just to an unintended location — and the tool still returns an error that includes the workbook's
+id, so you can move it to a project with [Move Workbook](move-workbook.md) or delete it if
+unwanted.
 
 ## Optional arguments
 
