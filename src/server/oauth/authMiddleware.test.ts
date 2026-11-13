@@ -9,9 +9,11 @@ import { authMiddleware } from './authMiddleware.js';
 import {
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
+  getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
   MCP_SITE_SETTINGS_READ_SCOPE,
+  MCP_WILDCARD_SCOPE,
   PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
@@ -883,5 +885,171 @@ describe('subset-mode regression guards (G6)', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body.error_description.split(MANDATORY_SCOPE)).toHaveLength(2);
+  });
+});
+
+describe('MCP wildcard scope', () => {
+  const clientId = 'test-client';
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false'); // enforceScopes on; strict is on by default
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+    mocks.isFeatureEnabled.mockImplementation(
+      async (flag: string) => flag === 'mcp-wildcard-scope',
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+  });
+
+  // `scopes` undefined sends no bearer token.
+  async function drive(
+    scopes: string[] | undefined,
+    body: unknown,
+  ): Promise<{ res: any; next: ReturnType<typeof vi.fn> }> {
+    const middleware = authMiddleware(makeValidator(new Ok({ scopes, clientId })));
+    const req = {
+      headers: scopes ? { authorization: 'Bearer valid-token' } : {},
+      method: 'POST',
+      body,
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+    await middleware(req, res, next);
+    return { res, next };
+  }
+
+  const challengeScopes = (res: any): string[] =>
+    /scope="([^"]*)"/.exec(res.headers['WWW-Authenticate'])![1].split(' ');
+
+  const initializeBody = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test-client', version: '1.0.0' },
+    },
+  };
+  const toolsListBody = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+  const callBody = (name: string): Record<string, unknown> => ({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name, arguments: {} },
+  });
+
+  it('asks for the wildcard instead of each MCP scope when no token is present', async () => {
+    const { res } = await drive(undefined, initializeBody);
+
+    expect(res.statusCode).toBe(401);
+    expect(challengeScopes(res)).toEqual([MCP_WILDCARD_SCOPE]);
+  });
+
+  it('accepts the wildcard at initialize under strict scope match', async () => {
+    const { res, next } = await drive([MCP_WILDCARD_SCOPE], initializeBody);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it('still accepts every MCP scope listed explicitly at initialize under strict scope match', async () => {
+    const { res, next } = await drive(await getSupportedMcpScopes(clientId), initializeBody);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it('accepts the wildcard for a tool call', async () => {
+    const { res, next } = await drive([MCP_WILDCARD_SCOPE], callBody('list-datasources'));
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it('asks for the wildcard, not the held MCP scopes, when a strict token lacks some', async () => {
+    const { res, next } = await drive(
+      (await getSupportedMcpScopes(clientId)).slice(1),
+      initializeBody,
+    );
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(challengeScopes(res)).toEqual([MCP_WILDCARD_SCOPE]);
+  });
+
+  it('does not let the wildcard stand in for Tableau API scopes', async () => {
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    const apiScopes = await getSupportedApiScopes(clientId, { includeOptionalScopes: false });
+
+    const rejected = await drive([MCP_WILDCARD_SCOPE], initializeBody);
+    expect(rejected.res.statusCode).toBe(403);
+    expect(challengeScopes(rejected.res)).toEqual(
+      expect.arrayContaining([MCP_WILDCARD_SCOPE, ...apiScopes]),
+    );
+
+    const accepted = await drive([MCP_WILDCARD_SCOPE, ...apiScopes], initializeBody);
+    expect(accepted.next).toHaveBeenCalledOnce();
+  });
+
+  it('does not let the wildcard stand in for the mandatory site-settings scope', async () => {
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
+
+    const { res } = await drive([MCP_WILDCARD_SCOPE], toolsListBody);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error_description).toContain(MCP_SITE_SETTINGS_READ_SCOPE);
+  });
+
+  it('names the MCP scope a tool needs, not the wildcard, when a tool call lacks it', async () => {
+    const { res } = await drive(['tableau:mcp:workbook:read'], callBody('list-datasources'));
+
+    expect(res.statusCode).toBe(403);
+    expect(challengeScopes(res)).toContain('tableau:mcp:datasource:read');
+    expect(challengeScopes(res)).not.toContain(MCP_WILDCARD_SCOPE);
+  });
+
+  describe('with the mcp-wildcard-scope flag off', () => {
+    beforeEach(() => {
+      mocks.isFeatureEnabled.mockResolvedValue(false);
+    });
+
+    it('asks for each MCP scope when no token is present', async () => {
+      const { res } = await drive(undefined, initializeBody);
+
+      expect(res.statusCode).toBe(401);
+      expect(challengeScopes(res)).toEqual(await getSupportedMcpScopes());
+    });
+
+    it('rejects a wildcard-only token at initialize under strict scope match', async () => {
+      const { res, next } = await drive([MCP_WILDCARD_SCOPE], initializeBody);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(challengeScopes(res)).toEqual(
+        expect.arrayContaining(await getSupportedMcpScopes(clientId)),
+      );
+    });
+
+    it('rejects a wildcard-only token for a tool call', async () => {
+      const { res, next } = await drive([MCP_WILDCARD_SCOPE], callBody('list-datasources'));
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(challengeScopes(res)).toContain('tableau:mcp:datasource:read');
+    });
+
+    it('accepts every MCP scope listed explicitly at initialize under strict scope match', async () => {
+      const { next } = await drive(await getSupportedMcpScopes(clientId), initializeBody);
+
+      expect(next).toHaveBeenCalledOnce();
+    });
   });
 });

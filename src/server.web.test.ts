@@ -12,6 +12,7 @@ import {
   getConditionApiScopesForTool,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
+  MCP_WILDCARD_SCOPE,
 } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
@@ -507,6 +508,34 @@ describe('server', () => {
       // token missing one never causes omission.
       await server.registerTools(bearerAuth, grant);
       expect(registeredNames(server)).toContain('publish-workbook');
+    });
+
+    it('treats the MCP wildcard as granting every MCP scope, but not API scopes', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'mcp-wildcard-scope',
+      );
+      const server = getServer();
+      // The wildcard covers both tools' shared MCP scope; only list-datasources' API scopes are granted.
+      await server.registerTools(bearerAuth, [
+        MCP_WILDCARD_SCOPE,
+        ...apiScopes('list-datasources'),
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).toContain('list-datasources');
+      expect(registered).not.toContain('query-datasource');
+    });
+
+    it('does not treat the MCP wildcard as granting MCP scopes when the mcp-wildcard-scope flag is off', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const server = getServer();
+      await server.registerTools(bearerAuth, [
+        MCP_WILDCARD_SCOPE,
+        ...apiScopes('list-datasources'),
+      ]);
+      const registered = registeredNames(server);
+      expect(registered).not.toContain('list-datasources');
+      expect(registered).not.toContain('query-datasource');
     });
 
     it('omits nothing when no explicit scope grant is present (e.g. PAT, stdio, passthrough)', async () => {

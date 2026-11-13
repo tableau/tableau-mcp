@@ -88,7 +88,7 @@ flowchart LR
 
    ```http
    HTTP/2 401
-   www-authenticate: Bearer realm="MCP", resource_metadata="https://mcp.tableau.com/.well-known/oauth-protected-resource", scope="tableau:mcp:datasource:read tableau:mcp:workbook:read ..."
+   www-authenticate: Bearer realm="MCP", resource_metadata="https://mcp.tableau.com/.well-known/oauth-protected-resource", scope="tableau:mcp:* ..."
 
    {"error":"unauthorized","error_description":"Authorization required. Use OAuth 2.1 flow. See https://tableau.github.io/tableau-mcp/ for details."}
    ```

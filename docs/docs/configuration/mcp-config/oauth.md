@@ -64,11 +64,24 @@ To set it up:
   any token with a matching `aud`, so use a value unique to this server. A client ID is fine only if
   it is this MCP server's own client ID and no other app receives tokens for it. Never use a client
   ID shared with another app, or a shared default audience such as Okta's `api://default`.
-- Grant the `tableau:mcp:*` scopes your tools need in the `scope` or `scp` claim. The scopes also
-  keep out tokens without `tableau:mcp:*` scopes, including ID tokens and tokens meant for other
-  apps. Accepting ID tokens requires [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) set to `true`.
+- Grant MCP scopes in the `scope` or `scp` claim: either `tableau:mcp:*`, which grants every MCP
+  scope, or the `tableau:mcp:…` scopes your tools need. The server advertises `tableau:mcp:*`, so
+  clients request it; make sure your IdP accepts and issues that exact scope. The scopes also keep
+  out tokens without MCP scopes, including ID tokens and tokens meant for other apps. Accepting ID
+  tokens requires [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) set to `true`.
   The audience is then the only check that ties a token to this server, so do this only when every
   accepted audience is unique to this server.
+
+:::info[Upgrading]
+
+The server now advertises `tableau:mcp:*` in place of the individual `tableau:mcp:…` scopes, so
+clients that read `scopes_supported` request `tableau:mcp:*`. Before you upgrade, set up your IdP
+to accept that scope and put it in the token. If your IdP rejects the scope, sign-in fails. If it
+drops the scope, the server rejects the token, or, with
+[`DISABLE_STRICT_SCOPE_MATCH`](#disable_strict_scope_match) set to `true`, the client connects
+with no tools. Tokens that list the individual scopes keep working.
+
+:::
 
 :::warning
 
@@ -495,8 +508,9 @@ SESSION_STORE_PROVIDER_CONFIG='{"module":"./providers/redis-session-store.js"}'
 Include Tableau API scopes in OAuth metadata and scope challenges.
 
 - Default: `false`
-- When `true`, `scopes_supported` includes MCP + API scopes and scope challenges may include API
-  scopes for step-up.
+- When `false`, `scopes_supported` lists only `tableau:mcp:*`. When `true`, it also lists the
+  Tableau API scopes, and scope challenges may include API scopes for step-up. `tableau:mcp:*` never
+  grants API scopes.
 - The check for AI-powered Pulse insight tools needs `tableau:entitlements:read`, so it is part of
   the advertised set. Under strict scope matching (the default), tokens issued before upgrading must
   be re-consented to include it. With
@@ -511,16 +525,18 @@ Do not require every access token to carry all supported scopes before it can co
 
 - Default: `false`.
 - Has no effect when [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `true`.
-- When `false`, a token missing any supported `tableau:mcp:*` scope is rejected with a `403`
-  `insufficient_scope` error. When [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`, the
-  token must also carry the supported Tableau API scopes, except optional ones.
+- When `false`, a token must carry `tableau:mcp:*` or every supported `tableau:mcp:…` scope.
+  Otherwise it is rejected with a `403` `insufficient_scope` error. When
+  [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`, the token must also carry the supported
+  Tableau API scopes, except optional ones.
 - When `true`, a token with only some of the supported scopes can connect. Tools the token lacks
   scopes for are left out of the tool list, and the server's initialize instructions name them.
 - When `true`, `ADVERTISE_API_SCOPES` is `true`, and
   [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
   every token must carry `tableau:mcp_site_settings:read` so the server can read the site's
-  settings. A token without it is rejected with a `403`, and the embedded authorization server
-  refuses to issue one (`400` `invalid_scope`).
+  settings. It is an API scope, so `tableau:mcp:*` doesn't grant it. A token without it is
+  rejected with a `403`, and the embedded authorization server refuses to issue one (`400`
+  `invalid_scope`).
 
 <hr />
 

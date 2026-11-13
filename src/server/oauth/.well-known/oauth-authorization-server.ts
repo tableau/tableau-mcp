@@ -1,7 +1,7 @@
 import express from 'express';
 
 import { getConfig } from '../../../config.js';
-import { getSupportedScopes } from '../scopes.js';
+import { getAdvertisedScopes } from '../scopes.js';
 
 /**
  * OAuth 2.0 Authorization Server Metadata
@@ -32,7 +32,7 @@ export function oauthAuthorizationServer(app: express.Application): void {
       grant_types_supported,
       code_challenge_methods_supported: ['S256'],
       scopes_supported: enforceScopes
-        ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+        ? await getAdvertisedScopes({ includeApiScopes: advertiseApiScopes })
         : [],
       token_endpoint_auth_methods_supported,
       subject_types_supported: ['public'],

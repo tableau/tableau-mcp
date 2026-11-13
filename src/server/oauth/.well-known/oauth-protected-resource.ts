@@ -2,7 +2,7 @@ import express from 'express';
 
 import { getConfig } from '../../../config.js';
 import { buildResourceIdentifier } from '../resourceIdentifier.js';
-import { getSupportedScopes } from '../scopes.js';
+import { getAdvertisedScopes } from '../scopes.js';
 
 /**
  * OAuth 2.0 Protected Resource Metadata
@@ -19,7 +19,7 @@ export function oauthProtectedResource(app: express.Application): void {
       authorization_servers: [issuer],
       bearer_methods_supported: ['header'],
       scopes_supported: enforceScopes
-        ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+        ? await getAdvertisedScopes({ includeApiScopes: advertiseApiScopes })
         : [],
     });
   });
