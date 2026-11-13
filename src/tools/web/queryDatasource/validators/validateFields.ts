@@ -1,4 +1,13 @@
-import { Field, FilterField } from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import {
+  Field,
+  FilterField,
+  TableCalcField,
+} from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+
+// Check this before any 'function' in / 'calculation' in test: a table calc can carry both keys.
+export function isTableCalcField(field: Field): field is TableCalcField {
+  return 'tableCalculation' in field;
+}
 
 export function validateFields(fields: Field[]): void {
   {

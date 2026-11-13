@@ -8,6 +8,7 @@ import {
   QueryParameter,
 } from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
+import { isTableCalcField } from './validateFields.js';
 
 export type FieldValidationError = {
   field: string;
@@ -75,6 +76,10 @@ export function validateFieldsAgainstDatasourceMetadata(
   interpretFieldCaptionsAsFieldNames = false,
 ): void {
   for (const field of fields) {
+    if (isTableCalcField(field)) {
+      continue;
+    }
+
     // Validate bin fields.
     if ('binSize' in field) {
       // The bin size property is only for new bin fields created as part of the query, it can not be used to override preexisting bin fields.
