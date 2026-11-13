@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { QueryValidationSubtype } from '../../../errors/errorSubtypes.js';
 import {
   ArgsValidationError,
   DatasourceNotAllowedError,
@@ -201,7 +202,10 @@ export const getQueryDatasourceTool = (
                 if (metadataValidationResult.isErr()) {
                   const errors = metadataValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new QueryValidationError(errorMessage).toErr();
+                  return new QueryValidationError(
+                    errorMessage,
+                    QueryValidationSubtype.MetadataMismatch,
+                  ).toErr();
                 }
 
                 // Validate filters values for SET and MATCH filters
@@ -216,7 +220,10 @@ export const getQueryDatasourceTool = (
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
-                  return new QueryValidationError(errorMessage).toErr();
+                  return new QueryValidationError(
+                    errorMessage,
+                    QueryValidationSubtype.FilterValueInvalid,
+                  ).toErr();
                 }
               }
 

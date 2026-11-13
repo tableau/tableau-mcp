@@ -7,6 +7,12 @@ import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from './externalApiAccess.js';
 
 export class McpToolError extends Error {
   readonly type: string;
+  /**
+   * Hand-assigned, never-reused sub-code for the generic buckets (args-validation, query-validation,
+   * unknown, xml-*), surfaced as the `error_subtype` telemetry key. Undefined for the single-message
+   * subclasses, whose `type` is already a unique analytical key. See src/errors/errorSubtypes.ts.
+   */
+  readonly subtype?: string;
   readonly statusCode: number;
   readonly internalStatusCode?: number;
   readonly internalError?: string;
@@ -14,6 +20,7 @@ export class McpToolError extends Error {
 
   constructor({
     type,
+    subtype,
     message,
     statusCode,
     // internal error is any underlying error caused by dependencies
@@ -22,6 +29,7 @@ export class McpToolError extends Error {
     internalErrorDetails,
   }: {
     type: string;
+    subtype?: string;
     message: string;
     statusCode: number;
     internalStatusCode?: number;
@@ -30,6 +38,7 @@ export class McpToolError extends Error {
   }) {
     super(message);
     this.type = type;
+    this.subtype = subtype;
     this.statusCode = statusCode;
     this.internalStatusCode = internalStatusCode;
     this.internalError = internalError;
@@ -46,8 +55,8 @@ export class McpToolError extends Error {
 }
 
 export class ArgsValidationError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'args-validation', message, statusCode: 400 });
+  constructor(message: string, subtype?: string) {
+    super({ type: 'args-validation', subtype, message, statusCode: 400 });
   }
 }
 
@@ -233,8 +242,8 @@ export class PulseNotAvailableError extends McpToolError {
 }
 
 export class QueryValidationError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'query-validation', message, statusCode: 400 });
+  constructor(message: string, subtype?: string) {
+    super({ type: 'query-validation', subtype, message, statusCode: 400 });
   }
 }
 
@@ -340,8 +349,8 @@ export class ServiceUnavailableError extends McpToolError {
 }
 
 export class UnknownError extends McpToolError {
-  constructor(message: string, statusCode = 500) {
-    super({ type: 'unknown', message, statusCode });
+  constructor(message: string, statusCode = 500, subtype?: string) {
+    super({ type: 'unknown', subtype, message, statusCode });
   }
 }
 
@@ -395,8 +404,8 @@ export class FileNotFoundError extends McpToolError {
 }
 
 export class XmlModificationError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'xml-modification-error', message, statusCode: 422 });
+  constructor(message: string, subtype?: string) {
+    super({ type: 'xml-modification-error', subtype, message, statusCode: 422 });
   }
 }
 

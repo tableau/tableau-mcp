@@ -410,6 +410,7 @@ describe('DesktopTool product telemetry', () => {
       success: true,
       error_code: '',
       error_message: '',
+      error_subtype: '',
       oauth_client_id: '',
       oauth_client_display_name: '',
       auth_type: 'desktop',
@@ -579,6 +580,32 @@ describe('DesktopTool product telemetry', () => {
         success: false,
         error_code: '400',
         error_message: 'args-validation',
+      }),
+    );
+  });
+
+  it('forwards the McpToolError sub-code as error_subtype', async () => {
+    await makeTool().logAndExecute({
+      extra: extraWithConfig({ desktopSessionLuid: guid }),
+      args: { session: 'S1' },
+      callback: async () =>
+        new Err(
+          new McpToolError({
+            type: 'query-validation',
+            subtype: 'filter-value-invalid',
+            message: 'invalid filter',
+            statusCode: 400,
+          }),
+        ),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        success: false,
+        error_code: '400',
+        error_message: 'query-validation',
+        error_subtype: 'filter-value-invalid',
       }),
     );
   });

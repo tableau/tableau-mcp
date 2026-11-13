@@ -3,9 +3,11 @@ import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
+import { QueryValidationSubtype } from '../../errors/errorSubtypes.js';
 import {
   AdminOnlyError,
   DatasourceNotAllowedError,
+  QueryValidationError,
   ServiceUnavailableError,
   ZodiosValidationError,
 } from '../../errors/mcpToolError.js';
@@ -471,12 +473,41 @@ describe('Tool', () => {
           success: false,
           error_code: '403',
           error_message: 'datasource-not-allowed',
+          // A single-message subclass carries no sub-code; its type is already unique.
+          error_subtype: '',
         }),
       );
 
       // The error text returned to the client is unchanged — still the full, interpolated message.
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe('Datasource "Secret Sales" is not allowed');
+    });
+
+    it('sends the hand-assigned sub-code as error_subtype for a generic-bucket error', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () =>
+          Promise.resolve(
+            new QueryValidationError(
+              'Filter validation failed for field "Secret Sales".',
+              QueryValidationSubtype.FilterValueInvalid,
+            ).toErr(),
+          ),
+        constrainSuccessResult: (r) => ({ type: 'success', result: r }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '400',
+          error_message: 'query-validation',
+          error_subtype: 'filter-value-invalid',
+        }),
+      );
     });
 
     it('should send telemetry with actual HTTP status code on API error', async () => {
@@ -502,7 +533,7 @@ describe('Tool', () => {
       );
     });
 
-    it('should send telemetry with success=false and empty error_code on constrained error', async () => {
+    it('leaves error_code empty on a constrained error that carries no HTTP status', async () => {
       const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
@@ -517,6 +548,7 @@ describe('Tool', () => {
         expect.objectContaining({
           success: false,
           error_code: '',
+          error_message: 'unknown',
         }),
       );
     });

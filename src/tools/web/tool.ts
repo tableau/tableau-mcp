@@ -206,10 +206,9 @@ export class WebTool<
     const productTelemetryForwarder = getProductTelemetry();
 
     let success = false;
-    let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
-    // Stable McpToolError.type slug (e.g. 'query-validation') — never the human-readable message,
-    // which can interpolate customer data. Empty unless a genuine error result is produced.
+    let errorCode = '';
     let errorType = '';
+    let errorSubtype = '';
     let toolResult: CallToolResult | undefined;
 
     try {
@@ -222,10 +221,12 @@ export class WebTool<
           const isError = constrainedResult.type === 'error';
           success = !isError;
           if (isError) {
-            errorType =
-              constrainedResult.error instanceof McpToolError
-                ? constrainedResult.error.type
-                : 'unknown';
+            if (constrainedResult.error instanceof McpToolError) {
+              errorType = constrainedResult.error.type;
+              errorSubtype = constrainedResult.error.subtype ?? '';
+            } else {
+              errorType = 'unknown';
+            }
             if (constrainedResult.error) {
               errorCode = getHttpStatus(constrainedResult.error);
             }
@@ -256,6 +257,7 @@ export class WebTool<
       }
 
       errorType = result.error.type;
+      errorSubtype = result.error.subtype ?? '';
       toolResult = {
         isError: true,
         content: [{ type: 'text', text: result.error.getErrorText() }],
@@ -292,7 +294,12 @@ export class WebTool<
       }
       // Typed errors normally return as an Err; a thrown one is rare but still carries its slug.
       // Everything else is an untyped failure.
-      errorType = error instanceof McpToolError ? error.type : 'unknown';
+      if (error instanceof McpToolError) {
+        errorType = error.type;
+        errorSubtype = error.subtype ?? '';
+      } else {
+        errorType = 'unknown';
+      }
       log(
         {
           message: 'Tool execution failed',
@@ -335,6 +342,9 @@ export class WebTool<
         // matching desktop (src/tools/desktop/tool.ts). Empty on success and on the
         // ZodiosValidationError passthrough (isError: false), which leaves errorType unset.
         error_message: errorType,
+        // Fine-grained, stable sub-code for the generic buckets (e.g. 'filter-value-invalid');
+        // empty when the error carries none. Also PII-free by construction.
+        error_subtype: errorSubtype,
         oauth_client_id: sanitizedClientId,
         oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
