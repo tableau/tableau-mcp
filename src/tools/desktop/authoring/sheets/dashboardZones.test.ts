@@ -325,8 +325,8 @@ describe('buildDashboardXml', () => {
         layoutType: 'custom',
         charts: ['A', 'B'],
         customZones: [
-          { worksheetName: 'A', x: 0, y: 0, width: 60000, height: 60000 },
-          { worksheetName: 'B', x: 30000, y: 30000, width: 60000, height: 60000 },
+          { worksheet: 'A', x: 0, y: 0, width: 60000, height: 60000 },
+          { worksheet: 'B', x: 30000, y: 30000, width: 60000, height: 60000 },
         ],
       }),
     );
@@ -361,8 +361,8 @@ describe('buildDashboardXml', () => {
       layoutType: 'custom',
       charts: ['A', 'B'],
       customZones: [
-        { worksheetName: 'A', x: 0, y: 0, width: 50000, height: 100000 },
-        { worksheetName: 'B', x: 50000, y: 0, width: 50000, height: 100000 },
+        { worksheet: 'A', x: 0, y: 0, width: 50000, height: 100000 },
+        { worksheet: 'B', x: 50000, y: 0, width: 50000, height: 100000 },
       ],
     });
     const root = rootZone(
