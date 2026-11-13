@@ -97,7 +97,14 @@ describe('preview evidence across replicas sharing a custom session store', () =
       message: 'Preview evidence store operation failed',
       level: 'error',
       logger: 'mutation-guard',
+      data: {
+        namespace: 'mutation-confirmation-nonces-v1',
+        operation: 'consume',
+        errorName: 'Error',
+        errorCode: 'ECONNREFUSED',
+      },
     });
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('test-password');
   });
 
   it('confirms a RegistryEvidence nonce on a different replica, exactly once', async () => {

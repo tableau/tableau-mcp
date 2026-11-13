@@ -32,7 +32,12 @@ class SharedBackendSessionStore {
 
   throwIfDown() {
     if (globalThis.__sharedSessionStoreDown) {
-      throw new Error('store down: redis://test-user:test-password@backend.invalid');
+      throw Object.assign(
+        new Error('store down: redis://test-user:test-password@backend.invalid'),
+        {
+          code: 'ECONNREFUSED',
+        },
+      );
     }
   }
 }
