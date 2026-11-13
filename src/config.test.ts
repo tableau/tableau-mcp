@@ -1,3 +1,5 @@
+import { inspect } from 'node:util';
+
 import { Config } from './config.js';
 import * as logger from './logging/logger.js';
 import { stubDefaultEnvVars } from './testShared.js';
@@ -1235,6 +1237,132 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.featureGate.provider).toBe('server');
+    });
+  });
+
+  describe('KV provider configuration and session compatibility', () => {
+    beforeEach(() => {
+      vi.stubEnv('KV_STORE_PROVIDER', undefined);
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', undefined);
+      vi.stubEnv('SESSION_STORE_PROVIDER', undefined);
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', undefined);
+    });
+
+    it('defaults to memory with the legacy property pointing at the same configuration', () => {
+      const config = new Config();
+      expect(config.keyValueStore).toEqual({ provider: 'memory' });
+      expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('accepts custom KV modules and forwards provider-specific settings', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"@example/kv-provider","table":"state"}');
+      const config = new Config();
+      expect(config.keyValueStore).toEqual({
+        provider: 'custom',
+        providerConfig: { module: '@example/kv-provider', table: 'state' },
+      });
+      expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('uses legacy session configuration when both KV settings are unset', () => {
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs","table":"sessions"}');
+      const config = new Config();
+      expect(config.keyValueStore).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './legacy.cjs', table: 'sessions' },
+      });
+      expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('requires KV_STORE_PROVIDER when KV_STORE_PROVIDER_CONFIG is set', () => {
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"./kv.cjs"}');
+
+      expect(() => new Config()).toThrow(
+        'KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided',
+      );
+    });
+
+    it('requires KV_STORE_PROVIDER when KV_STORE_PROVIDER_CONFIG is set even when legacy storage is configured', () => {
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"./kv.cjs"}');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs"}');
+
+      expect(() => new Config()).toThrow(
+        'KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided',
+      );
+    });
+
+    it('selects KV settings as a pair without parsing obsolete session configuration', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"./kv.cjs"}');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', 'invalid-json');
+      expect(new Config().keyValueStore).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './kv.cjs' },
+      });
+    });
+
+    it('honors explicit KV memory even when a legacy custom provider is configured', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'memory');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs"}');
+      expect(new Config().keyValueStore).toEqual({ provider: 'memory' });
+    });
+
+    it('requires KV custom configuration instead of borrowing legacy settings', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs"}');
+      expect(() => new Config()).toThrow(
+        'KV_STORE_PROVIDER_CONFIG is required when KV_STORE_PROVIDER is "custom"',
+      );
+    });
+
+    it('preserves the legacy missing-configuration error', () => {
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      expect(() => new Config()).toThrow(
+        'SESSION_STORE_PROVIDER_CONFIG is required when SESSION_STORE_PROVIDER is "custom"',
+      );
+    });
+
+    it('rejects unrecognized KV providers instead of silently selecting memory', () => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'redis');
+      expect(() => new Config()).toThrow('KV_STORE_PROVIDER must be "memory" or "custom"');
+    });
+
+    it.each(['invalid-json', '{}', '{"module":42}'])(
+      'rejects malformed custom KV configuration: %s',
+      (value) => {
+        vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+        vi.stubEnv('KV_STORE_PROVIDER_CONFIG', value);
+        expect(() => new Config()).toThrow();
+      },
+    );
+
+    it.each(['KV_STORE_PROVIDER', 'SESSION_STORE_PROVIDER'] as const)(
+      'does not expose malformed JSON from %s_CONFIG in errors',
+      async (variable) => {
+        const privateMarker = 'PRIVATE_KV_CONFIG_TEST_MARKER';
+        vi.stubEnv(variable, 'custom');
+        vi.stubEnv(`${variable}_CONFIG`, `${privateMarker}{"module":"./provider.cjs"}`);
+
+        const error = await Promise.resolve()
+          .then(() => new Config())
+          .catch((error: unknown) => error);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error).toHaveProperty('message', `${variable}_CONFIG is not valid JSON`);
+        expect(inspect(error)).not.toContain(privateMarker);
+        expect(error).not.toHaveProperty('cause');
+      },
+    );
+
+    it('preserves the existing memory default for an unrecognized legacy provider', () => {
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'invalid');
+      expect(new Config().sessionStore).toEqual({ provider: 'memory' });
     });
   });
 

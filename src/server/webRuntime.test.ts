@@ -4,11 +4,7 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import {
-  connectSessionStore,
-  disconnectSessionStore,
-  initializeSessionStore,
-} from '../sessionStore/init.js';
+import { connectKeyValueStore, disconnectKeyValueStore } from '../storage/storageProvider.js';
 
 const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
@@ -54,20 +50,17 @@ vi.mock('../sdks/tableau/restApi.js', () => ({
   RestApi: { host: '' },
 }));
 
-vi.mock('../sessionStore/init.js', () => ({
-  initializeSessionStore: vi.fn(() => {
-    runtimeState.events.push('session store init');
-  }),
-  connectSessionStore: vi.fn(() => {
-    runtimeState.events.push('session store connect');
+vi.mock('../storage/storageProvider.js', () => ({
+  connectKeyValueStore: vi.fn(() => {
+    runtimeState.events.push('key-value store connect');
     return runtimeState.connectPromise;
   }),
-  disconnectSessionStore: vi.fn(async () => {
+  disconnectKeyValueStore: vi.fn(async () => {
     if (runtimeState.disconnectNeverResolves) {
       await new Promise(() => undefined);
     }
     if (runtimeState.disconnectShouldReject) {
-      throw new Error('session store close failed');
+      throw new Error('key-value store close failed');
     }
   }),
 }));
@@ -124,14 +117,13 @@ describe('initializeWebRuntime', () => {
     runtimeState.serverInfoPromise = serverInfo.promise;
 
     const runtimePromise = initializeWebRuntime(config);
-    await vi.waitFor(() => expect(connectSessionStore).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(connectKeyValueStore).toHaveBeenCalledOnce());
 
     expect(RestApi.host).toBe(config.server);
     expect(runtimeState.events).toEqual([
       'feature gate',
       'activity log init',
-      'session store init',
-      'session store connect',
+      'key-value store connect',
     ]);
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
@@ -142,8 +134,7 @@ describe('initializeWebRuntime', () => {
     expect(runtimeState.events).toEqual([
       'feature gate',
       'activity log init',
-      'session store init',
-      'session store connect',
+      'key-value store connect',
       'server info',
     ]);
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
@@ -161,7 +152,7 @@ describe('initializeWebRuntime', () => {
     expect(ready).toBe(true);
   });
 
-  it('waits for Activity Log init before initializing the session store', async () => {
+  it('waits for Activity Log init before connecting the key-value store', async () => {
     const activityLogInit = deferred<void>();
     runtimeState.activityLogInitPromise = activityLogInit.promise;
 
@@ -169,7 +160,7 @@ describe('initializeWebRuntime', () => {
     await vi.waitFor(() => expect(initializeActivityLog).toHaveBeenCalledOnce());
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
 
-    expect(initializeSessionStore).not.toHaveBeenCalled();
+    expect(connectKeyValueStore).not.toHaveBeenCalled();
     expect(runtimeState.events).toEqual(['feature gate']);
 
     activityLogInit.resolve();
@@ -177,18 +168,18 @@ describe('initializeWebRuntime', () => {
     expect(runtimeState.events.slice(0, 3)).toEqual([
       'feature gate',
       'activity log init',
-      'session store init',
+      'key-value store connect',
     ]);
   });
 
   it('fails before registering handlers or fetching server info when the store cannot connect', async () => {
-    runtimeState.connectPromise = Promise.reject(new Error('session store init failed'));
+    runtimeState.connectPromise = Promise.reject(new Error('key-value store init failed'));
 
-    await expect(initializeWebRuntime(config)).rejects.toThrow('session store init failed');
+    await expect(initializeWebRuntime(config)).rejects.toThrow('key-value store init failed');
 
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
     expect(initializeActivityLog).toHaveBeenCalledOnce();
-    expect(initializeSessionStore).toHaveBeenCalledOnce();
+    expect(connectKeyValueStore).toHaveBeenCalledOnce();
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
   });
@@ -216,17 +207,17 @@ describe('initializeWebRuntime', () => {
     await serverInfoReady;
 
     await runtimeState.shutdownHandlers.get('SIGINT')!();
-    expect(disconnectSessionStore).toHaveBeenCalledOnce();
+    expect(disconnectKeyValueStore).toHaveBeenCalledOnce();
     expect(closeActivityLog).toHaveBeenCalledOnce();
     expect(processExitSpy).toHaveBeenLastCalledWith(0);
 
     runtimeState.disconnectShouldReject = true;
     await runtimeState.shutdownHandlers.get('SIGTERM')!();
-    expect(disconnectSessionStore).toHaveBeenCalledTimes(2);
+    expect(disconnectKeyValueStore).toHaveBeenCalledTimes(2);
     expect(closeActivityLog).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Error closing session store or Activity Log during shutdown',
+        message: 'Error closing key-value store or Activity Log during shutdown',
         level: 'error',
         logger: 'shutdown',
       }),

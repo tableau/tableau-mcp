@@ -47,6 +47,64 @@ describe('InMemorySessionStore', () => {
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
+  it.each([0, -100])('preserves a one-millisecond lifetime for TTL %i', async (ttlMs) => {
+    const store = new InMemorySessionStore<string>({ ttlMs });
+    await store.set('key', 'value');
+    await expect(store.get('key')).resolves.toBe('value');
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
+
+  it('supports the maximum timer TTL and resets expiry on overwrite', async () => {
+    const ttlMs = 2 ** 31 - 1;
+    const store = new InMemorySessionStore<string>({ ttlMs });
+    await store.set('key', 'original');
+
+    await vi.advanceTimersByTimeAsync(ttlMs - 1);
+    await expect(store.get('key')).resolves.toBe('original');
+    await store.set('key', 'updated');
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(store.get('key')).resolves.toBe('updated');
+
+    await vi.advanceTimersByTimeAsync(ttlMs - 1);
+    await expect(store.get('key')).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    undefined,
+    {},
+    { ttlMs: undefined },
+    { ttlMs: NaN },
+    { ttlMs: Infinity },
+    { ttlMs: '1000' },
+  ])('rejects missing or invalid TTL options: %j', (options) => {
+    expect(() => Reflect.construct(InMemorySessionStore, [options])).toThrow(
+      'ttlMs must be a finite number.',
+    );
+  });
+
+  it('bounds values and supports overwrites and explicit deletion', async () => {
+    const store = new InMemorySessionStore<string>({ ttlMs: 1000, maxSize: 2 });
+    await store.set('a', 'first');
+    await store.set('a', 'updated');
+    await store.set('b', 'second');
+    await expect(store.get('a')).resolves.toBe('updated');
+    await store.set('c', 'third');
+    await expect(store.get('a')).resolves.toBeUndefined();
+    await expect(store.get('b')).resolves.toBe('second');
+    await store.delete('c');
+    await expect(store.get('c')).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('rejects a non-positive size bound', () => {
+    expect(() => new InMemorySessionStore({ ttlMs: 1000, maxSize: 0 })).toThrow(
+      'Max size must be greater than 0',
+    );
+  });
+
   it('evicts the oldest key when constructed with maxSize', async () => {
     const store = new InMemorySessionStore<number>({ ttlMs: 10000, maxSize: 2 });
     await store.set('a', 1);

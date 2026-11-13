@@ -438,6 +438,10 @@ spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 ### `SESSION_STORE_PROVIDER`
 
+Compatibility setting for [key-value storage](storage.md). Prefer `KV_STORE_PROVIDER` and
+`KV_STORE_PROVIDER_CONFIG` for new deployments. The legacy settings apply when
+`KV_STORE_PROVIDER` is unset; both entry points use the same backend and namespace factory.
+
 The session store provider to use for the embedded OAuth authorization server's session state
 (pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
 Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
@@ -463,7 +467,16 @@ SESSION_STORE_PROVIDER_CONFIG='{"module":"./my-session-store.js"}'
 
 The custom provider module should export a default class or named export `SessionStore` that
 implements the [`SessionStore`](https://github.com/tableau/tableau-mcp/blob/main/src/sessionStore/sessionStore.ts)
-interface. `consume` must be implemented as a truly atomic operation against the backing store
+type. `SessionStore<V>` preserves the existing provider hooks and uses the generic
+[`KeyValueStore<V>`](https://github.com/tableau/tableau-mcp/blob/main/src/storage/keyValueStore.ts)
+interface, available at `@tableau/mcp-server/storage/keyValueStore`. Existing providers
+and imports continue to work. Namespace configuration and the optional `init`/`close` hooks
+remain on `SessionStore`; `KeyValueStore` contains only storage operations.
+
+The `SessionStore` type and legacy session-store lifecycle/factory function names are deprecated;
+use the generic storage API for new code. Existing providers and aliases remain supported.
+
+`consume` must be implemented as a truly atomic operation against the backing store
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
 Redis, or a transaction for a relational store).
 
@@ -472,6 +485,8 @@ Redis, or a transaction for a relational store).
 <hr />
 
 ### `SESSION_STORE_PROVIDER_CONFIG`
+
+Compatibility setting for `KV_STORE_PROVIDER_CONFIG`; see [key-value storage](storage.md).
 
 Configuration for custom session store providers (JSON string).
 

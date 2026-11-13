@@ -7,6 +7,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getConfig } from '../config.js';
+import type { KeyValueStore } from '../storage/keyValueStore.js';
 import {
   connectSessionStore,
   createNamespacedStore,
@@ -86,7 +87,7 @@ describe('SessionStore init', () => {
       } as any);
 
       expect(() => initializeSessionStore()).toThrow(
-        /Failed to load custom session store provider/,
+        /Failed to load custom key-value store provider/,
       );
     });
 
@@ -181,6 +182,31 @@ describe('SessionStore init', () => {
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
+    });
+  });
+
+  describe('generic storage compatibility', () => {
+    function useCustomStore(module: string): void {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: { provider: 'custom', providerConfig: { module } },
+      } as any);
+    }
+
+    it('uses an unchanged legacy provider through the generic contract', async () => {
+      useCustomStore(FAKE_STORE_MODULE);
+
+      const sessions: KeyValueStore<{ userId: string }> = createNamespacedStore('sessions', {
+        ttlMs: 10000,
+      });
+      const proofs: KeyValueStore<string> = createNamespacedStore('proofs', {
+        ttlMs: 1000,
+      });
+
+      await sessions.set('same-key', { userId: 'user-1' });
+      await proofs.set('same-key', 'proof');
+      await expect(sessions.get('same-key')).resolves.toEqual({ userId: 'user-1' });
+      await expect(proofs.consume('same-key')).resolves.toBe('proof');
+      await expect(sessions.get('same-key')).resolves.toEqual({ userId: 'user-1' });
     });
   });
 
