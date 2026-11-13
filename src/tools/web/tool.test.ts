@@ -444,9 +444,39 @@ describe('Tool', () => {
         expect.objectContaining({
           success: false,
           error_code: '500',
-          error_message: 'requestId: 2, error: Callback failed',
+          // Untyped throw → the slug collapses to 'unknown'; the raw message never reaches telemetry.
+          error_message: 'unknown',
         }),
       );
+    });
+
+    it('sends the stable type slug (not the message) as error_message, leaving tool output unchanged', async () => {
+      const tool = new WebTool(mockParams);
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () =>
+          Promise.resolve(
+            new DatasourceNotAllowedError('Datasource "Secret Sales" is not allowed').toErr(),
+          ),
+        constrainSuccessResult: (r) => ({ type: 'success', result: r }),
+      });
+
+      // Telemetry carries only the slug — the human-readable message (which can hold customer data)
+      // never reaches the wire.
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '403',
+          error_message: 'datasource-not-allowed',
+        }),
+      );
+
+      // The error text returned to the client is unchanged — still the full, interpolated message.
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('Datasource "Secret Sales" is not allowed');
     });
 
     it('should send telemetry with actual HTTP status code on API error', async () => {
