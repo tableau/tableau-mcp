@@ -61,6 +61,12 @@ export function validateFilters(filters: Filter[] | undefined, rules: ToolRules)
     }
   }
 
+  if (rules.restrictConditionFilters && filters.some((f) => f.filterType === 'CONDITION')) {
+    throw new Error(
+      'The query must not include CONDITION filters. CONDITION filters require Tableau 2026.1 or later.',
+    );
+  }
+
   if (rules.restrictFunctionsAndCalculationsInFilters) {
     // Set, Match, and Relative Date filters can't have functions or calculations.
     const setFiltersWithFunctionsOrCalculations = filters.filter((filter) => {
