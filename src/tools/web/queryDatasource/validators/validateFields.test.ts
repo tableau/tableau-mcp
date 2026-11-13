@@ -1,4 +1,4 @@
-import { validateFields } from './validateFields.js';
+import { isTableCalcField, validateFields } from './validateFields.js';
 
 describe('validateFields', () => {
   it('should not throw for a valid single field', () => {
@@ -77,5 +77,27 @@ describe('validateFields', () => {
         { fieldCaption: 'Profit', maxDecimalPlaces: 2 },
       ]),
     ).not.toThrow();
+  });
+});
+
+describe('isTableCalcField', () => {
+  it('identifies a table calc field even when it also has function and calculation', () => {
+    expect(
+      isTableCalcField({
+        fieldCaption: 'X',
+        function: 'SUM',
+        calculation: 'SUM([Sales])',
+        tableCalculation: { tableCalcType: 'RANK', dimensions: [] },
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    { fieldCaption: 'Category' },
+    { fieldCaption: 'Sales', function: 'SUM' as const },
+    { fieldCaption: 'X', calculation: 'SUM([Sales])' },
+    { fieldCaption: 'Sales', binSize: 10 },
+  ])('returns false for %j', (field) => {
+    expect(isTableCalcField(field)).toBe(false);
   });
 });

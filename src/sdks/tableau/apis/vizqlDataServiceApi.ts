@@ -122,7 +122,125 @@ const measureFieldSchema = fieldBaseSchema.extend({ function: functionSchema }).
 const calculatedFieldSchema = fieldBaseSchema.extend({ calculation: z.string() }).strict();
 const binFieldSchema = fieldBaseSchema.extend({ binSize: z.number().gt(0) }).strict();
 
+// Table calculation schemas
+const tableCalcFieldReferenceSchema = z
+  .object({ fieldCaption: z.string(), function: functionSchema.optional() })
+  .strict();
+
+const tableCalcCustomSortSchema = z
+  .object({ fieldCaption: z.string(), function: functionSchema, direction: sortDirectionSchema })
+  .strict();
+
+// VDS treats UNSPECIFIED (2026.2+) as unset.
+const tableCalcComputedAggregationSchema = z.enum(['UNSPECIFIED', 'SUM', 'AVG', 'MIN', 'MAX']);
+const tableCalcRelativeToSchema = z.enum(['UNSPECIFIED', 'PREVIOUS', 'NEXT', 'FIRST', 'LAST']);
+const tableCalcRankTypeSchema = z.enum([
+  'UNSPECIFIED',
+  'COMPETITION',
+  'MODIFIED COMPETITION',
+  'DENSE',
+  'UNIQUE',
+]);
+
+const tableCalcSpecificationBaseSchema = z.object({
+  dimensions: z.array(tableCalcFieldReferenceSchema),
+});
+
+const differenceTableCalcProperties = {
+  levelAddress: tableCalcFieldReferenceSchema.optional(),
+  relativeTo: tableCalcRelativeToSchema.optional(),
+  customSort: tableCalcCustomSortSchema.optional(),
+};
+
+// Upstream allows any spec as a secondary, recursively. VDS only accepts these six, and only
+// one level deep. Capping it also keeps $ref cycles out of the tool's JSON schema.
+const secondaryTableCalcSpecificationSchema = z.discriminatedUnion('tableCalcType', [
+  tableCalcSpecificationBaseSchema
+    .extend({ tableCalcType: z.literal('DIFFERENCE_FROM'), ...differenceTableCalcProperties })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('PERCENT_DIFFERENCE_FROM'),
+      ...differenceTableCalcProperties,
+    })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({ tableCalcType: z.literal('PERCENT_FROM'), ...differenceTableCalcProperties })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('PERCENT_OF_TOTAL'),
+      levelAddress: tableCalcFieldReferenceSchema.optional(),
+      customSort: tableCalcCustomSortSchema.optional(),
+    })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('RANK'),
+      rankType: tableCalcRankTypeSchema.optional(),
+      direction: sortDirectionSchema.optional(),
+    })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({ tableCalcType: z.literal('PERCENTILE'), direction: sortDirectionSchema.optional() })
+    .strict(),
+]);
+
+export const tableCalcSpecificationSchema = z.discriminatedUnion('tableCalcType', [
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('CUSTOM'),
+      levelAddress: tableCalcFieldReferenceSchema.optional(),
+      restartEvery: tableCalcFieldReferenceSchema.optional(),
+      customSort: tableCalcCustomSortSchema.optional(),
+    })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('NESTED'),
+      fieldCaption: z.string(),
+      levelAddress: tableCalcFieldReferenceSchema.optional(),
+      restartEvery: tableCalcFieldReferenceSchema.optional(),
+      customSort: tableCalcCustomSortSchema.optional(),
+    })
+    .strict(),
+  ...secondaryTableCalcSpecificationSchema.options,
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('RUNNING_TOTAL'),
+      aggregation: tableCalcComputedAggregationSchema.optional(),
+      restartEvery: tableCalcFieldReferenceSchema.optional(),
+      customSort: tableCalcCustomSortSchema.optional(),
+      secondaryTableCalculation: secondaryTableCalcSpecificationSchema.optional(),
+    })
+    .strict(),
+  tableCalcSpecificationBaseSchema
+    .extend({
+      tableCalcType: z.literal('MOVING_CALCULATION'),
+      aggregation: tableCalcComputedAggregationSchema.optional(),
+      previous: z.number().int().optional(),
+      next: z.number().int().optional(),
+      includeCurrent: z.boolean().optional(),
+      fillInNull: z.boolean().optional(),
+      customSort: tableCalcCustomSortSchema.optional(),
+      secondaryTableCalculation: secondaryTableCalcSpecificationSchema.optional(),
+    })
+    .strict(),
+]);
+
+const tableCalcFieldSchema = fieldBaseSchema
+  .extend({
+    function: functionSchema.optional(),
+    calculation: z.string().optional(),
+    tableCalculation: tableCalcSpecificationSchema,
+    nestedTableCalculations: z.array(tableCalcSpecificationSchema).nullable().optional(),
+  })
+  .strict();
+
 export const fieldSchema = z.union([
+  // First: Zod 3 reports the first strict variant that fails only on unknown keys, so a table
+  // calc listed later gets the dimension variant's "unrecognized keys" error instead of its own.
+  tableCalcFieldSchema,
   dimensionFieldSchema,
   measureFieldSchema,
   calculatedFieldSchema,
@@ -154,7 +272,8 @@ const simpleFilterBaseSchema = z.object({
 
 export const setFilterSchema = filterBaseSchema.extend({
   filterType: z.literal('SET'),
-  values: z.union([z.array(z.string()), z.array(z.number()), z.array(z.boolean())]),
+  // Narrower than upstream's NullableAny: VDS can't match objects or arrays.
+  values: z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])),
   exclude: z.boolean().optional(),
 });
 
@@ -283,9 +402,25 @@ export const topNFilterSchema = filterBaseSchema.extend({
   direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
 });
 
+// Upstream leaves condition and calculation both optional; validateFilters requires exactly one.
+export const conditionFilterSchema = filterBaseSchema.extend({
+  filterType: z.literal('CONDITION'),
+  condition: z
+    .object({
+      fieldCaption: z.string(),
+      function: functionSchema,
+      comparison: z.enum(['=', '<>', '<', '<=', '>', '>=']),
+      value: z.union([z.number(), z.string()]),
+    })
+    .strict()
+    .optional(),
+  calculation: z.string().optional(),
+});
+
 export const filterSchema = z.union([
   setFilterSchema.strict(),
   topNFilterSchema.strict(),
+  conditionFilterSchema.strict(),
   ...matchFilterSchema.options,
   ...quantitativeNumericalFilterSchema.options,
   ...quantitativeDateFilterSchema.options,
@@ -473,6 +608,9 @@ export type MetadataResponse = z.infer<typeof metadataOutputSchema>;
 export type MatchFilter = z.infer<typeof matchFilterSchema>;
 
 export type SetFilter = z.infer<typeof setFilterSchema>;
+export type ConditionFilter = z.infer<typeof conditionFilterSchema>;
+export type TableCalcField = z.infer<typeof tableCalcFieldSchema>;
+export type TableCalcSpecification = z.infer<typeof tableCalcSpecificationSchema>;
 
 export type Parameter = z.infer<typeof parameterSchema>;
 
