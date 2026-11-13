@@ -47,6 +47,31 @@ describe('InMemorySessionStore', () => {
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
+  it.each([0, -100])('preserves a one-millisecond lifetime for TTL %i', async (ttlMs) => {
+    const store = new InMemorySessionStore<string>({ ttlMs });
+    await store.set('key', 'value');
+    await expect(store.get('key')).resolves.toBe('value');
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
+
+  it('supports the maximum timer TTL and resets expiry on overwrite', async () => {
+    const ttlMs = 2 ** 31 - 1;
+    const store = new InMemorySessionStore<string>({ ttlMs });
+    await store.set('key', 'original');
+
+    await vi.advanceTimersByTimeAsync(ttlMs - 1);
+    await expect(store.get('key')).resolves.toBe('original');
+    await store.set('key', 'updated');
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(store.get('key')).resolves.toBe('updated');
+
+    await vi.advanceTimersByTimeAsync(ttlMs - 1);
+    await expect(store.get('key')).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([
     undefined,
     {},

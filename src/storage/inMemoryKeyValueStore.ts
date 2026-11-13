@@ -22,11 +22,10 @@ export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
       throw new Error('ttlMs must be a finite number.');
     }
     this.ttlMs = options.ttlMs;
-    // scheduleSet() always passes an explicit (possibly chunked) expirationTimeMs, so this
-    // default is never used. ExpiringMap's constructor rejects defaultExpirationTimeMs <= 0,
-    // so a valid non-zero placeholder is needed.
+    // Ordinary TTLs use the map's default. Longer TTLs override it in capped chunks.
+    // Preserve the existing one-millisecond minimum for non-positive TTLs.
     this.map = new ExpiringMap<string, V>({
-      defaultExpirationTimeMs: 1,
+      defaultExpirationTimeMs: Math.min(Math.max(this.ttlMs, 1), MAX_SIGNED_INT32),
       maxSize: options.maxSize,
       // Every ExpiringMap removal (natural expiry, maxSize eviction, explicit delete) routes through
       // delete(), so this hook guarantees the parallel refreshTimers entry is cleared too -- including
@@ -40,7 +39,11 @@ export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
   }
 
   set(key: string, value: V): Promise<void> {
-    this.scheduleSet(key, value, this.ttlMs);
+    if (this.ttlMs <= MAX_SIGNED_INT32) {
+      this.map.set(key, value);
+    } else {
+      this.scheduleSet(key, value, this.ttlMs);
+    }
     return Promise.resolve();
   }
 
@@ -68,13 +71,8 @@ export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
   private scheduleSet(key: string, value: V, ttlMs: number): void {
     const map = this.map;
     this.clearRefreshTimer(key);
-
     if (ttlMs <= CHUNK_MS) {
-      // ExpiringMap requires a strictly positive expiration. Callers may legitimately pass
-      // ttlMs <= 0 to represent "already expired" (e.g. tests simulating an expired token via
-      // a zero timeout config) and rely on their own expiresAt field for the actual rejection,
-      // not on the store evicting the entry at exactly the right instant.
-      map.set(key, value, Math.max(ttlMs, 1));
+      map.set(key, value, ttlMs);
       return;
     }
 

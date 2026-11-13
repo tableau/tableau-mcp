@@ -64,6 +64,13 @@ not need to choose these values. Missing or non-finite TTLs are rejected before 
 created. Memory stores expire entries using this TTL, and existing session callers continue
 supplying their configured lifetimes.
 
+Each `set` starts a new lifetime using the namespace TTL. Custom providers must return
+`undefined` from `get` and `consume` for expired records even if the backend has not yet
+deleted them. In particular, DynamoDB TTL cleanup is asynchronous, so its provider must
+check expiration before returning a value. The memory provider uses `ExpiringMap` timers
+for expiration; cleanup may be delayed while the event loop is blocked. It retains the
+existing one-millisecond minimum for non-positive TTLs.
+
 For compatibility, a custom provider may implement
 `configureNamespace(namespace, { ttlMs, maxSize? })` to receive namespace settings. The hook
 always receives a numeric TTL. The provider owns backend expiration and capacity behavior.
