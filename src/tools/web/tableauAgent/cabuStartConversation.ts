@@ -12,6 +12,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { asTableauAgentNotEnabledError } from './cabuErrors.js';
 import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const paramsSchema = {
@@ -77,10 +78,19 @@ Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of
             ...extra,
             jwtScopes: cabuStartConversationTool.requiredApiScopes,
             callback: async (restApi) => {
-              const response = await restApi.cabuMethods.startConversation({
-                dashboardDatasources: [{ datasourceLuid }],
-                embedded: false,
-              });
+              let response;
+              try {
+                response = await restApi.cabuMethods.startConversation({
+                  dashboardDatasources: [{ datasourceLuid }],
+                  embedded: false,
+                });
+              } catch (error) {
+                const notEnabled = asTableauAgentNotEnabledError(error);
+                if (notEnabled) {
+                  return notEnabled.toErr();
+                }
+                throw error;
+              }
 
               if (!response.conversationId) {
                 return new UnknownError(

@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AxiosError } from 'axios';
 
 import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -94,6 +95,18 @@ describe('cabuStartConversationTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('CES unavailable');
+  });
+
+  it('maps a CES 403 to a Tableau-Agent-not-enabled error', async () => {
+    mocks.mockStartConversation.mockRejectedValue(
+      new AxiosError('Forbidden', '403', undefined, undefined, { status: 403 } as never),
+    );
+
+    const result = await getToolResult({ datasourceLuid: '11111111-1111-1111-1111-111111111111' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Tableau Agent is most likely not enabled');
   });
 
   it('returns a datasource-not-allowed error and never starts a conversation when the datasource is outside tool-scoping', async () => {

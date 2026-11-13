@@ -454,3 +454,21 @@ export class CabuStreamIncompleteError extends McpToolError {
     });
   }
 }
+
+/**
+ * CES answers 403 when Tableau Agent is off for the site, either by site setting or by a
+ * server-side feature flag we cannot read ahead of time.
+ */
+export class TableauAgentNotEnabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'tableau-agent-not-enabled',
+      message: 'Tableau Agent is not enabled for this Tableau site',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'Tableau Agent refused the request (HTTP 403). Tableau Agent is most likely not enabled for this Tableau site; a site administrator must turn it on before these tools can be used. Do not retry. Tell the user Tableau Agent is unavailable on this site, and offer to answer with `get-datasource-metadata` and `query-datasource` instead.';
+  }
+}

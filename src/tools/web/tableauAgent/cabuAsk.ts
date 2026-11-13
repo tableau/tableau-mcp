@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -8,11 +8,13 @@ import {
   CabuResponseError,
   CabuStreamIncompleteError,
   DatasourceNotAllowedError,
+  McpToolError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { isTableauAgentToolsEnabled } from '../../../features/tableauAgentTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -20,6 +22,7 @@ import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { buildCabuAnswer, CabuAnswer } from './cabuAnswer.js';
+import { asTableauAgentNotEnabledError } from './cabuErrors.js';
 import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const paramsSchema = {
@@ -76,7 +79,7 @@ Returns the answer text, any datatables (rendered as truncated markdown), a data
         extra,
         args: { conversationId, utteranceArgs, question, parentLuid },
         callback: async () => {
-          let decoded;
+          let decoded: ReturnType<typeof decodeUtteranceArgs>;
           try {
             decoded = decodeUtteranceArgs(utteranceArgs);
           } catch (error) {
@@ -105,50 +108,62 @@ Returns the answer text, any datatables (rendered as truncated markdown), a data
             ...extra,
             jwtScopes: cabuAskTool.requiredApiScopes,
             callback: async (restApi) => {
-              const utteranceResponse = await restApi.cabuMethods.askUtterance(conversationId, {
-                utterance: { content: question, source: 'user' },
-                localization: decoded.localization,
-                scope: decoded.scope,
-                datasources: decoded.datasources,
-                parentLuid,
-                embedded: decoded.embedded,
-              });
-
-              if (!utteranceResponse.utteranceId) {
-                return new UnknownError(
-                  'CABU did not return an utteranceId for this question.',
-                ).toErr();
+              try {
+                return await askAndStream(restApi);
+              } catch (error) {
+                const notEnabled = asTableauAgentNotEnabledError(error);
+                if (notEnabled) {
+                  return notEnabled.toErr();
+                }
+                throw error;
               }
-
-              const streamResult = await restApi.cabuMethods.streamUtterance(
-                conversationId,
-                utteranceResponse.utteranceId,
-              );
-
-              if (streamResult.status === 'error') {
-                return new CabuResponseError(
-                  streamResult.error.error_code,
-                  streamResult.error.error_details,
-                ).toErr();
-              }
-
-              if (streamResult.status === 'incomplete') {
-                return new CabuStreamIncompleteError().toErr();
-              }
-
-              // CES can signal an error even inside a nominally-"complete" stream.
-              if (streamResult.responseComplete?.error_code) {
-                return new CabuResponseError(
-                  streamResult.responseComplete.error_code,
-                  streamResult.responseComplete.error_details,
-                ).toErr();
-              }
-
-              return new Ok(
-                streamResult.responseComplete ? buildCabuAnswer(streamResult.responseComplete) : {},
-              );
             },
           });
+
+          async function askAndStream(restApi: RestApi): Promise<Result<CabuAnswer, McpToolError>> {
+            const utteranceResponse = await restApi.cabuMethods.askUtterance(conversationId, {
+              utterance: { content: question, source: 'user' },
+              localization: decoded.localization,
+              scope: decoded.scope,
+              datasources: decoded.datasources,
+              parentLuid,
+              embedded: decoded.embedded,
+            });
+
+            if (!utteranceResponse.utteranceId) {
+              return new UnknownError(
+                'CABU did not return an utteranceId for this question.',
+              ).toErr();
+            }
+
+            const streamResult = await restApi.cabuMethods.streamUtterance(
+              conversationId,
+              utteranceResponse.utteranceId,
+            );
+
+            if (streamResult.status === 'error') {
+              return new CabuResponseError(
+                streamResult.error.error_code,
+                streamResult.error.error_details,
+              ).toErr();
+            }
+
+            if (streamResult.status === 'incomplete') {
+              return new CabuStreamIncompleteError().toErr();
+            }
+
+            // CES can signal an error even inside a nominally-"complete" stream.
+            if (streamResult.responseComplete?.error_code) {
+              return new CabuResponseError(
+                streamResult.responseComplete.error_code,
+                streamResult.responseComplete.error_details,
+              ).toErr();
+            }
+
+            return new Ok(
+              streamResult.responseComplete ? buildCabuAnswer(streamResult.responseComplete) : {},
+            );
+          }
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });

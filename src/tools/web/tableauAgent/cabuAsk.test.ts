@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AxiosError } from 'axios';
 
 import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -181,6 +182,47 @@ describe('cabuAskTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('WAII_TIMEOUT');
     expect(result.content[0].text).toContain('The model timed out.');
+  });
+
+  it.each([
+    ['the utterance POST', 'ask'],
+    ['the stream GET', 'stream'],
+  ])('maps a CES 403 on %s to a Tableau-Agent-not-enabled error', async (_label, failingCall) => {
+    const forbidden = new AxiosError('Forbidden', '403', undefined, undefined, {
+      status: 403,
+    } as never);
+    if (failingCall === 'ask') {
+      mocks.mockAskUtterance.mockRejectedValue(forbidden);
+    } else {
+      mocks.mockAskUtterance.mockResolvedValue({ utteranceId: 'utterance-1' });
+      mocks.mockStreamUtterance.mockRejectedValue(forbidden);
+    }
+
+    const result = await getToolResult({
+      conversationId: 'conversation-1',
+      utteranceArgs: VALID_UTTERANCE_ARGS,
+      question: 'What were total sales?',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Tableau Agent is most likely not enabled');
+  });
+
+  it('does not treat a non-403 CES failure as Tableau Agent being disabled', async () => {
+    mocks.mockAskUtterance.mockRejectedValue(
+      new AxiosError('Server error', '500', undefined, undefined, { status: 500 } as never),
+    );
+
+    const result = await getToolResult({
+      conversationId: 'conversation-1',
+      utteranceArgs: VALID_UTTERANCE_ARGS,
+      question: 'What were total sales?',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('Tableau Agent is most likely not enabled');
   });
 
   it('maps an incomplete stream (no terminal event) to a clear error', async () => {
