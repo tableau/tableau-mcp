@@ -134,6 +134,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             artifactId,
             templateName,
             title,
+            worksheetId: built.value.worksheetId,
             datasource: built.value.artifact.datasource,
             provenance: built.value.provenance,
             bindings: built.value.bindings,

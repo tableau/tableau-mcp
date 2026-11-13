@@ -31,6 +31,7 @@ const paramsSchema = {
 // tool knows it asked and does not know Tableau has repainted.
 type ActivateSheetToolResult = {
   focus_requested: boolean;
+  sheetId: string;
   sheetName: string;
   message: string;
   availableSheets: string[];
@@ -149,6 +150,7 @@ export const getActivateSheetTool = (
             commandOk(
               {
                 focus_requested: true,
+                sheetId: resolved.value.id,
                 sheetName: resolved.value.name,
                 message: `${subject}.`,
                 availableSheets: resolved.value.availableSheets,

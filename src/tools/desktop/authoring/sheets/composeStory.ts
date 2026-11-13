@@ -113,8 +113,8 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
             sizes.push(size);
           }
 
-          const dashboardNames = resolvedPoints.map(({ dashboard }) => dashboard);
-          if (new Set(dashboardNames).size !== dashboardNames.length) {
+          const dashboardIds = preflightDashboards.map(({ id }) => id);
+          if (new Set(dashboardIds).size !== dashboardIds.length) {
             return new ArgsValidationError('Story points must target distinct dashboards.').toErr();
           }
           const size = sizes[0];

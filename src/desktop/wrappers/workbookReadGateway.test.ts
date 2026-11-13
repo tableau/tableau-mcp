@@ -119,6 +119,7 @@ describe('WorkbookReadGateway', () => {
     if (result.isOk()) {
       expect(result.value.xml).toContain('name="Sheet A"');
       expect(result.value.name).toBe('Sheet A');
+      expect(result.value.id).toBe('{GUID-A}');
     }
   });
 });

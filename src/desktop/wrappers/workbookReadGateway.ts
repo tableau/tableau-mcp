@@ -45,7 +45,7 @@ export type GetWorksheetXmlError = (
 ) & { message: string };
 
 export type GetWorksheetXmlResult = Result<
-  { xml: string; name: string },
+  { xml: string; name: string; id?: string },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'get-worksheet-xml-error'; error: GetWorksheetXmlError }
 >;
@@ -195,7 +195,11 @@ export class WorkbookReadGateway {
       return Err({ type: 'execute-command-error', error: documentResult.error });
     }
 
-    return Ok({ xml: documentResult.value.xml, name: worksheetResult.value.name });
+    return Ok({
+      xml: documentResult.value.xml,
+      name: worksheetResult.value.name,
+      id: worksheetResult.value.id,
+    });
   }
 
   private async getDashboardXmlViaExternalApi(
@@ -238,16 +242,15 @@ export class WorkbookReadGateway {
     }
 
     let worksheetXml: string | null;
-    let resolvedName: string | undefined;
+    let resolved: { id?: string; name: string } | null;
     try {
-      const resolved = resolveWorksheetRef(workbookResult.value, worksheetRef);
-      worksheetXml = resolved ? extractSheetXml(workbookResult.value, resolved.name) : null;
-      resolvedName = resolved?.name;
+      resolved = resolveWorksheetRef(workbookResult.value, worksheetRef);
+      worksheetXml = extractSheetXml(workbookResult.value, worksheetRef);
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    if (worksheetXml === null || resolvedName === undefined) {
+    if (worksheetXml === null || resolved === null) {
       const didYouMean = await this.worksheetNameSuggestions(worksheetRef);
       return Err({
         type: 'get-worksheet-xml-error',
@@ -258,7 +261,11 @@ export class WorkbookReadGateway {
       });
     }
 
-    return Ok({ xml: worksheetXml, name: resolvedName });
+    return Ok({
+      xml: worksheetXml,
+      name: resolved.name,
+      ...(resolved.id ? { id: resolved.id } : {}),
+    });
   }
 
   private async getDashboardXmlViaWorkbookDocument(

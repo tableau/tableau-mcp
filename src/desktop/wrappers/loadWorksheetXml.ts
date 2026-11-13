@@ -70,6 +70,7 @@ export type LoadWorksheetXmlError =
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
 export interface LoadWorksheetXmlOk {
   appliedName?: string;
+  appliedId?: string;
   readbackWarnings: ReadbackFinding[];
   readbackVerification?: ReadbackVerificationResult;
   validationWarnings?: ValidationIssue[];
@@ -252,7 +253,7 @@ export async function verifyPostApplyWorksheetReadback(
 }
 
 async function verifyPostApplyArtifactReadback(
-  worksheetName: string,
+  worksheetRef: string,
   intendedXml: string,
   executor: WithExecutorAndAbortSignal['executor'],
   signal: WithExecutorAndAbortSignal['signal'],
@@ -261,7 +262,7 @@ async function verifyPostApplyArtifactReadback(
     const polled = await pollReadback({
       read: () => getWorkbookXml({ executor, signal }),
       settled: (workbookXml) => {
-        const fragment = extractSheetXml(workbookXml, worksheetName);
+        const fragment = extractSheetXml(workbookXml, worksheetRef);
         return (
           fragment !== null && !isReadbackUnsettled(verifyWorksheetReadback(intendedXml, fragment))
         );
@@ -278,13 +279,13 @@ async function verifyPostApplyArtifactReadback(
       };
     }
 
-    const fragment = extractSheetXml(polled.value, worksheetName);
+    const fragment = extractSheetXml(polled.value, worksheetRef);
     if (fragment === null) {
       return {
         ok: false,
         status: 'failed',
         findings: [],
-        message: `Worksheet "${worksheetName}" was absent from the post-apply workbook readback.`,
+        message: `Worksheet "${worksheetRef}" was absent from the post-apply workbook readback.`,
       };
     }
     const findings = verifyWorksheetReadback(intendedXml, fragment);
@@ -619,12 +620,13 @@ export async function loadWorksheetXml({
       if (applyResult.isErr()) {
         return Err({ type: 'execute-command-error', error: applyResult.error });
       }
+      const readbackRef = worksheetFragmentSimpleId(xml) ?? canonicalName;
       const finalized = await finalizeWorksheetApply({
         apply: applyResult.value,
         expectedInstanceId: artifactApply.expectedInstanceId,
         executor,
         signal,
-        readback: () => verifyPostApplyArtifactReadback(canonicalName, xml, executor, signal),
+        readback: () => verifyPostApplyArtifactReadback(readbackRef, xml, executor, signal),
         worksheetIdFor: (readback) =>
           readback?.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
         readbackVerificationOut,
@@ -680,6 +682,7 @@ export async function loadWorksheetXml({
         return Ok({
           ...finalized,
           appliedName: applyOutcome.name,
+          appliedId: applyOutcome.id,
           validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
         });
       }

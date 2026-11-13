@@ -139,9 +139,13 @@ export function worksheetFragmentSimpleId(worksheetFragmentXml: string): string 
 }
 
 // Returns a standalone `<worksheet>` fragment (not a whole workbook), or null if absent.
-export function extractSheetXml(workbookXml: string, sheetName: string): string | null {
+export function extractSheetXml(workbookXml: string, ref: string): string | null {
   const workbook = parseXML(workbookXml);
-  const worksheet = findWorksheet(workbook, sheetName);
+  const trimmed = ref.trim();
+  const worksheet =
+    normalizeArray(workbook.workbook?.worksheets?.worksheet).find(
+      (ws) => ws['simple-id']?.['@_uuid']?.trim() === trimmed,
+    ) ?? findWorksheet(workbook, ref);
   if (!worksheet) {
     return null;
   }

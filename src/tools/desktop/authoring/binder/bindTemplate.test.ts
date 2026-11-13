@@ -16,7 +16,11 @@ import { normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import type { SchemaField } from '../../../../desktop/binder/schema-summary.js';
 import * as externalDiscovery from '../../../../desktop/externalApi/discovery.js';
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
-import { extractSheetXml, extractWorksheetWindowXml } from '../../../../desktop/metadata/sheets.js';
+import {
+  extractSheetXml,
+  extractWorksheetWindowXml,
+  listWorksheetRefs,
+} from '../../../../desktop/metadata/sheets.js';
 import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
 import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/route/route-state.js';
 import {
@@ -4647,17 +4651,27 @@ function summaryRowsExecutor(
     getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
-    listWorksheets: vi.fn().mockResolvedValue(
-      Ok({
-        worksheets: [
-          {
-            id: 'sheet-sales',
-            name: options.worksheetName ?? 'Sales by Region',
-            datasources: [options.datasource ?? 'superstore'],
-          },
-        ],
-      }),
-    ),
+    listWorksheets: vi.fn(async () => {
+      const doc = await base.getWorkbookDocument();
+      const xml = doc.isOk() ? doc.value.xml : '';
+      const parsed = listWorksheetRefs(xml).map(({ id, name }) => ({
+        id,
+        name,
+        datasources: [options.datasource ?? 'superstore'],
+      }));
+      return Ok({
+        worksheets:
+          parsed.length > 0
+            ? parsed
+            : [
+                {
+                  id: 'sheet-sales',
+                  name: options.worksheetName ?? 'Sales by Region',
+                  datasources: [options.datasource ?? 'superstore'],
+                },
+              ],
+      });
+    }),
     getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
       Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
     ),
@@ -5161,6 +5175,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       'status',
       'summary_rows_error',
       'verification',
+      'worksheet_id',
     ]);
     expect(body.status).toBe('bound');
     expect(body.apply_instruction).toBeUndefined();
@@ -5416,7 +5431,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
       expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
       expect(executor.exportWorksheetImage).toHaveBeenCalledWith(
-        'sheet-sales',
+        '00000000-0000-0000-0000-000000000001',
         { mimeType: 'image/png' },
         expect.any(AbortSignal),
       );
@@ -5675,6 +5690,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       'status',
       'summary_rows_error',
       'verification',
+      'worksheet_id',
     ]);
     expect(body.guidance).toContain('HOST VERIFICATION — verified');
     expect((body.guidance as string).length).toBeLessThan(400);
@@ -8472,7 +8488,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(second.reused).toBe(true);
     expect(second.applied).toBe(false);
     expect(second.sheet_name).toBe('Sales by Region');
-    expect(second.guidance).toContain('still present by name');
+    expect(second.guidance).toContain('still present');
     expect(second.guidance).toContain('target_worksheet');
     expect(second.guidance).not.toContain('no further tool calls needed');
     expect(
@@ -8759,7 +8775,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   );
 
   it('rebuilds when the remembered sheet is no longer in the workbook', async () => {
-    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
       structuralReadback: true,
     });
@@ -8772,7 +8788,10 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     });
 
     // The user deleted the sheet in Desktop between the two calls.
-    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(XML));
+    getWorkbookDocument.mockResolvedValue(
+      Ok({ xml: XML, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+    );
     const second = body(
       await getToolResult({
         session: '1',
@@ -9053,6 +9072,7 @@ describe('bind-template — reports what it actually built', () => {
       'status',
       'summary_rows_error',
       'verification',
+      'worksheet_id',
     ]);
     expect(body.encodings).toBeUndefined();
   });
@@ -9101,7 +9121,7 @@ describe('bind-template — reports what it actually built', () => {
     invariant(result.content[0].type === 'text');
     const guidance = JSON.parse(result.content[0].text).guidance as string;
     expect(guidance).toContain(
-      "add-field{worksheetName:'Sales by Region',target:'encoding',encodingType:'size'",
+      "add-field{worksheetName:'00000000-0000-0000-0000-000000000001',target:'encoding',encodingType:'size'",
     );
     expect(guidance).toContain(
       "add-field{worksheetFile:<path returned by previous add-field>,target:'encoding',encodingType:'color'",
@@ -9110,7 +9130,7 @@ describe('bind-template — reports what it actually built', () => {
       "add-field{worksheetFile:<path returned by previous add-field>,target:'encoding',encodingType:'tooltip'",
     );
     expect(guidance).toContain(
-      "apply-worksheet{worksheetName:'Sales by Region',worksheetFile:<path returned by previous add-field>}",
+      "apply-worksheet{worksheetName:'00000000-0000-0000-0000-000000000001',worksheetFile:<path returned by previous add-field>}",
     );
   });
 });
@@ -9266,7 +9286,7 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
     );
 
     expect(second.reused).toBe(true);
-    expect(second.guidance).toContain('still present by name');
+    expect(second.guidance).toContain('still present');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 });
@@ -10510,7 +10530,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
           `The pie is already on the sheet and has ${n > 20 ? 'more than 20' : n} slices of Region, above the workable maximum of 12.`,
         );
         expect(body.guidance).toContain(
-          'A sorted bar of Sales by Region would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "Sales by Region".',
+          'A sorted bar of Sales by Region would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "00000000-0000-0000-0000-000000000001".',
         );
         expect(body.guidance).toContain('If the user wants the pie, nothing more is needed.');
         expect(body.guidance).not.toContain('Do NOT call bind-template again');
@@ -10645,7 +10665,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
   it('a plain SUM unfiltered pie still gets the concrete bar call', async () => {
     const { body } = await applyPie(pieRows(13));
     expect(body.guidance).toContain(
-      'call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "Sales by Region".',
+      'call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "00000000-0000-0000-0000-000000000001".',
     );
   });
 

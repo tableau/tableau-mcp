@@ -18,12 +18,12 @@ export type DataMembers = {
 /** Distinct string values of the target's column in the sheet's summary data, or undefined. */
 export async function readDataMembers({
   executor,
-  worksheetName,
+  worksheet,
   target,
   signal: callSignal,
 }: {
   executor: ExternalApiToolExecutor;
-  worksheetName: string;
+  worksheet: string;
   target: ColorTarget;
   signal: AbortSignal;
 }): Promise<DataMembers | undefined> {
@@ -38,7 +38,7 @@ export async function readDataMembers({
   };
   const summary = await fetchWorksheetSummaryData({
     read,
-    worksheet: worksheetName,
+    worksheet,
     maxRows: DATA_MAX_ROWS,
     materializeEmpty: true,
     ignoreAliases: true,

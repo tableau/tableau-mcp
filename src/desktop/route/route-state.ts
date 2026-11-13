@@ -224,6 +224,8 @@ export interface UnprotectedPassthroughs {
 export interface AppliedSheetRecord {
   /** The sheet name actually written to the workbook. */
   sheetName: string;
+  /** The applied sheet's stable id (its <simple-id uuid>), when known. */
+  worksheetId?: string;
   /** The bound template, for the reuse receipt. */
   template: string;
   /** ISO timestamp of the apply. */

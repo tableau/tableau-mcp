@@ -305,6 +305,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     expect(successSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
       refined: true,
       operation: 'round_bar',
+      worksheetId: '00000000-0000-0000-0000-000000000001',
       verification: { helperFields: 14, summaryGroups: 1, summaryRows: 12 },
     });
     expect(roundedApplyMock()).toHaveBeenCalledWith(
@@ -334,9 +335,9 @@ describe('refineWorksheetTool — rounded bars', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(refusalSchema.parse(JSON.parse(result.content[0].text)).reason).toMatch(
-      /one.*Category|grouped|shelf/i,
-    );
+    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.reason).toMatch(/one.*Category|grouped|shelf/i);
+    expect(parsed.worksheetId).toBe('00000000-0000-0000-0000-000000000001');
     expect(roundedApplyMock()).not.toHaveBeenCalled();
   });
 
@@ -1641,6 +1642,7 @@ const successSchema = z.object({
     'round_stacked_bar',
   ]),
   worksheetName: z.string(),
+  worksheetId: z.string().optional(),
   message: z.string(),
   verification: z
     .object({
@@ -1662,6 +1664,7 @@ const refusalSchema = z.object({
     'round_stacked_bar',
   ]),
   worksheetName: z.string(),
+  worksheetId: z.string().optional(),
   reason: z.string(),
 });
 

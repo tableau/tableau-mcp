@@ -13,6 +13,7 @@ export type SearchWorkbookFieldMatchAttribute =
 
 export interface SearchWorkbookFieldPlacement {
   worksheet: string;
+  worksheetId?: string;
   location: 'rows' | 'columns' | 'encoding';
   encoding?: string;
 }
@@ -104,16 +105,19 @@ function collectPlacements(worksheets: ParsedWorksheet[]): PlacementsByField {
   for (const worksheet of worksheets) {
     const worksheetName = worksheet['@_name'];
     if (typeof worksheetName !== 'string') continue;
+    const worksheetId = worksheet['simple-id']?.['@_uuid']?.trim();
 
     for (const columnRef of parseShelfValue(worksheet.table?.rows)) {
       addPlacement(placementsByField, columnRef, {
         worksheet: worksheetName,
+        ...(worksheetId ? { worksheetId } : {}),
         location: 'rows',
       });
     }
     for (const columnRef of parseShelfValue(worksheet.table?.cols)) {
       addPlacement(placementsByField, columnRef, {
         worksheet: worksheetName,
+        ...(worksheetId ? { worksheetId } : {}),
         location: 'columns',
       });
     }
@@ -131,6 +135,7 @@ function collectPlacements(worksheets: ParsedWorksheet[]): PlacementsByField {
           if (typeof columnRef === 'string') {
             addPlacement(placementsByField, columnRef, {
               worksheet: worksheetName,
+              ...(worksheetId ? { worksheetId } : {}),
               location: 'encoding',
               encoding,
             });

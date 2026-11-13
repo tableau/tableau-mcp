@@ -13,11 +13,7 @@ import type {
   ExecuteCommandWarning,
 } from '../../../../desktop/externalApi/executorTypes.js';
 import { isRouteMissing } from '../../../../desktop/externalApi/toolUtils.js';
-import {
-  deleteDashboard,
-  listDashboardRefs,
-  listWorkbookDashboards,
-} from '../../../../desktop/metadata/dashboards.js';
+import { deleteDashboard, resolveDashboardRef } from '../../../../desktop/metadata/dashboards.js';
 import { findAllWorksheets, parseXML } from '../../../../desktop/metadata/parser.js';
 import {
   extractSheetXml,
@@ -368,9 +364,9 @@ export const getRunDashboardBatchTool = (
             }
             const workbookXml = workbookResult.value.xml;
             const liveInstanceId = workbookResult.value.instanceId;
-            const existingDashboardName = listWorkbookDashboards(workbookXml).find((name) =>
-              xmlNamesEqual(name, dashboardName),
-            );
+            const existingDashboard = resolveDashboardRef(workbookXml, dashboardName);
+            const existingDashboardName = existingDashboard?.name;
+            const existingDashboardId = existingDashboard?.id;
             // Rebuild under the existing name's exact case so action sources and story points still match.
             if (existingDashboardName) dashboardName = existingDashboardName;
             if (existingDashboardName && isStoryboard(workbookXml, existingDashboardName)) {
@@ -647,10 +643,6 @@ export const getRunDashboardBatchTool = (
               }
               originalActions = read.value;
             }
-            const existingDashboardId = existingDashboardName
-              ? listDashboardRefs(workbookXml).find((ref) => xmlNamesEqual(ref.name, dashboardName))
-                  ?.id
-              : undefined;
             if (existingDashboardName && existingDashboardId === undefined) {
               return preflightInputFailure(
                 steps,

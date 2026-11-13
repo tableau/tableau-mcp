@@ -1,5 +1,6 @@
 import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/executorTypes.js';
 import { isSessionFatalError } from '../../../desktop/externalApi/sessionFatalError.js';
+import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import {
   type TemplateArtifactReserveResult,
   type TemplateArtifactStore,
@@ -26,6 +27,7 @@ export interface ApplyWorksheetArtifactArgs {
 export interface ArtifactApplyReceipt {
   artifactId: string;
   title: string;
+  worksheetId?: string;
   verification: ReadbackVerificationResult;
 }
 
@@ -119,6 +121,7 @@ export async function applyWorksheetArtifactPayload({
     receipt: {
       artifactId: artifact.id,
       title: artifact.title,
+      worksheetId: worksheetFragmentSimpleId(artifact.worksheetXml) ?? undefined,
       verification: result.value.readbackVerification ?? {
         ok: true,
         status: 'skipped',

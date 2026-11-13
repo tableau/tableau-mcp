@@ -15,7 +15,7 @@ function fail(problem: string, fix: string): DocumentValidationResult {
   return { ok: false, message: `${problem}\nFIX: ${fix}` };
 }
 
-type Sheet = { kind: 'worksheet' | 'dashboard' | 'story'; name: string };
+type Sheet = { kind: 'worksheet' | 'dashboard' | 'story'; name: string; id?: string };
 
 export type SheetCheckError = { document: 'edited' | 'open'; cause: unknown };
 
@@ -52,17 +52,28 @@ function readSheets(xml: string): Sheet[] {
     ...sheetElements(workbook.worksheets, 'worksheet').map((sheet) => ({
       kind: 'worksheet' as const,
       name: sheet['@_name'] as string,
+      id: sheetSimpleId(sheet),
     })),
     // Stories are <dashboard type='storyboard'>.
     ...sheetElements(workbook.dashboards, 'dashboard').map((sheet) => ({
       kind: sheet['@_type'] === 'storyboard' ? ('story' as const) : ('dashboard' as const),
       name: sheet['@_name'] as string,
+      id: sheetSimpleId(sheet),
     })),
   ];
 }
 
+function sheetSimpleId(sheet: Record<string, unknown>): string | undefined {
+  const simpleId = sheet['simple-id'];
+  if (!isRecord(simpleId)) return undefined;
+  const uuid = simpleId['@_uuid'];
+  return typeof uuid === 'string' ? uuid.trim() : undefined;
+}
+
 function sheetKey(sheet: Sheet): string {
-  return `${sheet.kind}:${normalizeParsedXmlName(sheet.name)}`;
+  return sheet.id
+    ? `${sheet.kind}:${sheet.id}`
+    : `${sheet.kind}:${normalizeParsedXmlName(sheet.name)}`;
 }
 
 export function liveSheetNamesMissingFrom(

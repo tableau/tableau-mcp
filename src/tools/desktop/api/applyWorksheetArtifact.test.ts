@@ -44,6 +44,9 @@ describe('applyWorksheetArtifact', () => {
     const outcome = await applyWorksheetArtifact(deps(store));
 
     expect(outcome.state).toBe('applied');
+    if (outcome.state === 'applied') {
+      expect(outcome.receipt.worksheetId).toBe('artifact-sheet-uuid');
+    }
     expect(consume).toHaveBeenCalledOnce();
   });
 
@@ -140,7 +143,8 @@ function artifactStore(): TemplateArtifactStore {
     title: 'Artifact Sheet',
     datasource: 'target.ds',
     fieldMapping: { '{{field_base_1}}': '[target.ds].[sum:Revenue:qk]' },
-    worksheetXml: '<worksheet name="Artifact Sheet"><table /></worksheet>',
+    worksheetXml:
+      '<worksheet name="Artifact Sheet"><simple-id uuid="artifact-sheet-uuid" /><table /></worksheet>',
     windowXml: '<window class="worksheet" name="Artifact Sheet" />',
     targetState: {
       worksheetName: 'Artifact Sheet',
