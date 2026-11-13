@@ -2,6 +2,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 import type { KeyValueStore } from './keyValueStore.js';
@@ -45,11 +46,21 @@ function initializeKeyValueStore(): void {
 export async function connectKeyValueStore(): Promise<void> {
   if (state === null) initializeKeyValueStore();
   if (state!.kind === 'custom') await state!.store.init?.();
+  log({
+    message: 'Key-value store ready',
+    level: 'info',
+    logger: 'storage',
+  });
 }
 
 /** Release an optional provider connection on shutdown, once per shared backend. */
 export async function disconnectKeyValueStore(): Promise<void> {
   if (state?.kind === 'custom') await state.store.close?.();
+  log({
+    message: 'Key-value store shutdown complete',
+    level: 'info',
+    logger: 'storage',
+  });
 }
 
 function loadCustomProvider(config: Record<string, unknown>): StoreProvider {

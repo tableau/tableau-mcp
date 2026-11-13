@@ -4,7 +4,10 @@ vi.mock('../config.js', () => ({
   getConfig: vi.fn(() => ({ keyValueStore: { provider: 'memory' } })),
 }));
 
+vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
+
 import { type Config, getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import { createNamespacedStore } from '../sessionStore/init.js';
 import type { KeyValueStore } from './keyValueStore.js';
 import {
@@ -125,5 +128,39 @@ describe('bring-your-own KV storage', () => {
     await expect(connectKeyValueStore()).rejects.toThrow(
       /Failed to load custom key-value store provider/,
     );
+  });
+
+  it.each(['memory', 'custom'] as const)(
+    'logs only lifecycle events without storage data for %s',
+    async (provider) => {
+      const privateMarker = 'PRIVATE_STORAGE_TEST_MARKER';
+      if (provider === 'custom') {
+        useCustomProvider({ module: MODULE, table: privateMarker, credential: privateMarker });
+      }
+
+      await connectKeyValueStore();
+      const store = createNamespacedKeyValueStore<{ token: string }>(privateMarker, {
+        ttlMs: 1000,
+      });
+      await store.set(privateMarker, { token: privateMarker });
+      await store.get(privateMarker);
+      await store.consume(privateMarker);
+      await store.delete(privateMarker);
+      await disconnectKeyValueStore();
+
+      expect(log).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(vi.mocked(log).mock.calls)).not.toContain(privateMarker);
+    },
+  );
+
+  it('does not log successful lifecycle events when provider hooks reject', async () => {
+    useCustomProvider({
+      module: './src/sessionStore/__fixtures__/rejectingLifecycleSessionStore.cjs',
+    });
+
+    await expect(connectKeyValueStore()).rejects.toThrow(/init failed/);
+    await expect(disconnectKeyValueStore()).rejects.toThrow(/close failed/);
+
+    expect(log).not.toHaveBeenCalled();
   });
 });
