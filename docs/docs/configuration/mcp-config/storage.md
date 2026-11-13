@@ -55,8 +55,12 @@ enabled consumers, including OAuth objects when embedded OAuth is enabled.
 | `consume(key)` | Atomically return and delete a value, so at most one caller receives it. |
 
 Methods return promises. Backend errors must reject. For shared backends, `consume` must be
-atomic across replicas; separate read and delete requests are insufficient. Encoding and
-decoding values is the provider's responsibility.
+atomic across replicas; separate read and delete requests are insufficient.
+
+Providers are responsible for encoding and decoding values without loss. `set()` must reject
+values that cannot be represented faithfully or whose encoded records exceed backend storage
+limits, rather than silently truncating or discarding data. Supported value types, encodings,
+and limits are provider-specific.
 
 ## Namespaces and expiration
 
