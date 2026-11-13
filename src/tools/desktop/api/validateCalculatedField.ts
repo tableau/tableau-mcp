@@ -15,7 +15,7 @@ const title = 'Validate Calculated Field';
 const paramsSchema = {
   session: sessionParam(),
   datasourceName: artifactNameParam('datasource', { min: 1 }),
-  formula: z.string().min(1).describe('Calculated field formula to check.'),
+  formula: z.string().min(1).describe('Formula to check.'),
   caption: z
     .string()
     .min(1)

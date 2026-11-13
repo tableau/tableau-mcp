@@ -140,7 +140,7 @@ describe('activateSheetTool', () => {
   it('resolves the name to an id from the inventory and requests focus via goToSheet', async () => {
     const { executor, goToSheet } = makeApiExecutor();
 
-    const result = await getToolResult({ sheetName: 'Sales by Region', executor });
+    const result = await getToolResult({ sheet: 'Sales by Region', executor });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -161,7 +161,7 @@ describe('activateSheetTool', () => {
   it('resolves a dashboard target and requests focus by its id', async () => {
     const { executor, goToSheet } = makeApiExecutor();
 
-    const result = await getToolResult({ sheetName: 'Executive Dashboard', executor });
+    const result = await getToolResult({ sheet: 'Executive Dashboard', executor });
 
     expect(result.isError).toBe(false);
     expect(goToSheet).toHaveBeenCalledWith('dash-exec', expect.anything());
@@ -170,7 +170,7 @@ describe('activateSheetTool', () => {
   it('resolves a storyboard target and requests focus by its id', async () => {
     const { executor, goToSheet } = makeApiExecutor();
 
-    const result = await getToolResult({ sheetName: 'QBR Story', executor });
+    const result = await getToolResult({ sheet: 'QBR Story', executor });
 
     expect(result.isError).toBe(false);
     expect(goToSheet).toHaveBeenCalledWith('story-qbr', expect.anything());
@@ -179,7 +179,7 @@ describe('activateSheetTool', () => {
   it('errors for an unknown sheet with the available sheets and issues no command', async () => {
     const { executor, goToSheet } = makeApiExecutor();
 
-    const result = await getToolResult({ sheetName: 'Missing', executor });
+    const result = await getToolResult({ sheet: 'Missing', executor });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -197,10 +197,10 @@ describe('activateSheetTool', () => {
 });
 
 async function getToolResult({
-  sheetName,
+  sheet,
   executor,
 }: {
-  sheetName: string;
+  sheet: string;
   executor: ExternalApiToolExecutor;
 }): Promise<CallToolResult> {
   const tool = getActivateSheetTool(new DesktopMcpServer());
@@ -210,7 +210,7 @@ async function getToolResult({
     getExecutor: vi.fn().mockResolvedValue(executor),
   };
 
-  return await callback({ session: '12345', sheetName }, extra);
+  return await callback({ session: '12345', sheet }, extra);
 }
 
 function makeApiExecutor(): {

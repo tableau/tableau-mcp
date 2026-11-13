@@ -458,8 +458,8 @@ export function resolveCanonicalWorksheetName(
     return Err({
       type: 'name-mismatch',
       message:
-        `worksheetName "${worksheetName}" does not match <worksheet name="${xmlName}"> in the file, and apply-worksheet cannot rename a worksheet. ` +
-        `FIX: check the worksheet's name in Desktop with list-worksheets. If it is "${xmlName}", pass "${xmlName}" as worksheetName. ` +
+        `worksheet "${worksheetName}" does not match <worksheet name="${xmlName}"> in the file, and apply-worksheet cannot rename a worksheet. ` +
+        `FIX: check the worksheet's name in Desktop with list-worksheets. If it is "${xmlName}", pass "${xmlName}" as worksheet. ` +
         `If it is "${worksheetName}", set the name in the file to "${worksheetName}" and apply; to rename the worksheet, call rename-sheet afterwards. ` +
         'If it is neither, re-read the worksheet with get-worksheet-xml and redo your edit in that file. No changes were sent to Tableau.',
     });

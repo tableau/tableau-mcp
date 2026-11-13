@@ -4,13 +4,13 @@ import { z } from 'zod';
 
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheet: z.string().describe('Worksheet, dashboard, or storyboard name/id.'),
+  sheet: artifactNameParam('sheet'),
   kind: z
     .enum(['worksheet', 'dashboard', 'storyboard'])
     .optional()

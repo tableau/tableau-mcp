@@ -18,7 +18,7 @@ import { DesktopTool } from '../../tool.js';
 const scopeSchema = z.enum(['all', 'containers', 'zone_ids']);
 const paramsSchema = {
   session: sessionParam(),
-  dashboardName: artifactNameParam('dashboard'),
+  dashboard: artifactNameParam('dashboard'),
   cornerRadius: z.number().int().min(0).max(100).describe('Radius in pixels, from 0 to 100.'),
   scope: scopeSchema.describe('Zones to format.'),
   zoneIds: z.array(z.string().trim().min(1).max(255)).min(1).max(64).optional(),
@@ -59,12 +59,12 @@ export const getFormatDashboardZonesTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, dashboardName, cornerRadius, scope, zoneIds },
+      { session, dashboard, cornerRadius, scope, zoneIds },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<ZoneFormatReceipt>({
         extra,
-        args: { session, dashboardName, cornerRadius, scope, zoneIds },
+        args: { session, dashboard, cornerRadius, scope, zoneIds },
         callback: async () => {
           const requestError = validateRequest({ cornerRadius, scope, zoneIds });
           if (requestError !== undefined) return new ArgsValidationError(requestError).toErr();
@@ -76,7 +76,7 @@ export const getFormatDashboardZonesTool = (
           if (listed.isErr()) return new DesktopCommandExecutionError(listed.error).toErr();
           const resolved = resolveItemByNameOrId(
             'Dashboard',
-            dashboardName,
+            dashboard,
             listed.value.dashboards ?? [],
           );
           if (resolved.isErr()) return resolved.error.toErr();

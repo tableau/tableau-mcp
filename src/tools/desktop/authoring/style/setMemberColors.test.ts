@@ -35,7 +35,7 @@ vi.mock('../../../../desktop/session/sessionResolution.js');
 const FIELD = '[none:Category:nk]';
 
 type Args = {
-  worksheetName?: string;
+  worksheet?: string;
   colors: Array<{ member: string; color: string }>;
   field?: string;
 };
@@ -144,7 +144,7 @@ async function run(
     ...(setup.signal === undefined ? {} : { signal: setup.signal }),
   };
   const pending = callback(
-    { session: 'requested', worksheetName: 'L1', field: undefined, ...args },
+    { session: 'requested', worksheet: 'L1', field: undefined, ...args },
     extra,
   );
   await vi.runAllTimersAsync();
@@ -180,7 +180,7 @@ describe('set-member-colors tool', () => {
       "Set colors for members of the discrete field on a worksheet's Color.",
     );
     expect(tool.minApiVersion).toBe('0.2.10');
-    expect(Object.keys(tool.paramsSchema)).toEqual(['session', 'worksheetName', 'colors', 'field']);
+    expect(Object.keys(tool.paramsSchema)).toEqual(['session', 'worksheet', 'colors', 'field']);
   });
 
   it('sets a plain dimension through the datasource route and reports the verified readback', async () => {
@@ -686,7 +686,7 @@ describe('set-member-colors tool', () => {
       await callback(
         {
           session: 'requested',
-          worksheetName: 'L1',
+          worksheet: 'L1',
           field: undefined,
           colors: [{ member, color }],
         },

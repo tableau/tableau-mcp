@@ -21,7 +21,7 @@ implementation. Pass `session`, `datappName`, `worksheetId` (External API worksh
 to an absolute workspace root first. A successful result includes `packageId`, `sourceDir`,
 `worksheetFile`, `extensionsDatasourceId` (Extensions API id stamped into the starter
 `BOUND_DATASOURCE_ID`), `worksheetId`, and `worksheetName` (live sheet name). Apply the fragment
-with `apply-worksheet`, passing `worksheetId` as `worksheetName`. The rest of this page documents
+with `apply-worksheet`, passing `worksheetId` as `worksheet`. The rest of this page documents
 the web contract.
 
 :::warning[Disabled by Default]

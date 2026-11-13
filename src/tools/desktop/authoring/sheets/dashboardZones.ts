@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 
 export const customZoneSchema = z.object({
-  worksheetName: z.string(),
+  worksheet: z.string(),
   x: z.number(),
   y: z.number(),
   width: z.number(),
@@ -91,11 +91,11 @@ export function validateLayoutSpec(
         h < 1
       ) {
         return new ArgsValidationError(
-          `Custom zone "${cz.worksheetName}" must keep x and y within 0..${MAX_COORD}, width and height at least 1 after rounding, and x+width and y+height at most ${MAX_COORD}; received x=${cz.x}, y=${cz.y}, width=${cz.width}, height=${cz.height}.`,
+          `Custom zone "${cz.worksheet}" must keep x and y within 0..${MAX_COORD}, width and height at least 1 after rounding, and x+width and y+height at most ${MAX_COORD}; received x=${cz.x}, y=${cz.y}, width=${cz.width}, height=${cz.height}.`,
         );
       }
     }
-    const zonedNames = customZones.map((cz) => cz.worksheetName);
+    const zonedNames = customZones.map((cz) => cz.worksheet);
     const repeated = [...new Set(zonedNames.filter((n, i) => zonedNames.indexOf(n) !== i))];
     if (repeated.length > 0) {
       return new ArgsValidationError(
@@ -352,12 +352,12 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
       });
     } else if (layoutType === 'custom' && customZones) {
       for (const cz of customZones) {
-        if (charts.includes(cz.worksheetName)) {
+        if (charts.includes(cz.worksheet)) {
           zones.push({
             kind: 'worksheet',
             h: Math.round(cz.height),
             id: nextId++,
-            name: cz.worksheetName,
+            name: cz.worksheet,
             w: Math.round(cz.width),
             x: Math.round(cz.x),
             y: Math.round(cz.y),

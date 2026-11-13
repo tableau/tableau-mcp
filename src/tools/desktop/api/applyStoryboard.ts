@@ -16,7 +16,7 @@ import { acceptedDashboardLoadResult, runApplyPreamble } from './applyPreamble.j
 
 const paramsSchema = {
   session: sessionParam(),
-  storyboardName: artifactNameParam('storyboard'),
+  storyboard: artifactNameParam('storyboard'),
   storyboardFile: artifactFileParam('storyboard').optional(),
 };
 
@@ -38,13 +38,10 @@ export const getApplyStoryboardTool = (
       destructiveHint: true,
       idempotentHint: false,
     },
-    callback: async (
-      { session, storyboardName, storyboardFile },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async ({ session, storyboard, storyboardFile }, extra): Promise<CallToolResult> => {
       return await applyStoryboardTool.logAndExecute({
         extra,
-        args: { session, storyboardName, storyboardFile },
+        args: { session, storyboard, storyboardFile },
         callback: async () => {
           const preamble = runApplyPreamble({
             kind: 'storyboard',
@@ -65,10 +62,10 @@ export const getApplyStoryboardTool = (
           // `<dashboard type='storyboard'>`), so error cases below carry the
           // dashboard loader's 'load-dashboard-xml-error' label.
           const result = await loadStoryboardXml({
-            storyboardName,
+            storyboardName: storyboard,
             xml: storyboardXml,
             expectedSourceHash: sourceHash,
-            focus: { navigate: 'artifact', sheetName: storyboardName },
+            focus: { navigate: 'artifact', sheetName: storyboard },
             executor,
             signal: extra.signal,
             // apply-storyboard updates an existing storyboard in place via the per-sheet `/document`
@@ -110,7 +107,7 @@ export const getApplyStoryboardTool = (
             acceptedDashboardLoadResult({
               kind: 'storyboard',
               loaded: result.value,
-              fallbackName: storyboardName,
+              fallbackName: storyboard,
             }),
           );
         },

@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import {
@@ -13,7 +12,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import {
   prefillNextAction,
   type WireStructuredContent,
@@ -24,7 +23,7 @@ import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheetName: z.string().min(1).describe('Worksheet or dashboard name to make active.'),
+  sheet: artifactNameParam('sheet', { min: 1 }),
 };
 
 // `focus_requested`, not `activated`: the goToSheet route settles asynchronously, so the
@@ -79,10 +78,10 @@ export const getActivateSheetTool = (
       destructiveHint: false,
       idempotentHint: true,
     },
-    callback: async ({ session, sheetName }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, sheet }, extra): Promise<CallToolResult> => {
       return await activateSheetTool.logAndExecute<ActivateSheetToolResult>({
         extra,
-        args: { session, sheetName },
+        args: { session, sheet },
         getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -122,9 +121,9 @@ export const getActivateSheetTool = (
                 ...(storyboards.value.storyboards ?? []),
               ];
               const availableSheets = candidates.map((candidate) => candidate.name);
-              const match = resolveItemByNameOrId('Sheet', sheetName, candidates);
+              const match = resolveItemByNameOrId('Sheet', sheet, candidates);
               if (match.isErr()) {
-                return new ActivateSheetNotFoundError(sheetName, availableSheets).toErr();
+                return new ActivateSheetNotFoundError(sheet, availableSheets).toErr();
               }
               return new Ok({ id: match.value.id, name: match.value.name, availableSheets });
             },

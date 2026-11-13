@@ -35,7 +35,7 @@ describe('get-diagnostics tool', () => {
     expect(tool.minApiVersion).toBe('0.2.16');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
     });
     expect(description).toContain('Inspect the existing workbook before editing');
     expect(description).toContain(
@@ -62,7 +62,7 @@ describe('get-diagnostics tool', () => {
       }),
     };
 
-    const result = await invokeTool({ session: undefined, worksheetName: undefined }, extra);
+    const result = await invokeTool({ session: undefined, worksheet: undefined }, extra);
 
     expect(parseResult(result)).toEqual(diagnostics);
     expect(getWorkbookDiagnostics).toHaveBeenCalledExactlyOnceWith(controller.signal, 'inst-test');
@@ -92,7 +92,7 @@ describe('get-diagnostics tool', () => {
       }),
     };
 
-    const result = await invokeTool({ session: '999', worksheetName: 'Sales' }, extra);
+    const result = await invokeTool({ session: '999', worksheet: 'Sales' }, extra);
 
     expect(parseResult(result)).toEqual(targetDiagnostics);
     expect(listWorksheets).toHaveBeenCalledExactlyOnceWith(controller.signal);
@@ -105,7 +105,7 @@ describe('get-diagnostics tool', () => {
 });
 
 async function invokeTool(
-  args: { session: string | undefined; worksheetName: string | undefined },
+  args: { session: string | undefined; worksheet: string | undefined },
   extra: ReturnType<typeof getMockRequestHandlerExtra>,
 ): Promise<CallToolResult> {
   const tool = getDiagnosticsTool(new DesktopMcpServer());

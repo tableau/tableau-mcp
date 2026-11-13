@@ -7,15 +7,15 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheet: z.string().describe('Worksheet, dashboard, or storyboard name/id to rename.'),
-  name: z.string().trim().min(1).describe('The new name for the sheet.'),
+  sheet: artifactNameParam('sheet'),
+  newName: z.string().trim().min(1).describe('The new name for the sheet.'),
 };
 const title = 'Rename Sheet';
 
@@ -32,10 +32,10 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
       openWorldHint: false,
     },
     paramsSchema,
-    callback: async ({ session, sheet, name }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, sheet, newName }, extra): Promise<CallToolResult> => {
       return await renameSheetTool.logAndExecute({
         extra,
-        args: { session, sheet, name },
+        args: { session, sheet, newName },
         getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -51,7 +51,7 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
             const { ref, previousName } = refResult.value;
 
             const executor = await extra.getExecutor(sessionResult.value);
-            const result = await executor.renameSheet(ref, name, extra.signal);
+            const result = await executor.renameSheet(ref, newName, extra.signal);
             if (result.isErr()) {
               if (isRouteMissing(result.error)) {
                 return endpointNotInThisBuild('rename-sheet').toErr();
@@ -61,14 +61,14 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
 
             const subject =
               result.value.status !== 'completed'
-                ? `Requested rename to "${name}"; Desktop is still applying it`
-                : name === previousName
-                  ? `The ${ref.kind} is already named "${name}"; nothing was renamed`
-                  : `Renamed ${ref.kind} "${previousName}" to "${name}"`;
+                ? `Requested rename to "${newName}"; Desktop is still applying it`
+                : newName === previousName
+                  ? `The ${ref.kind} is already named "${newName}"; nothing was renamed`
+                  : `Renamed ${ref.kind} "${previousName}" to "${newName}"`;
             return new Ok(
               commandOk(
                 {
-                  sheet: { id: ref.id, kind: ref.kind, name },
+                  sheet: { id: ref.id, kind: ref.kind, name: newName },
                   previousName,
                   message: `${subject}.`,
                 },

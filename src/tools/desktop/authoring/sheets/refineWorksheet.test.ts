@@ -214,7 +214,7 @@ describe('refineWorksheetTool — instance', () => {
     expect(tool.description).toContain('mark type');
     expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
       operation: expect.any(Object),
       topN: expect.any(Object),
       sortDirection: expect.any(Object),
@@ -244,7 +244,7 @@ describe('refineWorksheetTool — rounded bars', () => {
 
   it('refuses a missing subtle preset without reading or writing Tableau', async () => {
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
     });
 
@@ -261,7 +261,7 @@ describe('refineWorksheetTool — rounded bars', () => {
 
   it('refuses a non-subtle preset without reading or writing Tableau', async () => {
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'strong' as never,
     });
@@ -295,7 +295,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'round_bar',
       preset: 'subtle',
     });
@@ -328,7 +328,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     setupMocks({ source: grouped });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'round_bar',
       preset: 'subtle',
     });
@@ -364,7 +364,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'subtle',
     });
@@ -421,7 +421,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_bar',
       preset: 'subtle',
     });
@@ -444,7 +444,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     setupMocks({ source: compiled.xml });
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'subtle',
     });
@@ -487,7 +487,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'subtle',
     });
@@ -516,7 +516,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'subtle',
     });
@@ -543,7 +543,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'subtle',
     });
@@ -567,7 +567,7 @@ describe('refineWorksheetTool — rounded bars', () => {
     roundedApplyMock().mockRejectedValue(new Error('unexpected wrapper failure'));
 
     const result = await getToolResult({
-      worksheetName: 'Profit by Category',
+      worksheet: 'Profit by Category',
       operation: 'round_stacked_bar',
       preset: 'subtle',
     });
@@ -593,7 +593,7 @@ describe('refineWorksheetTool — mark_type', () => {
   it('fetches once, applies the requested mark type once, and confirms it on readback', async () => {
     const { applied } = setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -618,7 +618,7 @@ describe('refineWorksheetTool — mark_type', () => {
     setupMocks({ verification });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -651,7 +651,7 @@ describe('refineWorksheetTool — mark_type', () => {
     setupMocks({ verification });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -687,7 +687,7 @@ describe('refineWorksheetTool — mark_type', () => {
     setupMocks({ verification });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -714,7 +714,7 @@ describe('refineWorksheetTool — mark_type', () => {
     setupMocks({ source });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -762,7 +762,7 @@ describe('refineWorksheetTool — source drift', () => {
     loadMock().mockImplementation(actualLoadWorksheetXml.loadWorksheetXml);
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
       executor,
@@ -781,7 +781,7 @@ describe('refineWorksheetTool — top_n happy path', () => {
   it('fetches, patches, applies once, and confirms the Top-N filter on readback', async () => {
     const { applied } = setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -810,7 +810,7 @@ describe('refineWorksheetTool — top_n happy path', () => {
   it('reads back by the fragment simple-id, not the display name', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -828,7 +828,7 @@ describe('refineWorksheetTool — top_n happy path', () => {
   it('refines an ampersand-titled worksheet by literal name', async () => {
     setupMocks({ source: AMP_WORKSHEET_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'P&L Waterfall: Revenue to Net Income',
+      worksheet: 'P&L Waterfall: Revenue to Net Income',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -846,7 +846,7 @@ describe('refineWorksheetTool — top_n happy path', () => {
   it('normalizes escaped ampersand input and still refines the literal worksheet', async () => {
     setupMocks({ source: AMP_WORKSHEET_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'P&amp;L Waterfall: Revenue to Net Income',
+      worksheet: 'P&amp;L Waterfall: Revenue to Net Income',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -865,7 +865,7 @@ describe('refineWorksheetTool — top_n happy path', () => {
   it('refines a worksheet whose title contains angle brackets and quotes', async () => {
     setupMocks({ source: ANGLE_QUOTE_WORKSHEET_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Revenue < "Gross"',
+      worksheet: 'Revenue < "Gross"',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -887,7 +887,7 @@ describe('refineWorksheetTool — sort_direction happy path', () => {
   it('flips the computed-sort direction and confirms it on readback', async () => {
     const { applied } = setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'sort_direction',
       sortDirection: { direction: 'ASC' },
     });
@@ -911,7 +911,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
   it('applies a computed-sort by field caption and confirms column/using/direction on readback', async () => {
     const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       targetField: 'Line Item',
       sortByField: 'display_order',
@@ -934,7 +934,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
   it('defaults sort_by_field direction to ascending', async () => {
     const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       targetField: 'Line Item',
       sortByField: 'display_order',
@@ -952,7 +952,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
     // to throw TypeError in normalizeCaption; it must now resolve to a non-error result.
     const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       sortByField: 'display_order',
       direction: 'desc',
@@ -974,7 +974,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
     // DESC and confirm DESC.
     const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       sortByField: 'display_order',
       sortDirection: { direction: 'DESC' },
@@ -993,7 +993,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
   it('the flat direction wins when both flat direction and nested sortDirection are passed', async () => {
     const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       sortByField: 'display_order',
       direction: 'asc',
@@ -1023,7 +1023,7 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     );
     setupMocks({ source: SORT_BY_FIELD_SOURCE, readbackXml: wrongDirectionReadback });
     const resultPromise = getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       sortByField: 'display_order',
       sortDirection: { direction: 'DESC' },
@@ -1060,7 +1060,7 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     });
 
     const resultPromise = getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       sortByField: 'display_order',
       direction: 'desc',
@@ -1097,7 +1097,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     vi.useFakeTimers();
     const { applied } = setupMocks({ readback: 3 });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1120,7 +1120,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     vi.useFakeTimers();
     setupMocks({ readback: 8 });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1140,7 +1140,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     vi.useFakeTimers();
     setupMocks({ readback: 'source' });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1162,7 +1162,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
       verification: { ok: true, status: 'passed' },
     });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1204,7 +1204,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     };
     setupMocks({ readback: 'source', verification });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1244,7 +1244,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     };
     setupMocks({ readback: 'source', verification });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1270,18 +1270,16 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
 describe('refineWorksheetTool — refusals and errors', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('errors on a missing worksheetName and never touches Tableau', async () => {
+  it('errors on a missing worksheet and never touches Tableau', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: '',
+      worksheet: '',
       operation: 'top_n',
       topN: { n: 5 },
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      new ArgsValidationError('worksheetName is required.').message,
-    );
+    expect(result.content[0].text).toBe(new ArgsValidationError('worksheet is required.').message);
     expect(getMock()).not.toHaveBeenCalled();
     expect(loadMock()).not.toHaveBeenCalled();
   });
@@ -1293,7 +1291,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     };
     setupMocks({ fetchErr });
     const result = await getToolResult({
-      worksheetName: 'Ghost',
+      worksheet: 'Ghost',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1329,7 +1327,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -1381,7 +1379,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     });
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
       markType: 'area',
     });
@@ -1415,7 +1413,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('refuses on preflight failure and NEVER applies', async () => {
     setupMocks({ source: PREFLIGHT_FAIL_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1441,7 +1439,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     };
     setupMocks({ applyErr });
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1481,7 +1479,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     loadMock().mockImplementation(actualLoadModule.loadWorksheetXml);
 
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
       executor,
@@ -1501,7 +1499,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     };
     setupMocks({ applyErr });
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1519,7 +1517,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     vi.useFakeTimers();
     setupMocks({ readback: 'source' });
     const resultPromise = getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
@@ -1542,7 +1540,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('refuses an out-of-range n (kill criterion surfaced through the tool)', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 999 },
     });
@@ -1556,7 +1554,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('errors when operation=sort_by_field is missing sortByField, before touching Tableau', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'sort_by_field',
     });
     expect(result.isError).toBe(true);
@@ -1571,7 +1569,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('errors when operation=top_n is missing topN, before touching Tableau', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'top_n',
     });
     expect(result.isError).toBe(true);
@@ -1586,7 +1584,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('errors when operation=sort_direction is missing sortDirection, before touching Tableau', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'sort_direction',
     });
     expect(result.isError).toBe(true);
@@ -1601,7 +1599,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('errors when operation=mark_type is missing markType, before touching Tableau', async () => {
     setupMocks();
     const result = await getToolResult({
-      worksheetName: 'Sales by Region',
+      worksheet: 'Sales by Region',
       operation: 'mark_type',
     });
     expect(result.isError).toBe(true);
@@ -1616,7 +1614,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
   it('refuses an unknown sort_by_field caption and never applies', async () => {
     setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
-      worksheetName: 'Waterfall',
+      worksheet: 'Waterfall',
       operation: 'sort_by_field',
       targetField: 'Missing Field',
       sortByField: 'display_order',
@@ -1684,7 +1682,7 @@ it('propagates session-fatal refinement confirmation instead of a skipped verifi
     Ok({ readbackWarnings: [] }),
   );
   const result = await getToolResult({
-    worksheetName: 'Sales by Region',
+    worksheet: 'Sales by Region',
     operation: 'sort_direction',
     sortDirection: { direction: 'ASC' },
   });
@@ -1695,7 +1693,7 @@ it('propagates session-fatal refinement confirmation instead of a skipped verifi
 });
 
 async function getToolResult({
-  worksheetName,
+  worksheet,
   operation,
   topN,
   sortDirection,
@@ -1707,7 +1705,7 @@ async function getToolResult({
   session = '12345',
   executor = makeExecutorMock(),
 }: {
-  worksheetName: string;
+  worksheet: string;
   operation:
     | 'top_n'
     | 'sort_direction'
@@ -1747,7 +1745,7 @@ async function getToolResult({
   return await callback(
     {
       session,
-      worksheetName,
+      worksheet,
       operation,
       topN,
       sortDirection,

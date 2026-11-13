@@ -882,14 +882,14 @@ describe('bindTemplateTool', () => {
       calcs: expect.any(Object),
     });
     expect(paramsSchema['session']!.description).toBe('Desktop PID; omit if pinned or sole.');
-    expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
+    expect(paramsSchema['worksheet']!.description).toBe(
+      'Worksheet id (preferred) or name; omit=new.',
+    );
     expect(paramsSchema['auto_apply']!.description).toBe('Apply now');
     expect(paramsSchema['requireCompleteRequest']!.description).toBe(
       'Prove full ask or decline, no writes',
     );
-    expect(paramsSchema['datasource']!.description).toBe(
-      'Internal datasource name or unique caption.',
-    );
+    expect(paramsSchema['datasource']!.description).toBe('Internal name or unique caption.');
     expect(paramsSchema['calcs']!.description).toBe('Author fields.');
     expect(
       paramsSchema['calcs']!.safeParse([
@@ -1218,7 +1218,7 @@ describe('bindTemplateTool', () => {
     const result = await getToolResult({
       session: '1',
       ask: 'P&L waterfall',
-      target_worksheet: 'P&L',
+      worksheet: 'P&L',
     });
 
     invariant(result.content[0].type === 'text');
@@ -1228,7 +1228,7 @@ describe('bindTemplateTool', () => {
       arguments: {
         session: '1',
         ask: 'P&L waterfall',
-        target_worksheet: 'P&L',
+        worksheet: 'P&L',
         auto_apply: true,
       },
       proposal_choices: [
@@ -2689,7 +2689,7 @@ describe('bindTemplateTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('keeps requiring the corrected proposal when target_worksheet is added after a real contract mismatch', async () => {
+  it('keeps requiring the corrected proposal when worksheet is added after a real contract mismatch', async () => {
     const ask = 'P&L waterfall';
     const rejectedProposal: BindingProposal & { confidence: number } = {
       template: 'part-to-whole-waterfall',
@@ -2719,7 +2719,7 @@ describe('bindTemplateTool', () => {
     const blocked = await getToolResult({
       session: 'target-correction-bypass',
       ask,
-      target_worksheet: 'P&L Waterfall',
+      worksheet: 'P&L Waterfall',
       auto_apply: true,
       getExecutor,
     });
@@ -4372,7 +4372,7 @@ async function getToolResult({
   minConfidence,
   auto_apply,
   requireCompleteRequest,
-  target_worksheet,
+  worksheet,
   datasource,
   calcs,
   skip_validation,
@@ -4391,7 +4391,7 @@ async function getToolResult({
   minConfidence?: number;
   auto_apply?: boolean;
   requireCompleteRequest?: boolean;
-  target_worksheet?: string;
+  worksheet?: string;
   datasource?: string;
   calcs?: Array<{
     caption: string;
@@ -4433,7 +4433,7 @@ async function getToolResult({
       minConfidence,
       auto_apply,
       requireCompleteRequest,
-      target_worksheet,
+      worksheet,
       datasource,
       calcs,
       skip_validation,
@@ -6558,7 +6558,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       session: 'returns-filter-target',
       ask: 'top 10 products by sales with Region and Regional Manager filters',
       auto_apply: true,
-      target_worksheet: 'Sheet 1',
+      worksheet: 'Sheet 1',
       getExecutor,
     });
 
@@ -8033,7 +8033,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
   });
 });
 
-describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () => {
+describe('bindTemplateTool auto_apply worksheet (stray-sheet class)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
@@ -8053,7 +8053,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      target_worksheet: 'se-eval-scratch',
+      worksheet: 'se-eval-scratch',
       getExecutor,
     });
 
@@ -8092,7 +8092,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      target_worksheet: 'sheet-guid-1',
+      worksheet: 'sheet-guid-1',
       getExecutor,
     });
 
@@ -8118,13 +8118,13 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      target_worksheet: 'No Such Sheet',
+      worksheet: 'No Such Sheet',
       getExecutor,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('target_worksheet "No Such Sheet" not found');
+    expect(result.content[0].text).toContain('worksheet "No Such Sheet" not found');
     expect(result.content[0].text).toContain('list-worksheets');
     expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
@@ -8139,7 +8139,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      target_worksheet: 'Dash Member',
+      worksheet: 'Dash Member',
       getExecutor,
     });
 
@@ -8159,7 +8159,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
-      target_worksheet: 'se-eval-scratch',
+      worksheet: 'se-eval-scratch',
     });
 
     expect(result.isError).toBe(false);
@@ -8169,7 +8169,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     expect(body.args.title).toBe('se-eval-scratch');
   });
 
-  it('no target_worksheet: behavior unchanged, inject titled from the bound args', async () => {
+  it('no worksheet: behavior unchanged, inject titled from the bound args', async () => {
     const { getExecutor } = setupAutoApplyMocks();
 
     const result = await getToolResult({
@@ -8489,7 +8489,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(second.applied).toBe(false);
     expect(second.sheet_name).toBe('Sales by Region');
     expect(second.guidance).toContain('still present');
-    expect(second.guidance).toContain('target_worksheet');
+    expect(second.guidance).toContain('bind-template again with worksheet:');
     expect(second.guidance).not.toContain('no further tool calls needed');
     expect(
       (secondResult.structuredContent as { nextAction: { kind: string; label: string } })
@@ -8500,7 +8500,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       session: '1',
       ask,
       auto_apply: true,
-      target_worksheet: 'Sales by Region',
+      worksheet: 'Sales by Region',
       getExecutor,
     });
     const third = body(thirdResult);
@@ -8692,7 +8692,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(3);
   });
 
-  it('an explicit target_worksheet always applies, even for byte-identical args', async () => {
+  it('an explicit worksheet always applies, even for byte-identical args', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
       structuralReadback: true,
@@ -8710,7 +8710,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
         session: '1',
         ask: 'bar chart of Sales by Region',
         auto_apply: true,
-        target_worksheet: 'Sales by Region',
+        worksheet: 'Sales by Region',
         getExecutor,
       }),
     );
@@ -8720,7 +8720,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
-  it('blocks an explicit target_worksheet rebuild after a terminal escalation', async () => {
+  it('blocks an explicit worksheet rebuild after a terminal escalation', async () => {
     const ask = 'bar chart of Sales by Region';
     const askKey = normalizeAskForMatch(ask);
     sessionRouteState.recordBindRecoveryTerminal('1', askKey, { outcome: 'escalate' });
@@ -8731,7 +8731,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
         session: '1',
         ask,
         auto_apply: true,
-        target_worksheet: 'Sales by Region',
+        worksheet: 'Sales by Region',
         getExecutor,
       }),
     );
@@ -8744,7 +8744,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   });
 
   it.each(['proposal-attempted', 'terminal'] as const)(
-    'blocks an explicit target_worksheet rebuild after a %s Call 2',
+    'blocks an explicit worksheet rebuild after a %s Call 2',
     async (phase) => {
       const ask = 'bar chart of Sales by Region';
       const askKey = normalizeAskForMatch(ask);
@@ -8762,7 +8762,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
           session: '1',
           ask,
           auto_apply: true,
-          target_worksheet: 'Sales by Region',
+          worksheet: 'Sales by Region',
           getExecutor,
         }),
       );
@@ -9121,7 +9121,7 @@ describe('bind-template — reports what it actually built', () => {
     invariant(result.content[0].type === 'text');
     const guidance = JSON.parse(result.content[0].text).guidance as string;
     expect(guidance).toContain(
-      "add-field{worksheetName:'00000000-0000-0000-0000-000000000001',target:'encoding',encodingType:'size'",
+      "add-field{worksheet:'00000000-0000-0000-0000-000000000001',target:'encoding',encodingType:'size'",
     );
     expect(guidance).toContain(
       "add-field{worksheetFile:<path returned by previous add-field>,target:'encoding',encodingType:'color'",
@@ -9130,7 +9130,7 @@ describe('bind-template — reports what it actually built', () => {
       "add-field{worksheetFile:<path returned by previous add-field>,target:'encoding',encodingType:'tooltip'",
     );
     expect(guidance).toContain(
-      "apply-worksheet{worksheetName:'00000000-0000-0000-0000-000000000001',worksheetFile:<path returned by previous add-field>}",
+      "apply-worksheet{worksheet:'00000000-0000-0000-0000-000000000001',worksheetFile:<path returned by previous add-field>}",
     );
   });
 });
@@ -9229,7 +9229,7 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
     expect(first.applied).toBe(true);
     expect((first.encodings as { unfilled: string[] }).unfilled).toEqual(['color']);
 
-    // The same chart in new words with no target_worksheet: the exact re-bind the
+    // The same chart in new words with no worksheet: the exact re-bind the
     // duplicate-sheet reuse path is built to collapse.
     invariant(boundWithUnfilledColorResult.status === 'bound');
     const rewordedAsk = 'color the Sales by State dots by how much they sold';
@@ -10530,7 +10530,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
           `The pie is already on the sheet and has ${n > 20 ? 'more than 20' : n} slices of Region, above the workable maximum of 12.`,
         );
         expect(body.guidance).toContain(
-          'A sorted bar of Sales by Region would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "00000000-0000-0000-0000-000000000001".',
+          'A sorted bar of Sales by Region would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of Sales by Region" and worksheet "00000000-0000-0000-0000-000000000001".',
         );
         expect(body.guidance).toContain('If the user wants the pie, nothing more is needed.');
         expect(body.guidance).not.toContain('Do NOT call bind-template again');
@@ -10665,7 +10665,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
   it('a plain SUM unfiltered pie still gets the concrete bar call', async () => {
     const { body } = await applyPie(pieRows(13));
     expect(body.guidance).toContain(
-      'call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "00000000-0000-0000-0000-000000000001".',
+      'call bind-template with ask "sorted bar chart of Sales by Region" and worksheet "00000000-0000-0000-0000-000000000001".',
     );
   });
 
@@ -11122,7 +11122,7 @@ describe('bindTemplateTool pie slice count after apply', () => {
       session: '1',
       ask: 'sorted bar chart of Sales by Region',
       auto_apply: true,
-      target_worksheet: 'Sales by Region',
+      worksheet: 'Sales by Region',
       getExecutor,
     });
     invariant(rebuild.content[0].type === 'text');

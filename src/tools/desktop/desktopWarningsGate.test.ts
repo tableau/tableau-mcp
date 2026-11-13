@@ -272,7 +272,7 @@ const TOOL_CASES: Record<string, ToolCase> = {
   },
   'rename-sheet': {
     make: getRenameSheetTool,
-    args: { sheet: 'Sales', name: 'Revenue' },
+    args: { sheet: 'Sales', newName: 'Revenue' },
     clean: {
       sheet: { id: 'ws1', kind: 'worksheet', name: 'Revenue' },
       previousName: 'Sales',
@@ -395,7 +395,7 @@ const TOOL_CASES: Record<string, ToolCase> = {
   },
   'activate-sheet': {
     make: getActivateSheetTool,
-    args: { sheetName: 'Sales' },
+    args: { sheet: 'Sales' },
     clean: {
       focus_requested: true,
       sheetId: 'ws1',

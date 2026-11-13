@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind } from '../../../desktop/externalApi/types.js';
@@ -8,14 +7,14 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheet: z.string().describe('Worksheet, dashboard, or storyboard name/id to delete.'),
+  sheet: artifactNameParam('sheet'),
 };
 const title = 'Delete Sheet';
 

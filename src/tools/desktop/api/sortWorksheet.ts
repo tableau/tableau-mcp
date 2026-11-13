@@ -14,14 +14,14 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveShelfField } from './resolveShelfField.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().describe('Worksheet name/id to sort.'),
+  worksheet: artifactNameParam('worksheet'),
   fieldName: z
     .string()
     .min(1)

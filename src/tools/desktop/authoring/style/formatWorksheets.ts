@@ -57,7 +57,7 @@ const numberFormatSchema = z
 
 const worksheetFormatSchema = z
   .object({
-    name: z.string().trim().min(1).max(255),
+    worksheet: z.string().trim().min(1),
     showLabels: z.boolean().optional(),
     numberFormats: z.array(numberFormatSchema).min(1).max(12).optional(),
   })
@@ -114,7 +114,7 @@ export const getFormatWorksheetsTool = (
           for (const request of worksheets) {
             const item = resolveItemByNameOrId(
               'Worksheet',
-              request.name,
+              request.worksheet,
               listed.value.worksheets ?? [],
             );
             if (item.isErr()) return item.error.toErr();

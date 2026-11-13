@@ -1,15 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().describe('Worksheet name/id.'),
+  worksheet: artifactNameParam('worksheet'),
 };
 const title = 'List Worksheet Logical Tables';
 

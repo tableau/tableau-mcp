@@ -125,7 +125,7 @@ describe('applyWorksheetTool', () => {
     expect(tool.description).toBe('Apply a worksheet artifact, plan, or cached file.');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
       worksheetFile: expect.any(Object),
       artifactId: expect.any(Object),
       templatePlan: expect.any(Object),
@@ -335,7 +335,7 @@ describe('applyWorksheetTool', () => {
     });
   });
 
-  it('applies a live-shaped templatePlan with a matching worksheetName and unique datasource caption exactly once', async () => {
+  it('applies a live-shaped templatePlan with a matching worksheet and unique datasource caption exactly once', async () => {
     await useRealTemplateReads();
     const mockLoadWorksheetXml = vi
       .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
@@ -357,7 +357,7 @@ describe('applyWorksheetTool', () => {
     const result = await getDirectTemplateToolResult({
       getExecutor,
       plan: captionTemplatePlan(),
-      worksheetName: 'Sales by Category',
+      worksheet: 'Sales by Category',
     });
 
     expect(result.isError).toBe(false);
@@ -412,20 +412,20 @@ describe('applyWorksheetTool', () => {
     expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('rejects a templatePlan worksheetName mismatch before resolving Desktop or building', async () => {
+  it('rejects a templatePlan worksheet mismatch before resolving Desktop or building', async () => {
     const buildArtifact = vi.fn();
     const getExecutor = vi.fn();
 
     const result = await getDirectTemplateToolResult({
       buildArtifact,
       getExecutor,
-      worksheetName: 'Wrong Sheet',
+      worksheet: 'Wrong Sheet',
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'worksheetName "Wrong Sheet" must match templatePlan.title "Artifact Sheet"',
+      'worksheet "Wrong Sheet" must match templatePlan.title "Artifact Sheet"',
     );
     expect(getExecutor).not.toHaveBeenCalled();
     expect(buildArtifact).not.toHaveBeenCalled();
@@ -768,25 +768,25 @@ describe('applyWorksheetTool', () => {
     {
       artifactId: 'artifact-1',
       templatePlan: directTemplatePlan(),
-      worksheetName: undefined,
+      worksheet: undefined,
       worksheetFile: undefined,
     },
     {
       artifactId: undefined,
       templatePlan: directTemplatePlan(),
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: '/cache/sheet.xml',
     },
     {
       artifactId: undefined,
       templatePlan: undefined,
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: undefined,
     },
     {
       artifactId: undefined,
       templatePlan: undefined,
-      worksheetName: undefined,
+      worksheet: undefined,
       worksheetFile: undefined,
     },
   ])('rejects ambiguous or incomplete apply modes before resolving Desktop', async (args) => {
@@ -814,7 +814,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor,
     });
@@ -870,7 +870,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: mockFilePath,
       mockExecutor,
     });
@@ -899,7 +899,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: '{SHEET-GUID-9}',
+      worksheet: '{SHEET-GUID-9}',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -913,7 +913,7 @@ describe('applyWorksheetTool', () => {
     );
   });
 
-  it('infers the worksheet name from a cached fragment when worksheetName is omitted', async () => {
+  it('infers the worksheet name from a cached fragment when worksheet is omitted', async () => {
     const mockXml = "<worksheet name='Sales &amp; Profit'><table></table></worksheet>";
     const mockLoadWorksheetXml = vi
       .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
@@ -936,13 +936,13 @@ describe('applyWorksheetTool', () => {
     );
   });
 
-  it('rejects an explicit worksheetName that conflicts with the cached fragment before touching Desktop', async () => {
+  it('rejects an explicit worksheet that conflicts with the cached fragment before touching Desktop', async () => {
     const mockXml = "<worksheet name='Real Name'><table></table></worksheet>";
     const mockLoadWorksheetXml = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Wrong Name',
+      worksheet: 'Wrong Name',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -955,7 +955,7 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('fails safely on a whole-workbook document even when worksheetName is omitted', async () => {
+  it('fails safely on a whole-workbook document even when worksheet is omitted', async () => {
     const mockXml = '<workbook><worksheets><worksheet name="Sheet 1" /></worksheets></workbook>';
     const mockLoadWorksheetXml = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
 
@@ -971,7 +971,7 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('fails safely on a non-worksheet fragment when worksheetName is omitted', async () => {
+  it('fails safely on a non-worksheet fragment when worksheet is omitted', async () => {
     const mockXml = '<dashboard name="Dash 1"><zones /></dashboard>';
     const mockLoadWorksheetXml = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
 
@@ -997,7 +997,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1062,7 +1062,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1114,7 +1114,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1154,7 +1154,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: mockFilePath,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1203,7 +1203,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1225,7 +1225,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1299,7 +1299,7 @@ describe('applyWorksheetTool', () => {
 
       const result = await getToolResult({
         session: '12345',
-        worksheetName: 'L2',
+        worksheet: 'L2',
         worksheetXml: await colorFixture('apply-L2-ws.xml'),
         mockExecutor: vi.fn().mockResolvedValue(executor),
       });
@@ -1323,7 +1323,7 @@ describe('applyWorksheetTool', () => {
 
       const pending = getToolResult({
         session: '12345',
-        worksheetName: 'L2',
+        worksheet: 'L2',
         worksheetXml: await colorFixture('apply-L2-ws.xml'),
         mockExecutor: vi.fn().mockResolvedValue(executor),
       });
@@ -1386,12 +1386,12 @@ describe('applyWorksheetTool', () => {
     async function applyColorSheet(
       executor: ReturnType<typeof makeExecutorMock>,
       worksheetXml: string,
-      worksheetName: string,
+      worksheet: string,
     ): Promise<Record<string, any>> {
       vi.useFakeTimers({ toFake: ['setTimeout'] });
       const pending = getToolResult({
         session: '12345',
-        worksheetName,
+        worksheet,
         worksheetXml,
         mockExecutor: vi.fn().mockResolvedValue(executor),
       });
@@ -1558,7 +1558,7 @@ describe('applyWorksheetTool', () => {
 
       const result = await getToolResult({
         session: '12345',
-        worksheetName: 'Sheet 1',
+        worksheet: 'Sheet 1',
         worksheetXml: '<worksheet name="Sheet 1"><table></table></worksheet>',
         mockExecutor: vi.fn().mockResolvedValue(executor),
       });
@@ -1579,7 +1579,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1599,7 +1599,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Old Name',
+      worksheet: 'Old Name',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1618,7 +1618,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: '<worksheet name="Sheet 1"><table></table></worksheet>',
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -1632,7 +1632,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mockExecutor,
     });
 
@@ -1649,7 +1649,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: mockFilePath,
       mockExecutor,
     });
@@ -1672,7 +1672,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: mockFilePath,
       mockExecutor,
     });
@@ -1698,7 +1698,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor,
     });
@@ -1721,7 +1721,7 @@ describe('applyWorksheetTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor,
     });
@@ -1742,7 +1742,7 @@ describe('applyWorksheetTool', () => {
 
     await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetXml: mockXml,
       mockExecutor,
       customSignal,
@@ -1891,7 +1891,7 @@ describe('applyWorksheetTool', () => {
     ).toBeUndefined();
   });
 
-  it('applies an artifactId with a matching worksheetName exactly once', async () => {
+  it('applies an artifactId with a matching worksheet exactly once', async () => {
     const store = artifactStore();
     const mockLoadWorksheetXml = vi
       .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
@@ -1910,7 +1910,7 @@ describe('applyWorksheetTool', () => {
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
   });
 
-  it('applies an artifactId when worksheetName is the artifact worksheet id', async () => {
+  it('applies an artifactId when worksheet is the artifact worksheet id', async () => {
     const store = artifactStore();
     const mockLoadWorksheetXml = vi
       .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
@@ -1929,7 +1929,7 @@ describe('applyWorksheetTool', () => {
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
   });
 
-  it('rejects an artifactId worksheetName mismatch without applying or consuming it', async () => {
+  it('rejects an artifactId worksheet mismatch without applying or consuming it', async () => {
     const store = artifactStore();
 
     const result = await getArtifactToolResult(store, 'artifact-1', '12345', 'Wrong Sheet');
@@ -1937,7 +1937,7 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'worksheetName "Wrong Sheet" must match artifact title "Artifact Sheet"',
+      'worksheet "Wrong Sheet" must match artifact title "Artifact Sheet"',
     );
     expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
     const stillAvailable = store.reserve('artifact-1', '12345');
@@ -2040,7 +2040,7 @@ describe('applyWorksheetTool', () => {
         session: '99999',
         artifactId: 'artifact-1',
         templatePlan: undefined,
-        worksheetName: undefined,
+        worksheet: undefined,
         worksheetFile: undefined,
       },
       { ...getMockRequestHandlerExtra(), getExecutor },
@@ -2060,7 +2060,7 @@ describe('applyWorksheetTool', () => {
         session: '12345',
         artifactId: 'artifact-1',
         templatePlan: undefined,
-        worksheetName: undefined,
+        worksheet: undefined,
         worksheetFile: undefined,
       },
       {
@@ -2134,7 +2134,7 @@ async function getArtifactToolResult(
   store: TemplateArtifactStore,
   artifactId: string,
   session: string,
-  worksheetName?: string,
+  worksheet?: string,
   customSignal?: AbortSignal,
 ): Promise<CallToolResult> {
   const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
@@ -2144,7 +2144,7 @@ async function getArtifactToolResult(
       session,
       artifactId,
       templatePlan: undefined,
-      worksheetName,
+      worksheet,
       worksheetFile: undefined,
     },
     {
@@ -2256,14 +2256,14 @@ async function getDirectTemplateToolResult({
   getExecutor,
   store,
   plan = directTemplatePlan(),
-  worksheetName,
+  worksheet,
   customSignal,
 }: {
   buildArtifact?: ReturnType<typeof vi.fn>;
   getExecutor: TableauDesktopToolContext['getExecutor'];
   store?: TemplateArtifactStore;
   plan?: WorksheetTemplatePlan;
-  worksheetName?: string;
+  worksheet?: string;
   customSignal?: AbortSignal;
 }): Promise<CallToolResult> {
   const tool = (getApplyWorksheetTool as any)(new DesktopMcpServer(), {
@@ -2277,7 +2277,7 @@ async function getDirectTemplateToolResult({
       session: '12345',
       artifactId: undefined,
       templatePlan: plan,
-      worksheetName,
+      worksheet,
       worksheetFile: undefined,
     },
     {
@@ -2353,7 +2353,7 @@ async function useRealTemplateReads(): Promise<void> {
 
 async function getToolResult({
   session,
-  worksheetName,
+  worksheet,
   worksheetFile,
   worksheetXml,
   mockExecutor,
@@ -2361,7 +2361,7 @@ async function getToolResult({
   configOverrides,
 }: {
   session: string;
-  worksheetName?: string;
+  worksheet?: string;
   worksheetFile?: string;
   worksheetXml?: string;
   mockExecutor: TableauDesktopToolContext['getExecutor'];
@@ -2387,7 +2387,7 @@ async function getToolResult({
   extra.config = { ...extra.config, ...configOverrides };
 
   return await callback(
-    { session, artifactId: undefined, templatePlan: undefined, worksheetName, worksheetFile },
+    { session, artifactId: undefined, templatePlan: undefined, worksheet, worksheetFile },
     extra,
   );
 }

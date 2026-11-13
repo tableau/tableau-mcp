@@ -99,7 +99,7 @@ describe('addFieldTool', () => {
     expect(tool.description).not.toContain('when no template binds');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
       worksheetFile: expect.any(Object),
       target: expect.any(Object),
       columnRef: expect.any(Object),
@@ -265,7 +265,7 @@ describe('addFieldTool', () => {
     const result = await callback(
       {
         session: SESSION,
-        worksheetName: undefined,
+        worksheet: undefined,
         worksheetFile: WORKSHEET_FILE,
         target: 'rows',
         columnRef: COLUMN_REF,
@@ -295,7 +295,7 @@ describe('addFieldTool', () => {
     vi.mocked(writeFileSync).mockReturnValue(undefined);
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -325,7 +325,7 @@ describe('addFieldTool', () => {
     // "Ghost" is not in the mocked worksheet list, so the stable-id resolve fails and the
     // edit stops there — it never falls back to keying the buffer on the raw name.
     const result = await getResult({
-      worksheetName: 'Ghost',
+      worksheet: 'Ghost',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -348,7 +348,7 @@ describe('addFieldTool', () => {
     );
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -376,7 +376,7 @@ describe('addFieldTool', () => {
     vi.mocked(getWorksheetXmlModule.isRouteMissing).mockReturnValue(true);
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -389,14 +389,14 @@ describe('addFieldTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('errors when neither worksheetName nor worksheetFile is provided', async () => {
+  it('errors when neither worksheet nor worksheetFile is provided', async () => {
     const result = await getResult({ target: 'rows', columnRef: COLUMN_REF });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       new ArgsValidationError(
-        'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
+        'Provide either worksheet (to edit an existing sheet) or worksheetFile (a cached path).',
       ).message,
     );
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
@@ -419,7 +419,7 @@ describe('addFieldTool', () => {
     vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
 
     const first = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -428,7 +428,7 @@ describe('addFieldTool', () => {
     const firstBody = resultSchema.parse(JSON.parse(first.content[0].text));
 
     const second = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -463,14 +463,14 @@ describe('addFieldTool', () => {
     } as never);
 
     const first = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
     expect(first.isError).toBe(false);
 
     const second = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -492,7 +492,7 @@ describe('addFieldTool', () => {
 
     // First call names the sheet AND supplies the file explicitly — the override case.
     const explicit = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: WORKSHEET_FILE,
       target: 'rows',
       columnRef: COLUMN_REF,
@@ -501,7 +501,7 @@ describe('addFieldTool', () => {
 
     // A later name-only call continues from that same file without any fetch.
     const nameOnly = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -511,14 +511,14 @@ describe('addFieldTool', () => {
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('prefers worksheetFile over worksheetName when both are given (no fetch)', async () => {
+  it('prefers worksheetFile over worksheet when both are given (no fetch)', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: WORKSHEET_FILE,
       target: 'rows',
       columnRef: COLUMN_REF,
@@ -851,7 +851,7 @@ describe('addFieldTool', () => {
 });
 
 async function getResult(params: {
-  worksheetName?: string;
+  worksheet?: string;
   worksheetFile?: string;
   target: Target;
   columnRef: string;
@@ -860,13 +860,12 @@ async function getResult(params: {
   workbookFile?: string;
   session?: string;
 }): Promise<CallToolResult> {
-  const { worksheetName, worksheetFile, target, columnRef, encodingType, index, workbookFile } =
-    params;
+  const { worksheet, worksheetFile, target, columnRef, encodingType, index, workbookFile } = params;
   const session = ('session' in params ? params.session : SESSION) as string;
   const tool = getAddFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session, worksheetName, worksheetFile, target, columnRef, encodingType, index, workbookFile },
+    { session, worksheet, worksheetFile, target, columnRef, encodingType, index, workbookFile },
     getMockRequestHandlerExtra(),
   );
 }

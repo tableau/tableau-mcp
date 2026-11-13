@@ -468,6 +468,26 @@ describe('resolveLiveWorksheetNames', () => {
     expect(resolveLiveWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
   });
 
+  it('resolves a worksheet id to its canonical name before trying names', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="Sales"><table><rows>Sales</rows></table><simple-id uuid="{WS-0001}"/></worksheet>
+    <worksheet name="{WS-0001}"><table><rows>Decoy</rows></table><simple-id uuid="{WS-0002}"/></worksheet>
+  </worksheets>
+  <windows>
+    <window class="worksheet" name="Sales"/>
+    <window class="worksheet" name="{WS-0001}"/>
+  </windows>
+</workbook>`;
+
+    expect(resolveLiveWorksheetNames(workbookXml, ['{WS-0001}', 'Sales', '{WS-9999}'])).toEqual([
+      'Sales',
+      'Sales',
+      undefined,
+    ]);
+  });
+
   it('resolves worksheet names that differ only by one level of entity escaping independently', () => {
     expect(resolveLiveWorksheetNames(WITH_ENTITY_DISTINCT_NAMES, ['A & B', 'A &amp; B'])).toEqual([
       'A & B',

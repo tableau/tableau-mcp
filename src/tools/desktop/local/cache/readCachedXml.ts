@@ -10,11 +10,7 @@ import {
   FileReadError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import {
-  artifactNameParam,
-  deprecatedArtifactAliasParam,
-  resolveArtifactNameArg,
-} from '../../params.js';
+import { artifactNameParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import {
   CONTAINED_CACHE_READ_ISSUE,
@@ -26,10 +22,8 @@ import {
 
 const paramsSchema = {
   filePath: z.string(),
-  worksheetName: artifactNameParam('worksheet', { plainName: true }).optional(),
-  worksheet: deprecatedArtifactAliasParam('worksheet'),
-  dashboardName: artifactNameParam('dashboard', { plainName: true }).optional(),
-  dashboard: deprecatedArtifactAliasParam('dashboard'),
+  worksheet: artifactNameParam('worksheet', { plainName: true }).optional(),
+  dashboard: artifactNameParam('dashboard', { plainName: true }).optional(),
   startByte: z.number().int().min(0).optional(),
   endByte: z.number().int().min(0).optional(),
 };
@@ -51,29 +45,15 @@ export const getReadCachedXmlTool = (
       openWorldHint: false,
     },
     callback: async (
-      { filePath, worksheetName, worksheet, dashboardName, dashboard, startByte, endByte },
+      { filePath, worksheet, dashboard, startByte, endByte },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { filePath, worksheetName, worksheet, dashboardName, dashboard, startByte, endByte },
+        args: { filePath, worksheet, dashboard, startByte, endByte },
         callback: async () => {
-          // Both selectors are optional slice keys: both-absent is legal (whole file),
-          // so the resolver only rejects a *Name/alias conflict and coalesces the keys.
-          const worksheetArg = resolveArtifactNameArg('worksheet', worksheetName, worksheet, {
-            allowMissing: true,
-          });
-          if (worksheetArg.isErr()) {
-            return worksheetArg;
-          }
-          const dashboardArg = resolveArtifactNameArg('dashboard', dashboardName, dashboard, {
-            allowMissing: true,
-          });
-          if (dashboardArg.isErr()) {
-            return dashboardArg;
-          }
-          const worksheetSelector = worksheetArg.value;
-          const dashboardSelector = dashboardArg.value;
+          const worksheetSelector = worksheet;
+          const dashboardSelector = dashboard;
 
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();

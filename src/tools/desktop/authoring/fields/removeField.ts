@@ -18,7 +18,7 @@ import {
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import { artifactNameParam, sessionParam } from '../../params.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { FieldRemovalPlacement, removeFieldResult } from './removeFieldResult.js';
@@ -40,7 +40,7 @@ const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheetName: z.string().optional().describe('Sheet to edit; or supply worksheetFile.'),
+  worksheet: artifactNameParam('worksheet').optional(),
   worksheetFile: z.string().optional().describe('Cached path; omit to continue edits by name.'),
   target: z.enum(FIELD_TARGETS).describe('Confirmed shelf.'),
   columnRef: z.string().describe('Exact placed reference.'),
@@ -67,12 +67,12 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: false,
     },
     callback: async (
-      { session, worksheetName, worksheetFile, target, columnRef, encodingType },
+      { session, worksheet, worksheetFile, target, columnRef, encodingType },
       extra,
     ): Promise<CallToolResult> => {
       return await removeFieldTool.logAndExecute({
         extra,
-        args: { session, worksheetName, worksheetFile, target, columnRef, encodingType },
+        args: { session, worksheet, worksheetFile, target, columnRef, encodingType },
         callback: async () => {
           if (worksheetFile?.trim()) {
             const checked = checkCacheFileArg(
@@ -90,7 +90,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
           const resolvedSession = sessionResult.value;
 
           const editFile = await resolveWorksheetEditFile({
-            worksheetName,
+            worksheet,
             worksheetFile,
             resolvedSession,
             extra,

@@ -6,7 +6,7 @@ import { WorksheetUnderlyingDataQuery } from '../../../desktop/externalApi/types
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { qualifyColumnFields } from './qualifyColumnField.js';
 
@@ -15,10 +15,8 @@ const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().describe('Worksheet name/id.'),
-  logicalTable: z
-    .string()
-    .describe("A logical table caption or id from the worksheet's logical tables."),
+  worksheet: artifactNameParam('worksheet'),
+  logicalTable: z.string().describe('Logical table caption or id.'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   includeAllColumns: z
     .boolean()

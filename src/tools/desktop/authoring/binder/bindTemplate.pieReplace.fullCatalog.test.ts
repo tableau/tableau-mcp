@@ -140,11 +140,9 @@ describe('bind-template offered sorted-bar replacement on the full template cata
       },
     });
     expect(body).toMatchObject({ applied: true, pie_slice_warning: { rows: 13 } });
-    const m = /call bind-template with ask "([^"]+)" and target_worksheet "([^"]+)"/.exec(
-      body.guidance,
-    );
+    const m = /call bind-template with ask "([^"]+)" and worksheet "([^"]+)"/.exec(body.guidance);
     invariant(m, body.guidance);
-    const bar = await h.call({ ask: m[1], target_worksheet: m[2] });
+    const bar = await h.call({ ask: m[1], worksheet: m[2] });
     expect(bar).toMatchObject({ applied: true, sheet_name: body.sheet_name });
     const sheet = extractSheetXml(h.live(), body.sheet_name);
     expect(sheet).toMatch(/<rows>\[Superstore\]\.\[none:Region:nk\]<\/rows>/);
@@ -170,7 +168,7 @@ describe('bind-template offered sorted-bar replacement on the full template cata
       },
     });
     expect(body).toMatchObject({ applied: true, pie_slice_warning: { rows: 13 } });
-    const offer = /call bind-template with ask "([^"]+)" and target_worksheet "([^"]+)"/.exec(
+    const offer = /call bind-template with ask "([^"]+)" and worksheet "([^"]+)"/.exec(
       body.guidance,
     );
     expect(offer, body.guidance).toBeNull();

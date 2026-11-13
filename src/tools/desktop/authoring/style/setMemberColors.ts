@@ -37,7 +37,7 @@ import { buildBuckets, resolveColorTarget } from './memberColorsTarget.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheetName: artifactNameParam('worksheet'),
+  worksheet: artifactNameParam('worksheet'),
   colors: z
     .array(
       z.object({
@@ -81,10 +81,10 @@ export const getSetMemberColorsTool = (
       destructiveHint: true,
       idempotentHint: true,
     },
-    callback: async ({ session, worksheetName, colors, field }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, worksheet, colors, field }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<SetMemberColorsResult>({
         extra,
-        args: { session, worksheetName, colors, field },
+        args: { session, worksheet, colors, field },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -92,7 +92,11 @@ export const getSetMemberColorsTool = (
           }
           const executor = await extra.getExecutor(sessionResult.value);
 
-          const sheet = await getWorksheetXml({ worksheetName, executor, signal: extra.signal });
+          const sheet = await getWorksheetXml({
+            worksheetName: worksheet,
+            executor,
+            signal: extra.signal,
+          });
           if (sheet.isErr()) {
             const { type, error } = sheet.error;
             if (type === 'get-worksheet-xml-error') {

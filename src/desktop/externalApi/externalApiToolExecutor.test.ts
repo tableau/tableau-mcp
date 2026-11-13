@@ -226,7 +226,7 @@ describe('ExternalApiToolExecutor', () => {
         getFormatDashboardZonesTool(new DesktopMcpServer()).callback,
       );
       const result = await formatter(
-        { session: 'test', dashboardName: 'D', cornerRadius: 10, scope: 'all', zoneIds: undefined },
+        { session: 'test', dashboard: 'D', cornerRadius: 10, scope: 'all', zoneIds: undefined },
         extra,
       );
       expect(result.isError).toBe(true);
