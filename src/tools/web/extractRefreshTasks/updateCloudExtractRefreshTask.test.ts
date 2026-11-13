@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
+import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import {
   ExtractRefreshTask,
@@ -756,6 +757,24 @@ describe('updateCloudExtractRefreshTaskTool', () => {
           binding: scheduleBinding(validSchedule),
         }),
       ).resolves.toBe(true);
+    });
+
+    it('denies the preview once when the evidence store is unavailable', async () => {
+      const establish = vi
+        .spyOn(AppApprovalEvidence.prototype, 'establish')
+        .mockRejectedValue(new EvidenceStoreUnavailableError());
+      try {
+        const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(result.isError).toBe(true);
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+      } finally {
+        establish.mockRestore();
+      }
     });
 
     it('routes confirm:true to the human-gesture panel instead of updating (no model self-confirm)', async () => {

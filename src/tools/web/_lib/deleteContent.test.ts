@@ -2,7 +2,11 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
-import { ContentNotStaleError, StalenessUnverifiedError } from '../../../errors/mcpToolError.js';
+import {
+  ContentNotStaleError,
+  EvidenceStoreUnavailableError,
+  StalenessUnverifiedError,
+} from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -1066,6 +1070,43 @@ describe('deleteContentTool', () => {
       const payload = JSON.parse(result.content[0].text);
       expect(payload.data.kind).toBe('delete-extract-refresh-task-confirm');
       expect(payload.data.taskId).toBe(validTaskId);
+    });
+
+    describe('when the evidence store is unavailable', () => {
+      beforeEach(() => {
+        vi.spyOn(AppApprovalEvidence.prototype, 'establish').mockRejectedValue(
+          new EvidenceStoreUnavailableError(),
+        );
+      });
+      afterEach(() => vi.mocked(AppApprovalEvidence.prototype.establish).mockRestore());
+
+      it.each([
+        ['workbook', 'wb-app', mocks.mockAddTagsToWorkbook],
+        ['datasource', 'ds-app', mocks.mockAddTagsToDatasource],
+        ['extract-refresh-task', validTaskId, null],
+      ] as const)(
+        '%s preview is denied once and writes no tag',
+        async (resourceType, resourceId, addTags) => {
+          const result = await getToolResult({
+            resourceType,
+            resourceId,
+            mcpAppToolsRenderable: true,
+          });
+
+          expect(result.isError).toBe(true);
+          invariant(result.content[0].type === 'text');
+          expect(result.content[0].text).toContain('confirmation store is unavailable');
+          const audits = getAuditRecords();
+          expect(audits).toHaveLength(1);
+          expect(audits[0]).toMatchObject({
+            result: 'denied',
+            denyReason: 'evidence-store-unavailable',
+          });
+          if (addTags) {
+            expect(addTags).not.toHaveBeenCalled();
+          }
+        },
+      );
     });
 
     it('rejects model-driven confirm:true with a PreviewNotRun error (no self-confirm)', async () => {
