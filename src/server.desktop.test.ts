@@ -321,7 +321,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2576], // remeasured after standardizing the calc datasource selector as internal name or unique caption
+    ['bind-template', 2651], // raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
@@ -464,11 +464,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 87-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 89-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(87);
+      expect(selected).toHaveLength(89);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -540,6 +540,8 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'refresh-dashboard-auto-updates',
         'refresh-storyboard-auto-updates',
         'reload-extensions',
+        'get-workspace-extensions',
+        'reload-workspace-extension',
         'refresh-datasource-data',
         'refresh-datasource-extract',
         'get-workbook-xml',
@@ -819,6 +821,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
     expect(floors.get('close-workbook')).toBe('0.2.32');
+    expect(floors.get('get-workspace-extensions')).toBe('0.2.34');
+    expect(floors.get('reload-workspace-extension')).toBe('0.2.34');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');

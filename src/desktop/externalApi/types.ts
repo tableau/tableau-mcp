@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.32), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.34), derived from
  * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
@@ -16,6 +16,8 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appExtensions: '/v0/app/extensions',
+  appExtensionReload: '/v0/app/extensions/{id}:reload',
   appScreenshot: '/v0/app/screenshot',
   appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
@@ -272,6 +274,10 @@ function seg(raw: string): string {
   } catch {
     throw new ExternalApiRouteError('Refused a malformed path segment in an External API route.');
   }
+}
+
+export function appExtensionReloadRoute(extensionId: string): string {
+  return `${EXTERNAL_API_ROUTES.appExtensions}/${seg(extensionId)}:reload`;
 }
 
 export function worksheetRoute(worksheetId: string): string {
@@ -630,6 +636,7 @@ export const PROBLEM_CODES = [
   'not-found',
   'datasource-not-found',
   'sheet-not-found',
+  'workspace-extension-not-found',
   'logical-table-not-found',
   'operation-not-found',
   'operation-pending',
@@ -1147,6 +1154,24 @@ export const workbookExtensionListSchema = z
   })
   .passthrough();
 export type WorkbookExtensionList = z.infer<typeof workbookExtensionListSchema>;
+
+export const workspaceExtensionSchema = z
+  .object({
+    id: z.string(),
+    extensionKey: workbookExtensionKeySchema,
+    name: z.string(),
+    author: z.string(),
+    isEnabled: z.boolean(),
+  })
+  .passthrough();
+
+/** User-installed workspace extensions, from `GET /v0/app/extensions`. */
+export const workspaceExtensionListSchema = z
+  .object({
+    extensions: z.array(workspaceExtensionSchema),
+  })
+  .passthrough();
+export type WorkspaceExtensionList = z.infer<typeof workspaceExtensionListSchema>;
 
 /** Tabular data returned by the summary-data and logical-table data reads. */
 export const dataTableSchema = z

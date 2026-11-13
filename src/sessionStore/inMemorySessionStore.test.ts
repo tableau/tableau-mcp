@@ -47,36 +47,62 @@ describe('InMemorySessionStore', () => {
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
-  it('compareAndDelete preserves a different value and removes a matching value once', async () => {
-    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
-    await store.set('key', 'new-preview');
+  it.each([0, -100])('preserves a one-millisecond lifetime for TTL %i', async (ttlMs) => {
+    const store = new InMemorySessionStore<string>({ ttlMs });
+    await store.set('key', 'value');
+    await expect(store.get('key')).resolves.toBe('value');
 
-    await expect(store.compareAndDelete('key', 'old-preview')).resolves.toBe(false);
-    await expect(store.get('key')).resolves.toBe('new-preview');
-    await expect(store.compareAndDelete('key', 'new-preview')).resolves.toBe(true);
-    await expect(store.compareAndDelete('key', 'new-preview')).resolves.toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
-  it('compareAndDelete lets only one concurrent caller remove a matching value', async () => {
-    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
-    await store.set('key', 'preview');
+  it('supports the maximum timer TTL and resets expiry on overwrite', async () => {
+    const ttlMs = 2 ** 31 - 1;
+    const store = new InMemorySessionStore<string>({ ttlMs });
+    await store.set('key', 'original');
 
-    const results = await Promise.all([
-      store.compareAndDelete('key', 'preview'),
-      store.compareAndDelete('key', 'preview'),
-    ]);
-    expect(results).toEqual([true, false]);
+    await vi.advanceTimersByTimeAsync(ttlMs - 1);
+    await expect(store.get('key')).resolves.toBe('original');
+    await store.set('key', 'updated');
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(store.get('key')).resolves.toBe('updated');
+
+    await vi.advanceTimersByTimeAsync(ttlMs - 1);
+    await expect(store.get('key')).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('a mismatched compareAndDelete preserves the expiry timer', async () => {
-    const store = new InMemorySessionStore<string>({ ttlMs: 1000 });
-    await store.set('key', 'preview');
+  it.each([
+    undefined,
+    {},
+    { ttlMs: undefined },
+    { ttlMs: NaN },
+    { ttlMs: Infinity },
+    { ttlMs: '1000' },
+  ])('rejects missing or invalid TTL options: %j', (options) => {
+    expect(() => Reflect.construct(InMemorySessionStore, [options])).toThrow(
+      'ttlMs must be a finite number.',
+    );
+  });
 
-    await expect(store.compareAndDelete('key', 'other')).resolves.toBe(false);
-    vi.advanceTimersByTime(1000);
-    await expect(store.compareAndDelete('key', 'preview')).resolves.toBe(false);
-    await expect(store.get('key')).resolves.toBeUndefined();
+  it('bounds values and supports overwrites and explicit deletion', async () => {
+    const store = new InMemorySessionStore<string>({ ttlMs: 1000, maxSize: 2 });
+    await store.set('a', 'first');
+    await store.set('a', 'updated');
+    await store.set('b', 'second');
+    await expect(store.get('a')).resolves.toBe('updated');
+    await store.set('c', 'third');
+    await expect(store.get('a')).resolves.toBeUndefined();
+    await expect(store.get('b')).resolves.toBe('second');
+    await store.delete('c');
+    await expect(store.get('c')).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('rejects a non-positive size bound', () => {
+    expect(() => new InMemorySessionStore({ ttlMs: 1000, maxSize: 0 })).toThrow(
+      'Max size must be greater than 0',
+    );
   });
 
   it('evicts the oldest key when constructed with maxSize', async () => {

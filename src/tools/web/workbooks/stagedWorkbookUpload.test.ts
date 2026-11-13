@@ -45,6 +45,7 @@ describe('requestStagedWorkbookUpload', () => {
   it('returns a presigned PUT URL and workbook upload id', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
+      fileSizeBytes: 482133,
       config,
       tenant,
     });
@@ -53,7 +54,7 @@ describe('requestStagedWorkbookUpload', () => {
       uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-      requiredHeaders: { 'Content-Type': 'application/xml' },
+      requiredHeaders: { 'Content-Type': 'application/xml', 'Content-Length': '482133' },
     });
     expect(result.workbookUploadId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -61,6 +62,7 @@ describe('requestStagedWorkbookUpload', () => {
     expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
       key: `mcp/workbook-uploads/${tenantPrefix}/${result.workbookUploadId}/workbook.twb`,
       contentType: 'application/xml',
+      contentLength: 482133,
       bucket: 'tableau-workbooks',
       region: 'us-east-1',
       presignTtlSeconds: 300,
@@ -70,16 +72,18 @@ describe('requestStagedWorkbookUpload', () => {
   it('returns an octet-stream content type for TWBX filenames', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twbx',
+      fileSizeBytes: 482133,
       config,
       tenant,
     });
 
     expect(result).toMatchObject({
-      requiredHeaders: { 'Content-Type': 'application/octet-stream' },
+      requiredHeaders: { 'Content-Type': 'application/octet-stream', 'Content-Length': '482133' },
     });
     expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
       key: `mcp/workbook-uploads/${tenantPrefix}/${result.workbookUploadId}/workbook.twbx`,
       contentType: 'application/octet-stream',
+      contentLength: 482133,
       bucket: 'tableau-workbooks',
       region: 'us-east-1',
       presignTtlSeconds: 300,
@@ -90,6 +94,7 @@ describe('requestStagedWorkbookUpload', () => {
     await expect(
       requestStagedWorkbookUpload({
         fileName: 'workbook.xml',
+        fileSizeBytes: 482133,
         config,
         tenant,
       }),
@@ -100,6 +105,7 @@ describe('requestStagedWorkbookUpload', () => {
     await expect(
       requestStagedWorkbookUpload({
         fileName: 'workbook.twb',
+        fileSizeBytes: 482133,
         config,
         tenant: { siteLuid: '../other-site', userLuid: MOCK_USER_LUID },
       }),
@@ -120,6 +126,7 @@ describe('resolveStagedWorkbookUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.twb`,
       bytes: Buffer.from('<workbook />'),
+      stagedKey: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
     });
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledWith({
       key: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
@@ -139,6 +146,7 @@ describe('resolveStagedWorkbookUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
       bytes: Buffer.from('PK\x03\x04'),
+      stagedKey: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`,
     });
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(1, {
       key: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
@@ -159,7 +167,9 @@ describe('resolveStagedWorkbookUpload', () => {
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config, tenant }),
-    ).rejects.toThrow('Workbook upload not found. Upload the workbook bytes before publishing.');
+    ).rejects.toThrow(
+      'Workbook upload not found: it was never uploaded, has expired, or was deleted after prior publish. Check whether the workbook already exists before requesting a new upload.',
+    );
   });
 
   it.each([
