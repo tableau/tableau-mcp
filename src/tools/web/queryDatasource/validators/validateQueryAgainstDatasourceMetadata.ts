@@ -76,10 +76,6 @@ export function validateFieldsAgainstDatasourceMetadata(
   interpretFieldCaptionsAsFieldNames = false,
 ): void {
   for (const field of fields) {
-    if (isTableCalcField(field)) {
-      continue;
-    }
-
     // Validate bin fields.
     if ('binSize' in field) {
       // The bin size property is only for new bin fields created as part of the query, it can not be used to override preexisting bin fields.
@@ -99,7 +95,11 @@ export function validateFieldsAgainstDatasourceMetadata(
 
       // In order to create a new bin field, the query must also have the corresponding measure field.
       const measureField = fields.find(
-        (f) => f.fieldCaption === field.fieldCaption && 'function' in f && f.function,
+        (f) =>
+          f.fieldCaption === field.fieldCaption &&
+          !isTableCalcField(f) &&
+          'function' in f &&
+          f.function,
       );
 
       if (!measureField) {
@@ -143,7 +143,8 @@ export function validateFieldsAgainstDatasourceMetadata(
     }
 
     // For measure fields, validate that the function applied is valid given the field's data type.
-    if ('function' in field) {
+    // A table calc on a datasource table calc field has no function.
+    if ('function' in field && field.function) {
       switch (matchingField.dataType) {
         case 'INTEGER':
         case 'REAL':

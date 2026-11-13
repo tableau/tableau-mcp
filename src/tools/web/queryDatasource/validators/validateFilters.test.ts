@@ -426,3 +426,56 @@ describe('validateFilters with restrictConditionFilters', () => {
     expect(() => validateFilters([conditionFilter], rulesNoRestrictions)).not.toThrow();
   });
 });
+
+describe('validateFilters with CONDITION filters', () => {
+  const field = { fieldCaption: 'Customer Name' };
+  const condition = {
+    fieldCaption: 'Sales',
+    function: 'SUM' as const,
+    comparison: '>' as const,
+    value: 1000,
+  };
+
+  it('allows the condition form', () => {
+    expect(() =>
+      validateFilters([{ field, filterType: 'CONDITION', condition }], rulesNoRestrictions),
+    ).not.toThrow();
+  });
+
+  it('allows the calculation form', () => {
+    expect(() =>
+      validateFilters(
+        [{ field, filterType: 'CONDITION', calculation: 'SUM([Sales]) > 1000' }],
+        rulesNoRestrictions,
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a CONDITION filter with both forms', () => {
+    expect(() =>
+      validateFilters(
+        [{ field, filterType: 'CONDITION', condition, calculation: 'SUM([Sales]) > 1000' }],
+        rulesNoRestrictions,
+      ),
+    ).toThrow(
+      'The query must not include CONDITION filters that have both or neither of the condition and calculation properties. Provide exactly one. The following CONDITION filters are invalid: "Customer Name".',
+    );
+  });
+
+  it('rejects a CONDITION filter with neither form and labels a calculated field', () => {
+    expect(() =>
+      validateFilters(
+        [{ field: { calculation: 'LEFT([Customer Name], 1)' }, filterType: 'CONDITION' }],
+        rulesNoRestrictions,
+      ),
+    ).toThrow(
+      'The following CONDITION filters are invalid: calculation "LEFT([Customer Name], 1)".',
+    );
+  });
+
+  it('treats an empty calculation as missing', () => {
+    expect(() =>
+      validateFilters([{ field, filterType: 'CONDITION', calculation: '' }], rulesNoRestrictions),
+    ).toThrow('The following CONDITION filters are invalid: "Customer Name".');
+  });
+});

@@ -86,6 +86,24 @@ export function validateFields(fields: Field[], rules: ToolRules): void {
   }
 
   {
+    // VDS returns an opaque schema mismatch error for a quick table calc on a calculation.
+    const nonCustomCalculations = fields
+      .filter(
+        (field) =>
+          isTableCalcField(field) &&
+          field.calculation &&
+          field.tableCalculation.tableCalcType !== 'CUSTOM',
+      )
+      .map((field) => field.fieldCaption);
+
+    if (nonCustomCalculations.length > 0) {
+      throw new Error(
+        `The query must not include table calculation fields that have a calculation and a tableCalcType other than CUSTOM. With a calculation, use tableCalcType CUSTOM and write the table calculation function in the calculation, for example RANK(SUM([Sales])). The following fields are invalid: ${nonCustomCalculations.join(', ')}.`,
+      );
+    }
+  }
+
+  {
     // The maxDecimalPlaces value must be greater or equal to 0.
     const fieldsWithNegativeMaxDecimalPlace = fields
       .filter(hasNegativeMaxDecimalPlace)

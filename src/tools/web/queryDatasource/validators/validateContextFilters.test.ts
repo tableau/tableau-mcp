@@ -305,4 +305,61 @@ describe('validateContextFilters', () => {
       expect(warnings[0].affectedFilters).toEqual(['State']);
     });
   });
+
+  describe('CONDITION filters', () => {
+    const conditionFilter = {
+      field: { fieldCaption: 'Product Name' },
+      filterType: 'CONDITION' as const,
+      condition: {
+        fieldCaption: 'Sales',
+        function: 'SUM' as const,
+        comparison: '>' as const,
+        value: 1000,
+      },
+    };
+    const setFilter = {
+      field: { fieldCaption: 'State' },
+      filterType: 'SET' as const,
+      values: ['Massachusetts'],
+    };
+
+    it('should warn when a CONDITION filter is combined with a SET filter missing context', () => {
+      const warnings = validateContextFilters({
+        fields: baseFields,
+        filters: [setFilter, conditionFilter],
+      });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0].type).toBe('MISSING_CONTEXT_ON_DIMENSION_FILTER');
+      expect(warnings[0].affectedFilters).toEqual(['State']);
+      expect(warnings[0].message).toContain('CONDITION filter');
+      expect(warnings[0].message).not.toContain('TOP');
+    });
+
+    it('should not flag the CONDITION filter itself', () => {
+      const warnings = validateContextFilters({
+        fields: baseFields,
+        filters: [conditionFilter, { ...topFilter, field: { fieldCaption: 'State' } }],
+      });
+      expect(warnings).toEqual([]);
+    });
+
+    it('should not warn when the dimension filter has context: true', () => {
+      const warnings = validateContextFilters({
+        fields: baseFields,
+        filters: [{ ...setFilter, context: true }, conditionFilter],
+      });
+      expect(warnings).toEqual([]);
+    });
+
+    it('should return one warning per filter kind when TOP and CONDITION are both present', () => {
+      const warnings = validateContextFilters({
+        fields: baseFields,
+        filters: [setFilter, conditionFilter, { ...topFilter, field: { fieldCaption: 'City' } }],
+      });
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0].message).toContain('TOP/BOTTOM filter');
+      expect(warnings[1].message).toContain('CONDITION filter');
+      expect(warnings.map((w) => w.affectedFilters)).toEqual([['State'], ['State']]);
+    });
+  });
 });

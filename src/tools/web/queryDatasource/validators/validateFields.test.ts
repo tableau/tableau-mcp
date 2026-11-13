@@ -144,3 +144,75 @@ describe('validateFields with restrictTableCalculations', () => {
     expect(() => validateFields([{ fieldCaption: 'Category' }, rank], {})).not.toThrow();
   });
 });
+
+describe('validateFields with table calc fields', () => {
+  const dimensions = [{ fieldCaption: 'Category' }];
+
+  it('rejects a table calc with a calculation and a quick tableCalcType', () => {
+    expect(() =>
+      validateFields(
+        [
+          { fieldCaption: 'Category' },
+          {
+            fieldCaption: 'Margin Rank',
+            calculation: 'SUM([Profit]) / SUM([Sales])',
+            tableCalculation: { tableCalcType: 'RANK', dimensions },
+          },
+        ],
+        {},
+      ),
+    ).toThrow(
+      'The query must not include table calculation fields that have a calculation and a tableCalcType other than CUSTOM. With a calculation, use tableCalcType CUSTOM and write the table calculation function in the calculation, for example RANK(SUM([Sales])). The following fields are invalid: Margin Rank.',
+    );
+  });
+
+  it('allows a CUSTOM table calc with a calculation', () => {
+    expect(() =>
+      validateFields(
+        [
+          { fieldCaption: 'Category' },
+          {
+            fieldCaption: 'Sales Rank',
+            calculation: 'RANK(SUM([Sales]))',
+            tableCalculation: { tableCalcType: 'CUSTOM', dimensions },
+          },
+        ],
+        {},
+      ),
+    ).not.toThrow();
+  });
+
+  it('allows a quick table calc on a fieldCaption and function', () => {
+    expect(() =>
+      validateFields(
+        [
+          { fieldCaption: 'Category' },
+          {
+            fieldCaption: 'Sales',
+            function: 'SUM',
+            tableCalculation: { tableCalcType: 'RANK', dimensions },
+          },
+        ],
+        {},
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a table calc with both a function and a calculation', () => {
+    expect(() =>
+      validateFields(
+        [
+          {
+            fieldCaption: 'Sales Rank',
+            function: 'SUM',
+            calculation: 'RANK(SUM([Sales]))',
+            tableCalculation: { tableCalcType: 'CUSTOM', dimensions },
+          },
+        ],
+        {},
+      ),
+    ).toThrow(
+      'The query must not include fields that contain both a function and a calculation. The following fields contain both a function and a calculation: Sales Rank.',
+    );
+  });
+});
