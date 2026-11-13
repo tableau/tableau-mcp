@@ -142,9 +142,10 @@ export function listAvailableFieldsFromWorkbook(
         ? normalizeLogicalTableId(logicalTableObjects[0]?.['@_id'])
         : undefined;
 
-    if (datasource.connection?.['metadata-records']) {
-      const records = normalizeArray(datasource.connection['metadata-records']['metadata-record']);
-      for (const record of records) {
+    const collectApproxCounts = (connection: any, overwrite: boolean): void => {
+      const metadataRecords = connection?.['metadata-records'];
+      if (!metadataRecords) return;
+      for (const record of normalizeArray(metadataRecords['metadata-record']) as any[]) {
         if (record['@_class'] !== 'column') continue;
         const localName = record['local-name'];
         const raw = typeof record['approx-count'] === 'string' ? record['approx-count'] : undefined;
@@ -152,7 +153,19 @@ export function listAvailableFieldsFromWorkbook(
         const count = Number(raw.trim());
         if (!Number.isInteger(count) || count < 0) continue;
         const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
-        approxCountByName.set(bracketedName, count);
+        if (overwrite || !approxCountByName.has(bracketedName)) {
+          approxCountByName.set(bracketedName, count);
+        }
+      }
+    };
+
+    collectApproxCounts(datasource.connection, true);
+    // Extract workbooks only carry approx-count under <extract><connection>; counts only, never
+    // table/column metadata (extract parent-names are hashed).
+    for (const extract of normalizeArray(getEnabledFormatElement(datasource, 'extract')) as any[]) {
+      if (extract?.['@_enabled'] === 'false') continue;
+      for (const connection of normalizeArray(extract?.connection) as any[]) {
+        collectApproxCounts(connection, false);
       }
     }
 
