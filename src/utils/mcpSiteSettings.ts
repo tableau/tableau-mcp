@@ -1,4 +1,5 @@
 import { Config, getConfig } from '../config.js';
+import { McpSiteSettingsForbiddenError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import {
   getOverridableConfig,
@@ -85,6 +86,9 @@ async function getMcpSiteSettings({
     }
   } catch (error) {
     if (isAxiosError(error)) {
+      if (tableauAuthInfo?.type === 'ServerEas' && error.response?.status === 401) {
+        throw new McpSiteSettingsForbiddenError();
+      }
       if (error.response?.status === 500) {
         throw new Error(
           'Internal Server Error: The MCP settings are in a bad state and need to be overwritten.',

@@ -709,3 +709,35 @@ describe('restApiInstance', () => {
     });
   });
 });
+
+it('reuses full EAS request credentials without signing in or signing out inside the tool', async () => {
+  vi.stubEnv('AUTH', 'server-eas');
+  vi.stubEnv('PAT_NAME', '');
+  vi.stubEnv('PAT_VALUE', '');
+  const restApi = await useRestApi({
+    config: getConfig(),
+    requestId: 'eas-request',
+    server: new WebMcpServer(),
+    tableauAuthInfo: {
+      type: 'ServerEas',
+      server: 'https://my-tableau-server.com',
+      siteName: 'tc25',
+      username: 'viewer',
+      userId: 'verified-user',
+      siteId: 'verified-site',
+      accessToken: 'opaque-session',
+    },
+    jwtScopes: [],
+    signal: new AbortController().signal,
+    getSiteLuid: () => 'verified-site',
+    getUserLuid: () => 'verified-user',
+    callback: async (api) => api,
+  });
+  expect(restApi.setCredentials).toHaveBeenCalledWith({
+    token: 'opaque-session',
+    site: { id: 'verified-site' },
+    user: { id: 'verified-user' },
+  });
+  expect(restApi.signIn).not.toHaveBeenCalled();
+  expect(restApi.signOut).not.toHaveBeenCalled();
+});
