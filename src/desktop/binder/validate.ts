@@ -116,11 +116,34 @@ export type EscalateReason =
   // the general authoring flow rather than risk a silent wrong bind.
   | 'schema-too-large';
 
+export function pieSliceGateDetail(blockers: readonly Blocker[]): string | undefined {
+  return blockers.find((b) => b.pie_slice_gate === true)?.detail;
+}
+
+/** The internal datasource name of the pie slice field the gate blocked on. */
+export function pieSliceGateDatasource(blockers: readonly Blocker[]): string | undefined {
+  return blockers.find((b) => b.pie_slice_gate === true)?.datasource;
+}
+
+/** True when the too-many-slices pie gate is the ONLY blocker, so user confirmation can lift it. */
+export function onlyPieSliceGate(blockers: readonly Blocker[]): boolean {
+  return blockers.length > 0 && blockers.every((b) => b.pie_slice_gate === true);
+}
+
+export const PIE_TEMPLATE_NAME = 'part-to-whole-pie-chart';
+
+export const KEEP_LARGE_PIE_HINT =
+  'Only if the user explicitly says they want the pie anyway, send the pie proposal; the tool blocks it once and says how to keep it (keep_large_pie:true on the same proposal). Never set keep_large_pie without the user saying so';
+
 export interface Blocker {
   code: EscalateReason | BlockerCode;
   slot_id?: string;
   detail: string;
   candidates?: string[];
+  /** Marks the too-many-slices pie blocker so callers can steer to a sorted bar. */
+  pie_slice_gate?: true;
+  /** Internal datasource name of the pie slice field; ties a keep_large_pie grant to its source. */
+  datasource?: string;
 }
 
 export type ValidateResult =
@@ -129,6 +152,8 @@ export type ValidateResult =
       datasource: string;
       field_mapping: Record<string, string>;
       warnings?: string[];
+      /** Legibility hints (cardinality). Visible to the agent; never gate coverage or completion. */
+      advisories?: string[];
       /** temporal_axis_from_string: the apply-side DATEPARSE splice spec, when a temporal
        * slot accepted a date-like string source (undefined for every normal bind). */
       dateparse_axis?: DateparseAxisSpec;
@@ -469,6 +494,7 @@ export function validateBinding(
   p: BindingProposal,
   s: SchemaSummary,
   ask?: string,
+  opts?: { allowLargePie?: boolean },
 ): ValidateResult {
   const blockers: Blocker[] = [];
   const resolutionNotes: string[] = [];
@@ -801,18 +827,25 @@ export function validateBinding(
 
   // Chart-specific structural invariants belong in this shared validation seam so
   // Call 1, Call 2, and the eval-only injected proposal path cannot disagree.
-  if (m.template === 'part-to-whole-pie-chart') {
+  if (m.template === PIE_TEMPLATE_NAME) {
     const sliceSlot = m.slots.find(
       (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
     );
     const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
-    if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
+    if (
+      opts?.allowLargePie !== true &&
+      slice?.approxCount !== undefined &&
+      slice.approxCount > PIE_SLICE_WORKABLE_MAX
+    ) {
       blockers.push({
         code: 'kind-mismatch',
+        pie_slice_gate: true,
+        datasource: slice.datasource,
         slot_id: sliceSlot?.slot_id,
         detail:
           `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
-          `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
+          `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; tell the user a pie with ${slice.approxCount} slices ` +
+          `is hard to read and offer a sorted bar of "${slice.name}" (template ranking-ordered-bar)`,
       });
     }
     if (ask && /\bdonut\b/i.test(ask)) {
@@ -1228,6 +1261,9 @@ export function validateBinding(
   // warning rides along so the caller sees the anti-pattern it chose.
   const warnings = [
     ...resolutionNotes,
+    ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),
+  ];
+  const advisories = [
     ...m.slots.flatMap((slot) => {
       const entry = resolved.get(slot.slot_id);
       const effectiveDerivation = entry
@@ -1238,7 +1274,6 @@ export function validateBinding(
       const advice = entry ? cardinalityAdvice(slot, entry.field, effectiveDerivation) : undefined;
       return advice ? [advice] : [];
     }),
-    ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),
   ];
   // The datasource is workbook-controlled and flows verbatim into {{DATASOURCE}} (an XML
   // attribute), so escape it here at production alongside the field_mapping values —
@@ -1256,5 +1291,9 @@ export function validateBinding(
     ...(optionalFieldPrunes.length > 0 ? { optional_field_prunes: optionalFieldPrunes } : {}),
   };
   const withAxis = dateparseAxis ? { ...base, dateparse_axis: dateparseAxis } : base;
-  return warnings.length > 0 ? { ...withAxis, warnings } : withAxis;
+  return {
+    ...withAxis,
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(advisories.length > 0 ? { advisories } : {}),
+  };
 }
