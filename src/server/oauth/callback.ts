@@ -61,9 +61,13 @@ export function callback(
     try {
       // Parse state to get auth key and Tableau state
       const [authKey, tableauState] = state?.split(':') ?? [];
-      const pendingAuth = await pendingAuthorizations.get(authKey);
+      const pendingAuth = await pendingAuthorizations.consume(authKey);
 
-      if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
+      if (
+        !pendingAuth ||
+        pendingAuth.tableauState !== tableauState ||
+        pendingAuth.expiresAt < Math.floor(Date.now() / 1000)
+      ) {
         res.status(400).json({
           error: 'invalid_request',
           error_description: 'Invalid state parameter',
@@ -169,9 +173,6 @@ export function callback(
         siteContentUrl: sessionResult.value.site.contentUrl ?? '',
         expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
       });
-
-      // Clean up
-      await pendingAuthorizations.delete(authKey);
 
       // Redirect back to client with authorization code
       const redirectUrl = new URL(pendingAuth.redirectUri);
