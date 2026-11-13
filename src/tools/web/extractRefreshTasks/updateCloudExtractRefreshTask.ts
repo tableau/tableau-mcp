@@ -19,6 +19,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import {
+  AllEvidence,
   AppApprovalEvidence,
   getMutationPreviewTtlMs,
   RegistryEvidence,
@@ -232,7 +233,14 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                 action: 'update',
                 mode: 'preview-confirm',
                 phase: args.confirm ? 'confirm' : 'preview',
-                evidence,
+                // Flag ON: also record the schedule-bound approval the confirm panel's tool verifies.
+                evidence:
+                  mcpAppsEnabled && !args.confirm
+                    ? new AllEvidence([
+                        new AppApprovalEvidence('update-cloud-extract-refresh-task'),
+                        evidence,
+                      ])
+                    : evidence,
                 resolveTarget,
                 confirmationToken: args.confirmationToken,
                 binding,
@@ -251,24 +259,9 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                   ? ` (${frequencyDetails.start}–${frequencyDetails.end})`
                   : ` (start ${frequencyDetails.start})`;
 
-                // Flag ON: ALSO record a single-use, TTL-bounded human-approval window and return an
-                // AppToolResult so the host renders the in-iframe confirm panel describing the schedule
-                // change. The change is then applied by the model-invisible
-                // confirm-update-cloud-extract-refresh-task tool — the approval recorded here is what its
-                // AppApprovalEvidence verifies. No secret is transported; approval is presence-based,
-                // keyed server-side by site+user+task.
+                // Flag ON: the guard also recorded the approval that the model-invisible
+                // confirm-update-cloud-extract-refresh-task verifies. Return the confirm panel.
                 if (mcpAppsEnabled) {
-                  await new AppApprovalEvidence('update-cloud-extract-refresh-task').establish({
-                    restApi,
-                    siteId: restApi.siteId,
-                    target: { id: args.taskId, kind: 'extract-refresh-task' },
-                    tool: 'confirm-update-cloud-extract-refresh-task',
-                    userLuid: extra.getUserLuid(),
-                    // Bind the approval to the previewed schedule so the confirm can only apply THIS
-                    // schedule — an approval minted here will not satisfy a confirm carrying a
-                    // different schedule (see AppApprovalEvidence.approvalKey).
-                    binding,
-                  });
                   const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
                   return new Ok<AppToolResult<UpdateCloudExtractRefreshTaskConfirmPanel>>({
                     data: {

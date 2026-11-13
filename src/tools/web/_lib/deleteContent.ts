@@ -32,7 +32,9 @@ import { AppToolResult, WebTool } from '../tool.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 import {
+  AllEvidence,
   AppApprovalEvidence,
+  EvidenceStrategy,
   getMutationPreviewTtlMs,
   RegistryEvidence,
   TagEvidence,
@@ -496,7 +498,7 @@ async function runWorkbookBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: tagEvidence,
+    evidence: withAppApproval(tagEvidence, appRenderable && !confirm),
     resolveTarget,
     fallbackTargetKind: 'workbook',
     precondition: () =>
@@ -531,13 +533,6 @@ async function runWorkbookBranch({
   }
 
   if (appRenderable) {
-    await new AppApprovalEvidence('delete-content').establish({
-      restApi,
-      siteId,
-      target,
-      tool: 'delete-content',
-      userLuid: extra.getUserLuid(),
-    });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
     return new Ok<DeleteContentResult>({
       data: {
@@ -628,7 +623,7 @@ async function runDatasourceBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: tagEvidence,
+    evidence: withAppApproval(tagEvidence, appRenderable && !confirm),
     resolveTarget,
     fallbackTargetKind: 'datasource',
     precondition: () =>
@@ -664,13 +659,6 @@ async function runDatasourceBranch({
   }
 
   if (appRenderable) {
-    await new AppApprovalEvidence('delete-content').establish({
-      restApi,
-      siteId,
-      target,
-      tool: 'delete-content',
-      userLuid: extra.getUserLuid(),
-    });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
     return new Ok<DeleteContentResult>({
       data: {
@@ -765,7 +753,7 @@ async function runExtractRefreshTaskBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: registryEvidence,
+    evidence: withAppApproval(registryEvidence, appRenderable && !confirm),
     resolveTarget,
     ...(confirm ? { confirmationToken } : {}),
     fallbackTargetKind: 'extract-refresh-task',
@@ -790,13 +778,6 @@ async function runExtractRefreshTaskBranch({
   }
 
   if (appRenderable) {
-    await new AppApprovalEvidence('delete-content').establish({
-      restApi,
-      siteId,
-      target: { id: taskId, kind: 'extract-refresh-task' },
-      tool: 'delete-content',
-      userLuid: extra.getUserLuid(),
-    });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
     return new Ok<DeleteContentResult>({
       data: {
@@ -819,6 +800,16 @@ async function runExtractRefreshTaskBranch({
         tail: ' before deleting).',
       }),
   );
+}
+
+// The approval is established first, so a store outage fails the preview before the tag is written.
+function withAppApproval(
+  evidence: EvidenceStrategy<MutationTarget>,
+  recordApproval: boolean,
+): EvidenceStrategy<MutationTarget> {
+  return recordApproval
+    ? new AllEvidence([new AppApprovalEvidence('delete-content'), evidence])
+    : evidence;
 }
 
 /**
