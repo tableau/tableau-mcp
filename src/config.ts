@@ -371,6 +371,9 @@ export class Config extends BaseConfig {
 
     // Generic KV settings take precedence as a pair; legacy session settings remain a fallback.
     const useKeyValueSettings = keyValueStoreProvider !== undefined;
+    if (!useKeyValueSettings && keyValueStoreProviderConfig !== undefined) {
+      throw new Error('KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided');
+    }
     if (useKeyValueSettings && !isKeyValueStoreProvider(keyValueStoreProvider)) {
       throw new Error('KV_STORE_PROVIDER must be "memory" or "custom"');
     }

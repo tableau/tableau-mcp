@@ -16,9 +16,11 @@ KV_STORE_PROVIDER_CONFIG='{"module":"./my-kv-provider.cjs","table":"mcp-state"}'
 be a path relative to the server's working directory, an absolute path, or an installed npm
 package name. All configuration fields are passed to its constructor.
 
-When `KV_STORE_PROVIDER` is set, its settings take precedence as a pair. Otherwise the existing
-`SESSION_STORE_PROVIDER` and `SESSION_STORE_PROVIDER_CONFIG` settings are used. The legacy
-configuration and imports remain supported; callers do not need separate provider systems.
+When `KV_STORE_PROVIDER` is set, its settings take precedence as a pair. Providing
+`KV_STORE_PROVIDER_CONFIG` without `KV_STORE_PROVIDER` fails startup. When both KV settings
+are absent, the existing `SESSION_STORE_PROVIDER` and `SESSION_STORE_PROVIDER_CONFIG`
+settings are used. The legacy configuration and imports remain supported; callers do not
+need separate provider systems.
 
 The legacy `SessionStore` type and session-store lifecycle/factory function names are deprecated
 in favor of the generic storage API. Existing aliases remain available. Server startup calls

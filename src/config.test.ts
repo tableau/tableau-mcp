@@ -1265,7 +1265,7 @@ describe('Config', () => {
       expect(config.sessionStore).toBe(config.keyValueStore);
     });
 
-    it('uses legacy session configuration when the KV provider is unset', () => {
+    it('uses legacy session configuration when both KV settings are unset', () => {
       vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
       vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs","table":"sessions"}');
       const config = new Config();
@@ -1274,6 +1274,24 @@ describe('Config', () => {
         providerConfig: { module: './legacy.cjs', table: 'sessions' },
       });
       expect(config.sessionStore).toBe(config.keyValueStore);
+    });
+
+    it('requires KV_STORE_PROVIDER when KV_STORE_PROVIDER_CONFIG is set', () => {
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"./kv.cjs"}');
+
+      expect(() => new Config()).toThrow(
+        'KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided',
+      );
+    });
+
+    it('requires KV_STORE_PROVIDER when KV_STORE_PROVIDER_CONFIG is set even when legacy storage is configured', () => {
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', '{"module":"./kv.cjs"}');
+      vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+      vi.stubEnv('SESSION_STORE_PROVIDER_CONFIG', '{"module":"./legacy.cjs"}');
+
+      expect(() => new Config()).toThrow(
+        'KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided',
+      );
     });
 
     it('selects KV settings as a pair without parsing obsolete session configuration', () => {
