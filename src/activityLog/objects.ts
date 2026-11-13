@@ -50,6 +50,7 @@ export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> 
   'confirm-update-cloud-extract-refresh-task': idIn('extract-refresh-task', 'taskId'),
   'list-jobs': null,
   'list-users': null,
+  'list-groups': null,
   'list-workbooks': null,
   'request-workbook-upload': null,
   'publish-workbook': null,
