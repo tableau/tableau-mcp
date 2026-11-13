@@ -244,6 +244,22 @@ describe('preview evidence across replicas sharing a custom session store', () =
     );
   });
 
+  it('picks up a new provider after the store and proof stores are reset', async () => {
+    config.sessionStore = { provider: 'memory' };
+    const a = await startReplica();
+    const { resetKeyValueStore } = await import('../../../storage/storageProvider.js');
+    await new a.RegistryEvidence().establish(makeCtx());
+
+    resetKeyValueStore();
+    a.resetPreviewProofStores();
+    config.sessionStore = {
+      provider: 'custom',
+      providerConfig: { module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs' },
+    };
+    await new a.RegistryEvidence().establish(makeCtx());
+    expect(globalThis.__sharedSessionBackend!.size).toBe(1);
+  });
+
   it('stores only hashed keys and an expiry, never the raw nonce or ids', async () => {
     const a = await startReplica();
     const preview = new a.RegistryEvidence();
