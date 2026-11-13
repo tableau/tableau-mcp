@@ -54,12 +54,12 @@ export async function initializeWebRuntime(
 
   // Stateless HTTP is how a server is run behind a load balancer, where a process-local store
   // makes confirms fail whenever they land on a different replica than their preview.
-  if (config.disableSessionManagement && config.sessionStore?.provider === 'memory') {
+  if (config.disableSessionManagement && config.keyValueStore?.provider === 'memory') {
     log({
       message:
-        'DISABLE_SESSION_MANAGEMENT is true but SESSION_STORE_PROVIDER is memory. With more than ' +
+        'DISABLE_SESSION_MANAGEMENT is true but KV_STORE_PROVIDER is memory. With more than ' +
         'one replica, confirming a previewed mutation fails unless it reaches the same process. ' +
-        'Set SESSION_STORE_PROVIDER=custom with a shared store.',
+        'Set KV_STORE_PROVIDER=custom with a store shared by every replica.',
       level: 'warning',
       logger: 'startup',
     });
