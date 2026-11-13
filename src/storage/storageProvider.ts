@@ -6,7 +6,7 @@ import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 import type { KeyValueStore } from './keyValueStore.js';
 
-type NamespaceOptions = { ttlMs?: number; maxSize?: number };
+type NamespaceOptions = { ttlMs: number; maxSize?: number };
 
 // Provider hooks are optional infrastructure concerns, not part of the consumer KV interface.
 // Existing SessionStore providers already use these hooks and remain compatible.
@@ -87,12 +87,15 @@ function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
 /**
  * Create a namespace using the configured backend. Memory instances remain independent;
  * custom providers share one backend with prefixed keys and optional namespace configuration.
- * Omitting ttlMs means no expiration; session callers continue supplying their required TTLs.
+ * Every namespace requires an explicit TTL in milliseconds, matching the legacy session contract.
  */
 export function createNamespacedKeyValueStore<V>(
   namespace: string,
-  options: NamespaceOptions = {},
+  options: NamespaceOptions,
 ): KeyValueStore<V> {
+  if (!Number.isFinite(options?.ttlMs)) {
+    throw new Error('ttlMs must be a finite number.');
+  }
   if (state === null) initializeKeyValueStore();
   if (state!.kind === 'memory') return new InMemoryKeyValueStore<V>(options);
 

@@ -7,27 +7,21 @@ const REFRESH_MARGIN_MS = 60_000;
 const CHUNK_MS = MAX_SIGNED_INT32 - REFRESH_MARGIN_MS;
 
 /**
- * In-memory store backed by a Map, or an ExpiringMap when a TTL is configured.
+ * In-memory store backed by an ExpiringMap with a required TTL.
  *
  * Exposes only the KeyValueStore contract.
  * Used as the default provider: each namespace gets its own isolated instance.
  */
 export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
-  private readonly map: Map<string, V>;
+  private readonly map: ExpiringMap<string, V>;
   private readonly refreshTimers = new Map<string, NodeJS.Timeout>();
-  private readonly ttlMs?: number;
-  private readonly maxSize?: number;
+  private readonly ttlMs: number;
 
-  constructor(options: { ttlMs?: number; maxSize?: number } = {}) {
-    this.ttlMs = options.ttlMs;
-    this.maxSize = options.maxSize;
-    if (options.ttlMs === undefined) {
-      if (options.maxSize !== undefined && options.maxSize <= 0) {
-        throw new Error('Max size must be greater than 0');
-      }
-      this.map = new Map();
-      return;
+  constructor(options: { ttlMs: number; maxSize?: number }) {
+    if (!Number.isFinite(options?.ttlMs)) {
+      throw new Error('ttlMs must be a finite number.');
     }
+    this.ttlMs = options.ttlMs;
     // scheduleSet() always passes an explicit (possibly chunked) expirationTimeMs, so this
     // default is never used. ExpiringMap's constructor rejects defaultExpirationTimeMs <= 0,
     // so a valid non-zero placeholder is needed.
@@ -46,15 +40,7 @@ export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
   }
 
   set(key: string, value: V): Promise<void> {
-    if (this.ttlMs === undefined) {
-      this.map.set(key, value);
-      if (this.maxSize !== undefined && this.map.size > this.maxSize) {
-        const oldestKey = this.map.keys().next().value;
-        if (oldestKey !== undefined) this.map.delete(oldestKey);
-      }
-    } else {
-      this.scheduleSet(key, value, this.ttlMs);
-    }
+    this.scheduleSet(key, value, this.ttlMs);
     return Promise.resolve();
   }
 
@@ -81,9 +67,6 @@ export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
    */
   private scheduleSet(key: string, value: V, ttlMs: number): void {
     const map = this.map;
-    if (!(map instanceof ExpiringMap)) {
-      throw new Error('Cannot schedule expiration without an expiring map');
-    }
     this.clearRefreshTimer(key);
 
     if (ttlMs <= CHUNK_MS) {

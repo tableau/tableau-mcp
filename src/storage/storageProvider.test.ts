@@ -39,14 +39,31 @@ describe('bring-your-own KV storage', () => {
     vi.useRealTimers();
   });
 
-  it('defaults to independent non-expiring memory stores', async () => {
-    const first = createNamespacedKeyValueStore<string>('settings');
-    const second = createNamespacedKeyValueStore<string>('settings');
+  it('creates independent memory stores with the supplied TTL', async () => {
+    const first = createNamespacedKeyValueStore<string>('settings', { ttlMs: 1000 });
+    const second = createNamespacedKeyValueStore<string>('settings', { ttlMs: 1000 });
     await first.set('key', 'value');
-    await vi.advanceTimersByTimeAsync(60 * 24 * 60 * 60 * 1000);
     await expect(first.get('key')).resolves.toBe('value');
     await expect(second.get('key')).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(first.get('key')).resolves.toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  describe.each(['memory', 'custom'] as const)('%s TTL validation', (provider) => {
+    it.each([
+      undefined,
+      {},
+      { ttlMs: undefined },
+      { ttlMs: NaN },
+      { ttlMs: Infinity },
+      { ttlMs: '1000' },
+    ])('rejects missing or invalid TTL options: %j', (options) => {
+      if (provider === 'custom') useCustomProvider({ module: MODULE });
+      expect(() =>
+        Reflect.apply(createNamespacedKeyValueStore, undefined, ['settings', options]),
+      ).toThrow('ttlMs must be a finite number.');
+    });
   });
 
   it('honors an explicit namespace TTL on memory stores', async () => {
@@ -59,7 +76,7 @@ describe('bring-your-own KV storage', () => {
   it.each([MODULE, resolve(MODULE)])('loads a named KV provider from %s', async (module) => {
     useCustomProvider({ module, table: 'test-table' });
     await connectKeyValueStore();
-    const store: KeyValueStore<string> = createNamespacedKeyValueStore('settings');
+    const store: KeyValueStore<string> = createNamespacedKeyValueStore('settings', { ttlMs: 1000 });
     await store.set('key', 'value');
     await expect(store.get('key')).resolves.toBe('value');
     expect(globalThis.__keyValueProviderConfig).toEqual({ module, table: 'test-table' });
@@ -70,7 +87,7 @@ describe('bring-your-own KV storage', () => {
 
   it('shares one custom backend across generic and legacy entry points', async () => {
     useCustomProvider({ module: MODULE });
-    const generic = createNamespacedKeyValueStore<string>('shared');
+    const generic = createNamespacedKeyValueStore<string>('shared', { ttlMs: 1000 });
     const legacy = createNamespacedStore<string>('shared', { ttlMs: 1000 });
     await generic.set('key', 'value');
     await expect(legacy.get('key')).resolves.toBe('value');
@@ -80,8 +97,8 @@ describe('bring-your-own KV storage', () => {
 
   it('isolates namespaces and preserves atomic consumption for custom providers', async () => {
     useCustomProvider({ module: MODULE });
-    const first = createNamespacedKeyValueStore<string>('first');
-    const second = createNamespacedKeyValueStore<string>('second');
+    const first = createNamespacedKeyValueStore<string>('first', { ttlMs: 1000 });
+    const second = createNamespacedKeyValueStore<string>('second', { ttlMs: 1000 });
     await first.set('key', 'one');
     await second.set('key', 'two');
     const consumed = await Promise.all([first.consume('key'), first.consume('key')]);
@@ -91,14 +108,14 @@ describe('bring-your-own KV storage', () => {
 
   it('still accepts the existing default-export session-provider modules', async () => {
     useCustomProvider({ module: './src/sessionStore/__fixtures__/fakeSessionStore.cjs' });
-    const store = createNamespacedKeyValueStore<string>('settings');
+    const store = createNamespacedKeyValueStore<string>('settings', { ttlMs: 1000 });
     await store.set('key', 'value');
     await expect(store.get('key')).resolves.toBe('value');
   });
 
   it('rejects a provider missing required operations without falling back to memory', () => {
     useCustomProvider({ module: MODULE, omitConsume: true });
-    expect(() => createNamespacedKeyValueStore('settings')).toThrow(
+    expect(() => createNamespacedKeyValueStore('settings', { ttlMs: 1000 })).toThrow(
       'Custom provider missing required method: consume',
     );
   });

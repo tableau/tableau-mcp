@@ -58,14 +58,17 @@ from `src/storage/storageProvider.ts`.
 Custom providers receive keys prefixed with `<namespace>:`. One custom provider instance is
 shared across namespaces. Memory stores are independent per factory call.
 
-The public KV interface has no expiration requirement. Memory stores support an optional
-`ttlMs` and `maxSize` per namespace; omitting `ttlMs` retains values without expiration.
-Existing session callers continue supplying their TTLs.
+Every namespace requires an explicit, finite `ttlMs` in milliseconds when it is created;
+`maxSize` remains optional. Server code supplies each namespace's lifetime, so deployments do
+not need to choose these values. Missing or non-finite TTLs are rejected before a store is
+created. Memory stores expire entries using this TTL, and existing session callers continue
+supplying their configured lifetimes.
 
 For compatibility, a custom provider may implement
-`configureNamespace(namespace, { ttlMs?, maxSize? })` to receive namespace settings. The provider
-owns backend expiration and capacity behavior. Repeated configuration calls with identical
-settings must be harmless. Callers remain responsible for domain-specific validity checks.
+`configureNamespace(namespace, { ttlMs, maxSize? })` to receive namespace settings. The hook
+always receives a numeric TTL. The provider owns backend expiration and capacity behavior.
+Repeated configuration calls with identical settings must be harmless. Callers remain
+responsible for domain-specific validity checks.
 
 Providers may also implement the existing optional `init()` and `close()` hooks for readiness
 and connection cleanup. Startup awaits `init()` and fails if it rejects; shutdown awaits
