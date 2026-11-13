@@ -398,3 +398,31 @@ describe('validateFilters', () => {
     );
   });
 });
+
+describe('validateFilters with restrictConditionFilters', () => {
+  const rules = { restrictConditionFilters: true };
+  const conditionFilter = {
+    field: { fieldCaption: 'Customer Name' },
+    filterType: 'CONDITION' as const,
+    calculation: 'SUM([Sales]) > 1000',
+  };
+
+  it('rejects a CONDITION filter and names the minimum version', () => {
+    expect(() => validateFilters([conditionFilter], rules)).toThrow(
+      'The query must not include CONDITION filters. CONDITION filters require Tableau 2026.1 or later.',
+    );
+  });
+
+  it('allows other filter types', () => {
+    expect(() =>
+      validateFilters(
+        [{ field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['Furniture'] }],
+        rules,
+      ),
+    ).not.toThrow();
+  });
+
+  it('allows a CONDITION filter without the rule', () => {
+    expect(() => validateFilters([conditionFilter], rulesNoRestrictions)).not.toThrow();
+  });
+});

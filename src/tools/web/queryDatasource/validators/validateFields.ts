@@ -3,18 +3,28 @@ import {
   FilterField,
   TableCalcField,
 } from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ToolRules } from '../../tool.js';
 
 // Check this before any 'function' in / 'calculation' in test: a table calc can carry both keys.
 export function isTableCalcField(field: Field): field is TableCalcField {
   return 'tableCalculation' in field;
 }
 
-export function validateFields(fields: Field[]): void {
+export function validateFields(fields: Field[], rules: ToolRules): void {
   {
     // You must query at least one field.
     if (fields.length === 0) {
       throw new Error(
         'The query must include at least one field. The fields property cannot be an empty array.',
+      );
+    }
+  }
+
+  if (rules.restrictTableCalculations) {
+    const tableCalcFields = fields.filter(isTableCalcField).map((field) => field.fieldCaption);
+    if (tableCalcFields.length > 0) {
+      throw new Error(
+        `The query must not include table calculation fields. Table calculations require Tableau 2025.3 or later. The following fields are table calculations: ${tableCalcFields.join(', ')}.`,
       );
     }
   }
