@@ -26,6 +26,7 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { artifactNameParam } from '../../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
@@ -98,10 +99,9 @@ const paramsSchema = {
     .string()
     .optional()
     .describe('Desktop process ID; omit to use the pinned or only running instance.'),
-  worksheetName: z
-    .string()
+  worksheet: artifactNameParam('worksheet')
     .optional()
-    .describe('Sheet name; name-only calls reuse the edit buffer. Omit to pass worksheetFile.'),
+    .describe('Worksheet id (preferred) or name; reuses edit buffer. Omit to pass worksheetFile.'),
   worksheetFile: z.string().optional().describe('Cached path; omit to reuse the edit buffer.'),
   target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
   columnRef: z
@@ -136,23 +136,14 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
       idempotentHint: false,
     },
     callback: async (
-      {
-        session,
-        worksheetName,
-        worksheetFile,
-        target,
-        columnRef,
-        encodingType,
-        index,
-        workbookFile,
-      },
+      { session, worksheet, worksheetFile, target, columnRef, encodingType, index, workbookFile },
       extra,
     ): Promise<CallToolResult> => {
       return await addFieldTool.logAndExecute({
         extra,
         args: {
           session,
-          worksheetName,
+          worksheet,
           worksheetFile,
           target,
           columnRef,
@@ -182,7 +173,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           const resolvedSession = sessionResult.value;
 
           const editFile = await resolveWorksheetEditFile({
-            worksheetName,
+            worksheet,
             worksheetFile,
             resolvedSession,
             extra,

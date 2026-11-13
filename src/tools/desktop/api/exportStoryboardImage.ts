@@ -5,11 +5,7 @@ import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js
 import { ImageResult } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import {
-  artifactNameParam,
-  deprecatedArtifactAliasParam,
-  resolveArtifactNameArg,
-} from '../params.js';
+import { artifactNameParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import {
   buildSheetImageToolResult,
@@ -19,8 +15,7 @@ import {
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  storyboardName: artifactNameParam('storyboard').optional(),
-  storyboard: deprecatedArtifactAliasParam('storyboard'),
+  storyboard: artifactNameParam('storyboard'),
   filePath: z
     .string()
     .optional()
@@ -50,19 +45,14 @@ export const exportStoryboardImageTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, storyboardName, storyboard, filePath, mimeType },
+      { session, storyboard, filePath, mimeType },
       extra,
     ): Promise<CallToolResult> => {
       const { query } = resolveImageExportQuery({ filePath, mimeType });
       return await exportStoryboardImage.logAndExecute<ImageResult>({
         extra,
-        args: { session, storyboardName, storyboard, filePath, mimeType },
+        args: { session, storyboard, filePath, mimeType },
         callback: async () => {
-          const nameResult = resolveArtifactNameArg('storyboard', storyboardName, storyboard);
-          if (nameResult.isErr()) {
-            return nameResult;
-          }
-          const resolvedStoryboardName = nameResult.value;
           return await runExternalApiReadTool<ImageResult>({
             session,
             extra,
@@ -77,7 +67,7 @@ export const exportStoryboardImageTool = (
 
               const storyboardResult = resolveItemByNameOrId(
                 'Storyboard',
-                resolvedStoryboardName,
+                storyboard,
                 listResult.value.storyboards ?? [],
               );
               if (storyboardResult.isErr()) {

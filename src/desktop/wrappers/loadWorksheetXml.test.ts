@@ -1323,10 +1323,10 @@ describe('loadWorksheetXml (External Client API transport)', () => {
 
       const message = nameMismatchMessage(result);
       expect(message).toContain(
-        'worksheetName "Renamed" does not match <worksheet name="Old Name"> in the file',
+        'worksheet "Renamed" does not match <worksheet name="Old Name"> in the file',
       );
       expect(message).toContain('with list-worksheets');
-      expect(message).toContain('pass "Old Name" as worksheetName');
+      expect(message).toContain('pass "Old Name" as worksheet');
       expect(message).toContain('get-worksheet-xml');
       expect(e.applyWorksheetDocument).not.toHaveBeenCalled();
     });

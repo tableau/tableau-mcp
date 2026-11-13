@@ -39,7 +39,7 @@ describe('getWorksheetXmlTool with External Client API transport', () => {
     const tool = getGetWorksheetXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const result = await callback(
-      { session: '999', worksheetName: 'Sales by Region', mode: 'inline' },
+      { session: '999', worksheet: 'Sales by Region', mode: 'inline' },
       { ...getMockRequestHandlerExtra(), getExecutor: vi.fn().mockResolvedValue(executor) },
     );
 
@@ -72,7 +72,7 @@ describe('getWorksheetXmlTool with External Client API transport', () => {
     const tool = getGetWorksheetXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const result = await callback(
-      { session: '999', worksheetName: 'Sales by Region', mode: 'inline' },
+      { session: '999', worksheet: 'Sales by Region', mode: 'inline' },
       { ...getMockRequestHandlerExtra(), getExecutor: vi.fn().mockResolvedValue(executor) },
     );
 

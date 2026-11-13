@@ -83,7 +83,7 @@ async function addField(params: {
   return await callback(
     {
       session: SESSION,
-      worksheetName: undefined,
+      worksheet: undefined,
       encodingType: undefined,
       index: undefined,
       ...params,
@@ -166,7 +166,7 @@ describe('add-field — an absent column comes back as a tool error, not a crash
       {
         session: SESSION,
         worksheetFile,
-        worksheetName: undefined,
+        worksheet: undefined,
         encodingType: undefined,
         index: undefined,
         workbookFile: undefined,
@@ -195,7 +195,7 @@ describe('add-field — an absent column comes back as a tool error, not a crash
       {
         session: SESSION,
         worksheetFile,
-        worksheetName: undefined,
+        worksheet: undefined,
         encodingType: undefined,
         index: undefined,
         workbookFile: undefined,

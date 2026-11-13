@@ -121,7 +121,7 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
   it('rename-sheet POSTs the worksheet :rename route with the new name', async () => {
     const harness = await startHarness(getRenameSheetTool);
     try {
-      const { result } = await run(harness, { sheet: WORKSHEET_NAME, name: 'Regional Sales' });
+      const { result } = await run(harness, { sheet: WORKSHEET_NAME, newName: 'Regional Sales' });
       expect(result.isError).toBeFalsy();
       const posted = harness.server.requests.filter(
         (r) => r.method === 'POST' && r.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:rename`,
@@ -136,7 +136,7 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
   it('rename-sheet waits for an in-flight apply before POSTing its mutation', async () => {
     await expectMutationWaitsForApplyLock(
       getRenameSheetTool,
-      { sheet: WORKSHEET_NAME, name: 'Regional Sales' },
+      { sheet: WORKSHEET_NAME, newName: 'Regional Sales' },
       `/v0/workbook/worksheets/${WORKSHEET_ID}:rename`,
     );
   });

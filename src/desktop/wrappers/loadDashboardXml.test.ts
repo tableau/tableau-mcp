@@ -1469,10 +1469,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
       });
       const gateMessage = nameMismatchMessage(gate);
       expect(gateMessage).toContain(
-        'dashboardName "Renamed" does not match <dashboard name="Old Name"> in the file',
+        'dashboard "Renamed" does not match <dashboard name="Old Name"> in the file',
       );
       expect(gateMessage).toContain('with list-dashboards');
-      expect(gateMessage).toContain('pass "Old Name" as dashboardName');
+      expect(gateMessage).toContain('pass "Old Name" as dashboard');
       expect(gateMessage).toContain('get-dashboard-xml');
       expect(gateMessage).not.toContain('Retry with');
 
@@ -1522,11 +1522,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
         requireExistingSheet: true,
       });
       const message = nameMismatchMessage(result);
-      expect(message).toContain(
-        'storyboardName "Renamed" does not match <storyboard name="Old Name">',
-      );
+      expect(message).toContain('storyboard "Renamed" does not match <storyboard name="Old Name">');
       expect(message).toContain('get-storyboard-xml');
-      expect(message).toContain('pass "Old Name" as storyboardName');
+      expect(message).toContain('pass "Old Name" as storyboard');
       expect(message).not.toContain('list-');
       expect(message).not.toContain('Retry with');
       expectNoApply(e);

@@ -5,11 +5,7 @@ import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js
 import { ImageResult } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import {
-  artifactNameParam,
-  deprecatedArtifactAliasParam,
-  resolveArtifactNameArg,
-} from '../params.js';
+import { artifactNameParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import {
   buildSheetImageToolResult,
@@ -19,8 +15,7 @@ import {
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: artifactNameParam('dashboard').optional(),
-  dashboard: deprecatedArtifactAliasParam('dashboard'),
+  dashboard: artifactNameParam('dashboard'),
   filePath: z
     .string()
     .optional()
@@ -48,19 +43,14 @@ export const exportDashboardImageTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, dashboardName, dashboard, filePath, mimeType },
+      { session, dashboard, filePath, mimeType },
       extra,
     ): Promise<CallToolResult> => {
       const { query } = resolveImageExportQuery({ filePath, mimeType });
       return await exportDashboardImage.logAndExecute<ImageResult>({
         extra,
-        args: { session, dashboardName, dashboard, filePath, mimeType },
+        args: { session, dashboard, filePath, mimeType },
         callback: async () => {
-          const nameResult = resolveArtifactNameArg('dashboard', dashboardName, dashboard);
-          if (nameResult.isErr()) {
-            return nameResult;
-          }
-          const resolvedDashboardName = nameResult.value;
           return await runExternalApiReadTool<ImageResult>({
             session,
             extra,
@@ -75,7 +65,7 @@ export const exportDashboardImageTool = (
 
               const dashboardResult = resolveItemByNameOrId(
                 'Dashboard',
-                resolvedDashboardName,
+                dashboard,
                 listResult.value.dashboards ?? [],
               );
               if (dashboardResult.isErr()) {

@@ -17,7 +17,7 @@ import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheetName: artifactNameParam('worksheet'),
+  worksheet: artifactNameParam('worksheet'),
   mode: xmlModeParam(),
 };
 
@@ -45,10 +45,10 @@ export const getGetWorksheetXmlTool = (
       destructiveHint: false,
       idempotentHint: false, // A new cache file is created for each tool call
     },
-    callback: async ({ session, worksheetName, mode }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, worksheet, mode }, extra): Promise<CallToolResult> => {
       return await getWorksheetXmlTool.logAndExecute<GetWorksheetXmlToolResult>({
         extra,
-        args: { session, worksheetName, mode },
+        args: { session, worksheet, mode },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -57,7 +57,7 @@ export const getGetWorksheetXmlTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
           const result = await getWorksheetXml({
-            worksheetName,
+            worksheetName: worksheet,
             executor,
             signal: extra.signal,
           });

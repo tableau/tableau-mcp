@@ -88,23 +88,23 @@ import { removeDashboard } from './replaceDashboard.js';
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
   artifactIds: z.array(z.string().trim().min(1).max(255)).max(7).optional(),
-  dashboardName: z.string().trim().min(1).max(255),
-  existingWorksheetNames: z
+  dashboard: z.string().trim().min(1).max(255),
+  worksheets: z
     .array(z.string().trim().min(1).max(255))
     .max(7)
     .optional()
-    .describe('Live non-KPI chart worksheet names in dashboard order.'),
+    .describe('Live non-KPI chart worksheet ids (preferred) or names, in dashboard order.'),
   title: z.string().trim().min(1).max(255).optional(),
   layoutType: z
     .enum(['auto-grid', 'rows', 'columns', 'executive-summary'])
     .optional()
     .describe('Dashboard layout; executive-summary uses KPI and chart roles.'),
   gridColumns: z.number().int().min(1).max(6).optional(),
-  kpiWorksheetNames: z
+  kpiWorksheets: z
     .array(z.string().trim().min(1).max(255))
     .max(5)
     .optional()
-    .describe('Live KPI worksheet names in display order from left to right.'),
+    .describe('Live KPI worksheet ids (preferred) or names, left to right.'),
   replaceExisting: z.boolean().optional(),
 };
 
@@ -217,12 +217,12 @@ export const getRunDashboardBatchTool = (
       {
         session,
         artifactIds,
-        dashboardName,
-        existingWorksheetNames,
+        dashboard: dashboardName,
+        worksheets: existingWorksheetNames,
         title: dashboardTitle,
         layoutType,
         gridColumns,
-        kpiWorksheetNames: requestedKpiWorksheetNames,
+        kpiWorksheets: requestedKpiWorksheetNames,
         replaceExisting = false,
       },
       extra,
@@ -242,12 +242,12 @@ export const getRunDashboardBatchTool = (
         args: {
           session,
           artifactIds,
-          dashboardName,
-          existingWorksheetNames,
+          dashboard: dashboardName,
+          worksheets: existingWorksheetNames,
           title: dashboardTitle,
           layoutType,
           gridColumns,
-          kpiWorksheetNames,
+          kpiWorksheets: kpiWorksheetNames,
           replaceExisting,
         },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
@@ -480,9 +480,13 @@ export const getRunDashboardBatchTool = (
               ...(resolvedExistingNames as string[]),
               ...canonicalArtifactNames,
             ];
+            const resolvedKpiRefs = resolveLiveWorksheetNames(workbookXml, kpiWorksheetNames ?? []);
+            const requestedKpiNames = kpiWorksheetNames?.map(
+              (ref, index) => resolvedKpiRefs[index] ?? ref,
+            );
             const unresolvedKpiRoleNames =
               layoutType === 'executive-summary'
-                ? canonicalDifference(kpiWorksheetNames ?? [], explicitlyResolvedNames)
+                ? canonicalDifference(requestedKpiNames ?? [], explicitlyResolvedNames)
                 : [];
             const resolvedImplicitKpiNames = resolveLiveWorksheetNames(
               workbookXml,
@@ -500,7 +504,7 @@ export const getRunDashboardBatchTool = (
                   .map((name) => `"${name}"`)
                   .join(
                     ', ',
-                  )}. Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.`,
+                  )}. Create or render each KPI worksheet, or correct kpiWorksheets; then retry with the same executive-summary layout.`,
                 'kpiWorksheet',
               );
             }
@@ -509,14 +513,14 @@ export const getRunDashboardBatchTool = (
               ...(resolvedImplicitKpiNames as string[]),
             ];
             const canonicalKpiWorksheetNames =
-              layoutType === 'executive-summary' && kpiWorksheetNames
-                ? kpiWorksheetNames.flatMap((requestedName) => {
+              layoutType === 'executive-summary' && requestedKpiNames
+                ? requestedKpiNames.flatMap((requestedName) => {
                     const canonicalName = worksheetNames.find((worksheetName) =>
                       xmlNamesEqual(worksheetName, requestedName),
                     );
                     return canonicalName ? [canonicalName] : [];
                   })
-                : kpiWorksheetNames;
+                : requestedKpiNames;
             const layoutError = validateComposeDashboardInput(worksheetNames, {
               layoutType,
               gridColumns,

@@ -502,7 +502,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
     expect(readbackXml).not.toBe(formatted.xml);
 
     const { result, applyDashboardDocument } = await run(
-      { dashboardName: 'dashboard-1', cornerRadius: 12, scope: 'zone_ids', zoneIds: ['20'] },
+      { dashboard: 'dashboard-1', cornerRadius: 12, scope: 'zone_ids', zoneIds: ['20'] },
       { source: BLANK_ZONE, readbackXml },
     );
 
@@ -512,7 +512,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
 
   it('verifies scope all on Probe Rows when Desktop writes corner-radius before margin', async () => {
     const { result } = await run(
-      { dashboardName: 'dashboard-1', cornerRadius: 12, scope: 'all' },
+      { dashboard: 'dashboard-1', cornerRadius: 12, scope: 'all' },
       { source: PROBE_BEFORE, readbackXml: PROBE_READBACK },
     );
 
@@ -536,7 +536,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
       .replace("value='8'", "value='6'");
 
     const { result } = await run(
-      { dashboardName: 'dashboard-1', cornerRadius: 10, scope: 'containers' },
+      { dashboard: 'dashboard-1', cornerRadius: 10, scope: 'containers' },
       { source: SHEETS_WITH_PHONE, readbackXml },
     );
 
@@ -545,7 +545,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
 
   it('fails when the readback drops a target margin', async () => {
     const { result } = await run(
-      { dashboardName: 'dashboard-1', cornerRadius: 12, scope: 'all' },
+      { dashboard: 'dashboard-1', cornerRadius: 12, scope: 'all' },
       {
         source: PROBE_BEFORE,
         readbackXml: PROBE_READBACK.replace("<format attr='margin' value='4' />", ''),
@@ -557,7 +557,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
 
   it('fails when the readback changes a non-target zone style', async () => {
     const targetOnly = {
-      dashboardName: 'dashboard-1',
+      dashboard: 'dashboard-1',
       cornerRadius: 12,
       scope: 'zone_ids' as const,
       zoneIds: ['13'],
@@ -582,7 +582,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
     const PHONE_BLOCK = /<devicelayouts>[\s\S]*<\/devicelayouts>\s*/.exec(SHEETS_WITH_PHONE)![0];
     const WITHOUT_BLOCK = SHEETS_WITH_PHONE.replace(PHONE_BLOCK, '');
     const request = {
-      dashboardName: 'dashboard-1',
+      dashboard: 'dashboard-1',
       cornerRadius: 10,
       scope: 'containers' as const,
     };
@@ -629,7 +629,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
 
   it('fails when a non-target zone-style has its formats swapped', async () => {
     const targetOnly = {
-      dashboardName: 'dashboard-1',
+      dashboard: 'dashboard-1',
       cornerRadius: 12,
       scope: 'zone_ids' as const,
       zoneIds: ['13'],
@@ -650,7 +650,7 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
     const CUSTOM =
       "<dashboard name='D'><zones><zone id='2' type-v2='layout-basic'><zone id='3' name='Sales' /></zone></zones><devicelayouts><devicelayout name='Tablet'><size minheight='700' /><zones><zone id='2' type-v2='layout-basic'><zone-style><format attr='margin' value='8' /><format attr='padding' value='1' /></zone-style></zone></zones></devicelayout></devicelayouts></dashboard>";
     const request = {
-      dashboardName: 'dashboard-1',
+      dashboard: 'dashboard-1',
       cornerRadius: 10,
       scope: 'zone_ids' as const,
       zoneIds: ['2'],
@@ -776,7 +776,7 @@ describe('format-dashboard-zones tool', () => {
     expect(tool.name).toBe('format-dashboard-zones');
     expect(Object.keys(tool.paramsSchema)).toEqual([
       'session',
-      'dashboardName',
+      'dashboard',
       'cornerRadius',
       'scope',
       'zoneIds',
@@ -786,7 +786,7 @@ describe('format-dashboard-zones tool', () => {
 
   it('resolves a dashboard id, applies once, and verifies exact target ids', async () => {
     const { result, applyDashboardDocument } = await callTool({
-      dashboardName: 'dashboard-1',
+      dashboard: 'dashboard-1',
       cornerRadius: 14,
       scope: 'containers',
     });
@@ -805,7 +805,7 @@ describe('format-dashboard-zones tool', () => {
   it('accepts supported Desktop versions for native dashboard corner radius', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -819,7 +819,7 @@ describe('format-dashboard-zones tool', () => {
   it('rejects released Desktop versions before native dashboard corner radius', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -835,7 +835,7 @@ describe('format-dashboard-zones tool', () => {
   it('rechecks the Desktop version under the apply lock before mutation', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -854,7 +854,7 @@ describe('format-dashboard-zones tool', () => {
     async (applicationVersion) => {
       const { result, applyDashboardDocument } = await callTool(
         {
-          dashboardName: 'Executive Overview',
+          dashboard: 'Executive Overview',
           cornerRadius: 14,
           scope: 'containers',
         },
@@ -868,13 +868,13 @@ describe('format-dashboard-zones tool', () => {
 
   it('rejects duplicate zone ids and invalid scope combinations before any read', async () => {
     const duplicate = await callTool({
-      dashboardName: 'Executive Overview',
+      dashboard: 'Executive Overview',
       cornerRadius: 14,
       scope: 'zone_ids',
       zoneIds: ['2', '2'],
     });
     const ignored = await callTool({
-      dashboardName: 'Executive Overview',
+      dashboard: 'Executive Overview',
       cornerRadius: 14,
       scope: 'all',
       zoneIds: ['2'],
@@ -889,7 +889,7 @@ describe('format-dashboard-zones tool', () => {
   it('skips apply when the target radius already matches', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 4,
         scope: 'zone_ids',
         zoneIds: ['2'],
@@ -904,7 +904,7 @@ describe('format-dashboard-zones tool', () => {
   it('does not apply stale bytes after the dashboard drifts', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -920,7 +920,7 @@ describe('format-dashboard-zones tool', () => {
   it('surfaces a readback error after one apply', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -934,7 +934,7 @@ describe('format-dashboard-zones tool', () => {
   it('rejects document warnings returned by the apply', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -951,7 +951,7 @@ describe('format-dashboard-zones tool', () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -970,7 +970,7 @@ describe('format-dashboard-zones tool', () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -989,7 +989,7 @@ describe('format-dashboard-zones tool', () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -1007,7 +1007,7 @@ describe('format-dashboard-zones tool', () => {
   it('accepts semantically identical readback with benign XML reserialization', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'Executive Overview',
+        dashboard: 'Executive Overview',
         cornerRadius: 14,
         scope: 'containers',
       },
@@ -1056,12 +1056,12 @@ describe('format-dashboard-zones tool', () => {
     const executorFunctions = { getDashboardDocument, applyDashboardDocument };
 
     const first = callTool(
-      { dashboardName: 'Executive Overview', cornerRadius: 14, scope: 'containers' },
+      { dashboard: 'Executive Overview', cornerRadius: 14, scope: 'containers' },
       { executorFunctions },
     );
     await firstReadbackStarted;
     const second = callTool(
-      { dashboardName: 'Executive Overview', cornerRadius: 15, scope: 'containers' },
+      { dashboard: 'Executive Overview', cornerRadius: 15, scope: 'containers' },
       { executorFunctions },
     );
     await secondInitialReadStarted;
@@ -1085,7 +1085,7 @@ describe('format-dashboard-zones tool', () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
       {
-        dashboardName: 'dashboard-1',
+        dashboard: 'dashboard-1',
         cornerRadius: 18,
         scope: 'containers',
       },
@@ -1104,7 +1104,7 @@ describe('format-dashboard-zones tool', () => {
   it('accepts the live high-contrast scope-all format reordering and hex color casing', async () => {
     const { result, applyDashboardDocument } = await callTool(
       {
-        dashboardName: 'dashboard-1',
+        dashboard: 'dashboard-1',
         cornerRadius: 36,
         scope: 'all',
       },
@@ -1170,7 +1170,7 @@ describe('format-dashboard-zones tool', () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
       {
-        dashboardName: 'dashboard-1',
+        dashboard: 'dashboard-1',
         cornerRadius: 36,
         scope: 'all',
       },
@@ -1190,7 +1190,7 @@ describe('format-dashboard-zones tool', () => {
     );
     expect(readbackXml).not.toBe(HIGH_CONTRAST_DASHBOARD_READBACK_XML);
     const { result } = await callTool(
-      { dashboardName: 'dashboard-1', cornerRadius: 36, scope: 'all' },
+      { dashboard: 'dashboard-1', cornerRadius: 36, scope: 'all' },
       { source: HIGH_CONTRAST_DASHBOARD_XML, readbackXml },
     );
 
@@ -1201,7 +1201,7 @@ describe('format-dashboard-zones tool', () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
       {
-        dashboardName: 'dashboard-1',
+        dashboard: 'dashboard-1',
         cornerRadius: 18,
         scope: 'containers',
       },
@@ -1222,7 +1222,7 @@ describe('format-dashboard-zones tool', () => {
 });
 
 type ToolArgs = {
-  dashboardName: string;
+  dashboard: string;
   cornerRadius: number;
   scope: 'all' | 'containers' | 'zone_ids';
   zoneIds?: string[];

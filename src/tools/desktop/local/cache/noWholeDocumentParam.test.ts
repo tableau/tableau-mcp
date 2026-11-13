@@ -120,7 +120,7 @@ describe('the served profile still has a working edit path with no document para
       .mockResolvedValue(Ok({ validationWarnings: [], readbackWarnings: [] }));
 
     const getCb = await Provider.from(getGetWorksheetXmlTool(new DesktopMcpServer()).callback);
-    const getResult = await getCb({ session: 's1', worksheetName: 'Sales', mode: 'file' }, extra());
+    const getResult = await getCb({ session: 's1', worksheet: 'Sales', mode: 'file' }, extra());
     invariant(getResult.content[0].type === 'text');
     const file = [...store.keys()].find((key) => !key.endsWith('.session'));
     invariant(file, 'get-worksheet-xml must mint a cache file the agent can address');
@@ -130,9 +130,7 @@ describe('the served profile still has a working edit path with no document para
     const readResult = await readCb(
       {
         filePath: file,
-        worksheetName: undefined,
         worksheet: 'Sales',
-        dashboardName: undefined,
         dashboard: undefined,
         startByte: undefined,
         endByte: undefined,
@@ -149,9 +147,7 @@ describe('the served profile still has a working edit path with no document para
         filePath: file,
         xmlContent:
           "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>",
-        worksheetName: undefined,
         worksheet: 'Sales',
-        dashboardName: undefined,
         dashboard: undefined,
       },
       extra(),
@@ -164,7 +160,7 @@ describe('the served profile still has a working edit path with no document para
         session: 's1',
         artifactId: undefined,
         templatePlan: undefined,
-        worksheetName: 'Sales',
+        worksheet: 'Sales',
         worksheetFile: file,
       },
       extra(),

@@ -49,7 +49,7 @@ describe('getWorksheetXmlTool', () => {
     expect(tool.description).toContain('For pending drafts, read the cached file instead');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
       mode: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
@@ -67,7 +67,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
       mockExecutor,
     });
@@ -85,7 +85,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
     });
 
@@ -107,7 +107,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'file',
     });
 
@@ -130,7 +130,7 @@ describe('getWorksheetXmlTool', () => {
       }),
     );
 
-    await getToolResult({ session: '12345', worksheetName: 'Sheet 1', mode: 'inline' });
+    await getToolResult({ session: '12345', worksheet: 'Sheet 1', mode: 'inline' });
 
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
@@ -146,7 +146,7 @@ describe('getWorksheetXmlTool', () => {
       }),
     );
 
-    await getToolResult({ session: '12345', worksheetName: 'Sheet 1', mode: 'inline' });
+    await getToolResult({ session: '12345', worksheet: 'Sheet 1', mode: 'inline' });
 
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
   });
@@ -158,7 +158,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
     });
 
@@ -185,7 +185,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
     });
 
@@ -203,7 +203,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
     });
 
@@ -224,7 +224,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
     });
 
@@ -247,7 +247,7 @@ describe('getWorksheetXmlTool', () => {
 
     await getToolResult({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       mode: 'inline',
       customSignal,
     });
@@ -271,7 +271,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sales',
+      worksheet: 'Sales',
       mode: 'inline',
     });
 
@@ -296,7 +296,7 @@ describe('getWorksheetXmlTool', () => {
       Ok({ xml: overCapXml, name: 'Sales' }),
     );
 
-    await getToolResult({ session: '12345', worksheetName: 'Sales', mode: 'inline' });
+    await getToolResult({ session: '12345', worksheet: 'Sales', mode: 'inline' });
 
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -314,7 +314,7 @@ describe('getWorksheetXmlTool', () => {
 
     const result = await getToolResult({
       session: '12345',
-      worksheetName: 'Sales',
+      worksheet: 'Sales',
       mode: 'inline',
       capBytes: 8,
     });
@@ -328,14 +328,14 @@ describe('getWorksheetXmlTool', () => {
 
 async function getToolResult({
   session,
-  worksheetName,
+  worksheet,
   mode,
   mockExecutor = vi.fn().mockResolvedValue({}),
   customSignal,
   capBytes,
 }: {
   session: string;
-  worksheetName: string;
+  worksheet: string;
   mode: 'file' | 'inline';
   mockExecutor?: TableauDesktopToolContext['getExecutor'];
   customSignal?: AbortSignal;
@@ -352,5 +352,5 @@ async function getToolResult({
     ...(capBytes !== undefined && { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
   };
 
-  return await callback({ session, worksheetName, mode }, extra);
+  return await callback({ session, worksheet, mode }, extra);
 }

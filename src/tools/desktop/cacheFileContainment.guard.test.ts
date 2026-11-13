@@ -69,7 +69,7 @@ const CACHE_FILE_CASES: Array<{
     tool: 'apply-dashboard',
     param: 'dashboardFile',
     reached: 'executor',
-    args: (f) => ({ dashboardName: 'D', dashboardFile: f }),
+    args: (f) => ({ dashboard: 'D', dashboardFile: f }),
   },
   {
     tool: 'apply-datasource',
@@ -81,7 +81,7 @@ const CACHE_FILE_CASES: Array<{
     tool: 'apply-storyboard',
     param: 'storyboardFile',
     reached: 'executor',
-    args: (f) => ({ storyboardName: 'S', storyboardFile: f }),
+    args: (f) => ({ storyboard: 'S', storyboardFile: f }),
   },
   {
     tool: 'list-available-fields',
@@ -136,14 +136,14 @@ const CACHE_FILE_CASES: Array<{
   },
 ];
 
-// Same tools with worksheetName set: the file must be refused before the sheet-id lookup.
+// Same tools with worksheet set: the file must be refused before the sheet-id lookup.
 const NAMED_SHEET_CASES = [
   {
     tool: 'add-field',
     param: 'worksheetFile',
     args: (f: string) => ({
       session: '12345',
-      worksheetName: 'W',
+      worksheet: 'W',
       worksheetFile: f,
       target: 'rows',
       columnRef: '[ds].[none:A:nk]',
@@ -154,7 +154,7 @@ const NAMED_SHEET_CASES = [
     param: 'workbookFile',
     args: (f: string) => ({
       session: '12345',
-      worksheetName: 'W',
+      worksheet: 'W',
       workbookFile: f,
       target: 'rows',
       columnRef: '[ds].[none:A:nk]',
@@ -165,7 +165,7 @@ const NAMED_SHEET_CASES = [
     param: 'worksheetFile',
     args: (f: string) => ({
       session: '12345',
-      worksheetName: 'W',
+      worksheet: 'W',
       worksheetFile: f,
       target: 'rows',
       columnRef: '[ds].[none:A:nk]',
@@ -349,7 +349,7 @@ describe('cache-file arguments are contained in the Desktop cache directory', ()
   );
 
   it.skipIf(process.platform === 'win32').each(NAMED_SHEET_CASES)(
-    '$tool refuses a symlinked $param with worksheetName set, without a Desktop call or cache writes',
+    '$tool refuses a symlinked $param with worksheet set, without a Desktop call or cache writes',
     async (testCase) => {
       const link = join(state.cacheDir, 'link.twb');
       symlinkSync(outside, link);
@@ -357,7 +357,7 @@ describe('cache-file arguments are contained in the Desktop cache directory', ()
       const listingBefore = cacheListing();
       const run = await invoke(testCase, link);
       expectRefusedAndUntouched(
-        `${testCase.tool}.${testCase.param}+worksheetName`,
+        `${testCase.tool}.${testCase.param}+worksheet`,
         run,
         beforeMtime,
         listingBefore,

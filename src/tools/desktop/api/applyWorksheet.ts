@@ -88,7 +88,7 @@ const paramsSchema = {
     .optional()
     .describe('Artifact ID; omit with plan/file.'),
   templatePlan: templatePlanSchema.optional().describe('Exact binding to build and apply.'),
-  worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
+  worksheet: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
     .describe('Target id/name or plan/artifact title.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
@@ -139,35 +139,35 @@ export const getApplyWorksheetTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, artifactId, templatePlan, worksheetName, worksheetFile },
+      { session, artifactId, templatePlan, worksheet, worksheetFile },
       extra,
     ): Promise<CallToolResult> => {
       return await applyWorksheetTool.logAndExecute({
         extra,
-        args: { session, artifactId, templatePlan, worksheetName, worksheetFile },
+        args: { session, artifactId, templatePlan, worksheet, worksheetFile },
         callback: async (): Promise<
           Result<StructuredResult<ApplyWorksheetResult>, McpToolError>
         > => {
           const cachedModeSelected =
             worksheetFile !== undefined ||
-            (artifactId === undefined && templatePlan === undefined && worksheetName !== undefined);
+            (artifactId === undefined && templatePlan === undefined && worksheet !== undefined);
           const modeCount =
             Number(artifactId !== undefined) +
             Number(templatePlan !== undefined) +
             Number(cachedModeSelected);
           if (modeCount !== 1) {
             return new ArgsValidationError(
-              'Provide exactly one apply mode: artifactId, templatePlan, or worksheetFile (worksheetName optional).',
+              'Provide exactly one apply mode: artifactId, templatePlan, or worksheetFile (worksheet optional).',
             ).toErr();
           }
 
           if (
             templatePlan !== undefined &&
-            worksheetName !== undefined &&
-            worksheetName !== templatePlan.title
+            worksheet !== undefined &&
+            worksheet !== templatePlan.title
           ) {
             return new ArgsValidationError(
-              `worksheetName "${worksheetName}" must match templatePlan.title "${templatePlan.title}".`,
+              `worksheet "${worksheet}" must match templatePlan.title "${templatePlan.title}".`,
             ).toErr();
           }
 
@@ -183,13 +183,13 @@ export const getApplyWorksheetTool = (
               reservation.artifact.worksheetXml,
             );
             if (
-              worksheetName !== undefined &&
-              worksheetName !== reservation.artifact.title &&
-              worksheetName !== artifactWorksheetId
+              worksheet !== undefined &&
+              worksheet !== reservation.artifact.title &&
+              worksheet !== artifactWorksheetId
             ) {
               artifactStore.release(reservation.lease);
               return new ArgsValidationError(
-                `worksheetName "${worksheetName}" must match artifact title "${reservation.artifact.title}" or worksheet id "${artifactWorksheetId}".`,
+                `worksheet "${worksheet}" must match artifact title "${reservation.artifact.title}" or worksheet id "${artifactWorksheetId}".`,
               ).toErr();
             }
             try {
@@ -390,7 +390,7 @@ export const getApplyWorksheetTool = (
           }
           const { xml: worksheetXml, resolvedSession, sourceHash } = preamble.value;
 
-          const canonical = resolveCanonicalWorksheetName(worksheetName, worksheetXml);
+          const canonical = resolveCanonicalWorksheetName(worksheet, worksheetXml);
           if (canonical.isErr()) {
             return new WorksheetXmlLoadFailedError(canonical.error).toErr();
           }

@@ -73,7 +73,7 @@ export interface BindRecoveryProposalContext {
   arguments: {
     session: string;
     ask: string;
-    target_worksheet?: string;
+    worksheet?: string;
     datasource?: string;
     auto_apply: true;
   };
@@ -173,7 +173,7 @@ export interface BindRecoveryRecord {
     detail: string;
     /** Internal datasource name the blocked pie was bound on; a replay must stay on it. */
     datasource: string;
-    /** Raw target_worksheet of the blocked call; a replay must repeat it. */
+    /** Raw worksheet selector of the blocked call; a replay must repeat it. */
     targetWorksheet?: string;
     /** Set while the confirmed call that borrowed this grant is in flight; only an untagged grant is honored. */
     reservationId?: number;

@@ -50,7 +50,7 @@ describe('applyStoryboardTool', () => {
     expect(tool.description).toContain('freshness check');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      storyboardName: expect.any(Object),
+      storyboard: expect.any(Object),
       storyboardFile: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
@@ -231,14 +231,14 @@ describe('applyStoryboardTool', () => {
 
 async function getToolResult({
   session = '12345',
-  storyboardName = 'QBR Story',
+  storyboard = 'QBR Story',
   storyboardFile,
   storyboardXml,
   mockExecutor = vi.fn().mockResolvedValue({}),
   customSignal,
 }: {
   session?: string;
-  storyboardName?: string;
+  storyboard?: string;
   storyboardFile?: string;
   storyboardXml?: string;
   mockExecutor?: TableauDesktopToolContext['getExecutor'];
@@ -259,5 +259,5 @@ async function getToolResult({
     getExecutor: mockExecutor,
     ...(customSignal && { signal: customSignal }),
   };
-  return await callback({ session, storyboardName, storyboardFile }, extra);
+  return await callback({ session, storyboard, storyboardFile }, extra);
 }

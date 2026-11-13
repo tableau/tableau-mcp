@@ -255,12 +255,12 @@ describe('format-worksheets tool', () => {
     const { result, applyWorksheetDocument } = await callTool({
       worksheets: [
         {
-          name: 'Sales by Category',
+          worksheet: 'Sales by Category',
           showLabels: true,
           numberFormats: [{ field: 'Sales', kind: 'currency', currencySymbol: '$', decimals: 0 }],
         },
         {
-          name: 'Profit KPI',
+          worksheet: 'Profit KPI',
           showLabels: true,
           numberFormats: [{ field: 'Profit', kind: 'currency', currencySymbol: '$', decimals: 0 }],
         },
@@ -281,8 +281,8 @@ describe('format-worksheets tool', () => {
   it('rejects duplicate worksheet targets before applying', async () => {
     const { result, applyWorksheetDocument } = await callTool({
       worksheets: [
-        { name: 'Sales by Category', showLabels: true },
-        { name: 'Sales by Category', showLabels: true },
+        { worksheet: 'Sales by Category', showLabels: true },
+        { worksheet: 'Sales by Category', showLabels: true },
       ],
     });
 
@@ -293,8 +293,8 @@ describe('format-worksheets tool', () => {
   it('rejects one worksheet selected by both name and id before applying', async () => {
     const { result, getWorksheetDocument, applyWorksheetDocument } = await callTool({
       worksheets: [
-        { name: 'Sales by Category', showLabels: true },
-        { name: 'worksheet-1', showLabels: true },
+        { worksheet: 'Sales by Category', showLabels: true },
+        { worksheet: 'worksheet-1', showLabels: true },
       ],
     });
 
@@ -306,9 +306,9 @@ describe('format-worksheets tool', () => {
   it('preflights every target before applying any worksheet', async () => {
     const { result, applyWorksheetDocument } = await callTool({
       worksheets: [
-        { name: 'Sales by Category', showLabels: true },
+        { worksheet: 'Sales by Category', showLabels: true },
         {
-          name: 'Profit KPI',
+          worksheet: 'Profit KPI',
           numberFormats: [{ field: 'Discount', kind: 'percentage', decimals: 1 }],
         },
       ],
@@ -325,7 +325,7 @@ describe('format-worksheets tool', () => {
       {
         worksheets: [
           {
-            name: 'Sales by Category',
+            worksheet: 'Sales by Category',
             numberFormats: [{ field: 'Sales', kind: 'number', decimals: 0 }],
           },
         ],
@@ -348,7 +348,7 @@ describe('format-worksheets tool', () => {
       {
         worksheets: [
           {
-            name: 'Sales by Category',
+            worksheet: 'Sales by Category',
             showLabels: true,
             numberFormats: [{ field: 'Sales', kind: 'currency', currencySymbol: '$', decimals: 0 }],
           },
@@ -366,7 +366,7 @@ describe('format-worksheets tool', () => {
       {
         worksheets: [
           {
-            name: 'Sales by Category',
+            worksheet: 'Sales by Category',
             numberFormats: [{ field: 'Sales', kind: 'number', decimals: 0 }],
           },
         ],
@@ -384,7 +384,7 @@ describe('format-worksheets tool', () => {
 
   it('rejects matching mark-label formatting read back in another pane', async () => {
     const { result } = await callTool(
-      { worksheets: [{ name: 'Sales by Category', showLabels: true }] },
+      { worksheets: [{ worksheet: 'Sales by Category', showLabels: true }] },
       {
         sourceTransform: (xml) =>
           xml
@@ -404,7 +404,7 @@ describe('format-worksheets tool', () => {
 
   it('rejects readback that keeps formatting but drops a worksheet shelf', async () => {
     const { result } = await callTool(
-      { worksheets: [{ name: 'Sales by Category', showLabels: true }] },
+      { worksheets: [{ worksheet: 'Sales by Category', showLabels: true }] },
       {
         readbackTransform: (xml) =>
           xml.replace('    <rows>[Sample - Superstore].[none:Category:nk]</rows>\n', ''),
@@ -421,7 +421,7 @@ describe('format-worksheets tool', () => {
       {
         worksheets: [
           {
-            name: 'Sales by Category',
+            worksheet: 'Sales by Category',
             numberFormats: [{ field: 'Sales', kind: 'currency', currencySymbol: '$', decimals: 0 }],
           },
         ],
@@ -438,8 +438,8 @@ describe('format-worksheets tool', () => {
       const { result } = await callTool(
         {
           worksheets: [
-            { name: 'Sales by Category', showLabels: true },
-            { name: 'Profit KPI', showLabels: true },
+            { worksheet: 'Sales by Category', showLabels: true },
+            { worksheet: 'Profit KPI', showLabels: true },
           ],
         },
         { secondFailure },
@@ -456,8 +456,8 @@ describe('format-worksheets tool', () => {
     const resultPromise = callTool(
       {
         worksheets: [
-          { name: 'Sales by Category', showLabels: true },
-          { name: 'Profit KPI', showLabels: true },
+          { worksheet: 'Sales by Category', showLabels: true },
+          { worksheet: 'Profit KPI', showLabels: true },
         ],
       },
       { secondFailure: 'unsettled' },
@@ -477,7 +477,7 @@ describe('format-worksheets tool', () => {
     const swappedRows = `<rows>${ds}.[sum:Profit:qk] + ${ds}.[sum:Sales:qk]</rows>`;
     vi.useFakeTimers();
     const resultPromise = callTool(
-      { worksheets: [{ name: 'Sales by Category', showLabels: true }] },
+      { worksheets: [{ worksheet: 'Sales by Category', showLabels: true }] },
       {
         sourceTransform: (xml) =>
           xml.replace(`<rows>${ds}.[none:Category:nk]</rows>`, intendedRows),
@@ -496,8 +496,8 @@ describe('format-worksheets tool', () => {
     const { result, applyWorksheetDocument } = await callTool(
       {
         worksheets: [
-          { name: 'Sales by Category', showLabels: true },
-          { name: 'Profit KPI', showLabels: true },
+          { worksheet: 'Sales by Category', showLabels: true },
+          { worksheet: 'Profit KPI', showLabels: true },
         ],
       },
       { driftSecondBeforeApply: true },
@@ -518,7 +518,7 @@ describe('format-worksheets tool', () => {
 
 type ToolArgs = {
   worksheets: Array<{
-    name: string;
+    worksheet: string;
     showLabels?: boolean;
     numberFormats?: Array<{
       field: string;
@@ -544,7 +544,7 @@ async function callTool(
   getWorksheetDocument: ReturnType<typeof vi.fn>;
   applyWorksheetDocument: ReturnType<typeof vi.fn>;
 }> {
-  const worksheets = args.worksheets.map(({ name }, index) => ({
+  const worksheets = args.worksheets.map(({ worksheet: name }, index) => ({
     id: `worksheet-${index + 1}`,
     name,
   }));

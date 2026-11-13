@@ -29,7 +29,7 @@ describe('External API coverage tools', () => {
     try {
       // A storyboard serializes as a `<dashboard type="storyboard">`; its /document route returns
       // that bare fragment directly, so the tool returns it as-is.
-      const result = await harness.callTool({ storyboardName: 'QBR Story', mode: 'inline' });
+      const result = await harness.callTool({ storyboard: 'QBR Story', mode: 'inline' });
 
       expect(result.isError).toBe(false);
       const storyboardXml = z
@@ -49,7 +49,7 @@ describe('External API coverage tools', () => {
   it.each([
     {
       makeTool: getStoryboardXmlTool,
-      args: { storyboardName: 'story-qbr' },
+      args: { storyboard: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr/document',
       expectedMessage: 'does not serve the storyboard document endpoint',
     },

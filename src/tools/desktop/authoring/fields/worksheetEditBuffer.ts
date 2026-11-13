@@ -190,29 +190,29 @@ export function clearStickyWorksheetFile({
 
 /**
  * The cache file add-field/remove-field should edit for this sheet+session, minting one from
- * a live fetch when no buffer is open. Resolves a worksheetName through the sheet's stable id
+ * a live fetch when no buffer is open. Resolves a worksheet ref through the sheet's stable id
  * so a rename cannot strand the buffer, and updates the buffer pointer to the returned file.
  */
 export async function resolveWorksheetEditFile({
-  worksheetName,
+  worksheet,
   worksheetFile,
   resolvedSession,
   extra,
 }: {
-  worksheetName: string | undefined;
+  worksheet: string | undefined;
   worksheetFile: string | undefined;
   resolvedSession: string;
   extra: TableauDesktopRequestHandlerExtra;
 }): Promise<Result<string, McpToolError>> {
-  if (!worksheetFile?.trim() && !worksheetName?.trim()) {
+  if (!worksheetFile?.trim() && !worksheet?.trim()) {
     return Err(
       new ArgsValidationError(
-        'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
+        'Provide either worksheet (to edit an existing sheet) or worksheetFile (a cached path).',
       ),
     );
   }
 
-  const trimmedWorksheetName = worksheetName?.trim() || undefined;
+  const trimmedWorksheet = worksheet?.trim() || undefined;
 
   // Check the file before any Desktop call so a bad path costs no round trip or cache write.
   let resolvedFile: string | undefined;
@@ -227,9 +227,9 @@ export async function resolveWorksheetEditFile({
   }
 
   let bufferWorksheetId: string | undefined;
-  if (trimmedWorksheetName) {
+  if (trimmedWorksheet) {
     const resolved = await resolveWorksheetBufferId({
-      worksheetRef: trimmedWorksheetName,
+      worksheetRef: trimmedWorksheet,
       resolvedSession,
       extra,
     });
@@ -248,7 +248,7 @@ export async function resolveWorksheetEditFile({
       resolvedFile = sticky;
     } else {
       const minted = await fetchAndCacheWorksheet({
-        worksheetName: trimmedWorksheetName!,
+        worksheetName: trimmedWorksheet!,
         resolvedSession,
         extra,
       });

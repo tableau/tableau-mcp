@@ -97,7 +97,7 @@ describe('removeFieldTool', () => {
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
       worksheetFile: expect.any(Object),
       target: expect.any(Object),
       columnRef: expect.any(Object),
@@ -400,7 +400,7 @@ describe('removeFieldTool', () => {
     const result = await callback(
       {
         session: undefined as unknown as string,
-        worksheetName: 'Sheet 1',
+        worksheet: 'Sheet 1',
         worksheetFile: undefined,
         target: 'rows',
         columnRef: COLUMN_REF,
@@ -451,7 +451,7 @@ describe('removeFieldTool', () => {
     const result = await callback(
       {
         session: SESSION,
-        worksheetName: undefined,
+        worksheet: undefined,
         worksheetFile: WORKSHEET_FILE,
         target: 'rows',
         columnRef: COLUMN_REF,
@@ -475,7 +475,7 @@ describe('removeFieldTool', () => {
     vi.mocked(writeFileSync).mockReturnValue(undefined);
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -507,7 +507,7 @@ describe('removeFieldTool', () => {
     vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
 
     const first = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -516,7 +516,7 @@ describe('removeFieldTool', () => {
     const firstBody = resultSchema.parse(JSON.parse(first.content[0].text));
 
     const second = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -545,20 +545,20 @@ describe('removeFieldTool', () => {
       reason: 'session-mismatch',
     } as never);
 
-    await getResult({ worksheetName: 'Sheet 1', target: 'rows', columnRef: COLUMN_REF });
-    await getResult({ worksheetName: 'Sheet 1', target: 'rows', columnRef: COLUMN_REF });
+    await getResult({ worksheet: 'Sheet 1', target: 'rows', columnRef: COLUMN_REF });
+    await getResult({ worksheet: 'Sheet 1', target: 'rows', columnRef: COLUMN_REF });
 
     expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledTimes(2);
   });
 
-  it('uses a supplied worksheetFile without fetching when worksheetName is also given', async () => {
+  it('uses a supplied worksheetFile without fetching when worksheet is also given', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: WORKSHEET_FILE,
       target: 'rows',
       columnRef: COLUMN_REF,
@@ -570,14 +570,14 @@ describe('removeFieldTool', () => {
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('errors when neither worksheetName nor worksheetFile is provided', async () => {
+  it('errors when neither worksheet nor worksheetFile is provided', async () => {
     const result = await getResult({ target: 'rows', columnRef: COLUMN_REF });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       new ArgsValidationError(
-        'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
+        'Provide either worksheet (to edit an existing sheet) or worksheetFile (a cached path).',
       ).message,
     );
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
@@ -588,7 +588,7 @@ describe('removeFieldTool', () => {
     // "Ghost" is not in the mocked worksheet list, so the stable-id resolve fails and the
     // edit stops there — it never falls back to keying the buffer on the raw name.
     const result = await getResult({
-      worksheetName: 'Ghost',
+      worksheet: 'Ghost',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -611,7 +611,7 @@ describe('removeFieldTool', () => {
     );
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -639,7 +639,7 @@ describe('removeFieldTool', () => {
     vi.mocked(getWorksheetXmlModule.isRouteMissing).mockReturnValue(true);
 
     const result = await getResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       target: 'rows',
       columnRef: COLUMN_REF,
     });
@@ -677,7 +677,7 @@ describe('removeFieldTool', () => {
       Ok({ readbackWarnings: [] }),
     );
 
-    const addResult = await getAddResult({ worksheetName: 'Sheet 1', target: 'rows' });
+    const addResult = await getAddResult({ worksheet: 'Sheet 1', target: 'rows' });
 
     expect(addResult.isError).toBe(false);
     invariant(addResult.content[0].type === 'text');
@@ -695,7 +695,7 @@ describe('removeFieldTool', () => {
     expect(removeBody.file).toBe(addBody.file);
 
     const applyResult = await getApplyResult({
-      worksheetName: 'Sheet 1',
+      worksheet: 'Sheet 1',
       worksheetFile: removeBody.file,
     });
 
@@ -868,25 +868,25 @@ describe('removeFieldTool', () => {
 });
 
 async function getResult(params: {
-  worksheetName?: string;
+  worksheet?: string;
   worksheetFile?: string;
   target: Target;
   columnRef: string;
   encodingType?: EncodingType;
   session?: string;
 }): Promise<CallToolResult> {
-  const { worksheetName, worksheetFile, target, columnRef, encodingType } = params;
+  const { worksheet, worksheetFile, target, columnRef, encodingType } = params;
   const session = ('session' in params ? params.session : SESSION) as string;
   const tool = getRemoveFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session, worksheetName, worksheetFile, target, columnRef, encodingType },
+    { session, worksheet, worksheetFile, target, columnRef, encodingType },
     getMockRequestHandlerExtra(),
   );
 }
 
 async function getAddResult(params: {
-  worksheetName?: string;
+  worksheet?: string;
   worksheetFile?: string;
   target: Target;
   columnRef?: string;
@@ -899,7 +899,7 @@ async function getAddResult(params: {
   return await callback(
     {
       session,
-      worksheetName: params.worksheetName,
+      worksheet: params.worksheet,
       worksheetFile: params.worksheetFile,
       target: params.target,
       columnRef: params.columnRef ?? COLUMN_REF,
@@ -912,7 +912,7 @@ async function getAddResult(params: {
 }
 
 async function getApplyResult(params: {
-  worksheetName: string;
+  worksheet: string;
   worksheetFile: string;
   session?: string;
 }): Promise<CallToolResult> {
@@ -924,7 +924,7 @@ async function getApplyResult(params: {
       session,
       artifactId: undefined,
       templatePlan: undefined,
-      worksheetName: params.worksheetName,
+      worksheet: params.worksheet,
       worksheetFile: params.worksheetFile,
     },
     getMockRequestHandlerExtra(),

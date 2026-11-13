@@ -37,8 +37,8 @@ vi.mock('./composeDashboardCore.js', async (importOriginal) => {
 });
 
 const BATCH = {
-  dashboardName: 'Executive Overview',
-  existingWorksheetNames: ['Existing'],
+  dashboard: 'Executive Overview',
+  worksheets: ['Existing'],
   title: 'Executive Overview',
   layoutType: 'columns' as const,
 };
@@ -123,9 +123,9 @@ describe('runDashboardBatchTool', () => {
       schema.safeParse({
         session: '12345',
         artifactIds: ['a1', 'a2'],
-        dashboardName: BATCH.dashboardName,
+        dashboard: BATCH.dashboard,
         layoutType: 'executive-summary',
-        kpiWorksheetNames: ['New A'],
+        kpiWorksheets: ['New A'],
       }).success,
     ).toBe(true);
     expect(schema.safeParse({ session: '12345', ...BATCH }).success).toBe(true);
@@ -136,27 +136,20 @@ describe('runDashboardBatchTool', () => {
       schema.safeParse({ session: '12345', artifactIds: Array(8).fill('a'), ...BATCH }).success,
     ).toBe(false);
     expect(
-      schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: Array(7).fill('a') })
-        .success,
+      schema.safeParse({ session: '12345', ...BATCH, worksheets: Array(7).fill('a') }).success,
     ).toBe(true);
     expect(
-      schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: Array(8).fill('a') })
-        .success,
+      schema.safeParse({ session: '12345', ...BATCH, worksheets: Array(8).fill('a') }).success,
     ).toBe(false);
+    expect(schema.safeParse({ session: '12345', ...BATCH, worksheets: [] }).success).toBe(true);
+    expect(schema.safeParse({ session: '12345', ...BATCH, kpiWorksheets: [] }).success).toBe(true);
     expect(
-      schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: [] }).success,
-    ).toBe(true);
-    expect(schema.safeParse({ session: '12345', ...BATCH, kpiWorksheetNames: [] }).success).toBe(
-      true,
-    );
-    expect(
-      schema.safeParse({ session: '12345', ...BATCH, kpiWorksheetNames: Array(6).fill('a') })
-        .success,
+      schema.safeParse({ session: '12345', ...BATCH, kpiWorksheets: Array(6).fill('a') }).success,
     ).toBe(false);
     const tooLong = 'x'.repeat(256);
     expect(schema.safeParse({ ...BATCH, artifactIds: [tooLong] }).success).toBe(false);
-    expect(schema.safeParse({ ...BATCH, dashboardName: tooLong }).success).toBe(false);
-    expect(schema.safeParse({ ...BATCH, existingWorksheetNames: [tooLong] }).success).toBe(false);
+    expect(schema.safeParse({ ...BATCH, dashboard: tooLong }).success).toBe(false);
+    expect(schema.safeParse({ ...BATCH, worksheets: [tooLong] }).success).toBe(false);
     expect(schema.safeParse({ ...BATCH, title: tooLong }).success).toBe(false);
 
     const entry = await getDesktopToolListEntry(tool);
@@ -172,11 +165,11 @@ describe('runDashboardBatchTool', () => {
           description: 'Session ID; optional if pinned or unique.',
         },
         artifactIds: { type: 'array', items: { type: 'string' } },
-        dashboardName: { type: 'string' },
-        existingWorksheetNames: {
+        dashboard: { type: 'string' },
+        worksheets: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Live non-KPI chart worksheet names in dashboard order.',
+          description: 'Live non-KPI chart worksheet ids (preferred) or names, in dashboard order.',
         },
         title: { type: 'string' },
         layoutType: {
@@ -184,20 +177,20 @@ describe('runDashboardBatchTool', () => {
           description: 'Dashboard layout; executive-summary uses KPI and chart roles.',
         },
         gridColumns: { type: 'integer' },
-        kpiWorksheetNames: {
+        kpiWorksheets: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Live KPI worksheet names in display order from left to right.',
+          description: 'Live KPI worksheet ids (preferred) or names, left to right.',
         },
         replaceExisting: { type: 'boolean' },
       },
-      required: expect.arrayContaining(['dashboardName']),
+      required: expect.arrayContaining(['dashboard']),
     });
-    expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
+    expect(entry.inputSchema.required).not.toContain('worksheets');
     expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
     expect(entry._meta).toEqual({ 'anthropic/alwaysLoad': true });
-    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_302);
+    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_296);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {
@@ -217,7 +210,7 @@ describe('runDashboardBatchTool', () => {
       duration_ms: expect.any(Number),
       outcome: 'succeeded',
     });
-    expect(event).not.toHaveProperty('dashboardName');
+    expect(event).not.toHaveProperty('dashboard');
     expect(event).not.toHaveProperty('artifactIds');
     expect(event).not.toHaveProperty('worksheetNames');
   });
@@ -365,7 +358,7 @@ describe('runDashboardBatchTool', () => {
   });
 
   it('rejects missing existing worksheets before writing', async () => {
-    const missing = await callBatch([], { existingWorksheetNames: ['Missing'] });
+    const missing = await callBatch([], { worksheets: ['Missing'] });
 
     expect(bodyOf(missing)).toMatchObject({ applied: false, retrySafe: true });
   });
@@ -378,7 +371,7 @@ describe('runDashboardBatchTool', () => {
     const harness = statefulExecutor({ initialXml: unrenderedXml });
 
     const result = await callBatch([], {
-      existingWorksheetNames: ['Empty'],
+      worksheets: ['Empty'],
       executor: harness.executor,
     });
 
@@ -405,7 +398,7 @@ describe('runDashboardBatchTool', () => {
       store: artifactStore(['a1'], { titles: { a1: 'Executive Overview' } }),
     });
     const tooMany = await callBatch(['a1'], {
-      existingWorksheetNames: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7'],
+      worksheets: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7'],
       executor: statefulExecutor({
         initialXml: renderedWorkbook(['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7']),
       }).executor,
@@ -420,7 +413,7 @@ describe('runDashboardBatchTool', () => {
     const harness = statefulExecutor();
 
     const result = await callBatch([], {
-      existingWorksheetNames: ['Existing A', 'Existing B'],
+      worksheets: ['Existing A', 'Existing B'],
       executor: harness.executor,
     });
 
@@ -442,9 +435,9 @@ describe('runDashboardBatchTool', () => {
     const harness = statefulExecutor();
 
     const result = await callBatch([], {
-      existingWorksheetNames: ['Existing A', 'Existing B'],
+      worksheets: ['Existing A', 'Existing B'],
       layoutType: 'executive-summary',
-      kpiWorksheetNames: ['Existing A'],
+      kpiWorksheets: ['Existing A'],
       executor: harness.executor,
     });
 
@@ -458,7 +451,7 @@ describe('runDashboardBatchTool', () => {
     );
   });
 
-  it('resolves live KPI role references without duplicating them in existingWorksheetNames', async () => {
+  it('resolves live KPI role references without duplicating them in worksheets', async () => {
     const chartNames = ['Trend', 'Top Products', 'Regional Sales', 'Customer Mix'];
     const kpiNames = ['Total Sales', 'Total Profit', 'Total Quantity'];
     const harness = statefulExecutor({
@@ -474,9 +467,9 @@ describe('runDashboardBatchTool', () => {
     });
 
     const result = await callBatch([], {
-      existingWorksheetNames: chartNames,
+      worksheets: chartNames,
       layoutType: 'executive-summary',
-      kpiWorksheetNames: kpiNames,
+      kpiWorksheets: kpiNames,
       executor: harness.executor,
     });
 
@@ -507,13 +500,41 @@ describe('runDashboardBatchTool', () => {
     );
   });
 
+  it('resolves chart and KPI worksheet ids to their live names', async () => {
+    const harness = statefulExecutor({
+      initialXml: renderedWorkbook(['Trend', 'Total Sales']).replace(
+        /<worksheet name="([^"]+)">(.*?)<\/worksheet>/g,
+        '<worksheet name="$1">$2<simple-id uuid="{id-$1}"/></worksheet>',
+      ),
+    });
+
+    const result = await callBatch([], {
+      worksheets: ['{id-Trend}'],
+      layoutType: 'executive-summary',
+      kpiWorksheets: ['{id-Total Sales}'],
+      executor: harness.executor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({
+      applied: true,
+      steps: [
+        expect.objectContaining({ operation: 'dashboard', worksheets: ['Trend', 'Total Sales'] }),
+      ],
+    });
+    const posted = harness.posts[0]!.slice(harness.posts[0]!.indexOf('<dashboards>'));
+    expect(posted).toContain('name="Trend"');
+    expect(posted).toContain('name="Total Sales"');
+    expect(posted).not.toContain('{id-');
+  });
+
   it('unions a KPI role represented in both inputs only once', async () => {
     const harness = statefulExecutor();
 
     const result = await callBatch([], {
-      existingWorksheetNames: ['Existing A', 'Existing B'],
+      worksheets: ['Existing A', 'Existing B'],
       layoutType: 'executive-summary',
-      kpiWorksheetNames: ['Existing A'],
+      kpiWorksheets: ['Existing A'],
       executor: harness.executor,
     });
 
@@ -528,9 +549,9 @@ describe('runDashboardBatchTool', () => {
     const harness = statefulExecutor();
 
     const result = await callBatch(['a1', 'a2'], {
-      existingWorksheetNames: [],
+      worksheets: [],
       layoutType: 'executive-summary',
-      kpiWorksheetNames: ['New A'],
+      kpiWorksheets: ['New A'],
       executor: harness.executor,
     });
 
@@ -543,16 +564,16 @@ describe('runDashboardBatchTool', () => {
   it('rejects unknown KPI names and conflicting free-form layout controls before writing', async () => {
     const missingHarness = statefulExecutor();
     const missing = await callBatch([], {
-      existingWorksheetNames: ['Existing A', 'Existing B'],
+      worksheets: ['Existing A', 'Existing B'],
       layoutType: 'executive-summary',
-      kpiWorksheetNames: ['Missing KPI'],
+      kpiWorksheets: ['Missing KPI'],
       executor: missingHarness.executor,
     });
     const conflictHarness = statefulExecutor();
     const conflict = await callBatch([], {
-      existingWorksheetNames: ['Existing A', 'Existing B'],
+      worksheets: ['Existing A', 'Existing B'],
       layoutType: 'executive-summary',
-      kpiWorksheetNames: ['Existing A'],
+      kpiWorksheets: ['Existing A'],
       gridColumns: 2,
       executor: conflictHarness.executor,
     });
@@ -564,7 +585,7 @@ describe('runDashboardBatchTool', () => {
         expect.objectContaining({
           stage: 'kpiWorksheet',
           error:
-            'Missing live KPI worksheet name(s): "Missing KPI". Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.',
+            'Missing live KPI worksheet name(s): "Missing KPI". Create or render each KPI worksheet, or correct kpiWorksheets; then retry with the same executive-summary layout.',
         }),
       ],
     });
@@ -587,9 +608,9 @@ describe('runDashboardBatchTool', () => {
     const harness = statefulExecutor({ initialXml: renderedWorkbook(names) });
 
     const result = await callBatch([], {
-      existingWorksheetNames: names.slice(0, 5),
+      worksheets: names.slice(0, 5),
       layoutType: 'executive-summary',
-      kpiWorksheetNames: names.slice(5),
+      kpiWorksheets: names.slice(5),
       executor: harness.executor,
     });
 
@@ -610,28 +631,28 @@ describe('runDashboardBatchTool', () => {
     {
       name: 'a missing KPI list',
       worksheetNames: ['Existing A', 'Existing B'],
-      kpiWorksheetNames: undefined,
+      kpiWorksheets: undefined,
       error: 'layoutType "executive-summary" requires at least one KPI worksheet name.',
     },
     {
       name: 'duplicate KPI names',
       worksheetNames: ['Existing A', 'Existing B'],
-      kpiWorksheetNames: ['Existing A', 'Existing A'],
+      kpiWorksheets: ['Existing A', 'Existing A'],
       error: 'Duplicate KPI worksheet name(s): "Existing A".',
     },
     {
       name: 'only KPI worksheets',
       worksheetNames: ['Existing A', 'Existing B'],
-      kpiWorksheetNames: ['Existing A', 'Existing B'],
+      kpiWorksheets: ['Existing A', 'Existing B'],
       error: 'layoutType "executive-summary" requires at least one non-KPI worksheet.',
     },
-  ])('rejects $name before writing', async ({ worksheetNames, kpiWorksheetNames, error }) => {
+  ])('rejects $name before writing', async ({ worksheetNames, kpiWorksheets, error }) => {
     const harness = statefulExecutor();
 
     const result = await callBatch([], {
-      existingWorksheetNames: worksheetNames,
+      worksheets: worksheetNames,
       layoutType: 'executive-summary',
-      kpiWorksheetNames,
+      kpiWorksheets,
       executor: harness.executor,
     });
 
@@ -648,7 +669,7 @@ describe('runDashboardBatchTool', () => {
     async (layoutType) => {
       const absent = statefulExecutor();
       const empty = statefulExecutor();
-      const options = { existingWorksheetNames: ['Existing A', 'Existing B'], layoutType };
+      const options = { worksheets: ['Existing A', 'Existing B'], layoutType };
 
       const composeRequests = (): unknown[] =>
         vi
@@ -659,7 +680,7 @@ describe('runDashboardBatchTool', () => {
       vi.mocked(composeDashboardCore.buildDashboardCandidateXml).mockClear();
       const emptyResult = await callBatch([], {
         ...options,
-        kpiWorksheetNames: [],
+        kpiWorksheets: [],
         executor: empty.executor,
       });
 
@@ -674,12 +695,12 @@ describe('runDashboardBatchTool', () => {
 
   it('logs an empty KPI list like an absent one', async () => {
     const notify = vi.spyOn(Tool.prototype, 'notifyInvocation').mockImplementation(() => {});
-    const loggedArgs = async (kpiWorksheetNames?: string[]): Promise<unknown> => {
+    const loggedArgs = async (kpiWorksheets?: string[]): Promise<unknown> => {
       notify.mockClear();
       await callBatch([], {
-        existingWorksheetNames: ['Existing A', 'Existing B'],
+        worksheets: ['Existing A', 'Existing B'],
         layoutType: 'rows',
-        kpiWorksheetNames,
+        kpiWorksheets,
       });
       return notify.mock.calls[0]?.[0].args;
     };
@@ -705,9 +726,9 @@ describe('runDashboardBatchTool', () => {
     const harness = statefulExecutor();
 
     const result = await callBatch([], {
-      existingWorksheetNames: c.worksheetNames,
+      worksheets: c.worksheetNames,
       layoutType: 'executive-summary',
-      kpiWorksheetNames: [],
+      kpiWorksheets: [],
       executor: harness.executor,
     });
 
@@ -728,7 +749,7 @@ describe('runDashboardBatchTool', () => {
     });
 
     const resultPromise = callBatch([], {
-      existingWorksheetNames: ['Top Products'],
+      worksheets: ['Top Products'],
       executor: harness.executor,
     });
     await vi.runAllTimersAsync();
@@ -763,7 +784,7 @@ describe('runDashboardBatchTool', () => {
 
       const resultPromise = callBatch(['a1'], {
         store: artifactStore(['a1'], { worksheetXmls }),
-        existingWorksheetNames: [],
+        worksheets: [],
         executor: harness.executor,
       });
       await vi.runAllTimersAsync();
@@ -787,7 +808,7 @@ describe('runDashboardBatchTool', () => {
 
       const resultPromise = callBatch(['a1'], {
         store: artifactStore(['a1'], { worksheetXmls }),
-        existingWorksheetNames: [],
+        worksheets: [],
         executor: harness.executor,
       });
       await vi.runAllTimersAsync();
@@ -819,7 +840,7 @@ describe('runDashboardBatchTool', () => {
     });
     const warningResult = await callBatch(ids, {
       store: artifactStore(ids, { titles, worksheetXmls: warningXmls }),
-      existingWorksheetNames: [],
+      worksheets: [],
       executor: warningHarness.executor,
     });
 
@@ -838,7 +859,7 @@ describe('runDashboardBatchTool', () => {
     });
     const failurePromise = callBatch(ids, {
       store: artifactStore(ids, { titles, worksheetXmls: failedXmls }),
-      existingWorksheetNames: [],
+      worksheets: [],
       executor: failureHarness.executor,
     });
     await vi.runAllTimersAsync();
@@ -855,8 +876,8 @@ async function callBatch(
     store?: TemplateArtifactStore;
     signal?: AbortSignal;
     executor?: ExternalApiToolExecutor;
-    existingWorksheetNames?: string[];
-    kpiWorksheetNames?: string[];
+    worksheets?: string[];
+    kpiWorksheets?: string[];
     layoutType?: 'auto-grid' | 'rows' | 'columns' | 'executive-summary';
     gridColumns?: number;
   } = {},
@@ -872,11 +893,9 @@ async function callBatch(
       ...BATCH,
       gridColumns: options.gridColumns,
       layoutType: options.layoutType ?? BATCH.layoutType,
-      kpiWorksheetNames: options.kpiWorksheetNames,
+      kpiWorksheets: options.kpiWorksheets,
       replaceExisting: false,
-      ...(options.existingWorksheetNames !== undefined
-        ? { existingWorksheetNames: options.existingWorksheetNames }
-        : {}),
+      ...(options.worksheets !== undefined ? { worksheets: options.worksheets } : {}),
     },
     {
       ...getMockRequestHandlerExtra(),

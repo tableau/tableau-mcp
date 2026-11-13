@@ -16,7 +16,7 @@ import { acceptedDashboardLoadResult, runApplyPreamble } from './applyPreamble.j
 
 const paramsSchema = {
   session: sessionParam(),
-  dashboardName: artifactNameParam('dashboard'),
+  dashboard: artifactNameParam('dashboard'),
   dashboardFile: artifactFileParam('dashboard').optional(),
 };
 
@@ -38,10 +38,10 @@ export const getApplyDashboardTool = (
       destructiveHint: true,
       idempotentHint: false,
     },
-    callback: async ({ session, dashboardName, dashboardFile }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, dashboard, dashboardFile }, extra): Promise<CallToolResult> => {
       return await applyDashboardTool.logAndExecute({
         extra,
-        args: { session, dashboardName, dashboardFile },
+        args: { session, dashboard, dashboardFile },
         callback: async () => {
           const preamble = runApplyPreamble({
             kind: 'dashboard',
@@ -59,10 +59,10 @@ export const getApplyDashboardTool = (
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadDashboardXml({
-            dashboardName,
+            dashboardName: dashboard,
             xml: dashboardXml,
             expectedSourceHash: sourceHash,
-            focus: { navigate: 'artifact', sheetName: dashboardName },
+            focus: { navigate: 'artifact', sheetName: dashboard },
             executor,
             signal: extra.signal,
             // apply-dashboard updates an existing dashboard in place via the per-sheet `/document`
@@ -104,7 +104,7 @@ export const getApplyDashboardTool = (
             acceptedDashboardLoadResult({
               kind: 'dashboard',
               loaded: result.value,
-              fallbackName: dashboardName,
+              fallbackName: dashboard,
             }),
           );
         },

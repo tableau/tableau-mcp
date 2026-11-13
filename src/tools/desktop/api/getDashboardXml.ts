@@ -15,7 +15,7 @@ import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  dashboardName: artifactNameParam('dashboard'),
+  dashboard: artifactNameParam('dashboard'),
   mode: xmlModeParam(),
 };
 
@@ -38,10 +38,10 @@ export const getGetDashboardXmlTool = (
       destructiveHint: false,
       idempotentHint: false,
     },
-    callback: async ({ session, dashboardName, mode }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, dashboard, mode }, extra): Promise<CallToolResult> => {
       return await getDashboardXmlTool.logAndExecute<GetDashboardXmlToolResult>({
         extra,
-        args: { session, dashboardName, mode },
+        args: { session, dashboard, mode },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -50,7 +50,7 @@ export const getGetDashboardXmlTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
           const result = await getDashboardXml({
-            dashboardName,
+            dashboardName: dashboard,
             executor,
             signal: extra.signal,
           });

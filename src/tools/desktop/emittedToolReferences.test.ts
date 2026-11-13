@@ -136,7 +136,6 @@ const NON_TOOL_VOCABULARY = [
   'mark-labels-show',
   'missing-required-slot',
   'multi-select',
-  'name-only',
   'name-style',
   'nav-action',
   'nav-type',

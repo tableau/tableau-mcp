@@ -218,32 +218,6 @@ describe('writeCachedXmlTool', () => {
       expect(written).not.toContain('[Sales]</rows>');
     });
 
-    it('splices via the aligned worksheetName key too', async () => {
-      const modified =
-        "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>";
-
-      const result = await getResult(CACHED_FILE, modified, { worksheetName: 'Sales' });
-
-      expect(result.isError).toBeFalsy();
-      const written = vi.mocked(cachePathModule.writeContainedCacheTextFile).mock.calls[0][1];
-      expect(written).toContain('[Sales Modified]');
-      expect(written).toContain('[Profit]');
-    });
-
-    it('rejects a worksheetName/worksheet conflict without writing', async () => {
-      const result = await getResult(
-        CACHED_FILE,
-        "<worksheet name='Sales'><rows>[x]</rows></worksheet>",
-        { worksheetName: 'Sales', worksheet: 'Profit' },
-      );
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('worksheetName ("Sales")');
-      expect(result.content[0].text).toContain('Pass one of them.');
-      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
-    });
-
     it('errors (without writing) when the element to splice is absent', async () => {
       const result = await getResult(CACHED_FILE, "<worksheet name='Nope'/>", {
         worksheet: 'Nope',
@@ -355,9 +329,7 @@ async function getResult(
   filePath: string,
   xmlContent: string,
   selectors: {
-    worksheetName?: string;
     worksheet?: string;
-    dashboardName?: string;
     dashboard?: string;
   } = {},
   ...requestedSession: [string | undefined] | []
@@ -370,9 +342,7 @@ async function getResult(
       session,
       filePath,
       xmlContent,
-      worksheetName: selectors.worksheetName,
       worksheet: selectors.worksheet,
-      dashboardName: selectors.dashboardName,
       dashboard: selectors.dashboard,
     },
     getMockRequestHandlerExtra(),

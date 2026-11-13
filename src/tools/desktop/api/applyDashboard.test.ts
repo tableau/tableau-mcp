@@ -50,7 +50,7 @@ describe('applyDashboardTool', () => {
     expect(tool.description).toContain('freshness check');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      dashboardName: expect.any(Object),
+      dashboard: expect.any(Object),
       dashboardFile: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
@@ -232,14 +232,14 @@ describe('applyDashboardTool', () => {
 
 async function getToolResult({
   session = '12345',
-  dashboardName = 'Sales Dashboard',
+  dashboard = 'Sales Dashboard',
   dashboardFile,
   dashboardXml,
   mockExecutor = vi.fn().mockResolvedValue({}),
   customSignal,
 }: {
   session?: string;
-  dashboardName?: string;
+  dashboard?: string;
   dashboardFile?: string;
   dashboardXml?: string;
   mockExecutor?: TableauDesktopToolContext['getExecutor'];
@@ -260,5 +260,5 @@ async function getToolResult({
     getExecutor: mockExecutor,
     ...(customSignal && { signal: customSignal }),
   };
-  return await callback({ session, dashboardName, dashboardFile }, extra);
+  return await callback({ session, dashboard, dashboardFile }, extra);
 }

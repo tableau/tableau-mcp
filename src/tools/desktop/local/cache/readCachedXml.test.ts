@@ -142,17 +142,6 @@ describe('readCachedXmlTool', () => {
       expect(result.content[0].text).not.toContain('[Profit]');
     });
 
-    it('selects via the aligned worksheetName/dashboardName keys too', async () => {
-      const byName = await getResult(CACHED_FILE, { worksheetName: 'Sales' });
-      invariant(byName.content[0].type === 'text');
-      expect(byName.content[0].text).toContain('[Sales]');
-      expect(byName.content[0].text).not.toContain('[Profit]');
-
-      const dashByName = await getResult(CACHED_FILE, { dashboardName: 'Main' });
-      invariant(dashByName.content[0].type === 'text');
-      expect(dashByName.content[0].text).toContain("<zone name='Sales'/>");
-    });
-
     it.each([
       ['worksheet', { worksheet: 'Nope &amp; Co' }, 'list-worksheets'],
       ['dashboard', { dashboard: 'Nope &amp; Co' }, 'list-dashboards'],
@@ -164,17 +153,6 @@ describe('readCachedXmlTool', () => {
       expect(result.content[0].text).toContain(`No <${kind} name="Nope &amp; Co"> element found`);
       expect(result.content[0].text).toContain(`plain ${kind} name (A & B), not the XML-escaped`);
       expect(result.content[0].text).toContain(listTool);
-    });
-
-    it('rejects a worksheetName/worksheet conflict without reading', async () => {
-      vi.mocked(cachePathModule.readContainedCacheTextFile).mockClear();
-      const result = await getResult(CACHED_FILE, { worksheetName: 'Sales', worksheet: 'Profit' });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('worksheetName ("Sales")');
-      expect(result.content[0].text).toContain('Pass one of them.');
-      expect(cachePathModule.readContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('returns only the selected dashboard element', async () => {
@@ -271,9 +249,7 @@ describe('readCachedXmlTool', () => {
 async function getResult(
   filePath: string,
   selectors: {
-    worksheetName?: string;
     worksheet?: string;
-    dashboardName?: string;
     dashboard?: string;
     startByte?: number;
     endByte?: number;
@@ -284,9 +260,7 @@ async function getResult(
   return await callback(
     {
       filePath,
-      worksheetName: selectors.worksheetName,
       worksheet: selectors.worksheet,
-      dashboardName: selectors.dashboardName,
       dashboard: selectors.dashboard,
       startByte: selectors.startByte,
       endByte: selectors.endByte,

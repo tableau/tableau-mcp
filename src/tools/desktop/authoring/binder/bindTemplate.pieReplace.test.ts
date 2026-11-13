@@ -126,7 +126,7 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     invariant(pie.content[0].type === 'text');
     const pieBody = JSON.parse(pie.content[0].text);
     expect(pieBody).toMatchObject({ applied: true, pie_slice_warning: { rows: 13 } });
-    const offered = /call bind-template with ask "([^"]+)" and target_worksheet "([^"]+)"/.exec(
+    const offered = /call bind-template with ask "([^"]+)" and worksheet "([^"]+)"/.exec(
       pieBody.guidance,
     );
     invariant(offered, `no concrete offer in: ${pieBody.guidance}`);
@@ -140,7 +140,7 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
         session: '7',
         ask: offeredAsk,
         auto_apply: true,
-        target_worksheet: offeredTarget,
+        worksheet: offeredTarget,
       } as any,
       extra,
     );
@@ -263,9 +263,7 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     ],
   });
   const concreteOffer = (body: any): [string, string] | undefined => {
-    const m = /call bind-template with ask "([^"]+)" and target_worksheet "([^"]+)"/.exec(
-      body.guidance,
-    );
+    const m = /call bind-template with ask "([^"]+)" and worksheet "([^"]+)"/.exec(body.guidance);
     return m ? [m[1], m[2]] : undefined;
   };
   const setTemplate = (name: string, edit: (xml: string) => string): void => {
@@ -299,7 +297,7 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     const body = await h.call({ ask: 'clean pie', proposal: pieProposal('Superstore') });
     const offer = concreteOffer(body);
     invariant(offer, body.guidance);
-    const bar = await h.call({ ask: offer[0], target_worksheet: offer[1] });
+    const bar = await h.call({ ask: offer[0], worksheet: offer[1] });
     expect(bar).toMatchObject({ applied: true, sheet_name: body.sheet_name });
     const sheet = extractSheetXml(h.live(), body.sheet_name);
     expect(sheet).toMatch(/<rows>\[Superstore\]\.\[none:Region:nk\]<\/rows>/);

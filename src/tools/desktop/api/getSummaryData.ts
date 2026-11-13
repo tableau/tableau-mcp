@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
+import { artifactNameParam } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import {
@@ -18,8 +18,7 @@ const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetName: z.string().optional().describe('Worksheet name/id; omit if unique.'),
-  worksheet: deprecatedArtifactAliasParam('worksheet'),
+  worksheet: artifactNameParam('worksheet').optional(),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   columns: z
     .array(z.string())
@@ -51,22 +50,11 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { session, worksheetName, worksheet, maxRows, columns },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async ({ session, worksheet, maxRows, columns }, extra): Promise<CallToolResult> => {
       return await getSummaryData.logAndExecute({
         extra,
-        args: { session, worksheetName, worksheet, maxRows, columns },
+        args: { session, worksheet, maxRows, columns },
         callback: async () => {
-          // The worksheet selector stays optional (omit when unique); the resolver here
-          // only rejects a worksheetName/alias conflict and coalesces the two keys.
-          const worksheetArg = resolveArtifactNameArg('worksheet', worksheetName, worksheet, {
-            allowMissing: true,
-          });
-          if (worksheetArg.isErr()) {
-            return worksheetArg;
-          }
           const resolvedMaxRows = Math.min(maxRows ?? DEFAULT_MAX_ROWS, MAX_ROWS_CAP);
           return await runExternalApiReadTool<SummaryDataResult>({
             session,
@@ -74,7 +62,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
             callback: async (_executor, _signal, read) => {
               const summaryResult = await fetchWorksheetSummaryData({
                 read,
-                worksheet: worksheetArg.value,
+                worksheet,
                 maxRows: resolvedMaxRows,
                 columns,
                 materializeEmpty: true,

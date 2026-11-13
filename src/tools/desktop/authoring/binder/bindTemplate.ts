@@ -119,6 +119,7 @@ import {
   type SummaryDataReadScope,
   type SummaryRowOrder,
 } from '../../api/summaryDataCore.js';
+import { artifactNameParam } from '../../params.js';
 import {
   doneNextAction,
   jsonToolResult,
@@ -158,8 +159,10 @@ const paramsSchema = {
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
-  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
+  worksheet: artifactNameParam('worksheet')
+    .optional()
+    .describe('Worksheet id (preferred) or name; omit=new.'),
+  datasource: z.string().optional().describe('Internal name or unique caption.'),
   calcs: z
     .array(
       z.object({
@@ -644,7 +647,7 @@ async function pieSliceWarningFor({
   const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
   const offer = !offerVerified
     ? 'A sorted bar would read better; offer it to the user.'
-    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and target_worksheet "${worksheetId ?? sheetName}".`;
+    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and worksheet "${worksheetId ?? sheetName}".`;
   return {
     flag: {
       field: sliceField,
@@ -810,7 +813,7 @@ function pieSliceLimitResult(detail: string): StructuredBindTemplateToolResult {
   return blockedResult(
     'pie_slice_limit',
     `Not applied: ${detail}. If the user picks the sorted bar, bind it as a new ask. ` +
-      'Only if the user explicitly says they want the pie anyway, resubmit this same ask and the same pie proposal with keep_large_pie:true, keeping the same datasource and target_worksheet. ' +
+      'Only if the user explicitly says they want the pie anyway, resubmit this same ask and the same pie proposal with keep_large_pie:true, keeping the same datasource and worksheet. ' +
       'Never set keep_large_pie without that confirmation.',
     'Offer sorted bar; keep pie only if asked',
   );
@@ -1689,7 +1692,7 @@ function appendUnfilledEncodingGuidance(
       (role, index) =>
         `add-field{${
           index === 0
-            ? `worksheetName:'${worksheetRef}'`
+            ? `worksheet:'${worksheetRef}'`
             : 'worksheetFile:<path returned by previous add-field>'
         },target:'encoding',encodingType:'${role}',columnRef:${encodingColumnRefGuidance(
           ask,
@@ -1698,7 +1701,7 @@ function appendUnfilledEncodingGuidance(
         )}}`,
     )
     .join(', then ');
-  const applyCall = `apply-worksheet{worksheetName:'${worksheetRef}',worksheetFile:<path returned by previous add-field>}`;
+  const applyCall = `apply-worksheet{worksheet:'${worksheetRef}',worksheetFile:<path returned by previous add-field>}`;
   const filled = encodings.filled.length > 0 ? encodings.filled.join(', ') : 'none';
   return (
     `${receipt} INCOMPLETE — the ask asked for ${missing}, and this bind did NOT fill it: ` +
@@ -1772,7 +1775,7 @@ function buildCall2Contract({
     arguments: {
       session,
       ask,
-      ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
+      ...(targetWorksheet !== undefined ? { worksheet: targetWorksheet } : {}),
       ...(datasource !== undefined ? { datasource } : {}),
       auto_apply: true,
     },
@@ -3449,9 +3452,9 @@ function reusedSheetResult(
         // prose contradict the receipt after a user edits the remembered sheet.
         `The remembered sheet "${remembered.sheetName}" (template ${remembered.template}) ` +
         'is still present, so no second copy was created. To rebuild it, call ' +
-        `bind-template again with target_worksheet:"${target}".`,
+        `bind-template again with worksheet:"${target}".`,
     },
-    prefillNextAction('Rebuild sheet with target_worksheet'),
+    prefillNextAction('Rebuild sheet with worksheet'),
   );
 }
 
@@ -3564,7 +3567,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         minConfidence,
         auto_apply,
         requireCompleteRequest,
-        target_worksheet,
+        worksheet,
         datasource,
         calcs,
         skip_validation,
@@ -3581,7 +3584,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           minConfidence,
           auto_apply,
           requireCompleteRequest,
-          target_worksheet,
+          worksheet,
           datasource,
           calcs,
           skip_validation,
@@ -3613,7 +3616,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   calcs !== undefined ||
                   skip_validation !== undefined ||
                   keep_large_pie !== undefined ||
-                  target_worksheet !== undefined ||
+                  worksheet !== undefined ||
                   datasource !== undefined)
               ) {
                 return new Ok(completeRequestDecline(ask));
@@ -3690,7 +3693,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   currentProposalSignature,
                   resolvedSession,
                   askKey,
-                  target_worksheet,
+                  worksheet,
                   keep_large_pie,
                 );
                 if (blocked) {
@@ -3701,7 +3704,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   priorRecovery,
                   currentProposalSignature,
                   keep_large_pie,
-                  target_worksheet,
+                  worksheet,
                 );
                 if (requestedDatasource === undefined) {
                   admission.reservationId = sessionRouteState.reserveBindRecoveryAdmission(
@@ -3806,7 +3809,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                       currentProposalSignature,
                       resolvedSession,
                       askKey,
-                      target_worksheet,
+                      worksheet,
                       keep_large_pie,
                       effectiveDatasource,
                     );
@@ -3818,7 +3821,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                     currentRecovery,
                     currentProposalSignature,
                     keep_large_pie,
-                    target_worksheet,
+                    worksheet,
                     effectiveDatasource,
                   );
                   admission.reservationId = sessionRouteState.reserveBindRecoveryAdmission(
@@ -3939,22 +3942,22 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               // Desktop dedup the inject into a stray "Name (1)" copy, the exact failure
               // this parameter exists to prevent.
               let resolvedTarget: { id?: string; name: string } | undefined;
-              let canonicalTargetWorksheet = target_worksheet;
-              if (target_worksheet !== undefined) {
-                resolvedTarget = resolveWorksheetRef(workbookXml, target_worksheet) ?? undefined;
-                canonicalTargetWorksheet = resolvedTarget?.name ?? target_worksheet;
+              let canonicalTargetWorksheet = worksheet;
+              if (worksheet !== undefined) {
+                resolvedTarget = resolveWorksheetRef(workbookXml, worksheet) ?? undefined;
+                canonicalTargetWorksheet = resolvedTarget?.name ?? worksheet;
                 const target = classifyWorksheetReplaceTarget(
                   workbookXml,
                   canonicalTargetWorksheet,
                 );
                 if (target === 'not-found') {
                   return new ArgsValidationError(
-                    `target_worksheet "${canonicalTargetWorksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+                    `worksheet "${canonicalTargetWorksheet}" not found in the workbook — check list-worksheets, or omit worksheet to create a new sheet`,
                   ).toErr();
                 }
                 if (target === 'in-dashboard') {
                   return new ArgsValidationError(
-                    `target_worksheet "${canonicalTargetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
+                    `worksheet "${canonicalTargetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit worksheet to create a new sheet`,
                   ).toErr();
                 }
               }
@@ -4085,7 +4088,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                       llmInput: res.llm_input,
                       session: resolvedSession,
                       ask,
-                      targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                      targetWorksheet: resolvedTarget?.id ?? worksheet,
                       datasource: effectiveDatasource,
                       requiredFilterFields,
                       requiredFilterValues,
@@ -4118,7 +4121,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                       pieDetail,
                       {
                         datasource: pieDatasource,
-                        targetWorksheet: target_worksheet,
+                        targetWorksheet: worksheet,
                       },
                     );
                   }
@@ -4270,10 +4273,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               // for the SAME chart binds identical args under a new title and today builds a
               // duplicate sheet. Signature is title-free, so the paraphrase collapses onto the
               // sheet already applied. Only when the caller did NOT name a target: an explicit
-              // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
+              // worksheet is an explicit instruction to rewrite that sheet (a reset of
               // hand edits is legitimate) and always applies.
               const sheetSignature = appliedSheetSignature(res.args);
-              if (target_worksheet === undefined && atomicCalcs.length === 0) {
+              if (worksheet === undefined && atomicCalcs.length === 0) {
                 const remembered = rememberedSheetStillPresent({
                   session: resolvedSession,
                   signature: sheetSignature,
@@ -4284,7 +4287,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 }
               }
 
-              if (target_worksheet === undefined && trustedDeterministicApply && idempotencyKey) {
+              if (worksheet === undefined && trustedDeterministicApply && idempotencyKey) {
                 const existingTitle = existingDeterministicWorksheetTitle(
                   workbookXml,
                   decodeXmlEntities(res.args.title),

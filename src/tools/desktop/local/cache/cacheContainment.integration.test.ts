@@ -163,9 +163,7 @@ async function invokeRead(
   return callback(
     {
       filePath,
-      worksheetName: undefined,
       worksheet: selectors.worksheet,
-      dashboardName: undefined,
       dashboard: selectors.dashboard,
       startByte: undefined,
       endByte: undefined,
@@ -185,9 +183,7 @@ async function invokeWrite(
       session: '12345',
       filePath,
       xmlContent,
-      worksheetName: undefined,
       worksheet: selectors.worksheet,
-      dashboardName: undefined,
       dashboard: selectors.dashboard,
     },
     getMockRequestHandlerExtra(),

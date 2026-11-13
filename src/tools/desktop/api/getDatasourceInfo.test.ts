@@ -35,7 +35,7 @@ describe('getDatasourceInfoTool', () => {
       session: expect.any(Object),
       datasourceName: expect.any(Object),
     });
-    expect(paramsSchema.datasourceName.description).toBe('Datasource name/id.');
+    expect(paramsSchema.datasourceName.description).toBe('Datasource id (preferred) or name.');
     expect(tool.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,

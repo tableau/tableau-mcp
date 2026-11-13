@@ -44,7 +44,7 @@ describe('getDashboardXmlTool', () => {
     expect(tool.description).toContain('Get layout for an existing dashboard');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      dashboardName: expect.any(Object),
+      dashboard: expect.any(Object),
       mode: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
@@ -59,7 +59,7 @@ describe('getDashboardXmlTool', () => {
       Ok({ xml: mockXml, name: 'Sales Dashboard' }),
     );
 
-    const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
+    const result = await getToolResult({ dashboard: 'Sales Dashboard', mode: 'inline' });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -76,7 +76,7 @@ describe('getDashboardXmlTool', () => {
       Ok({ xml: mockXml, name: 'Sales Dashboard' }),
     );
 
-    const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'file' });
+    const result = await getToolResult({ dashboard: 'Sales Dashboard', mode: 'file' });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -97,7 +97,7 @@ describe('getDashboardXmlTool', () => {
     };
     vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Err(error));
 
-    const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
+    const result = await getToolResult({ dashboard: 'Sales Dashboard', mode: 'inline' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -114,7 +114,7 @@ describe('getDashboardXmlTool', () => {
     };
     vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Err(error));
 
-    const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
+    const result = await getToolResult({ dashboard: 'Sales Dashboard', mode: 'inline' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -131,7 +131,7 @@ describe('getDashboardXmlTool', () => {
     };
     vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Err(error));
 
-    const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
+    const result = await getToolResult({ dashboard: 'Sales Dashboard', mode: 'inline' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -146,7 +146,7 @@ describe('getDashboardXmlTool', () => {
       );
 
     const customSignal = new AbortController().signal;
-    await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline', customSignal });
+    await getToolResult({ dashboard: 'Sales Dashboard', mode: 'inline', customSignal });
 
     expect(mockGetDashboardXml).toHaveBeenCalledWith(
       expect.objectContaining({ signal: customSignal, dashboardName: 'Sales Dashboard' }),
@@ -160,7 +160,7 @@ describe('getDashboardXmlTool', () => {
       Ok({ xml: overCapXml, name: 'Sales Dashboard' }),
     );
 
-    const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
+    const result = await getToolResult({ dashboard: 'Sales Dashboard', mode: 'inline' });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -180,7 +180,7 @@ describe('getDashboardXmlTool', () => {
       Ok({ xml: overCapXml, name: 'D' }),
     );
 
-    await getToolResult({ dashboardName: 'D', mode: 'inline' });
+    await getToolResult({ dashboard: 'D', mode: 'inline' });
 
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -196,7 +196,7 @@ describe('getDashboardXmlTool', () => {
       Ok({ xml: smallXml, name: 'D' }),
     );
 
-    const result = await getToolResult({ dashboardName: 'D', mode: 'inline', capBytes: 8 });
+    const result = await getToolResult({ dashboard: 'D', mode: 'inline', capBytes: 8 });
 
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
@@ -207,14 +207,14 @@ describe('getDashboardXmlTool', () => {
 
 async function getToolResult({
   session = '12345',
-  dashboardName,
+  dashboard,
   mode,
   mockExecutor = vi.fn().mockResolvedValue({}),
   customSignal,
   capBytes,
 }: {
   session?: string;
-  dashboardName: string;
+  dashboard: string;
   mode: 'file' | 'inline';
   mockExecutor?: TableauDesktopToolContext['getExecutor'];
   customSignal?: AbortSignal;
@@ -229,5 +229,5 @@ async function getToolResult({
     ...(customSignal && { signal: customSignal }),
     ...(capBytes !== undefined && { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
   };
-  return await callback({ session, dashboardName, mode }, extra);
+  return await callback({ session, dashboard, mode }, extra);
 }

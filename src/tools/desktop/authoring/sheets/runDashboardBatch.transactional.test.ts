@@ -31,7 +31,7 @@ vi.mock('../../../../desktop/session/sessionResolution.js');
 // `<rows>` text (any non-empty text, here just the field name) is enough for
 // worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered rather than
 // blank; see composeDashboardCore.test.ts's PRISTINE fixture for the same pattern. "Existing" is
-// referenced via existingWorksheetNames and must resolve as a genuinely rendered worksheet.
+// referenced via worksheets and must resolve as a genuinely rendered worksheet.
 const BASELINE = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
@@ -1294,12 +1294,12 @@ async function callBatch(
     {
       session: '12345',
       artifactIds,
-      dashboardName,
-      existingWorksheetNames: ['Existing'],
+      dashboard: dashboardName,
+      worksheets: ['Existing'],
       title: 'Executive Overview',
       layoutType: 'columns',
       gridColumns: undefined,
-      kpiWorksheetNames: undefined,
+      kpiWorksheets: undefined,
       replaceExisting,
     },
     {

@@ -62,6 +62,7 @@ import {
 } from '../../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError, UnknownError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { artifactNameParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 type RefineOperation =
@@ -163,17 +164,15 @@ function appliedButUnconfirmed(
 
 const paramsSchema = {
   session: z.string().optional().describe('Session; omit if one.'),
-  worksheetName: z.string().min(1).describe('Sheet.'),
-  operation: z
-    .enum([
-      'top_n',
-      'sort_direction',
-      'sort_by_field',
-      'mark_type',
-      'round_bar',
-      'round_stacked_bar',
-    ])
-    .describe('Operation'),
+  worksheet: artifactNameParam('worksheet', { min: 1 }),
+  operation: z.enum([
+    'top_n',
+    'sort_direction',
+    'sort_by_field',
+    'mark_type',
+    'round_bar',
+    'round_stacked_bar',
+  ]),
   topN: z
     .object({
       n: z.number().int().min(1).max(50).describe('1-50.'),
@@ -217,7 +216,7 @@ export const getRefineWorksheetTool = (
     callback: async (
       {
         session,
-        worksheetName,
+        worksheet,
         operation,
         topN,
         sortDirection,
@@ -233,7 +232,7 @@ export const getRefineWorksheetTool = (
         extra,
         args: {
           session,
-          worksheetName,
+          worksheet,
           operation,
           topN,
           sortDirection,
@@ -244,8 +243,8 @@ export const getRefineWorksheetTool = (
           preset,
         },
         callback: async () => {
-          if (!worksheetName || !worksheetName.trim()) {
-            return new ArgsValidationError('worksheetName is required.').toErr();
+          if (!worksheet || !worksheet.trim()) {
+            return new ArgsValidationError('worksheet is required.').toErr();
           }
 
           // Per-operation required params — enforced here (not in the JSON Schema) so the
@@ -273,7 +272,7 @@ export const getRefineWorksheetTool = (
           if (isRoundBarOperation && preset !== 'subtle') {
             return refusal(
               operation,
-              worksheetName,
+              worksheet,
               `${operation} requires preset=subtle; no worksheet change was sent.`,
             );
           }
@@ -286,7 +285,7 @@ export const getRefineWorksheetTool = (
 
           // 1. Initial fetch of the target worksheet.
           const fetched = await getWorksheetXml({
-            worksheetName,
+            worksheetName: worksheet,
             executor,
             signal: extra.signal,
           });

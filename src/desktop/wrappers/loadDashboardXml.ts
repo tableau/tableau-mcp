@@ -99,7 +99,7 @@ function resolveCanonicalDashboardName(
   xml: string,
   kind: LoadDashboardKind,
 ): Result<string, Extract<LoadDashboardXmlError, { type: 'name-mismatch' }>> {
-  const param = kind === 'storyboard' ? 'storyboardName' : 'dashboardName';
+  const param = kind === 'storyboard' ? 'storyboard' : 'dashboard';
   const callerRef = dashboardName.trim();
   let xmlName = '';
   let xmlId = '';

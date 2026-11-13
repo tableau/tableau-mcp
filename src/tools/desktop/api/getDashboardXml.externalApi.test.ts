@@ -39,7 +39,7 @@ describe('getDashboardXmlTool with External Client API transport', () => {
     const tool = getGetDashboardXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const result = await callback(
-      { session: '999', dashboardName: 'Executive Dashboard', mode: 'inline' },
+      { session: '999', dashboard: 'Executive Dashboard', mode: 'inline' },
       { ...getMockRequestHandlerExtra(), getExecutor: vi.fn().mockResolvedValue(executor) },
     );
 
@@ -72,7 +72,7 @@ describe('getDashboardXmlTool with External Client API transport', () => {
     const tool = getGetDashboardXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const result = await callback(
-      { session: '999', dashboardName: 'Executive Dashboard', mode: 'inline' },
+      { session: '999', dashboard: 'Executive Dashboard', mode: 'inline' },
       { ...getMockRequestHandlerExtra(), getExecutor: vi.fn().mockResolvedValue(executor) },
     );
 

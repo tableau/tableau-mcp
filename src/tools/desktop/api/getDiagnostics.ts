@@ -1,20 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheetName: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Worksheet name or stable id; omit for diagnostics for the entire workbook.'),
+  worksheet: artifactNameParam('worksheet', { min: 1 }).optional(),
 };
 
 export const getDiagnosticsTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
@@ -32,10 +27,10 @@ export const getDiagnosticsTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, worksheetName }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, worksheet }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, worksheetName },
+        args: { session, worksheet },
         callback: async () =>
           await runExternalApiReadTool({
             session,
@@ -48,7 +43,7 @@ export const getDiagnosticsTool = (server: DesktopMcpServer): DesktopTool<typeof
                   error: 'Workbook diagnostics could not pin the current Desktop instance.',
                 }).toErr();
               }
-              if (worksheetName === undefined) {
+              if (worksheet === undefined) {
                 return await read(
                   'workbook diagnostics',
                   async (activeExecutor, activeSignal) =>
@@ -64,7 +59,7 @@ export const getDiagnosticsTool = (server: DesktopMcpServer): DesktopTool<typeof
               if (worksheets.isErr()) return worksheets;
               const target = resolveItemByNameOrId(
                 'Worksheet',
-                worksheetName,
+                worksheet,
                 worksheets.value.worksheets ?? [],
               );
               if (target.isErr()) return target.error.toErr();

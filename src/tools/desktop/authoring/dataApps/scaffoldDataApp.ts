@@ -112,7 +112,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     title: 'Scaffold a Desktop data app',
     description:
-      "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as <simple-id>. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.",
+      "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as <simple-id>. Apply with apply-worksheet; pass worksheetId as worksheet (stable id). Replaces that sheet; does not create or rename.",
     paramsSchema,
     annotations: {
       readOnlyHint: false,

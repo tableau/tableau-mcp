@@ -41,7 +41,6 @@ const resultSchema = z.object({
 
 type SummaryDataArgs = {
   session?: string;
-  worksheetName?: string;
   worksheet?: string;
   maxRows?: number;
   columns?: string[];
@@ -327,7 +326,7 @@ describe('getSummaryDataTool', () => {
     expect(tool.description).toContain('no truncation flag');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheetName: expect.any(Object),
+      worksheet: expect.any(Object),
       maxRows: expect.any(Object),
       columns: expect.any(Object),
     });
@@ -341,7 +340,7 @@ describe('getSummaryDataTool', () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({
-        worksheetName: 'Sales by Region',
+        worksheet: 'Sales by Region',
         maxRows: 50,
       });
 
@@ -459,7 +458,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Empty Sheet' });
+      const result = await harness.callTool({ worksheet: 'Empty Sheet' });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject({
@@ -492,7 +491,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+      const result = await harness.callTool({ worksheet: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject({
@@ -525,7 +524,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+      const result = await harness.callTool({ worksheet: 'Sales by Region' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('The worksheet is not ready to render.');
@@ -553,7 +552,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+      const result = await harness.callTool({ worksheet: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject({
@@ -565,29 +564,6 @@ describe('getSummaryDataTool', () => {
         },
         summaryData: { columns: [{ name: 'Sales', dataType: 'real' }], rows: [] },
       });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('accepts the deprecated worksheet alias key and rejects a conflict with worksheetName', async () => {
-    const harness = await startHarness();
-    try {
-      const aliased = await harness.callTool({ worksheet: 'Sales by Region' });
-      expect(aliased.isError).toBe(false);
-      expect(parseResult(aliased).worksheet).toEqual({
-        id: 'sheet-sales',
-        name: 'Sales by Region',
-      });
-
-      const conflict = await harness.callTool({
-        worksheetName: 'Sales by Region',
-        worksheet: 'Profit by Category',
-      });
-      expect(conflict.isError).toBe(true);
-      invariant(conflict.content[0].type === 'text');
-      expect(conflict.content[0].text).toContain('worksheetName ("Sales by Region")');
-      expect(conflict.content[0].text).toContain('Pass one of them.');
     } finally {
       await harness.close();
     }
@@ -608,7 +584,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+      const result = await harness.callTool({ worksheet: 'Sales by Region' });
       expect(result.isError).toBe(true);
       // The raw executor message reaches the caller so it can read the reason, not a bare status.
       expect(errorText(result)).toContain('Could not query worksheet');
@@ -676,7 +652,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Regional Sales' });
+      const result = await harness.callTool({ worksheet: 'Regional Sales' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toMatch(/matched multiple worksheets.*sheet-a.*sheet-b/);
@@ -688,7 +664,7 @@ describe('getSummaryDataTool', () => {
   it('surfaces a raw error when the worksheet is not found', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheetName: 'Missing Sheet' });
+      const result = await harness.callTool({ worksheet: 'Missing Sheet' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toMatch(
@@ -719,7 +695,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+      const result = await harness.callTool({ worksheet: 'Sales by Region' });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Desktop build');
       expect(errorText(result)).toContain('Do not retry');
@@ -731,7 +707,7 @@ describe('getSummaryDataTool', () => {
   it('clamps maxRows to 1000 before querying summary data', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales', maxRows: 5000 });
+      const result = await harness.callTool({ worksheet: 'sheet-sales', maxRows: 5000 });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result).maxRows).toBe(1000);
@@ -764,7 +740,6 @@ async function startHarness(
       await callback(
         {
           session: args.session,
-          worksheetName: args.worksheetName,
           worksheet: args.worksheet,
           maxRows: args.maxRows,
           columns: args.columns,

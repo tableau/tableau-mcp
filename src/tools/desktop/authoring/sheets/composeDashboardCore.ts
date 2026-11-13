@@ -6,6 +6,7 @@ import {
   deleteDashboard,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
+import { listWorksheetRefs } from '../../../../desktop/metadata/sheets.js';
 import { classifyWorkbookWorksheets } from '../../../../desktop/metadata/worksheetRenderState.js';
 import { injectTemplate } from '../../../../desktop/templates/injectTemplate.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
@@ -476,7 +477,7 @@ export function validateComposeDashboardInput(
   const requestedKpis = layout?.kpiWorksheetNames ?? [];
   if (layout?.layoutType !== 'executive-summary') {
     return requestedKpis.length > 0
-      ? new ArgsValidationError('kpiWorksheetNames requires layoutType "executive-summary".')
+      ? new ArgsValidationError('kpiWorksheets requires layoutType "executive-summary".')
       : undefined;
   }
   if (layout.gridColumns !== undefined) {
@@ -518,10 +519,12 @@ export function validateComposeDashboardInput(
 
 export function resolveLiveWorksheetNames(
   workbookXml: string,
-  requestedNames: string[],
+  requestedRefs: string[],
 ): Array<string | undefined> {
   const { worksheets, worksheetWindowNames } = classifyWorkbookWorksheets(workbookXml);
-  return requestedNames.map((requestedName) => {
+  const refs = listWorksheetRefs(workbookXml);
+  return requestedRefs.map((requestedRef) => {
+    const requestedName = refs.find((ref) => ref.id === requestedRef.trim())?.name ?? requestedRef;
     const worksheet = worksheets.find(
       (candidate) =>
         parsedXmlNamesEqual(candidate.name, requestedName) &&

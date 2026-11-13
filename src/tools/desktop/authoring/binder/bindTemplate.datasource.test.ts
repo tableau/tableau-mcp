@@ -107,7 +107,7 @@ async function call(
       ask: ASK,
       requireCompleteRequest: undefined,
       minConfidence: undefined,
-      target_worksheet: undefined,
+      worksheet: undefined,
       datasource: undefined,
       proposal: undefined,
       skip_validation: undefined,
@@ -358,7 +358,7 @@ describe('keep_large_pie grant is tied to the blocked datasource and target', ()
         ask: PIE_ASK,
         requireCompleteRequest: undefined,
         minConfidence: undefined,
-        target_worksheet: undefined,
+        worksheet: undefined,
         datasource: undefined,
         proposal: PIE_PROPOSAL,
         skip_validation: undefined,
@@ -407,13 +407,13 @@ describe('keep_large_pie grant is tied to the blocked datasource and target', ()
     expect(replay.args.template_parameters.DATASOURCE).toBe('federated.a');
   });
 
-  it('does not confirm a replay that changes target_worksheet', async () => {
-    const blocked = body(await withAsk({ datasource: 'federated.a', target_worksheet: 'Sheet 1' }));
+  it('does not confirm a replay that changes worksheet', async () => {
+    const blocked = body(await withAsk({ datasource: 'federated.a', worksheet: 'Sheet 1' }));
     expect(blocked.reason).toBe('pie_slice_limit');
     const replay = body(
       await withAsk({
         datasource: 'federated.a',
-        target_worksheet: 'Sheet 2',
+        worksheet: 'Sheet 2',
         keep_large_pie: true,
       }),
     );
@@ -421,7 +421,7 @@ describe('keep_large_pie grant is tied to the blocked datasource and target', ()
     const same = body(
       await withAsk({
         datasource: 'federated.a',
-        target_worksheet: 'Sheet 1',
+        worksheet: 'Sheet 1',
         keep_large_pie: true,
       }),
     );

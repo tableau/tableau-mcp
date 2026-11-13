@@ -28,7 +28,7 @@ describe('rename-sheet tool', () => {
   it('reports the old and new names after a real rename', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME, name: 'Regional Sales' });
+      const result = await harness.callTool({ sheet: WORKSHEET_NAME, newName: 'Regional Sales' });
       expect(result.isError).toBeFalsy();
       expect(messageOf(result)).toBe('Renamed worksheet "Sales by Region" to "Regional Sales".');
     } finally {
@@ -39,7 +39,7 @@ describe('rename-sheet tool', () => {
   it('says nothing was renamed when the name matches the current one', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME, name: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheet: WORKSHEET_NAME, newName: WORKSHEET_NAME });
       expect(result.isError).toBeFalsy();
       const message = messageOf(result);
       expect(message).toContain('already named "Sales by Region"');
@@ -52,7 +52,7 @@ describe('rename-sheet tool', () => {
   it('treats a name that differs only by surrounding whitespace as unchanged', async () => {
     const tool = getRenameSheetTool(new DesktopMcpServer());
     const paramsSchema = z.object(await Provider.from(tool.paramsSchema));
-    const args = paramsSchema.parse({ sheet: WORKSHEET_NAME, name: `  ${WORKSHEET_NAME} ` });
+    const args = paramsSchema.parse({ sheet: WORKSHEET_NAME, newName: `  ${WORKSHEET_NAME} ` });
     const harness = await startHarness();
     try {
       const result = await harness.callTool(args);
@@ -65,14 +65,14 @@ describe('rename-sheet tool', () => {
   it('rejects a blank name before calling Desktop', async () => {
     const tool = getRenameSheetTool(new DesktopMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
-    expect(paramsSchema.name.safeParse('   ').success).toBe(false);
-    expect(paramsSchema.name.safeParse('').success).toBe(false);
+    expect(paramsSchema.newName.safeParse('   ').success).toBe(false);
+    expect(paramsSchema.newName.safeParse('').success).toBe(false);
   });
 
   it('returns an error when the sheet does not exist', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: 'No Such Sheet', name: 'Anything' });
+      const result = await harness.callTool({ sheet: 'No Such Sheet', newName: 'Anything' });
       expect(result.isError).toBe(true);
       expect(harness.server.requests.filter((r) => r.path.endsWith(':rename'))).toHaveLength(0);
     } finally {
