@@ -398,6 +398,7 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: { sheetName: 'Sales' },
     clean: {
       focus_requested: true,
+      sheetId: 'ws1',
       sheetName: 'Sales',
       message: 'Requested focus on sheet "Sales".',
       availableSheets: ['Sales', 'Dash', 'Story'],

@@ -42,6 +42,14 @@ describe('extractSheetXml', () => {
     expect(xml).toContain('name="Sales by Region"');
   });
 
+  it('finds a worksheet by its simple-id before its name', () => {
+    const workbook = `<workbook><worksheets>
+    <worksheet name='{GUID-B}'><table /><simple-id uuid='{GUID-A}' /></worksheet>
+    <worksheet name='Target'><table /><simple-id uuid='{GUID-B}' /></worksheet>
+  </worksheets></workbook>`;
+    expect(extractSheetXml(workbook, '{GUID-B}')).toContain('name="Target"');
+  });
+
   it('returns null for a worksheet that does not exist', () => {
     expect(extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Does Not Exist')).toBeNull();
   });

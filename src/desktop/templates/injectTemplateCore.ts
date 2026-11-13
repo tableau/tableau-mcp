@@ -28,7 +28,7 @@ import {
   spliceBoundCalcDefinitions,
   spliceBoundGroupDefinitions,
 } from './groupDefinitionSplice.js';
-import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
+import { injectTemplate, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
 
@@ -204,8 +204,6 @@ export interface InjectTemplateCoreParams {
    * a geography the target datasource never declared).
    */
   fieldMetadata?: Record<string, FieldMetadataOverride>;
-  insertPosition?: InsertPosition;
-  relativeSheetName?: string;
   /**
    * Deterministic per-apply nonce for calc namespacing. The pure rewriter never
    * mints its own nonce, so every caller supplies one derived from its own
@@ -391,8 +389,6 @@ export function buildInjectedWorkbookXml({
   fieldMapping,
   templateSlots,
   fieldMetadata,
-  insertPosition,
-  relativeSheetName,
   applyNonce,
   optionalFieldPrunes,
   dateparseAxis,
@@ -467,13 +463,7 @@ export function buildInjectedWorkbookXml({
 
   processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), () => escapeXml(title));
 
-  const modifiedXml = injectTemplate(
-    baseWorkbookXml,
-    processed,
-    sheetType,
-    insertPosition ?? 'end',
-    relativeSheetName,
-  );
+  const modifiedXml = injectTemplate(baseWorkbookXml, processed, sheetType);
 
   const issues = wellFormedXmlRule.validate(modifiedXml);
   if (issues.length > 0) {

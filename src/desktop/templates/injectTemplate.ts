@@ -7,7 +7,6 @@ import {
 } from '../metadata/parser.js';
 
 export type SheetType = 'worksheet' | 'dashboard' | 'story';
-export type InsertPosition = 'end' | 'before_sheet' | 'after_sheet';
 
 const SHEET_CONFIG: Record<SheetType, { container: string; element: string; windowClass: string }> =
   {
@@ -49,8 +48,6 @@ export function injectTemplate(
   workbookXml: string,
   templateXml: string,
   sheetType: SheetType,
-  insertPosition: InsertPosition = 'end',
-  relativeSheetName?: string,
 ): string {
   const { container, element, windowClass } = SHEET_CONFIG[sheetType];
 
@@ -102,17 +99,7 @@ export function injectTemplate(
   if (!wb.windows) wb.windows = {};
   const existingWindows = normalizeArray<Record<string, unknown>>(wb.windows.window);
 
-  let insertIndex: number;
-  if (insertPosition === 'end' || !relativeSheetName) {
-    insertIndex = existingWindows.length;
-  } else {
-    const refIndex = existingWindows.findIndex((w) => w['@_name'] === relativeSheetName);
-    if (refIndex === -1)
-      throw new Error(`Relative sheet "${relativeSheetName}" not found in windows`);
-    insertIndex = insertPosition === 'before_sheet' ? refIndex : refIndex + 1;
-  }
-
-  existingWindows.splice(insertIndex, 0, windowToInject);
+  existingWindows.push(windowToInject);
 
   wb.windows.window = (existingWindows.length === 1 ? existingWindows[0] : existingWindows) as any;
 

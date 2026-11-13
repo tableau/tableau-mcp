@@ -6,7 +6,7 @@ import { Err, Ok } from 'ts-results-es';
 import { Config } from '../../../../config.desktop.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import { parseXML } from '../../../../desktop/metadata/parser.js';
-import { extractSheetXml } from '../../../../desktop/metadata/sheets.js';
+import { extractSheetXml, listWorksheetRefs } from '../../../../desktop/metadata/sheets.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -82,8 +82,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
       ),
       listWorksheets: vi.fn(async () =>
         Ok({
-          worksheets: worksheetNames(liveXml).map((name) => ({
-            id: `id-${name}`,
+          worksheets: listWorksheetRefs(liveXml).map(({ id, name }) => ({
+            id,
             name,
             datasources: ['Superstore'],
           })),
@@ -132,7 +132,7 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     invariant(offered, `no concrete offer in: ${pieBody.guidance}`);
     const [, offeredAsk, offeredTarget] = offered;
     const pieSheetName = pieBody.sheet_name as string;
-    expect(offeredTarget).toBe(pieSheetName);
+    expect(offeredTarget).toBe(pieBody.worksheet_id);
     expect(extractSheetXml(liveXml, pieSheetName)).toMatch(/<mark class=['"]Pie['"]/);
 
     const bar = await callback(
@@ -189,8 +189,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
       ),
       listWorksheets: vi.fn(async () =>
         Ok({
-          worksheets: worksheetNames(liveXml).map((name) => ({
-            id: `id-${name}`,
+          worksheets: listWorksheetRefs(liveXml).map(({ id, name }) => ({
+            id,
             name,
             datasources,
           })),
@@ -300,8 +300,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     const offer = concreteOffer(body);
     invariant(offer, body.guidance);
     const bar = await h.call({ ask: offer[0], target_worksheet: offer[1] });
-    expect(bar).toMatchObject({ applied: true, sheet_name: offer[1] });
-    const sheet = extractSheetXml(h.live(), offer[1]);
+    expect(bar).toMatchObject({ applied: true, sheet_name: body.sheet_name });
+    const sheet = extractSheetXml(h.live(), body.sheet_name);
     expect(sheet).toMatch(/<rows>\[Superstore\]\.\[none:Region:nk\]<\/rows>/);
     expect(sheet).toMatch(/<cols>\[Superstore\]\.\[sum:Sales:qk\]<\/cols>/);
   });

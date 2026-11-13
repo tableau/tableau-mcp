@@ -109,6 +109,7 @@ type ApplyWorksheetResult =
   | {
       artifactId?: string;
       title: string;
+      worksheetId?: string;
       applied: true;
       retrySafe: false;
       verification: ReadbackVerificationResult;
@@ -178,10 +179,17 @@ export const getApplyWorksheetTool = (
             if (!reservation.ok) {
               return templateArtifactUnavailableError(artifactId, reservation.reason).toErr();
             }
-            if (worksheetName !== undefined && worksheetName !== reservation.artifact.title) {
+            const artifactWorksheetId = worksheetFragmentSimpleId(
+              reservation.artifact.worksheetXml,
+            );
+            if (
+              worksheetName !== undefined &&
+              worksheetName !== reservation.artifact.title &&
+              worksheetName !== artifactWorksheetId
+            ) {
               artifactStore.release(reservation.lease);
               return new ArgsValidationError(
-                `worksheetName "${worksheetName}" must match artifact title "${reservation.artifact.title}".`,
+                `worksheetName "${worksheetName}" must match artifact title "${reservation.artifact.title}" or worksheet id "${artifactWorksheetId}".`,
               ).toErr();
             }
             try {
@@ -230,6 +238,7 @@ export const getApplyWorksheetTool = (
                   {
                     artifactId: outcome.receipt.artifactId,
                     title: outcome.receipt.title,
+                    worksheetId: outcome.receipt.worksheetId,
                     applied: true as const,
                     retrySafe: false as const,
                     verification,
@@ -334,6 +343,7 @@ export const getApplyWorksheetTool = (
               withNextAction(
                 {
                   title: outcome.receipt.title,
+                  worksheetId: outcome.receipt.worksheetId,
                   applied: true as const,
                   retrySafe: false as const,
                   verification,
@@ -477,15 +487,10 @@ export const getApplyWorksheetTool = (
             : canonicalWorksheetName;
 
           // The edits just landed — close the buffer so a later name-only call starts from a
-          // fresh live read. Resolve the id from the live name, not the fragment: a cached
-          // fragment may carry no <simple-id>, and keying the clear on that would skip it.
-          const appliedBufferId = await resolveWorksheetSimpleId({
-            worksheetRef: appliedWorksheetName,
-            resolvedSession,
-            extra,
-          });
-          if (appliedBufferId) {
-            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedBufferId });
+          // fresh live read.
+          const appliedId = result.isOk() ? result.value.appliedId : undefined;
+          if (appliedId) {
+            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedId });
           }
 
           // An explicit skipped verification keeps the run open for live inspection;

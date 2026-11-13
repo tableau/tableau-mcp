@@ -28,6 +28,7 @@ describe('getWorksheetXml', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap().xml).toBe('<worksheet name="Profit" />');
     expect(result.unwrap().name).toBe('Profit');
+    expect(result.unwrap().id).toBe('sheet-2');
     expect(executor.getWorksheetDocument).toHaveBeenCalledWith('sheet-2', expect.any(AbortSignal));
   });
 

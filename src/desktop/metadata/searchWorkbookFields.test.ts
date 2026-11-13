@@ -231,6 +231,29 @@ describe('searchWorkbookFields', () => {
     ]);
   });
 
+  it('reports the worksheet simple-id on each placement when present', () => {
+    const xml = `
+<workbook>
+  <datasources>
+    <datasource name="DS">
+      <column name="[Sales]" caption="Sales" role="measure" type="quantitative" datatype="real" />
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="Sheet 1">
+      <simple-id uuid="{GUID-A}" />
+      <table>
+        <rows>[DS].[sum:Sales:qk]</rows>
+      </table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+
+    expect(searchWorkbookFields(xml, 'sales').matches[0].placements).toEqual([
+      { worksheet: 'Sheet 1', worksheetId: '{GUID-A}', location: 'rows' },
+    ]);
+  });
+
   it('uses complete pill boundaries instead of substring matches on near-colliding shelf text', () => {
     expect(searchWorkbookFields(PLACEMENT_VARIANTS_XML, 'revenue').matches).toEqual([
       {

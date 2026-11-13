@@ -679,6 +679,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
+      expect(result.value.appliedId).toBe(worksheetId);
       expect(result.value.readbackVerification).toMatchObject({
         ok: false,
         status: 'failed',

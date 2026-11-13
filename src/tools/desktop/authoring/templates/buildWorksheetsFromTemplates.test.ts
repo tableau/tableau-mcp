@@ -162,6 +162,7 @@ describe('build-worksheets-from-templates', () => {
       artifactId: 'artifact-A',
       templateName: 'pulse-bar',
       title: 'Revenue by Segment',
+      worksheetId: expect.any(String),
       datasource: 'target.ds',
       provenance: 'dev-override',
       bindings: [
@@ -176,6 +177,7 @@ describe('build-worksheets-from-templates', () => {
     const reserved = store.reserve('artifact-A', '12345');
     expect(reserved.ok).toBe(true);
     if (!reserved.ok) return;
+    expect(reserved.artifact.worksheetXml).toContain(body.worksheetId);
     expect(reserved.artifact.worksheetXml).toContain('target.ds');
     expect(reserved.artifact.worksheetXml).toContain('Revenue');
     expect(reserved.artifact.worksheetXml).toContain('Segment');

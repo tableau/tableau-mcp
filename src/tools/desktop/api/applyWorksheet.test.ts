@@ -1573,11 +1573,8 @@ describe('applyWorksheetTool', () => {
 
   it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
-    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1' }] }),
-    );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
-      Ok({ readbackWarnings: [] }),
+      Ok({ appliedId: 'live-sheet-uuid', readbackWarnings: [] }),
     );
 
     const result = await getToolResult({
@@ -1594,15 +1591,10 @@ describe('applyWorksheetTool', () => {
     });
   });
 
-  it('closes the buffer for an id-less fragment by resolving the live id from the applied name', async () => {
-    // An id-less cached fragment applies via the name fallback; keying the clear on the
-    // fragment's absent simple-id skipped it, so a later name-only edit resumed the stale buffer.
+  it('closes the buffer on the id the apply resolved, even for an id-less fragment', async () => {
     const mockXml = '<worksheet name="Old Name"><table></table></worksheet>';
-    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live' }] }),
-    );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
-      Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }),
+      Ok({ appliedName: 'Renamed Live', appliedId: 'live-sheet-uuid', readbackWarnings: [] }),
     );
 
     const result = await getToolResult({
@@ -1788,6 +1780,7 @@ describe('applyWorksheetTool', () => {
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       artifactId: 'artifact-1',
       title: 'Artifact Sheet',
+      worksheetId: 'artifact-sheet-uuid',
       applied: true,
       retrySafe: false,
       verification: { ok: false, status: 'failed' },
@@ -1797,6 +1790,7 @@ describe('applyWorksheetTool', () => {
     expect(Object.keys(JSON.parse(result.content[0].text))).toEqual([
       'artifactId',
       'title',
+      'worksheetId',
       'applied',
       'retrySafe',
       'verification',
@@ -1910,6 +1904,25 @@ describe('applyWorksheetTool', () => {
       });
 
     const result = await getArtifactToolResult(store, 'artifact-1', '12345', 'Artifact Sheet');
+
+    expect(result.isError).toBe(false);
+    expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
+    expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+  });
+
+  it('applies an artifactId when worksheetName is the artifact worksheet id', async () => {
+    const store = artifactStore();
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: { ok: true, status: 'passed' },
+        });
+      });
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345', 'artifact-sheet-uuid');
 
     expect(result.isError).toBe(false);
     expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
@@ -2104,7 +2117,8 @@ function artifactStore(): TemplateArtifactStore {
     title: 'Artifact Sheet',
     datasource: 'target.ds',
     fieldMapping: { '{{field_base_1}}': '[target.ds].[sum:Revenue:qk]' },
-    worksheetXml: '<worksheet name="Artifact Sheet"><table /></worksheet>',
+    worksheetXml:
+      '<worksheet name="Artifact Sheet"><simple-id uuid="artifact-sheet-uuid" /><table /></worksheet>',
     windowXml: '<window class="worksheet" name="Artifact Sheet" />',
     targetState: {
       worksheetName: 'Artifact Sheet',

@@ -83,6 +83,7 @@ type RefineWorksheetToolResult =
       refined: true;
       operation: RefineOperation;
       worksheetName: string;
+      worksheetId?: string;
       message: string;
       applied?: true;
       retrySafe?: false;
@@ -92,6 +93,7 @@ type RefineWorksheetToolResult =
       refined: false;
       operation: RefineOperation;
       worksheetName: string;
+      worksheetId?: string;
       reason: string;
       applied?: true;
       retrySafe?: false;
@@ -103,8 +105,15 @@ function refusal(
   operation: RefineOperation,
   worksheetName: string,
   reason: string,
+  worksheetId?: string,
 ): Ok<RefineWorksheetToolResult> {
-  return new Ok({ refined: false, operation, worksheetName, reason });
+  return new Ok({
+    refined: false,
+    operation,
+    worksheetName,
+    reason,
+    ...(worksheetId && { worksheetId }),
+  });
 }
 
 /** Compact one-line summary of the error-severity preflight issues (rule id + message). */
@@ -122,6 +131,7 @@ function appliedButUnconfirmed(
   verification: ReadbackVerificationResult | undefined,
   confirmationStatus: 'failed' | 'skipped',
   readbackDiffers = false,
+  worksheetId?: string,
 ): Err<IncompleteOperationError<Record<string, unknown>>> {
   const confirmationFinding: VerificationFinding = {
     severity: confirmationStatus === 'failed' ? 'error' : 'warning',
@@ -143,6 +153,7 @@ function appliedButUnconfirmed(
     stage: 'readback',
     operation,
     worksheetName,
+    ...(worksheetId && { worksheetId }),
     reason: readbackDiffers
       ? `${reason} The write landed but the readback differs from what was asked; do not automatically retry.`
       : `${reason} The write may have landed; do not automatically retry.`,
@@ -294,22 +305,24 @@ export const getRefineWorksheetTool = (
           }
           const sourceXml = fetched.value.xml;
           const canonicalWorksheetName = fetched.value.name;
+          const sourceWorksheetId = worksheetFragmentSimpleId(sourceXml) ?? undefined;
           // Read back by the fragment's stable simple-id, not the display name, so a rename between
           // this fetch and the readback can't miss.
-          const readbackRef = worksheetFragmentSimpleId(sourceXml) ?? canonicalWorksheetName;
+          const readbackRef = sourceWorksheetId ?? canonicalWorksheetName;
 
           if (isRoundBarOperation) {
             const plan = planRoundStackedBar(sourceXml, {
               preset: preset as RoundStackedBarPreset,
             });
             if (!plan.ok) {
-              return refusal(operation, canonicalWorksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason, sourceWorksheetId);
             }
             if (plan.alreadyRounded) {
               return refusal(
                 operation,
                 canonicalWorksheetName,
                 'The worksheet already has the deterministic subtle rounded bar structure; no write was sent.',
+                sourceWorksheetId,
               );
             }
 
@@ -347,6 +360,7 @@ export const getRefineWorksheetTool = (
                 operation,
                 canonicalWorksheetName,
                 `${outcome.stage}: ${outcome.message}`,
+                sourceWorksheetId,
               );
             }
             if (outcome.state === 'unknown') {
@@ -375,6 +389,7 @@ export const getRefineWorksheetTool = (
               refined: true,
               operation,
               worksheetName: outcome.worksheet.name,
+              worksheetId: outcome.worksheet.id,
               verification,
               message:
                 `Rebuilt worksheet "${outcome.worksheet.name}" as subtle Polygon geometry. ` +
@@ -401,7 +416,7 @@ export const getRefineWorksheetTool = (
               end: topN?.end as TopNEnd | undefined,
             });
             if (!plan.ok) {
-              return refusal(operation, canonicalWorksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason, sourceWorksheetId);
             }
             patched = plan.xml;
             const col = plan.filterColumn;
@@ -412,7 +427,7 @@ export const getRefineWorksheetTool = (
               direction: sortDirection?.direction as SortDirection,
             });
             if (!plan.ok) {
-              return refusal(operation, canonicalWorksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason, sourceWorksheetId);
             }
             patched = plan.xml;
             const col = plan.column;
@@ -424,7 +439,7 @@ export const getRefineWorksheetTool = (
               markType: markType as TableauMarkType,
             });
             if (!plan.ok) {
-              return refusal(operation, canonicalWorksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason, sourceWorksheetId);
             }
             patched = plan.xml;
             const markClass = plan.markClass;
@@ -451,7 +466,7 @@ export const getRefineWorksheetTool = (
               direction: sortByDirection,
             });
             if (!plan.ok) {
-              return refusal(operation, canonicalWorksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason, sourceWorksheetId);
             }
             patched = plan.xml;
             const col = plan.column;
@@ -479,6 +494,7 @@ export const getRefineWorksheetTool = (
               operation,
               canonicalWorksheetName,
               `preflight validation failed — not applying. ${formatValidationErrors(blockingIssues)}`,
+              sourceWorksheetId,
             );
           }
 
@@ -540,6 +556,8 @@ export const getRefineWorksheetTool = (
                   `The ${nodeLabel} node could not be confirmed because readback failed: ${error.message}`,
                   verification,
                   'skipped',
+                  false,
+                  sourceWorksheetId,
                 );
               case 'execute-command-error':
                 return appliedButUnconfirmed(
@@ -548,6 +566,8 @@ export const getRefineWorksheetTool = (
                   `The ${nodeLabel} node could not be confirmed because readback failed: ${new DesktopCommandExecutionError(error).message}`,
                   verification,
                   'skipped',
+                  false,
+                  sourceWorksheetId,
                 );
               default: {
                 const _: never = type;
@@ -570,6 +590,7 @@ export const getRefineWorksheetTool = (
               retrySafe: false,
               operation,
               worksheetName: canonicalWorksheetName,
+              ...(sourceWorksheetId && { worksheetId: sourceWorksheetId }),
               message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.${verificationCaveat}`,
               verification,
             });
@@ -589,6 +610,7 @@ export const getRefineWorksheetTool = (
               verification,
               'failed',
               true,
+              sourceWorksheetId,
             );
           }
 
@@ -600,6 +622,8 @@ export const getRefineWorksheetTool = (
               'the refinement was not durable, or this is an async-settle miss.',
             verification,
             'failed',
+            false,
+            sourceWorksheetId,
           );
         },
       });

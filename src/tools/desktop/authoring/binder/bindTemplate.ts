@@ -205,6 +205,7 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   advisories?: string[];
   applied?: boolean;
   sheet_name?: string;
+  worksheet_id?: string;
   phase_ms?: AuthoringPhaseMs;
   apply_error?: string;
   retry_safe?: boolean;
@@ -256,6 +257,7 @@ type AppliedFastPathResult = {
   /** Desktop's own apply warnings; present only when Desktop returned any. */
   desktop_warnings?: ExecuteCommandWarning[];
   sheet_name: string;
+  worksheet_id?: string;
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
   completionEvidence?: CompletionEvidence;
@@ -286,6 +288,7 @@ type ReusedSheetResult = {
   reused: true;
   authored_calcs?: string[];
   sheet_name: string;
+  worksheet_id?: string;
   guidance: string;
   receipt: ReturnType<typeof receipt>;
 };
@@ -545,6 +548,7 @@ async function pieSliceWarningFor({
   templateSnapshot,
   schemaSummary,
   sheetName,
+  worksheetId,
   uncertain,
   unfilledEncodings,
   dryBindOffer,
@@ -558,6 +562,7 @@ async function pieSliceWarningFor({
   templateSnapshot: TemplateRuntimeSnapshot;
   schemaSummary: SchemaSummary;
   sheetName: string;
+  worksheetId?: string;
 }): Promise<{ flag: PieSliceWarning; guidance: string }> {
   type Slot = TemplateRuntimeSnapshot['descriptor']['slots'][number];
   const resolveSlot = (
@@ -639,7 +644,7 @@ async function pieSliceWarningFor({
   const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
   const offer = !offerVerified
     ? 'A sorted bar would read better; offer it to the user.'
-    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and target_worksheet "${sheetName}".`;
+    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and target_worksheet "${worksheetId ?? sheetName}".`;
   return {
     flag: {
       field: sliceField,
@@ -663,11 +668,11 @@ function boundedSummaryRowsError(reason: string): string {
 async function readAppliedSummaryRows({
   executor,
   signal,
-  worksheetName,
+  worksheet,
 }: {
   executor: ExternalApiToolExecutor;
   signal: AbortSignal;
-  worksheetName: string;
+  worksheet: string;
 }): Promise<{ enrichment: SummaryRowsEnrichment; rawRowCount?: number }> {
   const timeoutController = new AbortController();
   const onAbort = (): void => timeoutController.abort(signal.reason);
@@ -697,7 +702,7 @@ async function readAppliedSummaryRows({
     const result = await Promise.race([
       fetchWorksheetSummaryData({
         read,
-        worksheet: worksheetName,
+        worksheet,
         maxRows: SUMMARY_ROWS_MAX_ROWS + 1,
         materializeEmpty: true,
       }),
@@ -1673,7 +1678,7 @@ function encodingColumnRefGuidance(
 
 function appendUnfilledEncodingGuidance(
   receipt: string,
-  sheetName: string,
+  worksheetRef: string,
   encodings: EncodingReport,
   ask: string,
   schemaSummary: SchemaSummary,
@@ -1684,7 +1689,7 @@ function appendUnfilledEncodingGuidance(
       (role, index) =>
         `add-field{${
           index === 0
-            ? `worksheetName:'${sheetName}'`
+            ? `worksheetName:'${worksheetRef}'`
             : 'worksheetFile:<path returned by previous add-field>'
         },target:'encoding',encodingType:'${role}',columnRef:${encodingColumnRefGuidance(
           ask,
@@ -1693,7 +1698,7 @@ function appendUnfilledEncodingGuidance(
         )}}`,
     )
     .join(', then ');
-  const applyCall = `apply-worksheet{worksheetName:'${sheetName}',worksheetFile:<path returned by previous add-field>}`;
+  const applyCall = `apply-worksheet{worksheetName:'${worksheetRef}',worksheetFile:<path returned by previous add-field>}`;
   const filled = encodings.filled.length > 0 ? encodings.filled.join(', ') : 'none';
   return (
     `${receipt} INCOMPLETE — the ask asked for ${missing}, and this bind did NOT fill it: ` +
@@ -2911,6 +2916,7 @@ async function performAutoApply({
         }
       : undefined;
   const readbackMs = Date.now() - readbackStart;
+  const liveWorksheetId = verification?.worksheetId;
   const verificationReport = await verifyAppliedWorksheetFields({
     structural: verification ?? {
       ok: true,
@@ -2985,6 +2991,7 @@ async function performAutoApply({
       result: {
         ...failed,
         sheet_name: literalTitle,
+        ...(liveWorksheetId ? { worksheet_id: liveWorksheetId } : {}),
         may_have_applied: true,
         retry_safe: false,
         verification: verificationReport,
@@ -3035,7 +3042,7 @@ async function performAutoApply({
     ? await readAppliedSummaryRows({
         executor,
         signal,
-        worksheetName: literalTitle,
+        worksheet: liveWorksheetId ?? literalTitle,
       })
     : { enrichment: {} };
   const summaryRows = summaryRead.enrichment;
@@ -3073,6 +3080,7 @@ async function performAutoApply({
           templateSnapshot,
           schemaSummary,
           sheetName: literalTitle,
+          worksheetId: liveWorksheetId,
           uncertain: promiseOutcome === 'failed' || postApplyUncertain,
           unfilledEncodings: unfilledEncodings !== undefined,
         })
@@ -3103,7 +3111,7 @@ async function performAutoApply({
       : unfilledEncodings
         ? appendUnfilledEncodingGuidance(
             receiptText,
-            literalTitle,
+            liveWorksheetId ?? literalTitle,
             unfilledEncodings,
             ask,
             schemaSummary,
@@ -3213,6 +3221,7 @@ async function performAutoApply({
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
+    ...(liveWorksheetId ? { worksheet_id: liveWorksheetId } : {}),
     phase_ms: trustedDeterministicApply
       ? {
           bind: bindMs,
@@ -3396,11 +3405,12 @@ function rememberedSheetStillPresent({
     if (remembered === undefined) {
       return undefined;
     }
-    if (classifyWorksheetReplaceTarget(workbookXml, remembered.sheetName) === 'not-found') {
+    const live = resolveWorksheetRef(workbookXml, remembered.worksheetId ?? remembered.sheetName);
+    if (!live) {
       sessionRouteState.forgetAppliedSheet(session, signature);
       return undefined;
     }
-    return remembered;
+    return { ...remembered, sheetName: live.name };
   } catch {
     return undefined;
   }
@@ -3416,13 +3426,14 @@ function reusedSheetResult(
       ...(authoredCalcs.length > 0 ? [`authored calcs: ${authoredCalcs.join(', ')}`] : []),
     ],
     didNot: ['apply the chart — the remembered sheet was reused; no second copy was created'],
-    // rememberedSheetStillPresent() only confirms that a worksheet of that NAME is still in
-    // the document (classifyWorksheetReplaceTarget). Whether its fields still match the
-    // ask is never re-derived, so a user edit that emitted no observable event is invisible.
+    // rememberedSheetStillPresent() only confirms the sheet is still in the document. Whether
+    // its fields still match the ask is never re-derived, so a user edit that emitted no
+    // observable event is invisible.
     unverified: [
-      `whether "${remembered.sheetName}" still holds those fields — only its presence by name was confirmed`,
+      `whether "${remembered.sheetName}" still holds those fields — only its presence was confirmed`,
     ],
   });
+  const target = remembered.worksheetId ?? remembered.sheetName;
   return withNextAction(
     {
       status: 'bound',
@@ -3430,14 +3441,15 @@ function reusedSheetResult(
       reused: true,
       ...(authoredCalcs.length > 0 ? { authored_calcs: authoredCalcs } : {}),
       sheet_name: remembered.sheetName,
+      ...(remembered.worksheetId ? { worksheet_id: remembered.worksheetId } : {}),
       receipt: reuseReceipt,
       guidance:
         renderAuthoredCalcPrefix(authoredCalcs, 'bound') +
-        // Name presence is the only live fact checked here; claiming contents would make this
+        // Presence is the only live fact checked here; claiming contents would make this
         // prose contradict the receipt after a user edits the remembered sheet.
         `The remembered sheet "${remembered.sheetName}" (template ${remembered.template}) ` +
-        'is still present by name, so no second copy was created. To rebuild it, call ' +
-        `bind-template again with target_worksheet:"${remembered.sheetName}".`,
+        'is still present, so no second copy was created. To rebuild it, call ' +
+        `bind-template again with target_worksheet:"${target}".`,
     },
     prefillNextAction('Rebuild sheet with target_worksheet'),
   );
@@ -4281,10 +4293,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 );
                 if (existingTitle !== undefined) {
                   if (atomicCalcs.length === 0) {
+                    const existingId = resolveWorksheetRef(workbookXml, existingTitle)?.id;
                     return new Ok(
                       reusedSheetResult(
                         {
                           sheetName: existingTitle,
+                          ...(existingId ? { worksheetId: existingId } : {}),
                           template: res.args.template_name,
                           ts: new Date().toISOString(),
                         },
@@ -4354,6 +4368,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ) {
                 sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
                   sheetName: appliedResult.sheet_name,
+                  ...(appliedResult.worksheet_id
+                    ? { worksheetId: appliedResult.worksheet_id }
+                    : {}),
                   template: res.args.template_name,
                 });
               }

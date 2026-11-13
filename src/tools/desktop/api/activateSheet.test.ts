@@ -53,6 +53,7 @@ function buildWorkbook({
 
 const successSchema = z.object({
   focus_requested: z.boolean(),
+  sheetId: z.string(),
   sheetName: z.string(),
   message: z.string(),
   availableSheets: z.array(z.string()),
@@ -145,6 +146,7 @@ describe('activateSheetTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = successSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.sheetName).toBe('Sales by Region');
+    expect(parsed.sheetId).toBe('sheet-sales');
     expect(parsed.focus_requested).toBe(true);
     expect(parsed.message).toContain('Requested focus on sheet "Sales by Region"');
     expect(parsed.availableSheets).toEqual([

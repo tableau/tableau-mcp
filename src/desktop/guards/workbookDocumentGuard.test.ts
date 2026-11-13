@@ -191,8 +191,23 @@ describe('liveSheetNamesMissingFrom', () => {
   const db = (...names: string[]): string =>
     `<dashboards>${names.map((n) => `<dashboard name='${n}'/>`).join('')}</dashboards>`;
 
+  const wsid = (name: string, id: string): string =>
+    `<worksheets><worksheet name='${name}'><simple-id uuid='${id}'/></worksheet></worksheets>`;
+
   it('names a dropped worksheet', () => {
     expect(liveSheetNamesMissingFrom(wb(ws('A')), wb(ws('A', 'B'))).unwrap()).toEqual(['B']);
+  });
+
+  it('treats a renamed sheet with the same simple-id as present, not dropped', () => {
+    expect(
+      liveSheetNamesMissingFrom(wb(wsid('New', '{G1}')), wb(wsid('Old', '{G1}'))).unwrap(),
+    ).toEqual([]);
+  });
+
+  it('reports a dropped sheet whose name a different sheet reused', () => {
+    expect(
+      liveSheetNamesMissingFrom(wb(wsid('A', '{G2}')), wb(wsid('A', '{G1}'))).unwrap(),
+    ).toEqual(['A']);
   });
 
   it('names a dropped dashboard', () => {

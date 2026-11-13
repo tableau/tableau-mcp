@@ -2,7 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { Config } from '../../../../config.desktop.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
-import { extractSheetXml } from '../../../../desktop/metadata/sheets.js';
+import { extractSheetXml, listWorksheetRefs } from '../../../../desktop/metadata/sheets.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -22,10 +22,6 @@ const OTHER_SHEET = `<worksheet name='Untouched'>
       </table>
       <simple-id uuid='{00000000-0000-0000-0000-0000000000AA}' />
     </worksheet>`;
-
-const WORKSHEET_NAME = /<worksheet\b[^>]*\bname=['"]([^'"]+)['"]/g;
-const worksheetNames = (xml: string): string[] =>
-  [...xml.matchAll(WORKSHEET_NAME)].map((m) => m[1]);
 
 const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
@@ -70,8 +66,8 @@ describe('bind-template offered sorted-bar replacement on the full template cata
       ),
       listWorksheets: vi.fn(async () =>
         Ok({
-          worksheets: worksheetNames(liveXml).map((name) => ({
-            id: `id-${name}`,
+          worksheets: listWorksheetRefs(liveXml).map(({ id, name }) => ({
+            id,
             name,
             datasources,
           })),
@@ -149,8 +145,8 @@ describe('bind-template offered sorted-bar replacement on the full template cata
     );
     invariant(m, body.guidance);
     const bar = await h.call({ ask: m[1], target_worksheet: m[2] });
-    expect(bar).toMatchObject({ applied: true, sheet_name: m[2] });
-    const sheet = extractSheetXml(h.live(), m[2]);
+    expect(bar).toMatchObject({ applied: true, sheet_name: body.sheet_name });
+    const sheet = extractSheetXml(h.live(), body.sheet_name);
     expect(sheet).toMatch(/<rows>\[Superstore\]\.\[none:Region:nk\]<\/rows>/);
     expect(sheet).toMatch(/<cols>\[Superstore\]\.\[sum:Sales:qk\]<\/cols>/);
   });

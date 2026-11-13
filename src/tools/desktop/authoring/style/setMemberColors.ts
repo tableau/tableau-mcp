@@ -128,7 +128,7 @@ export const getSetMemberColorsTool = (
             target.datatype === 'string'
               ? await readDataMembers({
                   executor,
-                  worksheetName,
+                  worksheet: sheet.value.id ?? sheet.value.name,
                   target,
                   signal: extra.signal,
                 })

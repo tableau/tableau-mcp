@@ -579,13 +579,15 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       ['\r', '&#13;'],
       ['\r\n', '&#10;'],
     ])(
-      'refuses literal %j replacing %s with either validation setting',
+      'refuses literal %j replacing %s on an id-less sheet with either validation setting',
       async (literal, reference) => {
         const actual = await vi.importActual<typeof validationRegistry>(
           '../validation/registry.js',
         );
         vi.spyOn(validationRegistry, 'runValidation').mockImplementation(actual.runValidation);
-        const liveXml = realLiveXml.replace('stage-encore-canon', `A${reference}B`);
+        const liveXml = realLiveXml
+          .replace(/<simple-id [^>]*\/>/g, '')
+          .replace('stage-encore-canon', `A${reference}B`);
         const xml = liveXml.replace(`A${reference}B`, `A${literal}B`);
         const decoded = reference === '&#9;' ? '\t' : reference === '&#13;' ? '\r' : '\n';
 

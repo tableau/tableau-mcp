@@ -9,7 +9,11 @@ import { bindExplicitTemplate, formatExplicitBindErrors } from '../binder/explic
 import type { Derivation } from '../binder/manifest-types.js';
 import { summarizeSchema } from '../binder/schema-summary.js';
 import { resolveUniqueDatasourceName } from '../metadata/field-resolver.js';
-import { extractSheetXml, extractWorksheetWindowXml } from '../metadata/sheets.js';
+import {
+  extractSheetXml,
+  extractWorksheetWindowXml,
+  worksheetFragmentSimpleId,
+} from '../metadata/sheets.js';
 import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
 import { planTopN } from '../refine/refineWorksheet.js';
 import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
@@ -54,6 +58,7 @@ export interface WorksheetTemplatePlan {
 
 export interface BuiltTemplateWorksheetArtifact {
   artifact: TemplateWorksheetArtifact;
+  worksheetId: string;
   provenance: string;
   bindings: Array<{ slotId: string; field: string }>;
 }
@@ -182,7 +187,15 @@ export function buildTemplateWorksheetArtifact({
       worksheetXml = bounded.xml;
     }
 
+    const worksheetId = worksheetFragmentSimpleId(worksheetXml);
+    if (!worksheetId) {
+      return new ArgsValidationError(
+        `Template "${plan.templateName}" did not produce a complete worksheet artifact.`,
+      ).toErr();
+    }
+
     return Ok({
+      worksheetId,
       artifact: {
         id: artifactId,
         sessionId,

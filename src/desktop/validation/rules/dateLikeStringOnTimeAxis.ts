@@ -361,12 +361,12 @@ export const dateLikeStringOnTimeAxisRule: ValidationRule = {
     const worksheets = xpath.select('//worksheet', doc as unknown as Node) as Element[];
     const scope = worksheets.length > 0 ? worksheets : [doc.documentElement];
     const issues: ValidationIssue[] = [];
-    const seen = new Set<string>();
 
     for (const wsNode of scope) {
       const hasLineOrArea = isLineOrAreaWorksheet(wsNode);
       const hasMeasureRows = hasContinuousMeasureOnRows(wsNode, metadata);
       const worksheetName = attr(wsNode, 'name') ?? '(worksheet)';
+      const seen = new Set<string>();
 
       for (const shelf of ['rows', 'cols'] as const) {
         const shelfNodes = xpath.select(`.//${shelf}/text()`, wsNode as unknown as Node) as Node[];
@@ -382,9 +382,8 @@ export const dateLikeStringOnTimeAxisRule: ValidationRule = {
               hasLineOrArea || (shelf === 'cols' && hasMeasureRows && !categoricalEncoding);
             if (!timeIntent) continue;
 
-            const dedupeKey = `${worksheetName}::${pill.ref}`;
-            if (seen.has(dedupeKey)) continue;
-            seen.add(dedupeKey);
+            if (seen.has(pill.ref)) continue;
+            seen.add(pill.ref);
 
             const display = columns.find((col) => col.caption)?.caption ?? pill.field;
             issues.push({
