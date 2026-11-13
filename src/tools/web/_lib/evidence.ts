@@ -3,8 +3,8 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { createNamespacedStore } from '../../../sessionStore/init.js';
-import type { SessionStore } from '../../../sessionStore/sessionStore.js';
+import type { KeyValueStore } from '../../../storage/keyValueStore.js';
+import { createNamespacedKeyValueStore } from '../../../storage/storageProvider.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
 import { WebToolName } from '../toolName.js';
@@ -148,29 +148,20 @@ export function getMutationPreviewTtlMs(): number {
   return milliseconds.fromMinutes(ttlMinutes);
 }
 
-// Preview proof lives in the configured session store, so with a shared custom store a confirm
+// Preview proof lives in the configured key-value store, so with a shared custom store a confirm
 // verifies on whichever replica it reaches. With the default memory store it stays process-local: a
 // confirm reaching another process (or after a restart) is rejected and the caller re-previews.
 //
 // Each scope holds one entry, so a new preview replaces the last one and only the latest token works.
 // The entry is a string carrying its own expiry, which survives any provider's serialization and
 // keeps a provider that ignores the namespace TTL from stretching the approval window.
-type PreviewProofStore = SessionStore<string> &
-  Required<Pick<SessionStore<string>, 'compareAndDelete'>>;
+const proofStores = new Map<string, KeyValueStore<string>>();
 
-const proofStores = new Map<string, PreviewProofStore>();
-
-function getProofStore(namespace: string): PreviewProofStore {
+function getProofStore(namespace: string): KeyValueStore<string> {
   let store = proofStores.get(namespace);
   if (!store) {
-    // Memoized: on the memory provider every createNamespacedStore call returns a fresh store.
-    const candidate = createNamespacedStore<string>(namespace, {
-      ttlMs: getMutationPreviewTtlMs(),
-    });
-    if (typeof candidate.compareAndDelete !== 'function') {
-      throw new Error('Preview evidence requires atomic compareAndDelete support');
-    }
-    store = candidate as PreviewProofStore;
+    // Memoized: on the memory provider every factory call returns a fresh store.
+    store = createNamespacedKeyValueStore<string>(namespace, { ttlMs: getMutationPreviewTtlMs() });
     proofStores.set(namespace, store);
   }
   return store;
@@ -219,17 +210,11 @@ function matchesProof(stored: unknown, secret: string): stored is string {
   );
 }
 
+// Consume, then check: one atomic store call keeps a token single-use across replicas. A wrong token
+// burns the pending proof, but the key is scoped to the caller's own preview, so they re-preview.
 async function consumeProof(namespace: string, key: string, secret = ''): Promise<boolean> {
-  return withStore(async () => {
-    const store = getProofStore(namespace);
-    const stored = await store.get(key);
-    if (!matchesProof(stored, secret)) {
-      return false;
-    }
-    // A preview may replace the entry after our read. Delete only the proof we validated,
-    // so a stale confirm cannot burn its replacement. Re-check expiry after the store awaits.
-    return (await store.compareAndDelete(key, stored)) && matchesProof(stored, secret);
-  });
+  const stored = await withStore(() => getProofStore(namespace).consume(key));
+  return matchesProof(stored, secret);
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -301,8 +286,8 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
  * `establish` generates a fresh nonce via crypto.randomUUID() and records its hash in the session
  * store under a key scoped to site + user + tool + target + binding, replacing any earlier preview;
  * the preview text echoes the nonce so the caller can supply it on confirm. `verify` atomically
- * compares and deletes that entry after checking the nonce, so a token works once, only for the
- * latest preview of exactly what was previewed. The nonce is server-generated and unguessable,
+ * consumes that entry, then checks the nonce, so a token works once, only for the latest preview of
+ * exactly what was previewed. The nonce is server-generated and unguessable,
  * so — like the tag — it cannot be fabricated by computing a value.
  *
  * See the store note above: this can only reject, never wrongly allow.
@@ -324,8 +309,7 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    // Anything that isn't a nonce we could have minted is rejected without touching the store, so
-    // junk input can't burn a pending preview.
+    // Anything that isn't a nonce we could have minted is rejected without touching the store.
     if (!ctx.confirmationToken || !UUID_PATTERN.test(ctx.confirmationToken)) {
       return false;
     }
