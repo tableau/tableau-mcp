@@ -855,6 +855,12 @@ server on read.
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
   profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
+- For staged workbook and data source publishing, grant `s3:DeleteObject` on
+  `<prefix>workbook-uploads/*` and `<prefix>datasource-uploads/*`, where `<prefix>` is the normalized
+  `MCP_IMAGE_PREFIX` (empty when unset). Staged uploads are deleted after a successful publish, so
+  each upload id can be published once. If deletion fails, including when this permission is missing,
+  publishing still succeeds and logs a warning. Configure bucket lifecycle rules to expire uploads
+  that are never published or whose deletion fails.
 - If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
   retrieval never hard-fails.
 

@@ -1,6 +1,10 @@
+import { readFileSync } from 'fs';
+
+import invariant from '../../utils/invariant.js';
 import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
-import { ensureUserNamespace } from '../templates/injectTemplateCore.js';
+import { buildInjectedWorkbookXml, ensureUserNamespace } from '../templates/injectTemplateCore.js';
 import { readTemplate } from '../templates/templatePath.js';
+import { createTemplateRuntimeSnapshot } from '../templates/templateRuntimeSnapshot.js';
 import { spliceWaterfallAnchorFilter } from '../templates/waterfallAnchorFilter.js';
 import { runValidation } from '../validation/registry.js';
 import { parseXml } from '../validation/rules/parseXml.js';
@@ -1164,5 +1168,37 @@ describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (wate
     expect(r.reason).toMatch(/Region/i);
     expect(r.reason).toMatch(/Category/i);
     expect(r.reason).toMatch(/targetField/i);
+  });
+});
+
+describe('planTopN — pie template (known gap)', () => {
+  it('refuses the real pie worksheet because the pcto quick-table-calc instance counts as a second measure', () => {
+    const snap = createTemplateRuntimeSnapshot(
+      'part-to-whole-pie-chart',
+      readFileSync('src/desktop/data/templates/part-to-whole-pie-chart.tbm', 'utf8'),
+    );
+    const workbookXml =
+      "<?xml version='1.0'?><workbook><datasources><datasource name='SS'><column caption='State' name='[State]' role='dimension' type='nominal' datatype='string' /><column caption='Sales' name='[Sales]' role='measure' type='quantitative' datatype='real' /></datasource></datasources></workbook>";
+    const injected = buildInjectedWorkbookXml({
+      workbookXml,
+      templateXml: snap.xml,
+      title: 'P',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'SS' },
+      fieldMapping: {
+        '{{field_base_1}}': '[SS].[none:State:nk]',
+        '{{field_base_2}}': '[SS].[sum:Sales:qk]',
+      },
+      templateSlots: snap.descriptor.slots,
+      applyNonce: 'n',
+    });
+    invariant(injected.ok);
+
+    const plan = planTopN(injected.xml, { n: 10 });
+
+    expect(plan).toEqual({
+      ok: false,
+      reason: 'more than one measure is present; the ranking measure is ambiguous.',
+    });
   });
 });

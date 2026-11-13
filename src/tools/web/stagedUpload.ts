@@ -2,10 +2,13 @@ import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
 import { type TenantLuids } from '../../blobStorage/tenantKey.js';
+import { log } from '../../logging/logger.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   BucketS3Config,
   buildTenantS3Key,
   createPresignedPutUrlToS3,
+  deleteObjectFromS3,
   downloadObjectFromS3IfExists,
 } from './s3Client.js';
 
@@ -25,6 +28,8 @@ export type StagedUploadKind<FileType extends string> = {
 export type ResolvedStagedFile = {
   fileName: string;
   bytes: Buffer;
+  // Set only when read from S3; the key to delete once published.
+  stagedKey?: string;
 };
 
 export async function requestStagedUpload<FileType extends string>({
@@ -90,8 +95,9 @@ export async function resolveStagedUpload<FileType extends string>({
 
   // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
   for (const fileType of kind.fileTypes) {
+    const key = buildStagedUploadS3Key(kind, config.keyPrefix, tenant, uploadId, fileType);
     const bytes = await downloadObjectFromS3IfExists({
-      key: buildStagedUploadS3Key(kind, config.keyPrefix, tenant, uploadId, fileType),
+      key,
       bucket: config.bucket,
       region: config.region,
       maxBytes,
@@ -105,12 +111,37 @@ export async function resolveStagedUpload<FileType extends string>({
       throw new Error(`${kind.label} upload bytes must not be empty.`);
     }
 
-    return { fileName: `${uploadId}.${fileType}`, bytes };
+    return { fileName: `${uploadId}.${fileType}`, bytes, stagedKey: key };
   }
 
   throw new Error(
-    `${kind.label} upload not found. Upload the ${kind.noun} bytes before publishing.`,
+    `${kind.label} upload not found: it was never uploaded, has expired, or was deleted after prior publish. Check whether the ${kind.noun} already exists before requesting a new upload.`,
   );
+}
+
+/** Best-effort deletion of a published staged upload; never throws. No-op for local files. */
+export async function deleteStagedUpload(
+  stagedKey: string | undefined,
+  config: BucketS3Config,
+  logger: string,
+): Promise<void> {
+  if (stagedKey === undefined) {
+    return;
+  }
+  try {
+    await deleteObjectFromS3({
+      key: stagedKey,
+      bucket: config.bucket,
+      region: config.region,
+    });
+  } catch (error) {
+    log({
+      message: `${logger}: failed to delete staged upload (best-effort)`,
+      level: 'warning',
+      logger,
+      data: getExceptionMessage(error),
+    });
+  }
 }
 
 export function buildStagedUploadS3Key<FileType extends string>(

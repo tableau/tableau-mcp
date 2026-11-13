@@ -153,6 +153,8 @@ const NON_TOOL_VOCABULARY = [
   'order-dependent',
   'packaged-workbook',
   'param-domain-type',
+  // Template id compared in code, not emitted guidance.
+  'part-to-whole-pie-chart',
   // Field resolver transformation marker, not a callable tool.
   'part-to-whole-waterfall',
   'percent-encoded',
@@ -167,6 +169,8 @@ const NON_TOOL_VOCABULARY = [
   'print-prepared',
   'prior-version',
   'quantitative-or-categorical',
+  // Template id compared in code, not emitted guidance.
+  'ranking-ordered-bar',
   're-call',
   're-enables',
   're-read',
