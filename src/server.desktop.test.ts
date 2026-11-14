@@ -464,11 +464,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 85-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 82-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(85);
+      expect(selected).toHaveLength(82);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -534,8 +534,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'workbook-export-as',
         'close-workbook',
         'refresh-auto-updates',
-        'refresh-dashboard-auto-updates',
-        'refresh-storyboard-auto-updates',
         'reload-extensions',
         'get-workspace-extensions',
         'reload-workspace-extension',
@@ -640,36 +638,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     expect(
       selectToolsForProfile(tools, 'dynamic-authoring').filter(
         (tool) => tool.name === 'refresh-auto-updates',
-      ),
-    ).toHaveLength(1);
-  });
-
-  it('registers refresh-storyboard-auto-updates once in full and dynamic-authoring profiles', () => {
-    const tools = allTools();
-
-    expect(
-      desktopToolNames.filter((name) => name === 'refresh-storyboard-auto-updates'),
-    ).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === 'refresh-storyboard-auto-updates')).toHaveLength(1);
-    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('refresh-storyboard-auto-updates')).toBe(true);
-    expect(
-      selectToolsForProfile(tools, 'dynamic-authoring').filter(
-        (tool) => tool.name === 'refresh-storyboard-auto-updates',
-      ),
-    ).toHaveLength(1);
-  });
-
-  it('registers refresh-dashboard-auto-updates once in full and dynamic-authoring profiles', () => {
-    const tools = allTools();
-
-    expect(
-      desktopToolNames.filter((name) => name === 'refresh-dashboard-auto-updates'),
-    ).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === 'refresh-dashboard-auto-updates')).toHaveLength(1);
-    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('refresh-dashboard-auto-updates')).toBe(true);
-    expect(
-      selectToolsForProfile(tools, 'dynamic-authoring').filter(
-        (tool) => tool.name === 'refresh-dashboard-auto-updates',
       ),
     ).toHaveLength(1);
   });
@@ -803,11 +771,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
     expect(floors.get('capture-window-screenshot')).toBe('0.2.28');
-    expect(floors.get('pause-auto-updates')).toBe('0.2.5');
+    expect(floors.get('set-auto-updates-paused')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
-    expect(floors.get('refresh-storyboard-auto-updates')).toBe('0.2.20');
-    expect(floors.get('refresh-dashboard-auto-updates')).toBe('0.2.19');
-    expect(floors.get('resume-auto-updates')).toBe('0.2.5');
     expect(floors.get('open-file')).toBe('0.2.6');
     expect(floors.get('list-saved-datasources')).toBe('0.2.6');
     expect(floors.get('save-workbook')).toBe('0.2.6');
@@ -906,7 +871,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     ]) {
       expect(gated).not.toContain(dropped);
     }
-    for (const kept of ['pause-auto-updates', 'resume-auto-updates', 'apply-worksheet']) {
+    for (const kept of ['set-auto-updates-paused', 'apply-worksheet']) {
       expect(gated).toContain(kept);
     }
   });
@@ -989,25 +954,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
-  });
-
-  it('gates dashboard and storyboard refresh at their respective API versions', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.19')).not.toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.2.20')).toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.3.0')).toContain('refresh-storyboard-auto-updates');
-    expect(namesAt(undefined)).toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.2.18')).not.toContain('refresh-dashboard-auto-updates');
-    expect(namesAt('0.2.19')).toContain('refresh-dashboard-auto-updates');
-    expect(namesAt('0.3.0')).toContain('refresh-dashboard-auto-updates');
-    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
-    expect(namesAt(undefined)).toContain('refresh-dashboard-auto-updates');
   });
 
   it('gates Show Me option discovery at External Client API 0.2.18', () => {

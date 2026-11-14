@@ -15,7 +15,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getRefreshDashboardAutoUpdatesTool } from './refreshDashboardAutoUpdates.js';
+import { getRefreshAutoUpdatesTool } from './refreshAutoUpdates.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -27,23 +27,10 @@ beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
-describe('refresh-dashboard-auto-updates', () => {
+describe('refresh-auto-updates on a dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
-  });
-
-  it('declares the dashboard refresh contract and API floor', () => {
-    const tool = getRefreshDashboardAutoUpdatesTool(new DesktopMcpServer());
-
-    expect(tool.name).toBe('refresh-dashboard-auto-updates');
-    expect(tool.minApiVersion).toBe('0.2.19');
-    expect(tool.annotations).toEqual({
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
   });
 
   it.each([
@@ -52,7 +39,7 @@ describe('refresh-dashboard-auto-updates', () => {
   ])('resolves a dashboard by %s and POSTs the bodyless route', async (_label, dashboard) => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ dashboard });
+      const result = await harness.callTool({ sheet: dashboard });
 
       expect(result.isError).toBe(false);
       expect(refreshRequests(harness.server)).toEqual([
@@ -74,12 +61,6 @@ describe('refresh-dashboard-auto-updates', () => {
         message: `Refreshed auto-updates for dashboard "${DASHBOARD_NAME}".`,
       });
       expect(result.structuredContent).toBeUndefined();
-      expect(
-        harness.server.requests.some((request) => request.path === '/v0/workbook/worksheets'),
-      ).toBe(false);
-      expect(
-        harness.server.requests.some((request) => request.path === '/v0/workbook/storyboards'),
-      ).toBe(false);
     } finally {
       await harness.close();
     }
@@ -96,7 +77,7 @@ describe('refresh-dashboard-auto-updates', () => {
         });
       });
       try {
-        const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+        const result = await harness.callTool({ sheet: DASHBOARD_NAME });
 
         expect(result.isError).toBe(false);
         expect(parseText(result)).toEqual({
@@ -143,7 +124,7 @@ describe('refresh-dashboard-auto-updates', () => {
         });
       });
       try {
-        const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+        const result = await harness.callTool({ sheet: DASHBOARD_NAME });
         const body = parseText(result);
 
         expect(result.isError).toBe(false);
@@ -174,7 +155,7 @@ describe('refresh-dashboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
       const body = parseText(result);
 
       expect(result.isError).toBe(false);
@@ -193,13 +174,13 @@ describe('refresh-dashboard-auto-updates', () => {
     }
   });
 
-  it('rejects a worksheet name using only the dashboard inventory', async () => {
+  it('rejects a worksheet name when the lookup is restricted to dashboards', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ dashboard: 'Sales by Region' });
+      const result = await harness.callTool({ sheet: 'Sales by Region', kind: 'dashboard' });
 
       expect(result.isError).toBe(true);
-      expect(text(result)).toContain('Dashboard "Sales by Region" was not found');
+      expect(text(result)).toContain('Sheet "Sales by Region" was not found');
       expect(refreshRequests(harness.server)).toHaveLength(0);
     } finally {
       await harness.close();
@@ -220,10 +201,10 @@ describe('refresh-dashboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: 'Overview' });
+      const result = await harness.callTool({ sheet: 'Overview' });
 
       expect(result.isError).toBe(true);
-      expect(text(result)).toMatch(/matched multiple dashboards.*dash-a.*dash-b/);
+      expect(text(result)).toMatch(/matched multiple sheets.*dash-a.*dash-b/);
       expect(refreshRequests(harness.server)).toHaveLength(0);
     } finally {
       await harness.close();
@@ -278,7 +259,7 @@ describe('refresh-dashboard-auto-updates', () => {
         });
       });
       try {
-        const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+        const result = await harness.callTool({ sheet: DASHBOARD_NAME });
         const body = parseText(result);
 
         expect(result.isError).toBe(true);
@@ -342,7 +323,7 @@ describe('refresh-dashboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
       const body = parseText(result);
 
       expect(result.isError).toBe(true);
@@ -374,7 +355,7 @@ describe('refresh-dashboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('The dashboard is closing.');
@@ -399,7 +380,7 @@ describe('refresh-dashboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('invalid-response');
@@ -417,7 +398,7 @@ describe('refresh-dashboard-auto-updates', () => {
       );
     });
     try {
-      const result = await harness.callTool({ dashboard: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('Desktop build does not serve');
@@ -428,7 +409,11 @@ describe('refresh-dashboard-auto-updates', () => {
   });
 });
 
-type ToolArgs = { dashboard: string; session?: string };
+type ToolArgs = {
+  sheet: string;
+  kind?: 'worksheet' | 'dashboard' | 'storyboard';
+  session?: string;
+};
 type Harness = {
   server: MockExternalApiServer;
   callTool: (args: ToolArgs) => Promise<CallToolResult>;
@@ -442,16 +427,14 @@ async function startHarness(
   await configure?.(server);
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const callback = await Provider.from(
-    getRefreshDashboardAutoUpdatesTool(new DesktopMcpServer()).callback,
-  );
+  const callback = await Provider.from(getRefreshAutoUpdatesTool(new DesktopMcpServer()).callback);
   const extra = {
     ...getMockRequestHandlerExtra(),
     getExecutor: vi.fn().mockResolvedValue(executor),
   };
   return {
     server,
-    callTool: async ({ session, dashboard }) => await callback({ session, dashboard }, extra),
+    callTool: async ({ session, sheet, kind }) => await callback({ session, sheet, kind }, extra),
     close: async () => {
       executor.stop();
       await server.close();

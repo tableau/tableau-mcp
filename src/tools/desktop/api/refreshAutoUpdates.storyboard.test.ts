@@ -14,43 +14,28 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getRefreshStoryboardAutoUpdatesTool } from './refreshStoryboardAutoUpdates.js';
+import { getRefreshAutoUpdatesTool } from './refreshAutoUpdates.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
 const STORYBOARD_ID = 'story-qbr';
 const STORYBOARD_NAME = 'QBR Story';
-const WORKSHEET_NAME = 'Sales by Region';
-const DASHBOARD_NAME = 'Executive Dashboard';
 const REFRESH_ROUTE = `/v0/workbook/storyboards/${STORYBOARD_ID}:refreshNow`;
 
 beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
-describe('refresh-storyboard-auto-updates', () => {
+describe('refresh-auto-updates on a storyboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('defines the storyboard refresh contract and version floor', () => {
-    const tool = getRefreshStoryboardAutoUpdatesTool(new DesktopMcpServer());
-
-    expect(tool.name).toBe('refresh-storyboard-auto-updates');
-    expect(tool.minApiVersion).toBe('0.2.20');
-    expect(tool.annotations).toEqual({
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
-  });
-
   it('resolves a storyboard name and returns the exact public result without a receipt', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
 
       expect(result.isError).toBe(false);
       expect(refreshRequests(harness.server)).toHaveLength(1);
@@ -77,7 +62,7 @@ describe('refresh-storyboard-auto-updates', () => {
   it('resolves a stable storyboard id before dispatching refresh', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_ID });
+      const result = await harness.callTool({ sheet: STORYBOARD_ID });
 
       expect(result.isError).toBe(false);
       expect(refreshRequests(harness.server)).toHaveLength(1);
@@ -101,7 +86,7 @@ describe('refresh-storyboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result).refreshed).toBe(false);
@@ -144,7 +129,7 @@ describe('refresh-storyboard-auto-updates', () => {
         });
       });
       try {
-        const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+        const result = await harness.callTool({ sheet: STORYBOARD_NAME });
         const body = parseResult(result);
 
         expect(result.isError).toBe(false);
@@ -175,7 +160,7 @@ describe('refresh-storyboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
       const body = parseResult(result) as ReturnType<typeof parseResult> & {
         warnings?: unknown;
       };
@@ -196,27 +181,10 @@ describe('refresh-storyboard-auto-updates', () => {
     }
   });
 
-  it.each([
-    ['worksheet', WORKSHEET_NAME],
-    ['dashboard', DASHBOARD_NAME],
-  ] as const)('rejects a %s without dispatching refresh', async (kind, storyboard) => {
-    const harness = await startHarness();
-    try {
-      const result = await harness.callTool({ storyboard });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain(`is a ${kind}`);
-      expect(errorText(result)).toContain('only be refreshed on a storyboard');
-      expect(refreshRequests(harness.server)).toHaveLength(0);
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('rejects a missing sheet without dispatching refresh', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ storyboard: 'Missing Story' });
+      const result = await harness.callTool({ sheet: 'Missing Story' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('was not found');
@@ -240,7 +208,7 @@ describe('refresh-storyboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ storyboard: 'Quarterly Review' });
+      const result = await harness.callTool({ sheet: 'Quarterly Review' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toMatch(/matched multiple sheets.*story-a.*story-b/);
@@ -266,7 +234,7 @@ describe('refresh-storyboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Storyboard refresh failed.');
@@ -290,7 +258,7 @@ describe('refresh-storyboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('The storyboard is closing.');
@@ -332,7 +300,7 @@ describe('refresh-storyboard-auto-updates', () => {
         });
       });
       try {
-        const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+        const result = await harness.callTool({ sheet: STORYBOARD_NAME });
         const body = parseResult(result);
 
         expect(result.isError).toBe(true);
@@ -386,7 +354,7 @@ describe('refresh-storyboard-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
 
       expect(result.isError).toBe(true);
       expect(parseResult(result)).toMatchObject(partial);
@@ -401,7 +369,8 @@ describe('refresh-storyboard-auto-updates', () => {
 });
 
 type RefreshStoryboardArgs = {
-  storyboard: string;
+  sheet: string;
+  kind?: 'worksheet' | 'dashboard' | 'storyboard';
   session?: string;
 };
 
@@ -418,7 +387,7 @@ async function startHarness(
   await configure?.(server);
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const tool = getRefreshStoryboardAutoUpdatesTool(new DesktopMcpServer());
+  const tool = getRefreshAutoUpdatesTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   const extra = {
     ...getMockRequestHandlerExtra(),
@@ -427,7 +396,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async ({ session, storyboard }) => await callback({ session, storyboard }, extra),
+    callTool: async ({ session, sheet, kind }) => await callback({ session, sheet, kind }, extra),
     close: async () => {
       executor.stop();
       await server.close();
@@ -440,7 +409,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
-    instanceId: 'inst-refresh-storyboard-auto-updates',
+    instanceId: 'inst-refresh-auto-updates-storyboard',
     apiVersion: '0.2.20',
   };
 }

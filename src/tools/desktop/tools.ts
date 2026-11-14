@@ -42,16 +42,13 @@ import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
-import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
-import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUpdates.js';
 import { getRefreshDatasourceTool } from './api/refreshDatasource.js';
-import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
 import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
-import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
+import { getSetAutoUpdatesPausedTool } from './api/setAutoUpdatesPaused.js';
 import { getSetDataSourcePageActiveTool } from './api/setDataSourcePageActive.js';
 import { getSetStartPageVisibilityTool } from './api/setStartPageVisibility.js';
 import { getShowMeTool } from './api/showMe.js';
@@ -127,12 +124,9 @@ export const desktopToolFactories = [
   getRenameSheetTool,
   getSortWorksheetTool,
   getShowMeTool,
-  getPauseAutoUpdatesTool,
+  getSetAutoUpdatesPausedTool,
   getRefreshAutoUpdatesTool,
-  getRefreshStoryboardAutoUpdatesTool,
-  getRefreshDashboardAutoUpdatesTool,
   getReloadExtensionsTool,
-  getResumeAutoUpdatesTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,

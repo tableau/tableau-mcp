@@ -18,16 +18,13 @@ import { getAddWorksheetTool } from './api/addWorksheet.js';
 import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getOpenFileTool } from './api/openFile.js';
-import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
-import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUpdates.js';
 import { getRefreshDatasourceTool } from './api/refreshDatasource.js';
-import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
 import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
-import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
+import { getSetAutoUpdatesPausedTool } from './api/setAutoUpdatesPaused.js';
 import { getSetDataSourcePageActiveTool } from './api/setDataSourcePageActive.js';
 import { getShowMeTool } from './api/showMe.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
@@ -332,53 +329,22 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: { datasourceId: 'ds1', refreshType: 'extract' },
     clean: { message: 'Refreshed the extract for datasource "ds1".' },
   },
-  'pause-auto-updates': {
-    make: getPauseAutoUpdatesTool,
-    args: { sheet: 'Sales' },
+  'set-auto-updates-paused': {
+    make: getSetAutoUpdatesPausedTool,
+    args: { sheet: 'Sales', isAutoUpdatesPaused: true },
     clean: {
       paused: true,
       sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
       message: 'Paused auto-updates for worksheet "Sales".',
     },
   },
-  'resume-auto-updates': {
-    make: getResumeAutoUpdatesTool,
-    args: { sheet: 'Sales' },
-    clean: {
-      resumed: true,
-      sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
-      message: 'Resumed auto-updates for worksheet "Sales".',
-    },
-  },
   'refresh-auto-updates': {
     make: getRefreshAutoUpdatesTool,
-    args: { worksheet: 'Sales' },
+    args: { sheet: 'Sales' },
     clean: {
       refreshed: true,
       worksheet: { id: 'ws1', name: 'Sales' },
       message: 'Refreshed auto-updates for worksheet "Sales".',
-    },
-  },
-  'refresh-dashboard-auto-updates': {
-    make: getRefreshDashboardAutoUpdatesTool,
-    args: { dashboard: 'Dash' },
-    clean: {
-      dashboard: { id: 'd1', name: 'Dash' },
-      outcome: 'COMPLETE',
-      refreshed: [],
-      failed: [],
-      message: 'Refreshed auto-updates for dashboard "Dash".',
-    },
-  },
-  'refresh-storyboard-auto-updates': {
-    make: getRefreshStoryboardAutoUpdatesTool,
-    args: { storyboard: 'Story' },
-    clean: {
-      storyboard: { id: 's1', name: 'Story' },
-      outcome: 'COMPLETE',
-      refreshed: [],
-      failed: [],
-      message: 'Refreshed auto-updates for the current point of storyboard "Story".',
     },
   },
   'activate-sheet': {
@@ -502,7 +468,7 @@ describe('Desktop command tools show Desktop warnings', () => {
 
   it('words a pending dashboard refresh as a request, not a completed refresh', async () => {
     const result = await callTool(
-      TOOL_CASES['refresh-dashboard-auto-updates'],
+      { ...TOOL_CASES['refresh-auto-updates'], args: { sheet: 'Dash' } },
       undefined,
       'running',
     );
