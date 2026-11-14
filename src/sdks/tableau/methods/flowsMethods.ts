@@ -1,8 +1,11 @@
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowsApis } from '../apis/flowsApi.js';
+import { getFilenameFromContentDisposition, getHeader } from '../responseHeaders.js';
 import { RestApiCredentials } from '../restApi.js';
 import { TableauRestError } from '../tableauRestError.js';
+import { DownloadFlowResult } from '../types/downloadFlowResult.js';
 import { Flow, FlowConnection, FlowOutputStep, FlowRun } from '../types/flow.js';
 import { RunFlowJob } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
@@ -19,6 +22,29 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }
+
+  /** Downloads the original flow file with a bounded response size.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#download_flow
+   */
+  downloadFlow = async ({
+    siteId,
+    flowId,
+  }: {
+    siteId: string;
+    flowId: string;
+  }): Promise<DownloadFlowResult> => {
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      buildRestPath('sites', siteId, 'flows', assertLuid('flowId', flowId), 'content'),
+      { ...this.authHeader, responseType: 'arraybuffer', maxContentLength: 256 * 1024 * 1024 },
+    );
+    return {
+      content: Buffer.from(response.data),
+      contentType: getHeader(response.headers, 'content-type'),
+      filename: getFilenameFromContentDisposition(
+        getHeader(response.headers, 'content-disposition'),
+      ),
+    };
+  };
 
   /**
    * Returns the flows on a site.

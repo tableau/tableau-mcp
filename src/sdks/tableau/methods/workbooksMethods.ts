@@ -4,6 +4,7 @@ import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
 import { buildMultipartMixedBody } from '../multipart.js';
+import { getFilenameFromContentDisposition, getHeader } from '../responseHeaders.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
@@ -424,45 +425,4 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       throw error;
     }
   };
-}
-
-function getHeader(headers: Record<string, unknown>, name: string): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    const first = value[0];
-    return typeof first === 'string' ? first : undefined;
-  }
-  return typeof value === 'string' ? value : undefined;
-}
-
-function getFilenameFromContentDisposition(
-  contentDispositionHeader: string | undefined,
-): string | undefined {
-  if (!contentDispositionHeader) {
-    return undefined;
-  }
-
-  // Supports both filename="foo.twbx" and filename=foo.twbx.
-  const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(
-    contentDispositionHeader,
-  );
-  const encodedOrQuotedOrRaw = match?.[1] ?? match?.[2] ?? match?.[3];
-  if (!encodedOrQuotedOrRaw) {
-    return undefined;
-  }
-
-  const filename = encodedOrQuotedOrRaw.trim();
-  if (!filename) {
-    return undefined;
-  }
-
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(filename);
-    } catch {
-      return filename;
-    }
-  }
-
-  return filename;
 }
