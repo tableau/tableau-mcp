@@ -161,6 +161,24 @@ describe('get-datasources with datasourceId', () => {
     }
   });
 
+  it('resolves a caption with a literal % without sending a by-id request', async () => {
+    const harness = await startHarness([
+      { id: 'profit-id', name: 'profit_ds', caption: 'Profit %' },
+    ]);
+    try {
+      const result = await harness.callTool({ datasourceId: 'Profit %' });
+
+      expect(result.isError).toBe(false);
+      expect(parseResult(result)).toMatchObject({ id: 'profit-id', caption: 'Profit %' });
+      expect(requestPaths(harness.server)).toEqual([
+        '/v0/workbook/datasources',
+        '/v0/workbook/datasources/profit-id',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('reports a value that matches neither an id nor a name', async () => {
     const harness = await startHarness([{ id: 'sales-id', name: 'sales_ds', caption: 'Sales' }]);
     try {

@@ -334,8 +334,8 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: { sheetId: 'ws1', kind: 'worksheet', isAutoUpdatesPaused: true },
     clean: {
       paused: true,
-      sheet: { id: 'ws1', kind: 'worksheet' },
-      message: 'Paused auto-updates for worksheet "ws1".',
+      sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
+      message: 'Paused auto-updates for worksheet "Sales".',
     },
   },
   'refresh-auto-updates': {

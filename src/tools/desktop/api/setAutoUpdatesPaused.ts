@@ -9,7 +9,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
-import { resolveSheetIdOfKind } from './resolveSheetRef.js';
+import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -56,17 +56,13 @@ export const getSetAutoUpdatesPausedTool = (
             return sessionResult.error.toErr();
           }
 
-          const executor = await extra.getExecutor(sessionResult.value);
-          const idResult = await resolveSheetIdOfKind({
-            executor,
-            kind,
-            sheet: sheetId,
-            signal: extra.signal,
-          });
-          if (idResult.isErr()) {
-            return idResult;
+          const refResult = await resolveSheetRef({ session, sheet: sheetId, kind, extra });
+          if (refResult.isErr()) {
+            return refResult;
           }
-          const id = idResult.value;
+          const { id } = refResult.value.ref;
+          const name = refResult.value.previousName;
+          const executor = await extra.getExecutor(sessionResult.value);
           const result = isAutoUpdatesPaused
             ? kind === 'worksheet'
               ? await executor.pauseWorksheetAutoUpdates(id, extra.signal)
@@ -83,7 +79,7 @@ export const getSetAutoUpdatesPausedTool = (
 
           const completed = result.value.status === 'completed';
           const alsoResumedContainedWorksheets = !isAutoUpdatesPaused && kind === 'dashboard';
-          const scope = `${kind} "${id}"${alsoResumedContainedWorksheets ? ' and every worksheet it contains' : ''}`;
+          const scope = `${kind} "${name}"${alsoResumedContainedWorksheets ? ' and every worksheet it contains' : ''}`;
           const subject = completed
             ? `${isAutoUpdatesPaused ? 'Paused' : 'Resumed'} auto-updates for ${scope}`
             : `Requested ${isAutoUpdatesPaused ? 'pausing' : 'resuming'} auto-updates for ${scope}; Desktop is still applying it`;
@@ -91,7 +87,7 @@ export const getSetAutoUpdatesPausedTool = (
             commandOk(
               {
                 [isAutoUpdatesPaused ? 'paused' : 'resumed']: completed,
-                sheet: { id, kind },
+                sheet: { id, kind, name },
                 ...(alsoResumedContainedWorksheets ? { alsoResumedContainedWorksheets: true } : {}),
                 message: `${subject}.`,
               },

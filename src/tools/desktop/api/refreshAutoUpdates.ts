@@ -22,7 +22,7 @@ import { attachNextAction, prefillNextAction, withNextAction } from '../structur
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { nonCleanRefreshSubject } from './refreshOutcomeSubject.js';
-import { resolveSheetIdOfKind } from './resolveSheetRef.js';
+import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -79,7 +79,7 @@ export const getRefreshAutoUpdatesTool = (
     minApiVersion: MIN_API_VERSION.worksheet,
     title,
     description:
-      'Run pending automatic updates now, without changing the active sheet: for one worksheet, every worksheet in a dashboard, or the current point of a storyboard. ' +
+      "Run pending automatic updates now, without changing the active sheet: for one worksheet, every worksheet in a dashboard's current device layout, or the current point of a storyboard. " +
       'Use after batching edits with set-auto-updates-paused. If a dashboard or storyboard worksheet fails, the error result reports a PARTIAL or FAILED outcome per worksheet.',
     annotations: {
       readOnlyHint: false,
@@ -105,7 +105,13 @@ export const getRefreshAutoUpdatesTool = (
             return endpointNotInThisBuild(`${kind} refresh`).toErr();
           }
 
-          const dispatched = await refreshByIdThenName(executor, kind, sheetId, extra.signal);
+          const dispatched = await refreshByIdThenName({
+            executor,
+            session,
+            kind,
+            sheet: sheetId,
+            extra,
+          });
           if (dispatched.isErr()) {
             return dispatched;
           }
@@ -197,13 +203,20 @@ type Dispatched =
       result: Awaited<ReturnType<ExternalApiToolExecutor['refreshDashboardNow']>>;
     };
 
-async function refreshByIdThenName(
-  executor: ExternalApiToolExecutor,
-  kind: SheetKind,
-  sheet: string,
-  signal: AbortSignal,
-): Promise<Result<Dispatched & { id: string }, McpToolError>> {
-  const byId = await dispatchRefresh(executor, kind, sheet, signal);
+async function refreshByIdThenName({
+  executor,
+  session,
+  kind,
+  sheet,
+  extra,
+}: {
+  executor: ExternalApiToolExecutor;
+  session: string | undefined;
+  kind: SheetKind;
+  sheet: string;
+  extra: Parameters<typeof resolveSheetRef>[0]['extra'];
+}): Promise<Result<Dispatched & { id: string }, McpToolError>> {
+  const byId = await dispatchRefresh(executor, kind, sheet, extra.signal);
   if (
     !byId.result.isErr() ||
     byId.result.error.type !== 'command-failed' ||
@@ -211,17 +224,15 @@ async function refreshByIdThenName(
   ) {
     return new Ok({ ...byId, id: sheet });
   }
-  const resolved = await resolveSheetIdOfKind({ executor, kind, sheet, signal });
+  const resolved = await resolveSheetRef({ session, sheet, kind, extra });
   if (resolved.isErr()) {
     return resolved;
   }
-  if (resolved.value === sheet) {
-    return new Ok({ ...byId, id: sheet });
+  const { id } = resolved.value.ref;
+  if (id === sheet) {
+    return new Ok({ ...byId, id });
   }
-  return new Ok({
-    ...(await dispatchRefresh(executor, kind, resolved.value, signal)),
-    id: resolved.value,
-  });
+  return new Ok({ ...(await dispatchRefresh(executor, kind, id, extra.signal)), id });
 }
 
 async function dispatchRefresh(

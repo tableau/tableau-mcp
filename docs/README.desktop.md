@@ -41,8 +41,8 @@ source, create with `sourceDashboard` and omit `sourceWorksheet`. An edit must s
 `sourceWorksheet` (`""` for a dashboard-only source), because it replaces the full definition.
 
 If edit readback reports that the original action was removed or changed, run `undo-redo-workbook`
-with action `undo` in the same session to restore the previous workbook before retrying. Failed verification does not
-automatically undo the apply.
+with action `undo` in the same session to restore the previous workbook before retrying. Failed
+verification does not automatically undo the apply.
 
 For example, this edits a URL action:
 

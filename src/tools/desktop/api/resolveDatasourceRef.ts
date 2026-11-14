@@ -12,7 +12,7 @@ export type ResolvedDatasourceRef = {
   resolvedSession: string;
 };
 
-export type ListedDatasource = DatasourceItem & { id: string; name: string };
+type ListedDatasource = DatasourceItem & { id: string; name: string };
 
 /** Resolve a datasource id, internal name, or caption against the open workbook. */
 export async function resolveDatasourceRef({
@@ -36,11 +36,7 @@ export async function resolveDatasourceRef({
         return inventory;
       }
 
-      const candidates = (inventory.value.datasources ?? []).filter(
-        (datasource): datasource is ListedDatasource =>
-          typeof datasource.id === 'string' && typeof datasource.name === 'string',
-      );
-      const resolved = resolveDatasource(datasourceName, candidates);
+      const resolved = resolveDatasource(datasourceName, inventory.value.datasources ?? []);
       if (resolved.isErr()) {
         return resolved.error.toErr();
       }
@@ -57,8 +53,12 @@ export async function resolveDatasourceRef({
 
 export function resolveDatasource(
   requested: string,
-  candidates: ListedDatasource[],
+  datasources: DatasourceItem[],
 ): Result<ListedDatasource, ArgsValidationError> {
+  const candidates = datasources.filter(
+    (datasource): datasource is ListedDatasource =>
+      typeof datasource.id === 'string' && typeof datasource.name === 'string',
+  );
   const trimmed = requested.trim();
   const idMatch = candidates.find((datasource) => datasource.id === trimmed);
   if (idMatch) {

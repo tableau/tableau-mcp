@@ -2,14 +2,15 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import { ExternalApiRouteError } from '../../../desktop/externalApi/types.js';
+import { ExternalApiCall, runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { Provider } from '../../../utils/provider.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { projectDatasource, ProjectedDatasource } from './datasourceResult.js';
-import { ListedDatasource, resolveDatasource } from './resolveDatasourceRef.js';
+import { resolveDatasource } from './resolveDatasourceRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -24,6 +25,13 @@ const paramsSchema = {
 
 const title = 'Get Datasources';
 
+const DATASOURCES_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
 export const getDatasourcesTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const getDatasources = new DesktopTool({
     server,
@@ -35,12 +43,7 @@ export const getDatasourcesTool = (server: DesktopMcpServer): DesktopTool<typeof
       'Each has id/name/caption/type; isExtract = extract vs live. The id is percent-encoded: pass it back as-is. ' +
       'luid appears only for a published datasource when Desktop is signed in to its site; hasDownloadFilePermission for published ones.',
     paramsSchema,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
+    annotations: DATASOURCES_ANNOTATIONS,
     callback: async ({ session, datasourceId }, extra): Promise<CallToolResult> => {
       return await getDatasources.logAndExecute({
         extra,
@@ -53,24 +56,14 @@ export const getDatasourcesTool = (server: DesktopMcpServer): DesktopTool<typeof
             extra,
             callback: async (executor, signal, read) => {
               if (datasourceId === undefined) {
-                const list = await read(
-                  'workbook datasources',
-                  async (executor, signal) => await executor.listWorkbookDatasources(signal),
-                );
-                return list.map((value) => ({
-                  datasources: (value.datasources ?? []).map(projectDatasource),
-                }));
+                return await listDatasources(read);
               }
               const byId = await executor.getWorkbookDatasource(datasourceId, signal);
               const readById = async (): Promise<Result<ProjectedDatasource, McpToolError>> =>
                 (await read('datasource metadata', async () => await Promise.resolve(byId))).map(
                   projectDatasource,
                 );
-              if (
-                byId.isOk() ||
-                byId.error.type !== 'command-failed' ||
-                byId.error.error?.code !== 'datasource-not-found'
-              ) {
+              if (byId.isOk() || !isNotADatasourceId(byId.error)) {
                 return await readById();
               }
               const list = await read(
@@ -80,11 +73,7 @@ export const getDatasourcesTool = (server: DesktopMcpServer): DesktopTool<typeof
               if (list.isErr()) {
                 return list;
               }
-              const candidates = (list.value.datasources ?? []).filter(
-                (datasource): datasource is ListedDatasource =>
-                  typeof datasource.id === 'string' && typeof datasource.name === 'string',
-              );
-              const resolved = resolveDatasource(datasourceId, candidates);
+              const resolved = resolveDatasource(datasourceId, list.value.datasources ?? []);
               if (resolved.isErr()) {
                 return resolved.error.toErr();
               }
@@ -106,6 +95,23 @@ export const getDatasourcesTool = (server: DesktopMcpServer): DesktopTool<typeof
   return getDatasources;
 };
 
+async function listDatasources(
+  read: ExternalApiCall,
+): Promise<Result<{ datasources: ProjectedDatasource[] }, McpToolError>> {
+  const list = await read(
+    'workbook datasources',
+    async (executor, signal) => await executor.listWorkbookDatasources(signal),
+  );
+  return list.map((value) => ({ datasources: (value.datasources ?? []).map(projectDatasource) }));
+}
+
+function isNotADatasourceId(error: ExecuteCommandError): boolean {
+  return (
+    (error.type === 'command-failed' && error.error?.code === 'datasource-not-found') ||
+    (error.type === 'invalid-response' && error.error instanceof ExternalApiRouteError)
+  );
+}
+
 const listParamsSchema = {
   session: sessionParam(),
 };
@@ -113,18 +119,26 @@ const listParamsSchema = {
 export const getListWorkbookDatasourcesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof listParamsSchema> => {
-  const getDatasources = getDatasourcesTool(server);
-  return new DesktopTool({
+  const listWorkbookDatasources = new DesktopTool({
     server,
     name: 'list-workbook-datasources',
     title: 'List Workbook Datasources',
     description:
       'Deprecated: use get-datasources instead. Same as get-datasources without datasourceId.',
     paramsSchema: listParamsSchema,
-    annotations: getDatasources.annotations,
+    annotations: DATASOURCES_ANNOTATIONS,
     callback: async ({ session }, extra): Promise<CallToolResult> => {
-      const callback = await Provider.from(getDatasources.callback);
-      return await callback({ session, datasourceId: undefined }, extra);
+      return await listWorkbookDatasources.logAndExecute({
+        extra,
+        args: { session },
+        callback: async () =>
+          await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => await listDatasources(read),
+          }),
+      });
     },
   });
+  return listWorkbookDatasources;
 };

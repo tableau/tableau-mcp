@@ -46,7 +46,11 @@ describe('set-auto-updates-paused', () => {
       expect(posted).toHaveLength(1);
       expect(posted[0].body).toBe('');
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('"paused":true');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        paused: true,
+        sheet: { id: WORKSHEET_ID, kind: 'worksheet', name: WORKSHEET_NAME },
+        message: `Paused auto-updates for worksheet "${WORKSHEET_NAME}".`,
+      });
     } finally {
       await harness.close();
     }
