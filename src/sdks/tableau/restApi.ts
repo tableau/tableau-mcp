@@ -28,6 +28,7 @@ import PersonalSpaceMethods from './methods/personalSpaceMethods.js';
 import ProjectsMethods from './methods/projectsMethods.js';
 import PublishingMethods from './methods/publishingMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
+import RecentContentMethods from './methods/recentContentMethods.js';
 import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMethods.js';
 import TasksMethods from './methods/tasksMethods.js';
 import UsersMethods from './methods/usersMethods.js';
@@ -168,6 +169,15 @@ export class RestApi {
     );
     this._addInterceptors(RestApi.baseUrlWithoutVersion, contentExplorationMethods.interceptors);
     return contentExplorationMethods;
+  }
+
+  get recentContentMethods(): RecentContentMethods {
+    const recentContentMethods = new RecentContentMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, recentContentMethods.interceptors);
+    return recentContentMethods;
   }
 
   get datasourcesMethods(): DatasourcesMethods {

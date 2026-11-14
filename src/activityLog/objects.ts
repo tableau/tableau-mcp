@@ -98,6 +98,7 @@ export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> 
         : undefined,
   },
   'search-content': null,
+  'list-recent-content': null,
   'revoke-access-token': null,
   'reset-consent': null,
   'query-admin-insights': null,

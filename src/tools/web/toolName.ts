@@ -43,6 +43,7 @@ export const webToolNames = [
   'generate-pulse-insight-brief',
   'generate-insight-cards',
   'search-content',
+  'list-recent-content',
   'revoke-access-token',
   'reset-consent',
   'query-admin-insights',
@@ -119,7 +120,7 @@ export const webToolGroups = {
     'generate-pulse-insight-brief',
   ],
   insights: ['generate-insight-cards'],
-  'content-exploration': ['search-content'],
+  'content-exploration': ['search-content', 'list-recent-content'],
   tasks: [
     'list-extract-refresh-tasks',
     'update-cloud-extract-refresh-task',
