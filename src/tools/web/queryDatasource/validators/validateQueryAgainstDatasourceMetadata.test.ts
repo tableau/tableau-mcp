@@ -672,6 +672,92 @@ describe('validateFieldsAgainstDatasourceMetadata', () => {
       expect(validationErrors).toHaveLength(1);
     });
   });
+
+  describe('table calc fields', () => {
+    const tableCalculation = {
+      tableCalcType: 'RANK' as const,
+      dimensions: [{ fieldCaption: 'Category' }],
+    };
+
+    it('should not add errors for a table calc on an existing field', () => {
+      const fields: Field[] = [
+        { fieldCaption: 'Category' },
+        { fieldCaption: 'Sales', function: 'SUM', tableCalculation },
+      ];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateFieldsAgainstDatasourceMetadata(fields, sampleMetadataResponse, validationErrors);
+
+      expect(validationErrors).toHaveLength(0);
+    });
+
+    it('should add error when the table calc field is not in the datasource', () => {
+      const fields: Field[] = [{ fieldCaption: 'Revenue', function: 'SUM', tableCalculation }];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateFieldsAgainstDatasourceMetadata(fields, sampleMetadataResponse, validationErrors);
+
+      expect(validationErrors).toEqual([
+        {
+          field: 'Revenue',
+          message:
+            "Field 'Revenue' was not found in the datasource. Fields must either belong to the datasource or provide a custom calculation.",
+        },
+      ]);
+    });
+
+    it('should not add errors for a table calc with a calculation and a new caption', () => {
+      const fields: Field[] = [
+        {
+          fieldCaption: 'Sales Rank',
+          calculation: 'RANK(SUM([Sales]))',
+          tableCalculation: { ...tableCalculation, tableCalcType: 'CUSTOM' },
+        },
+      ];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateFieldsAgainstDatasourceMetadata(fields, sampleMetadataResponse, validationErrors);
+
+      expect(validationErrors).toHaveLength(0);
+    });
+
+    it('should not add errors for a table calc without a function on a calculated field', () => {
+      const fields: Field[] = [
+        {
+          fieldCaption: 'Calculation Int',
+          tableCalculation: { ...tableCalculation, tableCalcType: 'CUSTOM' },
+        },
+      ];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateFieldsAgainstDatasourceMetadata(fields, sampleMetadataResponse, validationErrors);
+
+      expect(validationErrors).toHaveLength(0);
+    });
+
+    it('should validate the function against the data type', () => {
+      const fields: Field[] = [{ fieldCaption: 'Category', function: 'SUM', tableCalculation }];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateFieldsAgainstDatasourceMetadata(fields, sampleMetadataResponse, validationErrors);
+
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].message).toContain("The 'SUM' function can not be applied");
+    });
+
+    it('should not count a table calc as the measure for a new bin', () => {
+      const fields: Field[] = [
+        { fieldCaption: 'Sales', function: 'SUM', tableCalculation },
+        { fieldCaption: 'Sales', binSize: 100 },
+      ];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateFieldsAgainstDatasourceMetadata(fields, sampleMetadataResponse, validationErrors);
+
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].message).toContain('no corresponding measure field was found');
+    });
+  });
 });
 
 describe('validateParametersAgainstDatasourceMetadata', () => {

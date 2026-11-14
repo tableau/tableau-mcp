@@ -1,11 +1,30 @@
-import { Field, FilterField } from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import {
+  Field,
+  FilterField,
+  TableCalcField,
+} from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ToolRules } from '../../tool.js';
 
-export function validateFields(fields: Field[]): void {
+// Check this before any 'function' in / 'calculation' in test: a table calc can carry both keys.
+export function isTableCalcField(field: Field): field is TableCalcField {
+  return 'tableCalculation' in field;
+}
+
+export function validateFields(fields: Field[], rules: ToolRules): void {
   {
     // You must query at least one field.
     if (fields.length === 0) {
       throw new Error(
         'The query must include at least one field. The fields property cannot be an empty array.',
+      );
+    }
+  }
+
+  if (rules.restrictTableCalculations) {
+    const tableCalcFields = fields.filter(isTableCalcField).map((field) => field.fieldCaption);
+    if (tableCalcFields.length > 0) {
+      throw new Error(
+        `The query must not include table calculation fields. Table calculations require Tableau 2025.3 or later. The following fields are table calculations: ${tableCalcFields.join(', ')}.`,
       );
     }
   }
@@ -62,6 +81,24 @@ export function validateFields(fields: Field[]): void {
     if (fieldsWithBothFunctionAndCalculation.length > 0) {
       throw new Error(
         `The query must not include fields that contain both a function and a calculation. The following fields contain both a function and a calculation: ${fieldsWithBothFunctionAndCalculation.join(', ')}.`,
+      );
+    }
+  }
+
+  {
+    // VDS returns an opaque schema mismatch error for a quick table calc on a calculation.
+    const nonCustomCalculations = fields
+      .filter(
+        (field) =>
+          isTableCalcField(field) &&
+          field.calculation &&
+          field.tableCalculation.tableCalcType !== 'CUSTOM',
+      )
+      .map((field) => field.fieldCaption);
+
+    if (nonCustomCalculations.length > 0) {
+      throw new Error(
+        `The query must not include table calculation fields that have a calculation and a tableCalcType other than CUSTOM. With a calculation, use tableCalcType CUSTOM and write the table calculation function in the calculation, for example RANK(SUM([Sales])). The following fields are invalid: ${nonCustomCalculations.join(', ')}.`,
       );
     }
   }

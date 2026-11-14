@@ -24,7 +24,7 @@ export function validateQuery({
   validateDatasourceLuid({ datasourceLuid });
 
   const { fields, filters } = query;
-  validateFields(fields);
+  validateFields(fields, rules);
   validateFilters(filters, rules);
 
   const result = querySchema.safeParse(query);
