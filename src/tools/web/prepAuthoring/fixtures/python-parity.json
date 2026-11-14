@@ -1,0 +1,1934 @@
+{
+  "format": "prep-python-node-parity/v1",
+  "oracleSourceCommit": "acb9bd623866bc92818346e4a5a122e00da06ef7",
+  "canonicalization": "semantic-normal-form/v1: sorted Unicode keys and decimal-normalized numeric values",
+  "scopeCases": [
+    [
+      {},
+      false
+    ],
+    [
+      {
+        "password": []
+      },
+      true
+    ],
+    [
+      {
+        "password": false
+      },
+      false
+    ],
+    [
+      {
+        "username": "FAKE"
+      },
+      true
+    ],
+    [
+      {
+        "attributes": {
+          "username": "FAKE"
+        }
+      },
+      true
+    ],
+    [
+      [
+        "password=FAKE"
+      ],
+      false
+    ],
+    [
+      {
+        "x": [
+          "password=FAKE"
+        ]
+      },
+      false
+    ],
+    [
+      {
+        "x": {
+          "y": "password=FAKE"
+        }
+      },
+      true
+    ],
+    [
+      {
+        "tokenEndpoint": "https://tableau.invalid"
+      },
+      false
+    ]
+  ],
+  "credentialCases": [
+    [
+      "password",
+      "secret"
+    ],
+    [
+      "priv-key-file-pwd",
+      "secret"
+    ],
+    [
+      "username",
+      "principal"
+    ],
+    [
+      "ownerUserId",
+      "principal"
+    ],
+    [
+      "accessKeyId",
+      "principal"
+    ],
+    [
+      "access-key-id",
+      "principal"
+    ],
+    [
+      "clientId",
+      "principal"
+    ],
+    [
+      "credentialId",
+      "principal"
+    ],
+    [
+      "oauth",
+      "metadata"
+    ],
+    [
+      "authentication",
+      "metadata"
+    ],
+    [
+      "authentication-mode",
+      "metadata"
+    ],
+    [
+      "authMode",
+      "metadata"
+    ],
+    [
+      "tokenEndpoint",
+      "metadata"
+    ],
+    [
+      "refreshToken",
+      "secret"
+    ],
+    [
+      "sessionToken",
+      "secret"
+    ],
+    [
+      "apiKey",
+      "secret"
+    ],
+    [
+      "secretAccessKey",
+      "secret"
+    ],
+    [
+      "sasUrl",
+      "metadata"
+    ],
+    [
+      "shared-access-signature",
+      "secret"
+    ],
+    [
+      "workgroup-credentials-dialog",
+      "metadata"
+    ],
+    [
+      "ssl-client-key-file",
+      "locator"
+    ],
+    [
+      "privateKeyPath",
+      "locator"
+    ],
+    [
+      "serviceAccountFilePath",
+      "locator"
+    ],
+    [
+      "certificate-file",
+      "locator"
+    ],
+    [
+      "sslfile",
+      "locator"
+    ],
+    [
+      "private-key-password",
+      "secret"
+    ],
+    [
+      "access-token-type",
+      "metadata"
+    ],
+    [
+      "personal-access-token-type",
+      "secret"
+    ],
+    [
+      "viewerId",
+      "principal"
+    ],
+    [
+      "deviceId",
+      "principal"
+    ],
+    [
+      "proxyUid",
+      "principal"
+    ],
+    [
+      "userCustom",
+      "principal"
+    ],
+    [
+      "normal",
+      "none"
+    ],
+    [
+      "columnName",
+      "none"
+    ],
+    [
+      "connectionType",
+      "none"
+    ],
+    [
+      "Authorization",
+      "secret"
+    ],
+    [
+      "cookie",
+      "secret"
+    ],
+    [
+      "set-cookie",
+      "secret"
+    ],
+    [
+      "authentication-token",
+      "secret"
+    ],
+    [
+      "x-tableau-auth",
+      "secret"
+    ],
+    [
+      "credentials",
+      "secret"
+    ],
+    [
+      "keychain",
+      "secret"
+    ],
+    [
+      "token",
+      "secret"
+    ],
+    [
+      "token_name",
+      "metadata"
+    ],
+    [
+      "client-secret",
+      "secret"
+    ],
+    [
+      "oauth-token-url",
+      "metadata"
+    ],
+    [
+      "accessTokenUrl",
+      "metadata"
+    ],
+    [
+      "private-key-file-path",
+      "locator"
+    ],
+    [
+      "user-id",
+      "principal"
+    ],
+    [
+      "paſſword",
+      "secret"
+    ],
+    [
+      "clİentId",
+      "secret"
+    ],
+    [
+      "authentıcationToken",
+      "secret"
+    ],
+    [
+      "Keychain",
+      "secret"
+    ]
+  ],
+  "inlineCases": [
+    [
+      "ordinary field text",
+      false
+    ],
+    [
+      "password=FAKE",
+      true
+    ],
+    [
+      "token:FAKE",
+      true
+    ],
+    [
+      "Bearer FAKE",
+      true
+    ],
+    [
+      "https://user:FAKE@tableau.invalid",
+      true
+    ],
+    [
+      "userId=FAKE",
+      true
+    ],
+    [
+      "private-key=FAKE",
+      true
+    ],
+    [
+      "tokenEndpoint=https://tableau.invalid",
+      false
+    ],
+    [
+      "[Sales] * 1.2",
+      false
+    ],
+    [
+      "paſſword=FAKE",
+      true
+    ],
+    [
+      "\u001fpassword=FAKE",
+      true
+    ],
+    [
+      "token=FAKE",
+      true
+    ],
+    [
+      "﻿password=FAKE",
+      false
+    ]
+  ],
+  "schemaCases": [
+    [
+      null,
+      "886d3741e03e989964383e686fba5deb25e26c75b46e56eb904da901f01cae9f"
+    ],
+    [
+      "flow",
+      "6a549ae1b0d037e104b2fd4965b6fd59abcb52464f4b75607101256fd8038d7a"
+    ],
+    [
+      "nodeVariants/addColumn",
+      "922806ca464b280327d2342c7aa9006ab67272673fe63995bb5a2afe8b3538f2"
+    ],
+    [
+      "maestroMetadata",
+      "6c231d28d1415d2ffb4e9b855c414aa5cabb40a55888fe03da449ab7dfa810f4"
+    ]
+  ],
+  "templateCases": [
+    [
+      "authoringProject",
+      "8f8bd232bbf2a59eab8fa4aa459adfefa6f5462cfdf2d29e5010a52cda588b32"
+    ],
+    [
+      "flow",
+      "583a7200004e5b10dadb86831f5c1bf55271dc5646ae02ebf06937e6e3c15621"
+    ],
+    [
+      "commonNode",
+      "5437beb6f9b882d81f2a9b6afb837955d3ede82b3184ad45e719cec0a9c000f4"
+    ],
+    [
+      "edge",
+      "3ec86b0087361d292c3c43582fcf164abc24ff8b389abb54c5abb9cbc230bc62"
+    ],
+    [
+      "displaySettings",
+      "697db28df28b42caf9d9bfe077d32c9aeba26a8574533a4e592fbe245403d68c"
+    ],
+    [
+      "nodeDisplaySettings",
+      "d8b425fdfc25c12ea42f736ecb0e218afd25ff23682abb45ecc9faa27492309c"
+    ],
+    [
+      "maestroMetadata",
+      "b366fe933e84f9f87d9a7680a1240c9b3082bf12b02b145e7acd2501ddba8f4c"
+    ],
+    [
+      "authoringCsvConnection",
+      "8269a19e96eaf7da81fb3dd3a0c0908fcd4d9f417398239af91b80cea8a1f68e"
+    ],
+    [
+      "nodeVariants/loadCsv",
+      "5885bf1c1d323d667d2991eaeca991f72eb8895d22636ffb324df16888af77c7"
+    ],
+    [
+      "nodeVariants/addColumn",
+      "9acf225a6fdd70d799c57aaffb86e9eadb94d7a995ac88e1076b1b286995c8a8"
+    ],
+    [
+      "nodeVariants/writeToHyper",
+      "a7aa929a00a36ef41e07481be8eb06ff456b3f348cb1c4a5cafe5671069e4f7f"
+    ]
+  ],
+  "scalarCases": [
+    {
+      "id": "scalar-001",
+      "yamlText": "future: \n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-002",
+      "yamlText": "future: true\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-003",
+      "yamlText": "future: TRUE\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-004",
+      "yamlText": "future: True\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-005",
+      "yamlText": "future: tRuE\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-006",
+      "yamlText": "future: false\n",
+      "valid": true,
+      "valueSha256": "8e601392ee7a369cf80887e81d2de3b5aedb279aa46df01f2d2436b6cc218348",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-007",
+      "yamlText": "future: False\n",
+      "valid": true,
+      "valueSha256": "8e601392ee7a369cf80887e81d2de3b5aedb279aa46df01f2d2436b6cc218348",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-008",
+      "yamlText": "future: FALSE\n",
+      "valid": true,
+      "valueSha256": "8e601392ee7a369cf80887e81d2de3b5aedb279aa46df01f2d2436b6cc218348",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-009",
+      "yamlText": "future: fAlSe\n",
+      "valid": true,
+      "valueSha256": "8e601392ee7a369cf80887e81d2de3b5aedb279aa46df01f2d2436b6cc218348",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-010",
+      "yamlText": "future: yes\n",
+      "valid": true,
+      "valueSha256": "ea9f6662485f76542c8f696255a49a13848a29f7be8f2ae322c0959bf4bf8494",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-011",
+      "yamlText": "future: Yes\n",
+      "valid": true,
+      "valueSha256": "a5eab7fcafe23b8440c5e25d225dd0693af2d5a8cc782f4476191f3299e9d8ea",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-012",
+      "yamlText": "future: YES\n",
+      "valid": true,
+      "valueSha256": "7c2c237c179d485f31e49eab1706f483e8c20e5f2cce29b352eba0a0dabc23f8",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-013",
+      "yamlText": "future: no\n",
+      "valid": true,
+      "valueSha256": "273f6dcd3607ba4f8a13457ae62bf977840f74c3a9c2bb2b99ee8517b0e3db3b",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-014",
+      "yamlText": "future: on\n",
+      "valid": true,
+      "valueSha256": "d2730a9c76caa9b5eaa8b8aac4a2f1c67778f18a0f00f161934c504800bccda9",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-015",
+      "yamlText": "future: off\n",
+      "valid": true,
+      "valueSha256": "255938d9c38e305e89456d91a07d9f8c474f53106b875ee7e8c2afb8d72b73d6",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-016",
+      "yamlText": "future: null\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-017",
+      "yamlText": "future: NULL\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-018",
+      "yamlText": "future: Null\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-019",
+      "yamlText": "future: nUlL\n",
+      "valid": true,
+      "valueSha256": "4b5b4350d9c1b46be5b9db423aae2d38921d45d85d0104252068e58afb9ea65c",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-020",
+      "yamlText": "future: ~\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-021",
+      "yamlText": "future: 0\n",
+      "valid": true,
+      "valueSha256": "4cf850cd179a49a6ae42b2dd9df4f797ce91fbec6e193006409f709ed96ea3cc",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-022",
+      "yamlText": "future: 00\n",
+      "valid": true,
+      "valueSha256": "4cf850cd179a49a6ae42b2dd9df4f797ce91fbec6e193006409f709ed96ea3cc",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-023",
+      "yamlText": "future: 012\n",
+      "valid": true,
+      "valueSha256": "9db1e06f76063af6b82cd417ce030e87d7c3eef9232a840ef3e2bf10f0294c7a",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-024",
+      "yamlText": "future: 08\n",
+      "valid": true,
+      "valueSha256": "575ed5073cb371c98a14935f703975542ae554afcb811345c5c3d9700445d5eb",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-025",
+      "yamlText": "future: 09\n",
+      "valid": true,
+      "valueSha256": "4c964df552eaf13181c526e93139132ecee376ff929d01ceb2f931e68ace2582",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-026",
+      "yamlText": "future: 0o12\n",
+      "valid": true,
+      "valueSha256": "a917c3205c1fb7a37baf20450af9200f86c0c66145a3d180d532a4a78cc1ea55",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-027",
+      "yamlText": "future: 0O12\n",
+      "valid": true,
+      "valueSha256": "3e95d08da8932ff97efa3dba4c76b482b376c773a03f7ab37c8b4bbfcde4a5c0",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-028",
+      "yamlText": "future: 0xFF\n",
+      "valid": true,
+      "valueSha256": "42e8b7841548932e29a242ca61c63bb1f507e619714b03016ed98512b812e94d",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-029",
+      "yamlText": "future: 0XFF\n",
+      "valid": true,
+      "valueSha256": "9cd47a4f758238671f09651e79adb5f880b4ef3de5b920cc1ce59d7cb9bcfd29",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-030",
+      "yamlText": "future: 0b10\n",
+      "valid": true,
+      "valueSha256": "0b1cf38f8ae95d4c057cda5e6a397c7d3f02e7deccf8fdfeeb6588eeb8bf59ee",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-031",
+      "yamlText": "future: 0B10\n",
+      "valid": true,
+      "valueSha256": "3358dc3f10a9d0fff78ebfe0d350574a84c74501b555e9efa16b68b5c1cbaac6",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-032",
+      "yamlText": "future: +12\n",
+      "valid": true,
+      "valueSha256": "551f623f21d541b1450ff2dbce2c2427901c1f79f4e561b1e1e6cff24c9c7dc9",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-033",
+      "yamlText": "future: -012\n",
+      "valid": true,
+      "valueSha256": "658b521bfb226ab38969b1127829355da77c9e6d5221dc086bcfb48a6bf6c612",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-034",
+      "yamlText": "future: 1:20\n",
+      "valid": true,
+      "valueSha256": "c6ba47eaada80c7bb950f2cdd17785b8a3524193e29b960ec4c65114d94059ae",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-035",
+      "yamlText": "future: 0:20\n",
+      "valid": true,
+      "valueSha256": "fbe1c3afdb468ec668880fef8b118bca82f6ab5a5b3dc044f141eda3a9fb4b3c",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-036",
+      "yamlText": "future: 1:60\n",
+      "valid": true,
+      "valueSha256": "b37a3d02d6f5e4426de6154b3e7f3185c1ff71198a3e1eda7052033a2db5c9bf",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-037",
+      "yamlText": "future: 1e3\n",
+      "valid": true,
+      "valueSha256": "3f24d8040e79a7118821b2e643f2503d46288f2a3182b6c442f60c1a3a40048d",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-038",
+      "yamlText": "future: 1e+3\n",
+      "valid": true,
+      "valueSha256": "f0d335b62c04ce9ee6889209fdbb48dd568b36e2b11bf757112665f6918fd234",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-039",
+      "yamlText": "future: 1.0e3\n",
+      "valid": true,
+      "valueSha256": "3ec302df8a190f8bb529f416b74e1d2c72a6de805c624adba6c4ef9f4476ba3c",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-040",
+      "yamlText": "future: 1.0e+3\n",
+      "valid": true,
+      "valueSha256": "b8869c1df2f384f2aec18e7d7ba847148504a359608e8d78128780b10cc41fd7",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-041",
+      "yamlText": "future: .5\n",
+      "valid": true,
+      "valueSha256": "62af4c4fa9b28f08765bfa2e2daf48d84aed7c46ca118a9b1a1ae5cd8ffa5f11",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-042",
+      "yamlText": "future: -.5\n",
+      "valid": true,
+      "valueSha256": "81e6b1212325c2797f1a18d67ec1d620f6f969b98eb3d91197d127f1d80e4fc7",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-043",
+      "yamlText": "future: 1.\n",
+      "valid": true,
+      "valueSha256": "958abf3293cfeabb818fc23a493946d3377bcb418a23404bd47eace7d3700e17",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-044",
+      "yamlText": "future: -0.0\n",
+      "valid": true,
+      "valueSha256": "4cf850cd179a49a6ae42b2dd9df4f797ce91fbec6e193006409f709ed96ea3cc",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-045",
+      "yamlText": "future: .inf\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-046",
+      "yamlText": "future: .nan\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-047",
+      "yamlText": "future: =\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-048",
+      "yamlText": "future: <<\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-049",
+      "yamlText": "future: 2026-01-01\n",
+      "valid": true,
+      "valueSha256": "faed346942f61c45b2ad2d9c12bf3c0cb3eddeff5b1618d9e3ac169c4e859bc7",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-050",
+      "yamlText": "future: ١٢\n",
+      "valid": true,
+      "valueSha256": "d854958002fd6d8fc44c7f5146167ac7d1ad7b5c4f192ba32f525028701f8cdf",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-051",
+      "yamlText": "future: 08x\n",
+      "valid": true,
+      "valueSha256": "bde67733b4d8a934553daafe08eb322bff4c0ce0f3e554f0ed9d95cecabcc2a5",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-052",
+      "yamlText": "future: [true,08,0o12,1e3]\n",
+      "valid": true,
+      "valueSha256": "33ed6e7857ff7d9d85b6e21d9ffbe0dd9e596f693697476a0ad4862b29535ec5",
+      "typesSha256": "c05d177904762e6a300375618a056a0b22e928f1dd08cbf473f30fcbeb43a6c6"
+    },
+    {
+      "id": "scalar-053",
+      "yamlText": "future: {x: 1, x: 2}\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-054",
+      "yamlText": "future: &a [*a]\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-055",
+      "yamlText": "future: !!timestamp 2026-01-01\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-056",
+      "yamlText": "future: !!set {x: null}\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-057",
+      "yamlText": "future: !!binary aGVsbG8=\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-058",
+      "yamlText": "future: !!str 08\n",
+      "valid": true,
+      "valueSha256": "575ed5073cb371c98a14935f703975542ae554afcb811345c5c3d9700445d5eb",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-059",
+      "yamlText": "future: !!str true\n",
+      "valid": true,
+      "valueSha256": "925d974339419fa1f5c2fae23be1aeddd2438e5d151ffe42e3dd88305e712ce6",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-060",
+      "yamlText": "future: !!str =\n",
+      "valid": true,
+      "valueSha256": "33e840446f2d2e5c33e4ffb9de535f0b17b978168c226b64d8c5ef7ca0a6e718",
+      "typesSha256": "400028ef69e10882d19eb76614ae27f260682be3d80cd8677b5f3b488e1e05d8"
+    },
+    {
+      "id": "scalar-061",
+      "yamlText": "future: !!int \"yes\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-062",
+      "yamlText": "future: !!int \"on\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-063",
+      "yamlText": "future: !!int \"tRuE\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-064",
+      "yamlText": "future: !!int \"false\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-065",
+      "yamlText": "future: !!int \"012\"\n",
+      "valid": true,
+      "valueSha256": "9db1e06f76063af6b82cd417ce030e87d7c3eef9232a840ef3e2bf10f0294c7a",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-066",
+      "yamlText": "future: !!int \"08\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-067",
+      "yamlText": "future: !!int \"0o12\"\n",
+      "valid": true,
+      "valueSha256": "9db1e06f76063af6b82cd417ce030e87d7c3eef9232a840ef3e2bf10f0294c7a",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-068",
+      "yamlText": "future: !!int \"0XFF\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-069",
+      "yamlText": "future: !!int \"0b0b10\"\n",
+      "valid": true,
+      "valueSha256": "0b1cf38f8ae95d4c057cda5e6a397c7d3f02e7deccf8fdfeeb6588eeb8bf59ee",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-070",
+      "yamlText": "future: !!int \"1:99\"\n",
+      "valid": true,
+      "valueSha256": "af750eccdf39be9b7fad9f82a1d9b07fd40fb1e39e37e57d3d11b5a50ba073fe",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-071",
+      "yamlText": "future: !!int \"0:20\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-072",
+      "yamlText": "future: !!int \"1e3\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-073",
+      "yamlText": "future: !!int \"1.0\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-074",
+      "yamlText": "future: !!int \" 012 \"\n",
+      "valid": true,
+      "valueSha256": "551f623f21d541b1450ff2dbce2c2427901c1f79f4e561b1e1e6cff24c9c7dc9",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-075",
+      "yamlText": "future: !!int \" -012 \"\n",
+      "valid": true,
+      "valueSha256": "48faa1c8e48553c8b3e4c3e92ada986ee92c99768f8223f92b99e52c7b1aa141",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-076",
+      "yamlText": "future: !!int \"\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-077",
+      "yamlText": "future: !!int \"١٢\"\n",
+      "valid": true,
+      "valueSha256": "551f623f21d541b1450ff2dbce2c2427901c1f79f4e561b1e1e6cff24c9c7dc9",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-078",
+      "yamlText": "future: !!int \"٠٨\"\n",
+      "valid": true,
+      "valueSha256": "a2df8a5dd09fbca282a0081ce9a7a54cb1d676c36483a1ae3cf0784bcb3e4a40",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-079",
+      "yamlText": "future: !!int \"١.٢\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-080",
+      "yamlText": "future: !!int \"0x١٢\"\n",
+      "valid": true,
+      "valueSha256": "6ac598bf8233d53d839efef51bc1f1e8d762c05d7dc9f7f7b5e2438a424eccc3",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-081",
+      "yamlText": "future: !!int \"0xFF\"\n",
+      "valid": true,
+      "valueSha256": "42e8b7841548932e29a242ca61c63bb1f507e619714b03016ed98512b812e94d",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-082",
+      "yamlText": "future: !!int \"0b10\"\n",
+      "valid": true,
+      "valueSha256": "0b1cf38f8ae95d4c057cda5e6a397c7d3f02e7deccf8fdfeeb6588eeb8bf59ee",
+      "typesSha256": "2996fc30a0164d16831974e3e87f604070209cfdee31515aaadc8f6a48843343"
+    },
+    {
+      "id": "scalar-083",
+      "yamlText": "future: !!int \"1_000.0e+3\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-084",
+      "yamlText": "future: !!int \"1.0000000000000001\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-085",
+      "yamlText": "future: !!float \"yes\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-086",
+      "yamlText": "future: !!float \"on\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-087",
+      "yamlText": "future: !!float \"tRuE\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-088",
+      "yamlText": "future: !!float \"false\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-089",
+      "yamlText": "future: !!float \"012\"\n",
+      "valid": true,
+      "valueSha256": "551f623f21d541b1450ff2dbce2c2427901c1f79f4e561b1e1e6cff24c9c7dc9",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-090",
+      "yamlText": "future: !!float \"08\"\n",
+      "valid": true,
+      "valueSha256": "a2df8a5dd09fbca282a0081ce9a7a54cb1d676c36483a1ae3cf0784bcb3e4a40",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-091",
+      "yamlText": "future: !!float \"0o12\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-092",
+      "yamlText": "future: !!float \"0XFF\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-093",
+      "yamlText": "future: !!float \"0b0b10\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-094",
+      "yamlText": "future: !!float \"1:99\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-095",
+      "yamlText": "future: !!float \"0:20\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-096",
+      "yamlText": "future: !!float \"1e3\"\n",
+      "valid": true,
+      "valueSha256": "b8869c1df2f384f2aec18e7d7ba847148504a359608e8d78128780b10cc41fd7",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-097",
+      "yamlText": "future: !!float \"1.0\"\n",
+      "valid": true,
+      "valueSha256": "958abf3293cfeabb818fc23a493946d3377bcb418a23404bd47eace7d3700e17",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-098",
+      "yamlText": "future: !!float \" 012 \"\n",
+      "valid": true,
+      "valueSha256": "551f623f21d541b1450ff2dbce2c2427901c1f79f4e561b1e1e6cff24c9c7dc9",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-099",
+      "yamlText": "future: !!float \" -012 \"\n",
+      "valid": true,
+      "valueSha256": "48faa1c8e48553c8b3e4c3e92ada986ee92c99768f8223f92b99e52c7b1aa141",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-100",
+      "yamlText": "future: !!float \"\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-101",
+      "yamlText": "future: !!float \"١٢\"\n",
+      "valid": true,
+      "valueSha256": "551f623f21d541b1450ff2dbce2c2427901c1f79f4e561b1e1e6cff24c9c7dc9",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-102",
+      "yamlText": "future: !!float \"٠٨\"\n",
+      "valid": true,
+      "valueSha256": "a2df8a5dd09fbca282a0081ce9a7a54cb1d676c36483a1ae3cf0784bcb3e4a40",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-103",
+      "yamlText": "future: !!float \"١.٢\"\n",
+      "valid": true,
+      "valueSha256": "0d312d4af07446c9d58a078aee57f904d004d598fd875f7860ea140aba8751ee",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-104",
+      "yamlText": "future: !!float \"0x١٢\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-105",
+      "yamlText": "future: !!float \"0xFF\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-106",
+      "yamlText": "future: !!float \"0b10\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-107",
+      "yamlText": "future: !!float \"1_000.0e+3\"\n",
+      "valid": true,
+      "valueSha256": "2cf7503929b736e1235d0bbe29bb74369dafc74054aae8135c7419ab64027778",
+      "typesSha256": "df721f4ff606b1ba6d5bbfc3c10852380819dcbde0a6454770e3b4e3d5d8814f"
+    },
+    {
+      "id": "scalar-108",
+      "yamlText": "future: !!float \"1.0000000000000001\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-109",
+      "yamlText": "future: !!bool \"yes\"\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-110",
+      "yamlText": "future: !!bool \"on\"\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-111",
+      "yamlText": "future: !!bool \"tRuE\"\n",
+      "valid": true,
+      "valueSha256": "441d8359709e5c753d9ea01a18416a141f8db52c51e46e43777110639093fbd8",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-112",
+      "yamlText": "future: !!bool \"false\"\n",
+      "valid": true,
+      "valueSha256": "8e601392ee7a369cf80887e81d2de3b5aedb279aa46df01f2d2436b6cc218348",
+      "typesSha256": "ba70fee029e7958bcf15feb5608216c55f5624e014432ac6343db39eec4f1ed0"
+    },
+    {
+      "id": "scalar-113",
+      "yamlText": "future: !!bool \"012\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-114",
+      "yamlText": "future: !!bool \"08\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-115",
+      "yamlText": "future: !!bool \"0o12\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-116",
+      "yamlText": "future: !!bool \"0XFF\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-117",
+      "yamlText": "future: !!bool \"0b0b10\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-118",
+      "yamlText": "future: !!bool \"1:99\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-119",
+      "yamlText": "future: !!bool \"0:20\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-120",
+      "yamlText": "future: !!bool \"1e3\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-121",
+      "yamlText": "future: !!bool \"1.0\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-122",
+      "yamlText": "future: !!bool \" 012 \"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-123",
+      "yamlText": "future: !!bool \" -012 \"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-124",
+      "yamlText": "future: !!bool \"\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-125",
+      "yamlText": "future: !!bool \"١٢\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-126",
+      "yamlText": "future: !!bool \"٠٨\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-127",
+      "yamlText": "future: !!bool \"١.٢\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-128",
+      "yamlText": "future: !!bool \"0x١٢\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-129",
+      "yamlText": "future: !!bool \"0xFF\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-130",
+      "yamlText": "future: !!bool \"0b10\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-131",
+      "yamlText": "future: !!bool \"1_000.0e+3\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-132",
+      "yamlText": "future: !!bool \"1.0000000000000001\"\n",
+      "valid": false
+    },
+    {
+      "id": "scalar-133",
+      "yamlText": "future: !!null \"yes\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-134",
+      "yamlText": "future: !!null \"on\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-135",
+      "yamlText": "future: !!null \"tRuE\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-136",
+      "yamlText": "future: !!null \"false\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-137",
+      "yamlText": "future: !!null \"012\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-138",
+      "yamlText": "future: !!null \"08\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-139",
+      "yamlText": "future: !!null \"0o12\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-140",
+      "yamlText": "future: !!null \"0XFF\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-141",
+      "yamlText": "future: !!null \"0b0b10\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-142",
+      "yamlText": "future: !!null \"1:99\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-143",
+      "yamlText": "future: !!null \"0:20\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-144",
+      "yamlText": "future: !!null \"1e3\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-145",
+      "yamlText": "future: !!null \"1.0\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-146",
+      "yamlText": "future: !!null \" 012 \"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-147",
+      "yamlText": "future: !!null \" -012 \"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-148",
+      "yamlText": "future: !!null \"\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-149",
+      "yamlText": "future: !!null \"١٢\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-150",
+      "yamlText": "future: !!null \"٠٨\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-151",
+      "yamlText": "future: !!null \"١.٢\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-152",
+      "yamlText": "future: !!null \"0x١٢\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-153",
+      "yamlText": "future: !!null \"0xFF\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-154",
+      "yamlText": "future: !!null \"0b10\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-155",
+      "yamlText": "future: !!null \"1_000.0e+3\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    },
+    {
+      "id": "scalar-156",
+      "yamlText": "future: !!null \"1.0000000000000001\"\n",
+      "valid": true,
+      "valueSha256": "1e4dfe0ec47b15cd3a88e35fca3b0839314985642569640db76a9a2f3615e4f5",
+      "typesSha256": "2154c1456e6df03c610891b6640f41e5b5951773fb25b7c56f2415f1c0069150"
+    }
+  ],
+  "cases": [
+    {
+      "id": "python-new-tfl",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles: []\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: !path 'project.resources/sales.csv'\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: false\n",
+      "format": "tfl",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [
+        {
+          "path": [
+            "flow",
+            "connections",
+            "d4d2e33b-67cc-59c5-815b-e7e5b95dac86",
+            "connectionAttributes",
+            "filename"
+          ],
+          "relative": "project.resources/sales.csv"
+        }
+      ],
+      "metadataSha256": "4b5ce8407af43067038a351c6fa47f064d511e359b02fcd7daec6405e4c5fae0",
+      "metadataTypesSha256": "28743ca2a7188c83b7a9d01a324b6d9de5355f13a699d0ab27437056c300f74e",
+      "jsonPathCount": 109,
+      "attachmentHashes": {}
+    },
+    {
+      "id": "python-new-tflx",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "6780c5411fa27eef4554d00d07ffede472e55b49fe09bd31755a5524378c49a0",
+      "metadataTypesSha256": "28743ca2a7188c83b7a9d01a324b6d9de5355f13a699d0ab27437056c300f74e",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "edit-expression",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.25'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "1d49b9a59ddd92c428a0e7cb68dbaed032a68ce8c0f469bcc0cdfec2806cbd61",
+      "metadataTypesSha256": "28743ca2a7188c83b7a9d01a324b6d9de5355f13a699d0ab27437056c300f74e",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "future-private-and-null",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n      description: null\n      futurePrivate:\n        values:\n        - true\n        - false\n        - null\n        - 'on'\n        - 9007199254740993\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "0488442ee699f95f87c4827d9999f76dc3bfaf7465b977f054111a87700648c8",
+      "metadataTypesSha256": "e1fe1947c3ae90b2bb981273e4369e917cb252fc7823ef062fb64bd4c2d87714",
+      "jsonPathCount": 116,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "non-rfc-namespace",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: 11111111-1111-1111-1111-111111111111\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "dc3a18dd2af6ec3b4f7454b937e68adc71e1cfded841ad97612222cd4169b76f",
+      "metadataTypesSha256": "52b288df563f63064691bc918575d0144480cd8519348285f5428feb187b4c66",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/be072ea1-2e15-5d17-890e-9ab61ade2840/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "nil-namespace",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: 00000000-0000-0000-0000-000000000000\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "a4d76fff6f6d1a91d9e9b7bb639998b814baff1e89640f7591b2a27bc45df5d1",
+      "metadataTypesSha256": "874ab41d6f441163a3a6c6600748a8f072fb4a805c950e543876f085fcbf5cf2",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/e3872201-19d6-5a98-ae6a-1f42d31de542/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "constructor-node-alias",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n    constructor:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "2b05d20b8136d53310f9f5807aa5091ebb7e84b55621d7d8dc1bd8788796854f",
+      "metadataTypesSha256": "19c7b31c2ef748ee5572ef8128a162ef17e3f2e885389cddfbd43cf64595f88a",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "toString-node-alias",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n    toString:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "37e93f01c9dcb0a3a0f1dc42f5257e02296ba6da6180042246246a3b647f2085",
+      "metadataTypesSha256": "367d70f172dfa04185f4d9e613549ad7e489b02b7b7fee177d63e75a03385cfa",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "prototype-named-opaque-fields",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n      futureOpaque:\n        __proto__:\n          kept: true\n        constructor:\n        - 1\n        - 2\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "25dc5cfc4fb7bb99f959f68a283e02e6fc14f2595cb4c185b8b56325f30fd75a",
+      "metadataTypesSha256": "296666ad469566aed047965e5419244bec80d33e8abd075298010650154f5834",
+      "jsonPathCount": 115,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "integer-version-as-float",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n  majorVersion: 1.0\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "display-version-as-float",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\ndisplaySettings:\n  majorVersion: 1.0\n  minorVersion: 0\n  fieldOrder:\n    fieldOrdinals: {}\n    minOrdinal: 0\n    maxOrdinal: 0\n  flowDisplaySettings:\n    flowGroupNodeDisplay: {}\n    flowSelection:\n      type: nothing\n      selectedNodePath: null\n      selectedType: null\n    flowNodeDisplaySettings: {}\n  hiddenColumns: []\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "manifest-version-as-float",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\nmaestroMetadata:\n  majorVersion: 1.0\n  minorVersion: 0\n  flowEntryName: flow\n  displaySettingsEntryName: displaySettings\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "opaque-integral-float",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n  futureFloat: 1.0\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "800b8f18c374f731b1bdd0abea8ab768483114ed5458a6c9a990ea44bfc8707b",
+      "metadataTypesSha256": "0ac2a7a4ee57a668d8099fd62b5d542593e114667d7ae2daf5cf00e885403cff",
+      "jsonPathCount": 110,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708"
+      }
+    },
+    {
+      "id": "invalid-surrogate",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n  futureText: \"\\uD800\"\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "string-defaults",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: 'true'\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "colliding-id-map",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\nids:\n  first: 11111111-1111-1111-1111-111111111111\n  second: 11111111-1111-1111-1111-111111111111\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "invalid-type-id",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n      id: bad-id\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "invalid-type-nodeType",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: AddColumn\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "invalid-type-baseType",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: 123\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "invalid-type-serialize",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n      serialize: 'false'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "missing-edge",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - nextNodeId: !id 'missing'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "cyclic-edge",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - nextNodeId: !id 'input'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "missing-connection",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'missing'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "explicit-null-defaults",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: null\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "explicit-null-ids",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\nids: null\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "explicit-null-files",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles: null\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "null-connections",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections: null\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "extra-project-key",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\nunexpected: true\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "unsafe-tag",
+      "yamlText": "!!python/object/apply:os.system [whoami]",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "duplicate-key",
+      "yamlText": "format: one\nformat: two\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "alias",
+      "yamlText": "a: &a [*a]",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "nonstring-key",
+      "yamlText": "true: value\n",
+      "format": "tflx",
+      "valid": false,
+      "resources": [
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": []
+    },
+    {
+      "id": "large-opaque-attachment",
+      "yamlText": "format: tableau-prep-flow/v1\ndefaults: true\nfiles:\n- entry:\n  - Data\n  - !id 'csv'\n  - sales.csv\n  source: project.resources/sales.csv\n- entry: opaque.bin\n  source: large.bin\nnamespace: f1f4f47e-c4fa-4ba0-bf4b-49364313f20e\nflow:\n  nodes:\n    input:\n      nodeType: .v1.LoadCsv\n      baseType: input\n      containsHeaders: true\n      separator: ','\n      charSet: UTF-8\n      name: Sales\n      connectionId: !id 'csv'\n      connectionAttributes: {}\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'calculate'\n    calculate:\n      nodeType: .v1.AddColumn\n      baseType: transform\n      name: Tax included\n      columnName: SalesWithTax\n      expression: '[Sales] * 1.1'\n      nextNodes:\n      - namespace: Default\n        nextNamespace: Default\n        nextNodeId: !id 'output'\n    output:\n      nodeType: .v1.WriteToHyper\n      baseType: output\n      name: Result\n      hyperOutputFile: sales-output.hyper\n      tdsOutput: sales-output.tds\n  connections:\n    csv:\n      connectionType: .v1.SqlConnection\n      connectionAttributes:\n        class: textscan\n        filename: sales.csv\n      id: !id 'csv'\n      name: sales.csv\n      isPackaged: true\n",
+      "format": "tflx",
+      "valid": true,
+      "resources": [
+        {
+          "path": "large.bin",
+          "repeatByte": 0,
+          "byteLength": 41943040
+        },
+        {
+          "path": "project.resources/sales.csv",
+          "base64": "UmVnaW9uLFNhbGVzCkVhc3QsMTAwCldlc3QsMjAwCg=="
+        }
+      ],
+      "pathFields": [],
+      "metadataSha256": "6780c5411fa27eef4554d00d07ffede472e55b49fe09bd31755a5524378c49a0",
+      "metadataTypesSha256": "28743ca2a7188c83b7a9d01a324b6d9de5355f13a699d0ab27437056c300f74e",
+      "jsonPathCount": 109,
+      "attachmentHashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708",
+        "opaque.bin": "80a3721188e40218b08b26776bc53bdae81e4784fff71d71450a197319cba113"
+      }
+    }
+  ],
+  "zipFixtures": [
+    {
+      "id": "zip64-0-False",
+      "base64": "UEsDBC0AAAAAAAAAIQBM0T1l//////////8zABQARGF0YS9kNGQyZTMzYi02N2NjLTU5YzUtODE1Yi1lN2U1Yjk1ZGFjODYvc2FsZXMuY3N2AQAQAB8AAAAAAAAAHwAAAAAAAABSZWdpb24sU2FsZXMKRWFzdCwxMDAKV2VzdCwyMDAKUEsDBC0AAAAAAAAAIQCRKSJH//////////8PABQAZGlzcGxheVNldHRpbmdzAQAQAEECAAAAAAAAQQIAAAAAAAB7Im1ham9yVmVyc2lvbiI6MSwibWlub3JWZXJzaW9uIjowLCJmaWVsZE9yZGVyIjp7ImZpZWxkT3JkaW5hbHMiOnt9LCJtaW5PcmRpbmFsIjowLCJtYXhPcmRpbmFsIjowfSwiZmxvd0Rpc3BsYXlTZXR0aW5ncyI6eyJmbG93R3JvdXBOb2RlRGlzcGxheSI6e30sImZsb3dTZWxlY3Rpb24iOnsidHlwZSI6Im5vdGhpbmciLCJzZWxlY3RlZE5vZGVQYXRoIjpudWxsLCJzZWxlY3RlZFR5cGUiOm51bGx9LCJmbG93Tm9kZURpc3BsYXlTZXR0aW5ncyI6eyI1NmExNDM2My1iOGU3LTUyYzQtOGEzMS1iY2E3ZjEyNmJlYzQiOnsicG9zaXRpb24iOnsieCI6MCwieSI6MH0sInNpemUiOnsid2lkdGgiOjE4MCwiaGVpZ2h0Ijo4MH19LCI5MTczMjFjMy0wNjhiLTUxOTUtOGY5OC0yZTI1YjYyZDNlNDciOnsicG9zaXRpb24iOnsieCI6MjQwLCJ5IjowfSwic2l6ZSI6eyJ3aWR0aCI6MTgwLCJoZWlnaHQiOjgwfX0sIjFmMWNlMjhmLWNkYzgtNTM3Ni05ODA2LTgwZTU2Nzg1MGVhNyI6eyJwb3NpdGlvbiI6eyJ4Ijo0ODAsInkiOjB9LCJzaXplIjp7IndpZHRoIjoxODAsImhlaWdodCI6ODB9fX19LCJoaWRkZW5Db2x1bW5zIjpbXX0KUEsDBC0AAAAAAAAAIQB7sY5C//////////8EABQAZmxvdwEAEAChBgAAAAAAAKEGAAAAAAAAeyJub2RlcyI6eyI1NmExNDM2My1iOGU3LTUyYzQtOGEzMS1iY2E3ZjEyNmJlYzQiOnsibm9kZVR5cGUiOiIudjEuTG9hZENzdiIsImJhc2VUeXBlIjoiaW5wdXQiLCJjb250YWluc0hlYWRlcnMiOnRydWUsInNlcGFyYXRvciI6IiwiLCJjaGFyU2V0IjoiVVRGLTgiLCJuYW1lIjoiU2FsZXMiLCJjb25uZWN0aW9uSWQiOiJkNGQyZTMzYi02N2NjLTU5YzUtODE1Yi1lN2U1Yjk1ZGFjODYiLCJjb25uZWN0aW9uQXR0cmlidXRlcyI6e30sIm5leHROb2RlcyI6W3sibmFtZXNwYWNlIjoiRGVmYXVsdCIsIm5leHROYW1lc3BhY2UiOiJEZWZhdWx0IiwibmV4dE5vZGVJZCI6IjkxNzMyMWMzLTA2OGItNTE5NS04Zjk4LTJlMjViNjJkM2U0NyJ9XSwiaWQiOiI1NmExNDM2My1iOGU3LTUyYzQtOGEzMS1iY2E3ZjEyNmJlYzQiLCJzZXJpYWxpemUiOmZhbHNlLCJkZXNjcmlwdGlvbiI6bnVsbH0sIjkxNzMyMWMzLTA2OGItNTE5NS04Zjk4LTJlMjViNjJkM2U0NyI6eyJub2RlVHlwZSI6Ii52MS5BZGRDb2x1bW4iLCJiYXNlVHlwZSI6InRyYW5zZm9ybSIsIm5hbWUiOiJUYXggaW5jbHVkZWQiLCJjb2x1bW5OYW1lIjoiU2FsZXNXaXRoVGF4IiwiZXhwcmVzc2lvbiI6IltTYWxlc10gKiAxLjEiLCJuZXh0Tm9kZXMiOlt7Im5hbWVzcGFjZSI6IkRlZmF1bHQiLCJuZXh0TmFtZXNwYWNlIjoiRGVmYXVsdCIsIm5leHROb2RlSWQiOiIxZjFjZTI4Zi1jZGM4LTUzNzYtOTgwNi04MGU1Njc4NTBlYTcifV0sImlkIjoiOTE3MzIxYzMtMDY4Yi01MTk1LThmOTgtMmUyNWI2MmQzZTQ3Iiwic2VyaWFsaXplIjpmYWxzZSwiZGVzY3JpcHRpb24iOm51bGx9LCIxZjFjZTI4Zi1jZGM4LTUzNzYtOTgwNi04MGU1Njc4NTBlYTciOnsibm9kZVR5cGUiOiIudjEuV3JpdGVUb0h5cGVyIiwiYmFzZVR5cGUiOiJvdXRwdXQiLCJuYW1lIjoiUmVzdWx0IiwiaHlwZXJPdXRwdXRGaWxlIjoic2FsZXMtb3V0cHV0Lmh5cGVyIiwidGRzT3V0cHV0Ijoic2FsZXMtb3V0cHV0LnRkcyIsImlkIjoiMWYxY2UyOGYtY2RjOC01Mzc2LTk4MDYtODBlNTY3ODUwZWE3IiwibmV4dE5vZGVzIjpbXSwic2VyaWFsaXplIjpmYWxzZSwiZGVzY3JpcHRpb24iOm51bGx9fSwiY29ubmVjdGlvbnMiOnsiZDRkMmUzM2ItNjdjYy01OWM1LTgxNWItZTdlNWI5NWRhYzg2Ijp7ImNvbm5lY3Rpb25UeXBlIjoiLnYxLlNxbENvbm5lY3Rpb24iLCJjb25uZWN0aW9uQXR0cmlidXRlcyI6eyJjbGFzcyI6InRleHRzY2FuIiwiZmlsZW5hbWUiOiJzYWxlcy5jc3YifSwiaWQiOiJkNGQyZTMzYi02N2NjLTU5YzUtODE1Yi1lN2U1Yjk1ZGFjODYiLCJuYW1lIjoic2FsZXMuY3N2IiwiaXNQYWNrYWdlZCI6dHJ1ZX19LCJpbml0aWFsTm9kZXMiOlsiNTZhMTQzNjMtYjhlNy01MmM0LThhMzEtYmNhN2YxMjZiZWM0Il0sIm1ham9yVmVyc2lvbiI6MSwibWlub3JWZXJzaW9uIjowLCJwYXJhbWV0ZXJzIjp7fSwiZGF0YUNvbm5lY3Rpb25zIjp7fSwiZGF0YUNvbm5lY3Rpb25JZHMiOltdLCJub2RlUHJvcGVydGllcyI6e30sImV4dGVuc2liaWxpdHkiOnt9LCJzZWxlY3Rpb24iOm51bGwsImNvbm5lY3Rpb25JZHMiOlsiZDRkMmUzM2ItNjdjYy01OWM1LTgxNWItZTdlNWI5NWRhYzg2Il0sImRvY3VtZW50SWQiOiJjZmI5NmMyZC1kMGRmLTUxNzctODAxOS1lNzBmMzY5MDA5MTQiLCJvYmZ1c2NhdG9ySWQiOiI0NTMyNmIxMy01MzM4LTU3YzAtOTM2Yy1hNzYzMDgyNjU0ZjkifQpQSwMELQAAAAAAAAAhAGAob2z//////////w8AFABtYWVzdHJvTWV0YWRhdGEBABAAiQAAAAAAAACJAAAAAAAAAHsibWFqb3JWZXJzaW9uIjoxLCJtaW5vclZlcnNpb24iOjAsImZsb3dFbnRyeU5hbWUiOiJmbG93IiwiZGlzcGxheVNldHRpbmdzRW50cnlOYW1lIjoiZGlzcGxheVNldHRpbmdzIiwiaXNQYWNrYWdlZE1hZXN0cm9Eb2N1bWVudCI6dHJ1ZX0KUEsBAi0ALQAAAAAAAAAhAEzRPWUfAAAAHwAAADMAAAAAAAAAAAAAAIABAAAAAERhdGEvZDRkMmUzM2ItNjdjYy01OWM1LTgxNWItZTdlNWI5NWRhYzg2L3NhbGVzLmNzdlBLAQItAC0AAAAAAAAAIQCRKSJHQQIAAEECAAAPAAAAAAAAAAAAAACAAYQAAABkaXNwbGF5U2V0dGluZ3NQSwECLQAtAAAAAAAAACEAe7GOQqEGAAChBgAABAAAAAAAAAAAAAAAgAEGAwAAZmxvd1BLAQItAC0AAAAAAAAAIQBgKG9siQAAAIkAAAAPAAAAAAAAAAAAAACAAd0JAABtYWVzdHJvTWV0YWRhdGFQSwUGAAAAAAQABAANAQAApwoAAAAA",
+      "hashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708",
+        "displaySettings": "2419d89289fd7c5a722e1929ed9ed37934a688c8ea8b1d5d9e881e27a73520e7",
+        "flow": "87f0d12fa8a7a970b1abba49291237372d06c1fa096194b4a8aeecadd95567f6",
+        "maestroMetadata": "a7c31c3c1d90ac6310f118c53c6cce70e95eb2279524124c2a8c9b68de76ce96"
+      }
+    },
+    {
+      "id": "zip64-0-True",
+      "base64": "UEsDBC0AAAAAAAAAIQBM0T1l//////////8zABQARGF0YS9kNGQyZTMzYi02N2NjLTU5YzUtODE1Yi1lN2U1Yjk1ZGFjODYvc2FsZXMuY3N2AQAQAB8AAAAAAAAAHwAAAAAAAABSZWdpb24sU2FsZXMKRWFzdCwxMDAKV2VzdCwyMDAKUEsDBC0AAAAAAAAAIQCRKSJH//////////8PABQAZGlzcGxheVNldHRpbmdzAQAQAEECAAAAAAAAQQIAAAAAAAB7Im1ham9yVmVyc2lvbiI6MSwibWlub3JWZXJzaW9uIjowLCJmaWVsZE9yZGVyIjp7ImZpZWxkT3JkaW5hbHMiOnt9LCJtaW5PcmRpbmFsIjowLCJtYXhPcmRpbmFsIjowfSwiZmxvd0Rpc3BsYXlTZXR0aW5ncyI6eyJmbG93R3JvdXBOb2RlRGlzcGxheSI6e30sImZsb3dTZWxlY3Rpb24iOnsidHlwZSI6Im5vdGhpbmciLCJzZWxlY3RlZE5vZGVQYXRoIjpudWxsLCJzZWxlY3RlZFR5cGUiOm51bGx9LCJmbG93Tm9kZURpc3BsYXlTZXR0aW5ncyI6eyI1NmExNDM2My1iOGU3LTUyYzQtOGEzMS1iY2E3ZjEyNmJlYzQiOnsicG9zaXRpb24iOnsieCI6MCwieSI6MH0sInNpemUiOnsid2lkdGgiOjE4MCwiaGVpZ2h0Ijo4MH19LCI5MTczMjFjMy0wNjhiLTUxOTUtOGY5OC0yZTI1YjYyZDNlNDciOnsicG9zaXRpb24iOnsieCI6MjQwLCJ5IjowfSwic2l6ZSI6eyJ3aWR0aCI6MTgwLCJoZWlnaHQiOjgwfX0sIjFmMWNlMjhmLWNkYzgtNTM3Ni05ODA2LTgwZTU2Nzg1MGVhNyI6eyJwb3NpdGlvbiI6eyJ4Ijo0ODAsInkiOjB9LCJzaXplIjp7IndpZHRoIjoxODAsImhlaWdodCI6ODB9fX19LCJoaWRkZW5Db2x1bW5zIjpbXX0KUEsDBC0AAAAAAAAAIQB7sY5C//////////8EABQAZmxvdwEAEAChBgAAAAAAAKEGAAAAAAAAeyJub2RlcyI6eyI1NmExNDM2My1iOGU3LTUyYzQtOGEzMS1iY2E3ZjEyNmJlYzQiOnsibm9kZVR5cGUiOiIudjEuTG9hZENzdiIsImJhc2VUeXBlIjoiaW5wdXQiLCJjb250YWluc0hlYWRlcnMiOnRydWUsInNlcGFyYXRvciI6IiwiLCJjaGFyU2V0IjoiVVRGLTgiLCJuYW1lIjoiU2FsZXMiLCJjb25uZWN0aW9uSWQiOiJkNGQyZTMzYi02N2NjLTU5YzUtODE1Yi1lN2U1Yjk1ZGFjODYiLCJjb25uZWN0aW9uQXR0cmlidXRlcyI6e30sIm5leHROb2RlcyI6W3sibmFtZXNwYWNlIjoiRGVmYXVsdCIsIm5leHROYW1lc3BhY2UiOiJEZWZhdWx0IiwibmV4dE5vZGVJZCI6IjkxNzMyMWMzLTA2OGItNTE5NS04Zjk4LTJlMjViNjJkM2U0NyJ9XSwiaWQiOiI1NmExNDM2My1iOGU3LTUyYzQtOGEzMS1iY2E3ZjEyNmJlYzQiLCJzZXJpYWxpemUiOmZhbHNlLCJkZXNjcmlwdGlvbiI6bnVsbH0sIjkxNzMyMWMzLTA2OGItNTE5NS04Zjk4LTJlMjViNjJkM2U0NyI6eyJub2RlVHlwZSI6Ii52MS5BZGRDb2x1bW4iLCJiYXNlVHlwZSI6InRyYW5zZm9ybSIsIm5hbWUiOiJUYXggaW5jbHVkZWQiLCJjb2x1bW5OYW1lIjoiU2FsZXNXaXRoVGF4IiwiZXhwcmVzc2lvbiI6IltTYWxlc10gKiAxLjEiLCJuZXh0Tm9kZXMiOlt7Im5hbWVzcGFjZSI6IkRlZmF1bHQiLCJuZXh0TmFtZXNwYWNlIjoiRGVmYXVsdCIsIm5leHROb2RlSWQiOiIxZjFjZTI4Zi1jZGM4LTUzNzYtOTgwNi04MGU1Njc4NTBlYTcifV0sImlkIjoiOTE3MzIxYzMtMDY4Yi01MTk1LThmOTgtMmUyNWI2MmQzZTQ3Iiwic2VyaWFsaXplIjpmYWxzZSwiZGVzY3JpcHRpb24iOm51bGx9LCIxZjFjZTI4Zi1jZGM4LTUzNzYtOTgwNi04MGU1Njc4NTBlYTciOnsibm9kZVR5cGUiOiIudjEuV3JpdGVUb0h5cGVyIiwiYmFzZVR5cGUiOiJvdXRwdXQiLCJuYW1lIjoiUmVzdWx0IiwiaHlwZXJPdXRwdXRGaWxlIjoic2FsZXMtb3V0cHV0Lmh5cGVyIiwidGRzT3V0cHV0Ijoic2FsZXMtb3V0cHV0LnRkcyIsImlkIjoiMWYxY2UyOGYtY2RjOC01Mzc2LTk4MDYtODBlNTY3ODUwZWE3IiwibmV4dE5vZGVzIjpbXSwic2VyaWFsaXplIjpmYWxzZSwiZGVzY3JpcHRpb24iOm51bGx9fSwiY29ubmVjdGlvbnMiOnsiZDRkMmUzM2ItNjdjYy01OWM1LTgxNWItZTdlNWI5NWRhYzg2Ijp7ImNvbm5lY3Rpb25UeXBlIjoiLnYxLlNxbENvbm5lY3Rpb24iLCJjb25uZWN0aW9uQXR0cmlidXRlcyI6eyJjbGFzcyI6InRleHRzY2FuIiwiZmlsZW5hbWUiOiJzYWxlcy5jc3YifSwiaWQiOiJkNGQyZTMzYi02N2NjLTU5YzUtODE1Yi1lN2U1Yjk1ZGFjODYiLCJuYW1lIjoic2FsZXMuY3N2IiwiaXNQYWNrYWdlZCI6dHJ1ZX19LCJpbml0aWFsTm9kZXMiOlsiNTZhMTQzNjMtYjhlNy01MmM0LThhMzEtYmNhN2YxMjZiZWM0Il0sIm1ham9yVmVyc2lvbiI6MSwibWlub3JWZXJzaW9uIjowLCJwYXJhbWV0ZXJzIjp7fSwiZGF0YUNvbm5lY3Rpb25zIjp7fSwiZGF0YUNvbm5lY3Rpb25JZHMiOltdLCJub2RlUHJvcGVydGllcyI6e30sImV4dGVuc2liaWxpdHkiOnt9LCJzZWxlY3Rpb24iOm51bGwsImNvbm5lY3Rpb25JZHMiOlsiZDRkMmUzM2ItNjdjYy01OWM1LTgxNWItZTdlNWI5NWRhYzg2Il0sImRvY3VtZW50SWQiOiJjZmI5NmMyZC1kMGRmLTUxNzctODAxOS1lNzBmMzY5MDA5MTQiLCJvYmZ1c2NhdG9ySWQiOiI0NTMyNmIxMy01MzM4LTU3YzAtOTM2Yy1hNzYzMDgyNjU0ZjkifQpQSwMELQAAAAAAAAAhAGAob2z//////////w8AFABtYWVzdHJvTWV0YWRhdGEBABAAiQAAAAAAAACJAAAAAAAAAHsibWFqb3JWZXJzaW9uIjoxLCJtaW5vclZlcnNpb24iOjAsImZsb3dFbnRyeU5hbWUiOiJmbG93IiwiZGlzcGxheVNldHRpbmdzRW50cnlOYW1lIjoiZGlzcGxheVNldHRpbmdzIiwiaXNQYWNrYWdlZE1hZXN0cm9Eb2N1bWVudCI6dHJ1ZX0KUEsBAi0ALQAAAAAAAAAhAEzRPWUfAAAAHwAAADMAAAAAAAAAAAAAAIABAAAAAERhdGEvZDRkMmUzM2ItNjdjYy01OWM1LTgxNWItZTdlNWI5NWRhYzg2L3NhbGVzLmNzdlBLAQItAC0AAAAAAAAAIQCRKSJHQQIAAEECAAAPAAAAAAAAAAAAAACAAYQAAABkaXNwbGF5U2V0dGluZ3NQSwECLQAtAAAAAAAAACEAe7GOQqEGAAChBgAABAAAAAAAAAAAAAAAgAEGAwAAZmxvd1BLAQItAC0AAAAAAAAAIQBgKG9siQAAAIkAAAAPAAAAAAAAAAAAAACAAd0JAABtYWVzdHJvTWV0YWRhdGFQSwYGLAAAAAAAAAAtAC0AAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAADQEAAAAAAACnCgAAAAAAAFBLBgcAAAAAtAsAAAAAAAABAAAAUEsFBgAAAAD///////////////8AAA==",
+      "hashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708",
+        "displaySettings": "2419d89289fd7c5a722e1929ed9ed37934a688c8ea8b1d5d9e881e27a73520e7",
+        "flow": "87f0d12fa8a7a970b1abba49291237372d06c1fa096194b4a8aeecadd95567f6",
+        "maestroMetadata": "a7c31c3c1d90ac6310f118c53c6cce70e95eb2279524124c2a8c9b68de76ce96"
+      }
+    },
+    {
+      "id": "zip64-8-False",
+      "base64": "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",
+      "hashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708",
+        "displaySettings": "2419d89289fd7c5a722e1929ed9ed37934a688c8ea8b1d5d9e881e27a73520e7",
+        "flow": "87f0d12fa8a7a970b1abba49291237372d06c1fa096194b4a8aeecadd95567f6",
+        "maestroMetadata": "a7c31c3c1d90ac6310f118c53c6cce70e95eb2279524124c2a8c9b68de76ce96"
+      }
+    },
+    {
+      "id": "zip64-8-True",
+      "base64": "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",
+      "hashes": {
+        "Data/d4d2e33b-67cc-59c5-815b-e7e5b95dac86/sales.csv": "0900fa6f40b3f6a501a1334a96a061f0f188916827ea695a8e3c733f40933708",
+        "displaySettings": "2419d89289fd7c5a722e1929ed9ed37934a688c8ea8b1d5d9e881e27a73520e7",
+        "flow": "87f0d12fa8a7a970b1abba49291237372d06c1fa096194b4a8aeecadd95567f6",
+        "maestroMetadata": "a7c31c3c1d90ac6310f118c53c6cce70e95eb2279524124c2a8c9b68de76ce96"
+      }
+    }
+  ],
+  "provenance": "Synthetic reference-only data generated from the previous Python implementation; no private/native corpus content is distributed. Numeric and platform path normalization is explicit."
+}

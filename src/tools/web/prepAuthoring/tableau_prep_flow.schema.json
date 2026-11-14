@@ -1,0 +1,691 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.tableau-prep-schema/tableau_prep_flow.schema.json",
+  "title": "Tableau Prep package metadata",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "flow": { "$ref": "#/$defs/flow" },
+    "displaySettings": { "$ref": "#/$defs/displaySettings" },
+    "maestroMetadata": { "$ref": "#/$defs/maestroMetadata" },
+    "archiveEntries": { "$ref": "#/$defs/archiveEntries" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "versionedType": {
+      "type": "string",
+      "pattern": "^\\.v[0-9]+(_[0-9]+)*\\.[A-Za-z0-9_]+$"
+    },
+    "authoringProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "namespace", "flow"],
+      "x-value-evidence": {"kind": "authoring-policy", "note": "YAML project envelope after tag expansion; metadata is validated after ID/default expansion. This envelope is not a native Tableau file format"},
+      "properties": {
+        "format": {"const": "tableau-prep-flow/v1"},
+        "namespace": {"$ref": "#/$defs/uuid"},
+        "ids": {"type": "object", "additionalProperties": {"$ref": "#/$defs/uuid"}},
+        "defaults": {"type": "boolean", "default": true},
+        "flow": {"type": "object", "additionalProperties": true},
+        "displaySettings": {"$ref": "#/$defs/displaySettings"},
+        "maestroMetadata": {"$ref": "#/$defs/maestroMetadata"},
+        "files": {"type": "array", "default": [], "items": {
+          "type": "object", "additionalProperties": false, "required": ["entry", "source"],
+          "properties": {
+            "entry": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+            "source": {"type": "string"}
+          }
+        }}
+      }
+    },
+    "nativeXmlDataType": {
+      "type": "string",
+      "enum": ["integer", "boolean", "real", "string", "date", "datetime", "tuple", "spatial", "table"],
+      "x-value-evidence": {"kind": "ghidra-decompilation", "source": "docs/analysis/ghidra_tabfileformat_value_formats.json", "function": "ColumnParserUtils::ParseDataTypeAttribute", "address": "180066134", "context": "native XML datatype attribute", "unknownHandling": "Unrecognized text returns the native unknown code; this is not an exhaustive flow JSON enum"}
+    },
+    "nativeXmlSortMode": {
+      "type": "string",
+      "enum": ["alphabetic-sort", "computed-sort", "manual-sort", "natural-sort"],
+      "x-value-evidence": {"kind": "ghidra-decompilation", "source": "docs/analysis/ghidra_tabfileformat_value_formats.json", "function": "SortParser::GetSortType", "address": "1800fe7f8", "context": "native XML element name; NOT flow JSON sortType ASC/DESC"}
+    },
+    "jsonDataTypeText": {
+      "type": ["string", "null"],
+      "examples": ["integer", "boolean", "real", "string", "date", "datetime", "spatial"],
+      "x-native-known-values": "#/$defs/nativeXmlDataType",
+      "x-value-evidence": {"kind": "package-observation", "nativeSpellingSource": "ColumnParserUtils::ParseDataTypeAttribute", "note": "Unknown private JSON spellings remain open; native XML recognition is not proof of the complete JSON domain"}
+    },
+    "flow": {
+      "$comment": "Ghidra evidence: tabfileformat.dll ObjectGraphParser/ObjectGraphNodeParser/ObjectGraphNodeFormatter and loomsupport.dll flow-name/flow-output-* strings in docs/analysis/ghidra_*_schema_evidence.json.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["nodes"],
+      "properties": {
+        "parameters": { "type": "object", "additionalProperties": true, "default": {}, "x-value-evidence": {"kind": "authoring-policy", "formatSource": "ObjectGraphParser.cpp"} },
+        "initialNodes": {
+          "type": "array",
+          "x-authoring-generated": "graph-roots",
+          "items": { "$ref": "#/$defs/uuid" }
+        },
+        "nodes": {
+          "$comment": "Ghidra evidence: ObjectGraphNodeParser.cpp, ObjectGraphNodeFormatter.cpp, ObjectGraphParser.cpp.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/node" }
+        },
+        "connections": {
+          "$comment": "Ghidra evidence: DataConnectionParser.cpp, DataConnectionFormatter.cpp, ConnectionPropertyFormatter.cpp, plus loomsupport GetConnectionAttributes/GetConnectionInfo symbols.",
+          "type": "object",
+          "default": {},
+          "additionalProperties": { "$ref": "#/$defs/connection" }
+        },
+        "dataConnections": {
+          "$comment": "Ghidra evidence: DataConnectionParser.cpp/DataConnectionFormatter.cpp and loomsupport.dll ConnectionPayload/GetConnectionAttributes symbols.",
+          "type": "object",
+          "default": {},
+          "additionalProperties": { "$ref": "#/$defs/dataConnection" }
+        },
+        "connectionIds": {
+          "type": "array",
+          "x-authoring-generated": "connection-keys",
+          "items": { "$ref": "#/$defs/uuid" }
+        },
+        "dataConnectionIds": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" }
+        },
+        "nodeProperties": {
+          "$comment": "Ghidra evidence: tabfileformat.dll object model parser/formatter symbols show graph node payloads are extensible.",
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/nodeProperty" }
+          }
+        },
+        "extensibility": { "type": ["object", "null"], "additionalProperties": true, "default": {} },
+        "selection": { "type": ["object", "array", "string", "null"], "additionalProperties": true, "default": null },
+        "majorVersion": { "type": "integer", "default": 1, "x-value-evidence": {"kind": "authoring-policy", "observedPackageValue": 1} },
+        "minorVersion": { "type": "integer", "default": 0, "x-value-evidence": {"kind": "authoring-policy", "note": "A writer baseline, not a Ghidra-proven native default"} },
+        "documentId": { "type": "string", "x-authoring-generated": "uuid5:document" },
+        "obfuscatorId": { "type": "string", "x-authoring-generated": "uuid5:obfuscator" }
+      }
+    },
+    "edge": {
+      "$comment": "Ghidra evidence: ObjectGraphParser.cpp and ObjectModelRelationshipParser.cpp.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["nextNodeId"],
+      "properties": {
+        "namespace": { "type": "string", "default": "Default", "x-value-evidence": {"kind": "package-observation", "source": "apps/prep-flow-workbench/src/dev-samples"} },
+        "nextNodeId": { "$ref": "#/$defs/uuid" },
+        "nextNamespace": { "type": "string", "default": "Default" }
+      }
+    },
+    "node": {
+      "allOf": [
+        { "$ref": "#/$defs/commonNode" },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.Container"}}}, "then": {"$ref": "#/$defs/nodeVariants/container"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"pattern": "^\\.v[0-9]+(_[0-9]+)*\\.LoadExcel$"}}}, "then": {"$ref": "#/$defs/nodeVariants/loadExcel"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.AddColumn"}}}, "then": {"$ref": "#/$defs/nodeVariants/addColumn"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"pattern": "^\\.v[0-9]+(_[0-9]+)*\\.MultiRowCalc$"}}}, "then": {"$ref": "#/$defs/nodeVariants/multiRowCalc"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.FilterOperation"}}}, "then": {"$ref": "#/$defs/nodeVariants/filterOperation"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.RemoveColumns"}}}, "then": {"$ref": "#/$defs/nodeVariants/removeColumns"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.PublishExtract"}}}, "then": {"$ref": "#/$defs/nodeVariants/publishExtract"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.LoadCsv"}}}, "then": {"$ref": "#/$defs/nodeVariants/loadCsv"} },
+        { "if": {"required": ["nodeType"], "properties": {"nodeType": {"const": ".v1.WriteToHyper"}}}, "then": {"$ref": "#/$defs/nodeVariants/writeToHyper"} }
+      ]
+    },
+    "commonNode": {
+      "$comment": "Ghidra evidence: ObjectGraphNodeParser.cpp/ObjectGraphNodeFormatter.cpp establish node-level parse/format handling; schema keeps unknown node payload fields for private Tableau extensions.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["nodeType", "id", "baseType"],
+      "x-value-evidence": {"kind": "package-observation", "nativeStructureSource": "ObjectGraphNodeParser.cpp/ObjectGraphNodeFormatter.cpp", "note": "Defaults are writer policy, not reverse-engineered native defaults"},
+      "properties": {
+        "nodeType": { "$ref": "#/$defs/versionedType" },
+        "name": { "type": ["string", "null"] },
+        "id": { "$ref": "#/$defs/uuid", "x-authoring-generated": "node-key" },
+        "baseType": {
+          "$comment": "Observed packages also use superNode; future/private base categories remain extensible, as do nodeType variants.",
+          "type": "string"
+        },
+        "nextNodes": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/edge" }
+        },
+        "serialize": { "type": "boolean", "default": false },
+        "description": { "type": ["string", "null"], "default": null }
+        ,
+        "fields": {
+          "$comment": "Ghidra evidence: field/fields strings, ColumnParser.cpp, ConnectionFieldsParser::ReadFieldFromDOM, loomsupport gen-field-pres-model.",
+          "anyOf": [
+            { "type": "object", "additionalProperties": { "$ref": "#/$defs/fieldMetadata" } },
+            { "type": "array", "items": { "$ref": "#/$defs/fieldMetadata" } }
+          ]
+        },
+        "columns": {
+          "$comment": "Ghidra evidence: column/columns strings, ColumnDefnParser.cpp, ColumnInstanceParser.cpp, ColumnParser.cpp.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/columnMetadata" }
+        },
+        "filters": {
+          "$comment": "Ghidra evidence: FilterParser.cpp, FilterFormatter.cpp, filter-fields strings.",
+          "type": ["array", "null"],
+          "items": { "$ref": "#/$defs/filterMetadata" }
+        },
+        "relation": {
+          "$comment": "Ghidra evidence: DataSourceRelationships.cpp and ObjectModelRelationshipParser.cpp.",
+          "anyOf": [
+            { "$ref": "#/$defs/relationMetadata" },
+            { "type": "null" }
+          ]
+        },
+        "connectionId": {
+          "$comment": "Observed Data Cloud output uses an opaque external connection identity rather than a local connection UUID.",
+          "type": "string"
+        },
+        "connectionAttributes": { "$ref": "#/$defs/connectionAttributes" }
+      }
+    },
+    "nodeVariants": {
+      "container": {
+        "type": "object",
+        "properties": {
+          "nodeType": { "const": ".v1.Container" },
+          "baseType": { "const": "container" },
+          "loomContainer": { "$ref": "#/$defs/flow" },
+          "namespacesToInput": { "type": "object", "additionalProperties": true },
+          "namespacesToOutput": { "type": "object", "additionalProperties": true },
+          "providedParameters": { "type": ["object", "null"], "additionalProperties": true }
+        }
+      },
+      "loadExcel": {
+        "type": "object",
+        "x-value-evidence": {"kind": "package-observation", "source": "apps/prep-flow-workbench/src/dev-samples", "note": "Integer timestamps, nullable field collections and object group-by entries were observed; no exhaustive native JSON value domain was established"},
+        "properties": {
+          "nodeType": { "pattern": "^\\.v[0-9]+(_[0-9]+)*\\.LoadExcel$" },
+          "baseType": { "const": "input" },
+          "connectionId": { "$ref": "#/$defs/uuid" },
+          "connectionAttributes": { "$ref": "#/$defs/connectionAttributes" },
+          "fields": { "$ref": "#/$defs/commonNode/properties/fields" },
+          "actions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "debugModeRowLimit": { "type": ["integer", "null"] },
+          "originalDataTypes": { "type": "object", "additionalProperties": true },
+          "randomSampling": { "type": ["boolean", "null"] },
+          "updateTimestamp": { "type": ["integer", "null"] },
+          "restrictedFields": { "type": ["object", "null"], "additionalProperties": true },
+          "userRenamedFields": { "type": "object", "additionalProperties": true },
+          "selectedFields": { "type": ["array", "null"], "items": { "type": "string" } },
+          "samplingType": { "type": ["string", "null"] },
+          "groupByFields": { "type": ["array", "null"], "items": { "$ref": "#/$defs/fieldMetadata" } },
+          "filters": { "$ref": "#/$defs/commonNode/properties/filters" },
+          "relation": {
+            "anyOf": [
+              { "$ref": "#/$defs/relationMetadata" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "addColumn": {
+        "type": "object",
+        "properties": {
+          "nodeType": { "const": ".v1.AddColumn" },
+          "baseType": { "const": "transform" },
+          "columnName": { "type": "string" },
+          "expression": { "type": "string" }
+        }
+      },
+      "multiRowCalc": {
+        "type": "object",
+        "properties": {
+          "nodeType": { "pattern": "^\\.v[0-9]+(_[0-9]+)*\\.MultiRowCalc$" },
+          "baseType": { "const": "transform" },
+          "columnName": { "type": "string" },
+          "expression": { "type": "string" },
+          "fieldId": { "type": "string" },
+          "specificRowCalc": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "calcType": { "type": "string" },
+              "groupByColumns": { "type": "array", "items": { "type": "string" } },
+              "orderByColumns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "columnName": { "type": "string" },
+                    "sortType": { "type": "string" }
+                  }
+                }
+              },
+              "rankedColumns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "columnName": { "type": "string" },
+                    "sortType": { "type": "string" }
+                  }
+                }
+              },
+              "computeUsingColumnName": { "type": "string" },
+              "aggregatedColumn": { "type": "string" }
+            }
+          }
+        }
+      },
+      "filterOperation": {
+        "type": "object",
+        "properties": {
+          "nodeType": { "const": ".v1.FilterOperation" },
+          "baseType": { "const": "transform" },
+          "filterExpression": { "type": "string" }
+        }
+      },
+      "removeColumns": {
+        "type": "object",
+        "properties": {
+          "nodeType": { "const": ".v1.RemoveColumns" },
+          "baseType": { "const": "transform" },
+          "columnNames": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "publishExtract": {
+        "type": "object",
+        "properties": {
+          "nodeType": { "const": ".v1.PublishExtract" },
+          "baseType": { "const": "output" },
+          "projectName": { "type": ["string", "null"] },
+          "projectLuid": { "type": ["string", "null"] },
+          "datasourceName": { "type": ["string", "null"] },
+          "datasourceDescription": { "type": ["string", "null"] },
+          "serverUrl": { "type": ["string", "null"] }
+        }
+      },
+      "loadCsv": {
+        "type": "object",
+        "x-value-evidence": {"kind": "package-observation", "source": "apps/prep-flow-workbench/src/dev-samples", "note": "CSV choices are template policy; no exhaustive native charset/separator enum was established"},
+        "properties": {
+          "nodeType": {"const": ".v1.LoadCsv"},
+          "baseType": {"const": "input"},
+          "containsHeaders": {"type": ["boolean", "null"], "default": true},
+          "separator": {"type": ["string", "null"], "default": ",", "examples": [",", "\\t", " "]},
+          "charSet": {"type": ["string", "null"], "default": "UTF-8", "examples": ["UTF-8"]}
+        }
+      },
+      "writeToHyper": {
+        "type": "object",
+        "x-value-evidence": {"kind": "package-observation", "source": "apps/prep-flow-workbench/src/dev-samples"},
+        "properties": {
+          "nodeType": {"const": ".v1.WriteToHyper"},
+          "baseType": {"const": "output"},
+          "hyperOutputFile": {"type": "string", "examples": ["output.hyper"]},
+          "tdsOutput": {"type": "string", "examples": ["output.tds"]}
+        }
+      }
+    },
+    "authoringCsvConnection": {
+      "type": "object",
+      "x-value-evidence": {"kind": "package-observation", "note": "Only the CSV starter template; other connector classes remain open"},
+      "properties": {
+        "connectionType": {"const": ".v1.SqlConnection"},
+        "connectionAttributes": {"type": "object", "properties": {"class": {"const": "textscan"}}}
+      }
+    },
+    "connection": {
+      "$comment": "Ghidra evidence: DataConnectionParser.cpp, DataConnectionFormatter.cpp, ConnectionPropertyFormatter.cpp, loomsupport.dll GetConnectionAttributes/GetConnectionInfo/ConnectionPayload.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "connectionType": { "$ref": "#/$defs/versionedType" },
+        "id": { "$ref": "#/$defs/uuid" },
+        "name": { "type": ["string", "null"] },
+        "isPackaged": { "type": "boolean" },
+        "connectionAttributes": { "$ref": "#/$defs/connectionAttributes" },
+        "attributes": { "$ref": "#/$defs/connectionAttributes" },
+        "connectionInfo": { "type": "object", "additionalProperties": true },
+        "connectionKeychainInfo": { "type": "object", "additionalProperties": true },
+        "connectionKeychainInfoList": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "metadata": { "type": "object", "additionalProperties": true },
+        "metadataRecords": {
+          "$comment": "Ghidra evidence: metadata-record/metadata-records and MetadataRecordFormatter.cpp.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/metadataRecord" }
+        },
+        "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/fieldMetadata" } },
+        "columns": { "type": "object", "additionalProperties": { "$ref": "#/$defs/columnMetadata" } },
+        "connectionFields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/fieldMetadata" } },
+        "connectionMetadata": { "type": "object", "additionalProperties": true },
+        "namedConnections": { "type": "object", "additionalProperties": true },
+        "connectionCustomization": { "type": "object", "additionalProperties": true },
+        "connectionProperties": { "type": "object", "additionalProperties": true },
+        "relation": { "$ref": "#/$defs/relationMetadata" },
+        "federatedConnection": { "type": ["object", "string", "boolean", "null"], "additionalProperties": true },
+        "connectionClass": { "type": ["string", "null"] },
+        "connectionId": { "type": ["string", "null"] },
+        "dataConnection": { "type": ["object", "string", "null"], "additionalProperties": true },
+        "dataConnections": { "type": ["object", "array"], "additionalProperties": true }
+      }
+    },
+    "dataConnection": {
+      "$comment": "Ghidra evidence: DataConnectionParser.cpp, data-connection/data-connections strings, data-connection-formatter.output-* strings, loomsupport gen-imported-data-connection-pres-model.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "connectionId": { "type": ["string", "null"] },
+        "connectionType": { "type": ["string", "null"] },
+        "connectionClass": { "type": ["string", "null"] },
+        "class": { "type": ["string", "null"] },
+        "connectionAttributes": { "$ref": "#/$defs/connectionAttributes" },
+        "attributes": { "$ref": "#/$defs/connectionAttributes" },
+        "columns": { "type": "object", "additionalProperties": { "$ref": "#/$defs/columnMetadata" } },
+        "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/fieldMetadata" } },
+        "metadata": { "type": "object", "additionalProperties": true },
+        "metadataRecords": { "type": "array", "items": { "$ref": "#/$defs/metadataRecord" } },
+        "relation": { "$ref": "#/$defs/relationMetadata" },
+        "outputColumns": { "type": "array", "items": { "$ref": "#/$defs/columnMetadata" } },
+        "outputMetadata": { "type": "object", "additionalProperties": true },
+        "outputMaterialisedCalcs": { "type": "array", "items": { "type": ["string", "object"], "additionalProperties": true } },
+        "outputMdxConnection": { "type": ["object", "string", "null"], "additionalProperties": true },
+        "outputSqlConnection": { "type": ["object", "string", "null"], "additionalProperties": true }
+      }
+    },
+    "connectionAttributes": {
+      "$comment": "Ghidra evidence: DataConnectionAttrs::attrClass, connection-class, connection-id, cache-connection-protocol, connection-keychain.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "class": { "type": ["string", "null"] },
+        "connectionClass": { "type": ["string", "null"] },
+        "connection-class": { "type": ["string", "null"] },
+        "connectionId": { "type": ["string", "null"] },
+        "connection-id": { "type": ["string", "null"] },
+        "connectionType": { "type": ["string", "null"] },
+        "connection-type": { "type": ["string", "null"] },
+        "protocol": { "type": ["string", "null"] },
+        "cache-connection-protocol": { "type": ["string", "null"] },
+        "connection-keychain": { "type": ["string", "object", "null"], "additionalProperties": true },
+        "connection-ids": { "type": ["array", "object", "string"], "additionalProperties": true }
+      }
+    },
+    "fieldMetadata": {
+      "$comment": "Ghidra evidence: field/fields, field-type, fieldname, FieldDisplayFormatterID, field-sort-* strings, loomsupport gen-field-pres-model.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "fieldName": { "type": ["string", "null"] },
+        "fieldname": { "type": ["string", "null"] },
+        "fieldId": { "type": ["string", "null"] },
+        "fieldType": { "type": ["string", "null"] },
+        "field-type": { "type": ["string", "null"] },
+        "dataType": { "$ref": "#/$defs/jsonDataTypeText" },
+        "columnName": { "type": ["string", "null"] },
+        "sourceField": { "type": ["string", "null"] },
+        "source-field": { "type": ["string", "null"] },
+        "defaultValueField": { "type": ["string", "null"] },
+        "default-value-field": { "type": ["string", "null"] },
+        "caption": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "isHidden": { "type": ["boolean", "null"] },
+        "hidden": { "type": ["boolean", "null"] },
+        "showHiddenFields": { "type": ["boolean", "null"] },
+        "show-hidden-fields": { "type": ["boolean", "null"] },
+        "isAutoGenLodField": { "type": ["boolean", "null"] },
+        "is-auto-gen-lod-field": { "type": ["boolean", "null"] },
+        "isPrimaryKey": { "type": ["boolean", "null"] },
+        "loom-is-primary-key": { "type": ["boolean", "string", "null"] },
+        "primaryKeyFieldName": { "type": ["string", "null"] },
+        "primary-key-field-name": { "type": ["string", "null"] },
+        "width": { "type": ["number", "integer", "null"] },
+        "field-width": { "type": ["number", "integer", "string", "null"] },
+        "ordinal": { "type": ["integer", "null"] },
+        "sortInfo": { "type": ["object", "null"], "additionalProperties": true },
+        "field-sort-info": { "type": ["object", "string", "null"], "additionalProperties": true },
+        "sortOrder": { "type": ["array", "string", "null"], "items": { "type": ["string", "number", "integer", "boolean", "null"] } },
+        "field-sort-order": { "type": ["array", "string", "null"], "items": { "type": ["string", "number", "integer", "boolean", "null"] } },
+        "field-sort-order-type": { "type": ["string", "null"] },
+        "field-sort-custom-order": { "type": ["array", "string", "null"], "items": { "type": ["string", "number", "integer", "boolean", "null"] } }
+      }
+    },
+    "columnMetadata": {
+      "$comment": "Ghidra evidence: column/columns, ColumnDefnParser.cpp, ColumnInstanceParser.cpp, forecast-column-*, output-columns, result-fields.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "columnName": { "type": ["string", "null"] },
+        "column": { "type": ["string", "object", "null"], "additionalProperties": true },
+        "columnType": { "type": ["string", "null"] },
+        "columnClass": { "type": ["string", "null"] },
+        "dataType": { "$ref": "#/$defs/jsonDataTypeText" },
+        "fieldName": { "type": ["string", "null"] },
+        "sourceColumn": { "type": ["string", "null"] },
+        "targetColumn": { "type": ["string", "null"] },
+        "forecastColumnBase": { "type": ["string", "null"] },
+        "forecast-column-base": { "type": ["string", "null"] },
+        "forecastColumnType": { "type": ["string", "null"] },
+        "forecast-column-type": { "type": ["string", "null"] },
+        "columnCollation": { "type": ["string", "null"] },
+        "column-collation": { "type": ["string", "null"] },
+        "columnValueMin": { "type": ["number", "integer", "string", "null"] },
+        "column-value-min": { "type": ["number", "integer", "string", "null"] },
+        "columnValueMax": { "type": ["number", "integer", "string", "null"] },
+        "column-value-max": { "type": ["number", "integer", "string", "null"] }
+      }
+    },
+    "filterMetadata": {
+      "$comment": "Ghidra evidence: FilterParser.cpp, FilterFormatter.cpp, CannotParseFilterForField, filter-fields.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "field": { "type": ["string", "object", "null"], "additionalProperties": true },
+        "fieldName": { "type": ["string", "null"] },
+        "column": { "type": ["string", "object", "null"], "additionalProperties": true },
+        "columnName": { "type": ["string", "null"] },
+        "expression": { "type": ["string", "null"] },
+        "filterExpression": { "type": ["string", "null"] },
+        "filterType": { "type": ["string", "null"] },
+        "values": { "type": ["array", "object", "string", "null"], "additionalProperties": true }
+      }
+    },
+    "relationMetadata": {
+      "$comment": "Ghidra evidence: DataSourceRelationships.cpp, ObjectModelRelationshipParser.cpp, ObjectModelRelationshipFormatter.cpp, relation type metadata in loomsupport MetadataQuery strings.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": ["string", "null"] },
+        "relationType": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "table": { "type": ["string", "object", "null"], "additionalProperties": true },
+        "columns": { "type": ["array", "object", "null"], "additionalProperties": true },
+        "fields": { "type": ["array", "object", "null"], "additionalProperties": true },
+        "left": { "type": ["object", "string", "null"], "additionalProperties": true },
+        "right": { "type": ["object", "string", "null"], "additionalProperties": true },
+        "clauses": { "type": ["array", "object", "null"], "additionalProperties": true }
+      }
+    },
+    "metadataRecord": {
+      "$comment": "Ghidra evidence: metadata-record/metadata-records and MetadataRecordFormatter.cpp.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "fieldName": { "type": ["string", "null"] },
+        "columnName": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "dataType": { "$ref": "#/$defs/jsonDataTypeText" },
+        "role": { "type": ["string", "null"] },
+        "caption": { "type": ["string", "null"] }
+      }
+    },
+    "nodeProperty": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "nodePropertyType": { "$ref": "#/$defs/versionedType" }
+      }
+    },
+    "displaySettings": {
+      "$comment": "Ghidra evidence: FieldOrderXMLUtils.cpp, ColumnParser.cpp, ColumnDefnParser.cpp, GetShouldAutoHideNewColumns, and ColumnParserUtils symbols support field order/column visibility metadata handling.",
+      "type": "object",
+      "x-value-evidence": {"kind": "authoring-policy", "nativeStructureSource": "FieldOrderXMLUtils.cpp", "note": "Writer defaults use observed package shapes; canvas choices are not Ghidra-proven native defaults"},
+      "additionalProperties": true,
+      "properties": {
+        "majorVersion": { "type": "integer", "default": 1 },
+        "minorVersion": { "type": "integer", "default": 0 },
+        "fieldOrder": {
+          "$comment": "Ghidra evidence: FieldOrderXMLUtils.cpp.",
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "fieldOrdinals": {
+              "type": "object",
+              "default": {},
+              "additionalProperties": { "type": "integer" }
+            },
+            "minOrdinal": { "type": "integer", "default": 0 },
+            "maxOrdinal": { "type": "integer", "default": 0 }
+          }
+        },
+        "flowDisplaySettings": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "flowGroupNodeDisplay": { "type": "object", "additionalProperties": true, "default": {} },
+            "flowSelection": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "type": { "type": ["string", "null"], "default": "nothing" },
+                "selectedNodePath": { "type": ["string", "array", "null"], "default": null },
+                "selectedType": { "type": ["string", "null"], "default": null }
+              }
+            },
+            "flowNodeDisplaySettings": {
+              "type": "object",
+              "default": {},
+              "additionalProperties": { "$ref": "#/$defs/nodeDisplaySettings" }
+            }
+          }
+        },
+        "hiddenColumns": {
+          "$comment": "Ghidra evidence: GetShouldAutoHideNewColumns and AutoHideNewColumn-related FileFormatCompatibility transform strings.",
+          "type": "array",
+          "default": [],
+          "items": { "type": ["string", "object"] }
+        }
+      }
+    },
+    "nodeDisplaySettings": {
+      "$comment": "No direct native symbol names for canvas coordinates were found in the targeted Ghidra extraction; this definition is retained from displaySettings package evidence and intentionally isolated from Ghidra-backed field-order evidence.",
+      "type": "object",
+      "x-authoring-node-spacing": 240,
+      "x-value-evidence": {"kind": "authoring-policy", "note": "Package-observed numeric canvas shape; no native Ghidra coordinate/default contract was established"},
+      "additionalProperties": true,
+      "properties": {
+        "color": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "hexCss": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+            },
+            "rgba": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": { "type": ["string", "number", "integer"] }
+            }
+          }
+        },
+        "position": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "x": { "type": "number", "default": 0 },
+            "y": { "type": "number", "default": 0 }
+          }
+        },
+        "size": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "width": { "type": "number", "default": 180 },
+            "height": { "type": "number", "default": 80 }
+          }
+        }
+      }
+    },
+    "maestroMetadata": {
+      "$comment": "Ghidra evidence: FileFormatCompatibility::RecordUseOfNewFormat/ReconcileForFileSave and TransformNames symbols support compatibility/feature metadata; entry-name properties are package manifest evidence.",
+      "type": "object",
+      "x-value-evidence": {"kind": "package-observation", "note": "Entry names come from metadata ZIP manifests; version defaults are authoring policy"},
+      "additionalProperties": true,
+      "properties": {
+        "majorVersion": { "type": "integer", "default": 1 },
+        "minorVersion": { "type": "integer", "default": 0 },
+        "flowEntryName": { "type": "string", "const": "flow" },
+        "displaySettingsEntryName": { "type": "string", "const": "displaySettings" },
+        "isPackagedMaestroDocument": { "type": "boolean" },
+        "documentFeaturesUsedInDocument": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/documentFeature" }
+        }
+      }
+    },
+    "documentFeature": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "featureName": { "type": "string" },
+        "firstSoftwareVersionSupportedIn": { "$ref": "#/$defs/softwareVersion" },
+        "minimumCompatibleSoftwareVersion": {
+          "anyOf": [
+            { "$ref": "#/$defs/softwareVersion" },
+            { "type": "null" }
+          ]
+        },
+        "notSupportedMessages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "softwareVersion": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "year": { "type": "integer" },
+        "quarterOfYear": { "type": "integer" },
+        "versionString": { "type": "string" },
+        "indexOfRelease": { "type": "integer" }
+      }
+    },
+    "archiveEntries": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "sourceType": { "type": "string", "enum": ["directory", "zip", "single-entry"] },
+        "entries": { "type": "array", "items": { "type": "string" } },
+        "hasFlow": { "type": "boolean" },
+        "hasDisplaySettings": { "type": "boolean" },
+        "hasMaestroMetadata": { "type": "boolean" },
+        "hasDataDirectory": { "type": "boolean" }
+      }
+    }
+  }
+}

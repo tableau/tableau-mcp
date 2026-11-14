@@ -1,0 +1,111 @@
+{
+  "source": "PyYAML 6.0.3 implicit scalar rules used by the reference _codec; timestamps disabled and booleans restricted to true/false.",
+  "unicodeVersion": "15.1.0",
+  "resolvers": {
+    "null": {
+      "pattern": "^(?:~|null|Null|NULL|)$",
+      "ignoreCase": false,
+      "constructor": "construct_yaml_null"
+    },
+    "bool": {
+      "pattern": "^(?:true|false)$",
+      "ignoreCase": true,
+      "constructor": "construct_yaml_bool"
+    },
+    "float": {
+      "pattern": "^(?:[-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+][0-9]+)?|\\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*|[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$",
+      "ignoreCase": false,
+      "constructor": "construct_yaml_float"
+    },
+    "int": {
+      "pattern": "^(?:[-+]?0b[0-1_]+|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)|[-+]?0x[0-9a-fA-F_]+|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+)$",
+      "ignoreCase": false,
+      "constructor": "construct_yaml_int"
+    },
+    "merge": {
+      "pattern": "^(?:<<)$",
+      "ignoreCase": false,
+      "constructor": null
+    },
+    "value": {
+      "pattern": "^(?:=)$",
+      "ignoreCase": false,
+      "constructor": null
+    },
+    "yaml": {
+      "pattern": "^(?:!|&|\\*)$",
+      "ignoreCase": false,
+      "constructor": null
+    }
+  },
+  "decimalZeroCodepoints": [
+    48,
+    1632,
+    1776,
+    1984,
+    2406,
+    2534,
+    2662,
+    2790,
+    2918,
+    3046,
+    3174,
+    3302,
+    3430,
+    3558,
+    3664,
+    3792,
+    3872,
+    4160,
+    4240,
+    6112,
+    6160,
+    6470,
+    6608,
+    6784,
+    6800,
+    6992,
+    7088,
+    7232,
+    7248,
+    42528,
+    43216,
+    43264,
+    43472,
+    43504,
+    43600,
+    44016,
+    65296,
+    66720,
+    68912,
+    69734,
+    69872,
+    69942,
+    70096,
+    70384,
+    70736,
+    70864,
+    71248,
+    71360,
+    71472,
+    71904,
+    72016,
+    72784,
+    73040,
+    73120,
+    73552,
+    92768,
+    92864,
+    93008,
+    120782,
+    120792,
+    120802,
+    120812,
+    120822,
+    123200,
+    123632,
+    124144,
+    125264,
+    130032
+  ]
+}
