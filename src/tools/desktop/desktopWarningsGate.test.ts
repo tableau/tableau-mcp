@@ -18,22 +18,17 @@ import { getAddWorksheetTool } from './api/addWorksheet.js';
 import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getOpenFileTool } from './api/openFile.js';
-import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
-import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
-import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUpdates.js';
-import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
-import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
-import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
+import { getRefreshDatasourceTool } from './api/refreshDatasource.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
 import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
-import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
+import { getSetAutoUpdatesPausedTool } from './api/setAutoUpdatesPaused.js';
 import { getSetDataSourcePageActiveTool } from './api/setDataSourcePageActive.js';
 import { getShowMeTool } from './api/showMe.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
-import { getUndoWorkbookTool } from './api/undoWorkbook.js';
+import { getUndoRedoWorkbookTool } from './api/undoRedoWorkbook.js';
 import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { DesktopTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -236,15 +231,10 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: {},
     clean: { message: 'Closed the open workbook.' },
   },
-  'undo-workbook': {
-    make: getUndoWorkbookTool,
-    args: {},
+  'undo-redo-workbook': {
+    make: getUndoRedoWorkbookTool,
+    args: { action: 'undo' },
     clean: { message: 'Undid the last change to the open workbook.' },
-  },
-  'redo-workbook': {
-    make: getRedoWorkbookTool,
-    args: {},
-    clean: { message: 'Reapplied the most recently undone change to the open workbook.' },
   },
   'add-worksheet': {
     make: getAddWorksheetTool,
@@ -334,63 +324,27 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: { format: 'pdf', filePath: '/a/Book.pdf' },
     clean: { message: 'Exported the workbook to "/a/Book.pdf".' },
   },
-  'refresh-datasource-data': {
-    make: getRefreshDatasourceDataTool,
-    args: { datasourceId: 'ds1' },
-    clean: { message: 'Refreshed the live data for datasource "ds1".' },
-  },
-  'refresh-datasource-extract': {
-    make: getRefreshDatasourceExtractTool,
-    args: { datasourceId: 'ds1' },
+  'refresh-datasource': {
+    make: getRefreshDatasourceTool,
+    args: { datasourceId: 'ds1', refreshType: 'extract' },
     clean: { message: 'Refreshed the extract for datasource "ds1".' },
   },
-  'pause-auto-updates': {
-    make: getPauseAutoUpdatesTool,
-    args: { sheet: 'Sales' },
+  'set-auto-updates-paused': {
+    make: getSetAutoUpdatesPausedTool,
+    args: { sheetId: 'ws1', kind: 'worksheet', isAutoUpdatesPaused: true },
     clean: {
       paused: true,
-      sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
-      message: 'Paused auto-updates for worksheet "Sales".',
-    },
-  },
-  'resume-auto-updates': {
-    make: getResumeAutoUpdatesTool,
-    args: { sheet: 'Sales' },
-    clean: {
-      resumed: true,
-      sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
-      message: 'Resumed auto-updates for worksheet "Sales".',
+      sheet: { id: 'ws1', kind: 'worksheet' },
+      message: 'Paused auto-updates for worksheet "ws1".',
     },
   },
   'refresh-auto-updates': {
     make: getRefreshAutoUpdatesTool,
-    args: { worksheet: 'Sales' },
+    args: { sheetId: 'ws1', kind: 'worksheet' },
     clean: {
       refreshed: true,
-      worksheet: { id: 'ws1', name: 'Sales' },
-      message: 'Refreshed auto-updates for worksheet "Sales".',
-    },
-  },
-  'refresh-dashboard-auto-updates': {
-    make: getRefreshDashboardAutoUpdatesTool,
-    args: { dashboard: 'Dash' },
-    clean: {
-      dashboard: { id: 'd1', name: 'Dash' },
-      outcome: 'COMPLETE',
-      refreshed: [],
-      failed: [],
-      message: 'Refreshed auto-updates for dashboard "Dash".',
-    },
-  },
-  'refresh-storyboard-auto-updates': {
-    make: getRefreshStoryboardAutoUpdatesTool,
-    args: { storyboard: 'Story' },
-    clean: {
-      storyboard: { id: 's1', name: 'Story' },
-      outcome: 'COMPLETE',
-      refreshed: [],
-      failed: [],
-      message: 'Refreshed auto-updates for the current point of storyboard "Story".',
+      sheet: { id: 'ws1', kind: 'worksheet' },
+      message: 'Refreshed auto-updates for worksheet "ws1".',
     },
   },
   'activate-sheet': {
@@ -514,13 +468,13 @@ describe('Desktop command tools show Desktop warnings', () => {
 
   it('words a pending dashboard refresh as a request, not a completed refresh', async () => {
     const result = await callTool(
-      TOOL_CASES['refresh-dashboard-auto-updates'],
+      { ...TOOL_CASES['refresh-auto-updates'], args: { sheetId: 'd1', kind: 'dashboard' } },
       undefined,
       'running',
     );
 
     expect(JSON.parse(textOf(result)).message).toBe(
-      'Requested refreshing auto-updates for dashboard "Dash"; Desktop is still applying it.',
+      'Requested refreshing auto-updates for dashboard "d1"; Desktop is still applying it.',
     );
   });
 

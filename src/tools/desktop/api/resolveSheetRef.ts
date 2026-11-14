@@ -1,8 +1,12 @@
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 
+import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind, SheetRef } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 
 export type ResolvedSheetRef = {
   ref: SheetRef;
@@ -81,4 +85,43 @@ export async function resolveSheetRef({
       });
     },
   });
+}
+
+export async function resolveSheetIdOfKind({
+  executor,
+  kind,
+  sheet,
+  signal,
+}: {
+  executor: ExternalApiToolExecutor;
+  kind: SheetKind;
+  sheet: string;
+  signal: AbortSignal;
+}): Promise<Result<string, McpToolError>> {
+  const list = await listSheetsOfKind(executor, kind, signal);
+  if (list.isErr()) {
+    return new DesktopCommandExecutionError(list.error).toErr();
+  }
+  return resolveItemByNameOrId(SHEET_LABEL[kind], sheet, list.value).map((item) => item.id);
+}
+
+const SHEET_LABEL: Record<SheetKind, string> = {
+  worksheet: 'Worksheet',
+  dashboard: 'Dashboard',
+  storyboard: 'Storyboard',
+};
+
+async function listSheetsOfKind(
+  executor: ExternalApiToolExecutor,
+  kind: SheetKind,
+  signal: AbortSignal,
+): Promise<Result<Array<{ id: string; name: string }>, ExecuteCommandError>> {
+  switch (kind) {
+    case 'worksheet':
+      return (await executor.listWorksheets(signal)).map((list) => list.worksheets ?? []);
+    case 'dashboard':
+      return (await executor.listDashboards(signal)).map((list) => list.dashboards ?? []);
+    case 'storyboard':
+      return (await executor.listStoryboards(signal)).map((list) => list.storyboards ?? []);
+  }
 }

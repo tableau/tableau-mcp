@@ -40,8 +40,8 @@ when their triggers, destination options, encoding, or source exclusions differ.
 source, create with `sourceDashboard` and omit `sourceWorksheet`. An edit must still pass
 `sourceWorksheet` (`""` for a dashboard-only source), because it replaces the full definition.
 
-If edit readback reports that the original action was removed or changed, run `undo-workbook` in
-the same session to restore the previous workbook before retrying. Failed verification does not
+If edit readback reports that the original action was removed or changed, run `undo-redo-workbook`
+with action `undo` in the same session to restore the previous workbook before retrying. Failed verification does not
 automatically undo the apply.
 
 For example, this edits a URL action:
@@ -61,8 +61,8 @@ Delete with `{"operation":"delete","actionName":"[Action1]"}` and an optional `s
 name returns the available names and captions. Existing actions can also be inspected with
 `get-workbook-xml`; use their internal `name`, rather than their caption. Edits/deletes require a
 Desktop build that replaces actions during whole-workbook applies. The tool verifies the resulting
-action identities and edited settings after applying; `undo-workbook` and `redo-workbook` can
-reverse and restore the change.
+action identities and edited settings after applying; `undo-redo-workbook` can reverse and
+restore the change.
 
 Highlight actions use `clearSelection: "show-all"` by default; Desktop always clears highlighting
 with the selection. Other clearing options are refused before applying.

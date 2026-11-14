@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
@@ -11,10 +12,8 @@ import * as sessionResolution from '../../../desktop/session/sessionResolution.j
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getPauseAutoUpdatesTool } from './pauseAutoUpdates.js';
-import { getResumeAutoUpdatesTool } from './resumeAutoUpdates.js';
+import { getSetAutoUpdatesPausedTool } from './setAutoUpdatesPaused.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -23,18 +22,21 @@ const WORKSHEET_ID = 'sheet-sales';
 const WORKSHEET_NAME = 'Sales by Region';
 const DASHBOARD_ID = 'dash-exec';
 const DASHBOARD_NAME = 'Executive Dashboard';
-const STORYBOARD_NAME = 'QBR Story';
 
-describe('pause-auto-updates / resume-auto-updates', () => {
+describe('set-auto-updates-paused', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('pause-auto-updates POSTs the worksheet :pauseAutoUpdates route body-less', async () => {
-    const harness = await startHarness(getPauseAutoUpdatesTool);
+  it('pausing POSTs the worksheet :pauseAutoUpdates route body-less', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({
+        sheetId: WORKSHEET_ID,
+        kind: 'worksheet',
+        isAutoUpdatesPaused: true,
+      });
       expect(result.isError).toBeFalsy();
       const posted = harness.server.requests.filter(
         (r) =>
@@ -50,10 +52,14 @@ describe('pause-auto-updates / resume-auto-updates', () => {
     }
   });
 
-  it('pause-auto-updates routes a dashboard target to the dashboards path', async () => {
-    const harness = await startHarness(getPauseAutoUpdatesTool);
+  it('pausing routes a dashboard target to the dashboards path', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({
+        sheetId: DASHBOARD_ID,
+        kind: 'dashboard',
+        isAutoUpdatesPaused: true,
+      });
       expect(result.isError).toBeFalsy();
       const posted = harness.server.requests.filter(
         (r) =>
@@ -66,10 +72,14 @@ describe('pause-auto-updates / resume-auto-updates', () => {
     }
   });
 
-  it('resume-auto-updates POSTs the worksheet :resumeAutoUpdates route body-less', async () => {
-    const harness = await startHarness(getResumeAutoUpdatesTool);
+  it('resuming POSTs the worksheet :resumeAutoUpdates route body-less', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_ID });
+      const result = await harness.callTool({
+        sheetId: WORKSHEET_ID,
+        kind: 'worksheet',
+        isAutoUpdatesPaused: false,
+      });
       expect(result.isError).toBeFalsy();
       const posted = harness.server.requests.filter(
         (r) =>
@@ -88,10 +98,14 @@ describe('pause-auto-updates / resume-auto-updates', () => {
     }
   });
 
-  it('resume-auto-updates on a dashboard surfaces the contained-worksheet blast radius in the result', async () => {
-    const harness = await startHarness(getResumeAutoUpdatesTool);
+  it('resuming a dashboard surfaces the contained-worksheet blast radius in the result', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({
+        sheetId: DASHBOARD_ID,
+        kind: 'dashboard',
+        isAutoUpdatesPaused: false,
+      });
       expect(result.isError).toBeFalsy();
       const posted = harness.server.requests.filter(
         (r) =>
@@ -108,23 +122,48 @@ describe('pause-auto-updates / resume-auto-updates', () => {
     }
   });
 
-  it.each([
-    ['pause-auto-updates', getPauseAutoUpdatesTool],
-    ['resume-auto-updates', getResumeAutoUpdatesTool],
-  ] as const)('%s rejects a storyboard target without dispatching', async (_name, makeTool) => {
-    const harness = await startHarness(makeTool);
+  it('accepts a unique sheet name and dispatches by its id', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: STORYBOARD_NAME });
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('storyboard');
-      const posted = harness.server.requests.filter(
-        (r) => r.method === 'POST' && /AutoUpdates$/.test(r.path),
-      );
-      expect(posted).toHaveLength(0);
+      const result = await harness.callTool({
+        sheetId: WORKSHEET_NAME,
+        kind: 'worksheet',
+        isAutoUpdatesPaused: true,
+      });
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter((r) => r.method === 'POST');
+      expect(posted.map((r) => r.path)).toEqual([
+        `/v0/workbook/worksheets/${WORKSHEET_ID}:pauseAutoUpdates`,
+      ]);
     } finally {
       await harness.close();
     }
+  });
+
+  it('rejects an unknown sheet without dispatching', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        sheetId: DASHBOARD_NAME,
+        kind: 'worksheet',
+        isAutoUpdatesPaused: true,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`Worksheet "${DASHBOARD_NAME}" was not found`);
+      expect(harness.server.requests.filter((r) => r.method === 'POST')).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('rejects a storyboard kind in the schema', async () => {
+    const tool = getSetAutoUpdatesPausedTool(new DesktopMcpServer());
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    expect(
+      schema.safeParse({ sheetId: 'story-qbr', kind: 'storyboard', isAutoUpdatesPaused: true })
+        .success,
+    ).toBe(false);
   });
 });
 
@@ -134,13 +173,11 @@ type Harness = {
   close: () => Promise<void>;
 };
 
-async function startHarness(
-  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
-): Promise<Harness> {
+async function startHarness(): Promise<Harness> {
   const server = await startMockExternalApiServer();
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const tool = makeTool(new DesktopMcpServer());
+  const tool = getSetAutoUpdatesPausedTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
     args: Record<string, unknown>,
     extra: ReturnType<typeof getMockRequestHandlerExtra>,

@@ -99,7 +99,7 @@ export function appendedActionsError(
   const readbackNames = new Set(readback.value.map((action) => action.name));
   if (!baselineActions.every((action) => readbackNames.has(action.name))) return undefined;
   return new XmlModificationError(
-    'This Desktop build adds actions instead of replacing them. Copies were added to the workbook. Run undo-workbook in the same session to remove the copies, then use a Desktop build that supports replacing workbook actions before retrying.',
+    'This Desktop build adds actions instead of replacing them. Copies were added to the workbook. Run undo-redo-workbook with action undo in the same session to remove the copies, then use a Desktop build that supports replacing workbook actions before retrying.',
   );
 }
 
@@ -118,7 +118,7 @@ export function editRecoveryError(
       ? 'the original action is no longer present'
       : 'the original action definition changed';
   return new XmlModificationError(
-    `edit failed verification for "${original.name}": ${reason}. Run undo-workbook in the same session to restore the previous workbook before retrying.`,
+    `edit failed verification for "${original.name}": ${reason}. Run undo-redo-workbook with action undo in the same session to restore the previous workbook before retrying.`,
   );
 }
 

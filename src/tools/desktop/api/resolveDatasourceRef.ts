@@ -12,7 +12,7 @@ export type ResolvedDatasourceRef = {
   resolvedSession: string;
 };
 
-type ListedDatasource = DatasourceItem & { id: string; name: string };
+export type ListedDatasource = DatasourceItem & { id: string; name: string };
 
 /** Resolve a datasource id, internal name, or caption against the open workbook. */
 export async function resolveDatasourceRef({
@@ -55,7 +55,7 @@ export async function resolveDatasourceRef({
   });
 }
 
-function resolveDatasource(
+export function resolveDatasource(
   requested: string,
   candidates: ListedDatasource[],
 ): Result<ListedDatasource, ArgsValidationError> {

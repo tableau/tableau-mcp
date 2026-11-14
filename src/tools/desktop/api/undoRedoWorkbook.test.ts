@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
@@ -12,26 +13,24 @@ import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getRedoWorkbookTool } from './redoWorkbook.js';
-import { getUndoWorkbookTool } from './undoWorkbook.js';
+import { getUndoRedoWorkbookTool } from './undoRedoWorkbook.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
-describe('undo-workbook / redo-workbook tools', () => {
+describe('undo-redo-workbook tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
   it.each([
-    { makeTool: getUndoWorkbookTool, path: '/v0/workbook:undo', message: 'Undid the last change' },
-    { makeTool: getRedoWorkbookTool, path: '/v0/workbook:redo', message: 'Reapplied' },
-  ])('POSTs $path and reports success', async ({ makeTool, path, message }) => {
-    const harness = await startHarness(makeTool);
+    { action: 'undo', path: '/v0/workbook:undo', message: 'Undid the last change' },
+    { action: 'redo', path: '/v0/workbook:redo', message: 'Reapplied' },
+  ])('$action POSTs $path and reports success', async ({ action, path, message }) => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({});
+      const result = await harness.callTool({ action });
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain(message);
@@ -45,11 +44,20 @@ describe('undo-workbook / redo-workbook tools', () => {
     }
   });
 
-  it.each([
-    { makeTool: getUndoWorkbookTool, method: 'undo' as const },
-    { makeTool: getRedoWorkbookTool, method: 'redo' as const },
-  ])('waits for an in-flight apply before calling $method', async ({ makeTool, method }) => {
-    await expectMutationWaitsForApplyLock(makeTool, method);
+  it.each([{ method: 'undo' as const }, { method: 'redo' as const }])(
+    'waits for an in-flight apply before calling $method',
+    async ({ method }) => {
+      await expectMutationWaitsForApplyLock(method);
+    },
+  );
+
+  it('requires action to be undo or redo', async () => {
+    const schema = z.object(
+      await Provider.from(getUndoRedoWorkbookTool(new DesktopMcpServer()).paramsSchema),
+    );
+    expect(schema.safeParse({}).success).toBe(false);
+    expect(schema.safeParse({ action: 'repeat' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'redo' }).success).toBe(true);
   });
 });
 
@@ -59,13 +67,11 @@ type Harness = {
   close: () => Promise<void>;
 };
 
-async function startHarness(
-  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
-): Promise<Harness> {
+async function startHarness(): Promise<Harness> {
   const server = await startMockExternalApiServer();
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const tool = makeTool(new DesktopMcpServer());
+  const tool = getUndoRedoWorkbookTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
     args: Record<string, unknown>,
     extra: ReturnType<typeof getMockRequestHandlerExtra>,
@@ -85,10 +91,7 @@ async function startHarness(
   };
 }
 
-async function expectMutationWaitsForApplyLock(
-  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
-  method: 'undo' | 'redo',
-): Promise<void> {
+async function expectMutationWaitsForApplyLock(method: 'undo' | 'redo'): Promise<void> {
   let markLockHeld!: () => void;
   const lockHeld = new Promise<void>((resolve) => {
     markLockHeld = resolve;
@@ -122,7 +125,7 @@ async function expectMutationWaitsForApplyLock(
         markExecutorRequested();
       }),
   );
-  const tool = makeTool(new DesktopMcpServer());
+  const tool = getUndoRedoWorkbookTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
     args: Record<string, unknown>,
     extra: ReturnType<typeof getMockRequestHandlerExtra>,
@@ -133,7 +136,7 @@ async function expectMutationWaitsForApplyLock(
   };
   let pending: Promise<CallToolResult> | undefined;
   try {
-    pending = callback({}, extra);
+    pending = callback({ action: method }, extra);
     await executorRequested;
     provideExecutor();
     await Promise.resolve();
