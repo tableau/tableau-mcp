@@ -234,6 +234,31 @@ describe('preview evidence across replicas sharing a custom session store', () =
     );
   });
 
+  it('lets exactly one of two concurrent app-approval confirms through', async () => {
+    const a = await startReplica();
+    const b = await startReplica();
+    const c = await startReplica();
+
+    const ctx = makeCtx({ tool: 'delete-content', target: { id: 'wb-1' } });
+    await new a.AppApprovalEvidence('delete-content').establish(ctx);
+
+    const results = await Promise.all([
+      new b.AppApprovalEvidence('delete-content').verify(ctx),
+      new c.AppApprovalEvidence('delete-content').verify(ctx),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('fails closed when the store errors on preview and returns no nonce', async () => {
+    const a = await startReplica();
+    globalThis.__sharedSessionStoreDown = true;
+
+    const preview = new a.RegistryEvidence();
+    await expect(preview.establish(makeCtx())).rejects.toThrow('confirmation store is unavailable');
+    expect(preview.getEstablishedNonce()).toBeUndefined();
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('test-password');
+  });
+
   it('keeps proof process-local on the memory provider', async () => {
     config.sessionStore = { provider: 'memory' };
     const a = await startReplica();
