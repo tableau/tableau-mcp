@@ -15,6 +15,7 @@ import {
 } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
+import { getUpdateFlowConnectionTool } from './tools/web/flows/updateFlowConnection.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
@@ -701,7 +702,7 @@ describe('server', () => {
     (featureName === 'flow-read-tools' && readFlag) ||
     (featureName === 'flow-write-tools' && writeFlag);
 
-  it('registers all nine flow tools with shipped feature defaults and unset environment controls', async () => {
+  it('registers all flow tools with shipped feature defaults and unset environment controls', async () => {
     vi.stubEnv('FLOW_READ_TOOLS_ENABLED', undefined);
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
@@ -2279,4 +2280,12 @@ describe('server', () => {
       expect(registeredNames.includes('record-event')).toBe(recordEventPresent);
     },
   );
+});
+
+// Connection mutation is hidden below the administrator role even when flow writes are enabled.
+describe('flow connection update registration contract', () => {
+  it('declares an administrator minimum role', () => {
+    const tool = getUpdateFlowConnectionTool(new WebMcpServer());
+    expect(tool?.minRequiredRole).toBe(SiteRole.SITE_ADMINISTRATOR_EXPLORER);
+  });
 });

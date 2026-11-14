@@ -17,6 +17,7 @@ import { getListFlowsTool } from './flows/listFlows/listFlows.js';
 import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
 import { getRunFlowTool } from './flows/runFlow/runFlow.js';
 import { getRunFlowTaskTool } from './flows/runFlowTask/runFlowTask.js';
+import { getUpdateFlowConnectionTool } from './flows/updateFlowConnection.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
@@ -74,6 +75,7 @@ export const webToolFactories = [
   getQueryDatasourceTool,
   getListFlowsTool,
   getGetFlowTool,
+  getUpdateFlowConnectionTool,
   getListFlowRunsTool,
   getListFlowTasksTool,
   getDescribeFlowTool,
