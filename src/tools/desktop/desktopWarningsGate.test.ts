@@ -19,11 +19,9 @@ import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
-import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
 import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUpdates.js';
-import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
-import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
+import { getRefreshDatasourceTool } from './api/refreshDatasource.js';
 import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
 import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
@@ -33,7 +31,7 @@ import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSetDataSourcePageActiveTool } from './api/setDataSourcePageActive.js';
 import { getShowMeTool } from './api/showMe.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
-import { getUndoWorkbookTool } from './api/undoWorkbook.js';
+import { getUndoRedoWorkbookTool } from './api/undoRedoWorkbook.js';
 import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { DesktopTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -236,15 +234,10 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: {},
     clean: { message: 'Closed the open workbook.' },
   },
-  'undo-workbook': {
-    make: getUndoWorkbookTool,
-    args: {},
+  'undo-redo-workbook': {
+    make: getUndoRedoWorkbookTool,
+    args: { action: 'undo' },
     clean: { message: 'Undid the last change to the open workbook.' },
-  },
-  'redo-workbook': {
-    make: getRedoWorkbookTool,
-    args: {},
-    clean: { message: 'Reapplied the most recently undone change to the open workbook.' },
   },
   'add-worksheet': {
     make: getAddWorksheetTool,
@@ -334,14 +327,9 @@ const TOOL_CASES: Record<string, ToolCase> = {
     args: { format: 'pdf', filePath: '/a/Book.pdf' },
     clean: { message: 'Exported the workbook to "/a/Book.pdf".' },
   },
-  'refresh-datasource-data': {
-    make: getRefreshDatasourceDataTool,
-    args: { datasourceId: 'ds1' },
-    clean: { message: 'Refreshed the live data for datasource "ds1".' },
-  },
-  'refresh-datasource-extract': {
-    make: getRefreshDatasourceExtractTool,
-    args: { datasourceId: 'ds1' },
+  'refresh-datasource': {
+    make: getRefreshDatasourceTool,
+    args: { datasourceId: 'ds1', refreshType: 'extract' },
     clean: { message: 'Refreshed the extract for datasource "ds1".' },
   },
   'pause-auto-updates': {

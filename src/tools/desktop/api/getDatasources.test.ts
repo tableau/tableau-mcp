@@ -13,7 +13,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getListWorkbookDatasourcesTool } from './listWorkbookDatasources.js';
+import { getDatasourcesTool } from './getDatasources.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -31,41 +31,48 @@ const resultSchema = z.object({
   ),
 });
 
-describe('listWorkbookDatasourcesTool', () => {
+describe('get-datasources tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('creates a workbook datasource read tool with an optional session arg', () => {
-    const tool = getListWorkbookDatasourcesTool(new DesktopMcpServer());
+  it('declares the read contract with optional session and datasourceId', async () => {
+    const tool = getDatasourcesTool(new DesktopMcpServer());
 
-    expect(tool.name).toBe('list-workbook-datasources');
+    expect(tool.name).toBe('get-datasources');
+    expect(tool.minApiVersion).toBeUndefined();
     expect(tool.description).toContain('including ones no sheet uses');
     expect(tool.description).toContain('isExtract');
     expect(tool.description).toContain('percent-encoded');
     expect(tool.description).toContain('signed in to its site');
-    expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
+    expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
+      datasourceId: expect.any(Object),
+    });
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    expect(schema.safeParse({}).success).toBe(true);
+    expect(schema.safeParse({ datasourceId: '' }).success).toBe(false);
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
       openWorldHint: false,
     });
   });
 
-  it('returns datasources connected to the open workbook', async () => {
+  it('lists the datasources in the open workbook when no id is given', async () => {
     const server = await startMockExternalApiServer();
     const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
     await executor.start();
 
     try {
-      const tool = getListWorkbookDatasourcesTool(new DesktopMcpServer());
+      const tool = getDatasourcesTool(new DesktopMcpServer());
       const callback = await Provider.from(tool.callback);
       const extra = {
         ...getMockRequestHandlerExtra(),
         getExecutor: vi.fn().mockResolvedValue(executor),
       };
 
-      const result = await callback({ session: undefined }, extra);
+      const result = await callback({ session: undefined, datasourceId: undefined }, extra);
 
       expect(result.isError).toBe(false);
       // The published datasource surfaces its server LUID and a real hasDownloadFilePermission; the

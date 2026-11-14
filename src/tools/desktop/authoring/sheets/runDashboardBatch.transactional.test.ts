@@ -277,7 +277,7 @@ describe('run-dashboard-batch transactional apply', () => {
 
     expect(bodyOf(result)).toMatchObject({ applied: 'unknown', retrySafe: false });
     expect(bodyOf(result).steps.at(-1).error).toContain(
-      'was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.',
+      'was removed and the new one may not have been applied. Check the workbook; undo-redo-workbook with action undo restores the old dashboard and its actions.',
     );
     expect(harness.posts).toHaveLength(1);
     expect(consume).toHaveBeenCalledTimes(2);
@@ -302,7 +302,7 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(bodyOf(result)).toMatchObject({ applied: 'unknown', retrySafe: false });
     expect(harness.posts).toHaveLength(1);
     expect(bodyOf(result).steps.at(-1).error).toContain(
-      'was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.',
+      'was removed and the new one may not have been applied. Check the workbook; undo-redo-workbook with action undo restores the old dashboard and its actions.',
     );
     expect(harness.getCalls()).toBe(12); // baseline + guard + re-read + guard + 8 shared poll attempts
     expect(store.reserve('a1', '12345')).toMatchObject({ ok: false, reason: 'consumed' });
@@ -339,7 +339,7 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(bodyOf(result)).toMatchObject({ applied: 'unknown', retrySafe: false });
       expect(step.stage).toBe('removeExisting');
       expect(step.error).toContain(
-        'Desktop did not remove "Executive Overview"; it may now be hidden. Nothing was rebuilt. Run undo-workbook to restore it.',
+        'Desktop did not remove "Executive Overview"; it may now be hidden. Nothing was rebuilt. Run undo-redo-workbook with action undo to restore it.',
       );
       expect(step.error).not.toContain('was removed');
       expect(harness.deletes).toHaveLength(1);
@@ -498,7 +498,7 @@ describe('run-dashboard-batch transactional apply', () => {
     });
 
     const SENT =
-      'The delete of the old dashboard "Executive Overview" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-workbook restores them.';
+      'The delete of the old dashboard "Executive Overview" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-redo-workbook with action undo restores them.';
 
     it('says the delete was sent when it times out after dispatch', async () => {
       const harness = statefulExecutor({ deleteFails: true });
@@ -533,7 +533,7 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(step.stage).toBe('removeExisting');
       expect(step.error).toContain(SENT);
       expect(step.error).toContain('Could not confirm the removal:');
-      expect(step.error.match(/undo-workbook/g)).toHaveLength(1);
+      expect(step.error.match(/undo-redo-workbook with action undo/g)).toHaveLength(1);
     });
 
     it('keeps the whole removed note for a 260-character name with a warning', async () => {
@@ -550,7 +550,7 @@ describe('run-dashboard-batch transactional apply', () => {
 
       const error = bodyOf(result).steps.at(-1).error as string;
       expect(error).toContain(
-        `The old dashboard "${name}" was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`,
+        `The old dashboard "${name}" was removed and the new one may not have been applied. Check the workbook; undo-redo-workbook with action undo restores the old dashboard and its actions.`,
       );
       expect(error).toContain('w1: ');
     });
@@ -570,7 +570,9 @@ describe('run-dashboard-batch transactional apply', () => {
       const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
 
       const error = bodyOf(result).steps.at(-1).error as string;
-      expect(error).toContain('undo-workbook restores the old dashboard and its actions.');
+      expect(error).toContain(
+        'undo-redo-workbook with action undo restores the old dashboard and its actions.',
+      );
       expect(error.match(/while removing the old dashboard - w/g)).toHaveLength(3);
       expect(error).toContain(MORE);
       expect(error.length).toBeLessThan(2000);
@@ -611,7 +613,7 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(bodyOf(result)).toMatchObject(ambiguous);
       expect(step.stage).toBe('apply');
       expect(step.error).toContain(
-        `${REMOVED} and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`,
+        `${REMOVED} and the new one may not have been applied. Check the workbook; undo-redo-workbook with action undo restores the old dashboard and its actions.`,
       );
       expect(harness.current()).not.toContain('Executive Overview');
       expect(consume).toHaveBeenCalledTimes(1);
@@ -630,7 +632,7 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(bodyOf(result)).toMatchObject(ambiguous);
       expect(step.stage).toBe('rebuildApply');
       expect(step.error).toContain(
-        `${REMOVED} and the new one was not applied. Run undo-workbook to restore it.`,
+        `${REMOVED} and the new one was not applied. Run undo-redo-workbook with action undo to restore it.`,
       );
       expect(bodyOf(result).steps[0]).toMatchObject({ state: 'skipped' });
       expect(harness.deletes).toHaveLength(1);
@@ -654,7 +656,7 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(bodyOf(result)).toMatchObject(ambiguous);
       expect(step.stage).toBe('rebuildRead');
       expect(step.error).toContain(
-        'The old dashboard "Executive Overview" was removed, with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.',
+        'The old dashboard "Executive Overview" was removed, with the actions tied to it, and the new one was not applied. Run undo-redo-workbook with action undo to restore them.',
       );
       expect(harness.posts).toHaveLength(0);
     });
@@ -733,8 +735,8 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(bodyOf(result)).toMatchObject({ applied: 'unknown', retrySafe: false });
       expect(step.stage).toBe('removeExisting');
       expect(step.error).toContain('Could not confirm the removal:');
-      expect(step.error).toContain('undo-workbook restores them.');
-      expect(step.error.match(/undo-workbook/g)).toHaveLength(1);
+      expect(step.error).toContain('undo-redo-workbook with action undo restores them.');
+      expect(step.error.match(/undo-redo-workbook with action undo/g)).toHaveLength(1);
       expect(harness.posts).toHaveLength(0);
     });
 
@@ -777,7 +779,7 @@ describe('run-dashboard-batch transactional apply', () => {
 
       const step = bodyOf(result).steps.at(-1);
       expect(step.error).toContain(
-        'The old dashboard "Executive Overview" was removed, with the 1 action tied to it, and the new one was not applied. Run undo-workbook to restore them.',
+        'The old dashboard "Executive Overview" was removed, with the 1 action tied to it, and the new one was not applied. Run undo-redo-workbook with action undo to restore them.',
       );
       expect(step.error).toContain('w1: m');
     });
@@ -797,11 +799,11 @@ describe('run-dashboard-batch transactional apply', () => {
       const W1 = 'Desktop reported a warning while removing the old dashboard - w1: m';
       const W2 = 'Desktop reported a warning while removing the old dashboard - w2: n';
       const ONE_WARNING = [{ code: 'w1', message: 'm' }];
-      const NOT_APPLIED = `${REMOVED}, with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.`;
-      const NOT_APPLIED_DRIFT = `${REMOVED}, with the actions tied to it, and the new one was not applied. The workbook changed again after the removal, so undo-workbook would first reverse that newer change. Check with the user before undoing.`;
-      const NOT_APPLIED_NONE = `${REMOVED} and the new one was not applied. Run undo-workbook to restore it.`;
-      const NOT_APPLIED_ONE = `${REMOVED}, with the 1 action tied to it, and the new one was not applied. Run undo-workbook to restore them.`;
-      const MAY_NOT = `${REMOVED} and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
+      const NOT_APPLIED = `${REMOVED}, with the actions tied to it, and the new one was not applied. Run undo-redo-workbook with action undo to restore them.`;
+      const NOT_APPLIED_DRIFT = `${REMOVED}, with the actions tied to it, and the new one was not applied. The workbook changed again after the removal, so undo-redo-workbook with action undo would first reverse that newer change. Check with the user before undoing.`;
+      const NOT_APPLIED_NONE = `${REMOVED} and the new one was not applied. Run undo-redo-workbook with action undo to restore it.`;
+      const NOT_APPLIED_ONE = `${REMOVED}, with the 1 action tied to it, and the new one was not applied. Run undo-redo-workbook with action undo to restore them.`;
+      const MAY_NOT = `${REMOVED} and the new one may not have been applied. Check the workbook; undo-redo-workbook with action undo restores the old dashboard and its actions.`;
       const READ_TIMED_OUT = JSON.stringify({ type: 'command-timed-out', error: 'read timed out' });
       const notSent = {
         index: 0,
@@ -898,7 +900,7 @@ describe('run-dashboard-batch transactional apply', () => {
         expect(bodyOf(result)).toEqual(
           unknownAt(
             'removeExisting',
-            `Desktop did not remove "Executive Overview"; it may now be hidden. Nothing was rebuilt. Run undo-workbook to restore it. ${W1}`,
+            `Desktop did not remove "Executive Overview"; it may now be hidden. Nothing was rebuilt. Run undo-redo-workbook with action undo to restore it. ${W1}`,
           ),
         );
         expect(harness.posts).toHaveLength(0);
@@ -1166,7 +1168,7 @@ describe('run-dashboard-batch transactional apply', () => {
         expect(bodyOf(result)).toEqual(
           unknownAt(
             'rebuildApply',
-            `${REMOVED}, with the 2 actions tied to it, and the new one was not applied. The workbook changed again after the removal, so undo-workbook would first reverse that newer change. Check with the user before undoing. Cause: The workbook changed before the authoring write.`,
+            `${REMOVED}, with the 2 actions tied to it, and the new one was not applied. The workbook changed again after the removal, so undo-redo-workbook with action undo would first reverse that newer change. Check with the user before undoing. Cause: The workbook changed before the authoring write.`,
           ),
         );
         expect(harness.posts).toHaveLength(0);

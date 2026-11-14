@@ -12,75 +12,35 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getDatasourceInfoTool } from './getDatasourceInfo.js';
+import { getDatasourcesTool } from './getDatasources.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
-describe('getDatasourceInfoTool', () => {
+describe('get-datasources with datasourceId', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('defines the version-gated credential-safe metadata tool', async () => {
-    const tool = getDatasourceInfoTool(new DesktopMcpServer());
-    const paramsSchema = await Provider.from(tool.paramsSchema);
-
-    expect(tool.name).toBe('get-datasource-info');
-    expect(tool.minApiVersion).toBe('0.2.10');
-    expect(tool.title).toBe('Get Datasource Info');
-    expect(tool.description).toContain('internal name');
-    expect(tool.description).toContain('by id, internal name, or caption');
-    expect(paramsSchema).toMatchObject({
-      session: expect.any(Object),
-      datasourceName: expect.any(Object),
-    });
-    expect(paramsSchema.datasourceName.description).toBe('Datasource name/id.');
-    expect(tool.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    });
-  });
-
   it.each([
+    { label: 'plain', id: 'sales-id', expectedPath: '/v0/workbook/datasources/sales-id' },
     {
-      label: 'exact encoded inventory id',
-      datasource: { id: 'Sales%2FExtract', name: 'Slash source' },
-      datasourceName: 'Sales%2FExtract',
+      label: 'percent-encoded',
+      id: 'Sales%2FExtract',
       expectedPath: '/v0/workbook/datasources/Sales%2FExtract',
     },
-    {
-      label: 'unique name',
-      datasource: { id: 'Sales%20Extract', name: 'Sales Extract' },
-      datasourceName: 'Sales Extract',
-      expectedPath: '/v0/workbook/datasources/Sales%20Extract',
-    },
-    {
-      label: 'entity-encoded name',
-      datasource: { id: 'Sales%252FExtract', name: 'Sales & Profit' },
-      datasourceName: 'Sales &amp; Profit',
-      expectedPath: '/v0/workbook/datasources/Sales%252FExtract',
-    },
-  ])(
-    'resolves a datasource by $label before reading its metadata',
-    async ({ datasource, datasourceName, expectedPath }) => {
-      const harness = await startHarness([datasource]);
-      try {
-        const result = await harness.callTool({ datasourceName });
+  ])('reads a $label datasource id straight from its route', async ({ id, expectedPath }) => {
+    const harness = await startHarness([{ id, name: 'Sales' }]);
+    try {
+      const result = await harness.callTool({ datasourceId: id });
 
-        expect(result.isError).toBe(false);
-        expect(parseResult(result)).toMatchObject({
-          id: datasource.id,
-          name: datasource.name,
-        });
-        expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources', expectedPath]);
-      } finally {
-        await harness.close();
-      }
-    },
-  );
+      expect(result.isError).toBe(false);
+      expect(parseResult(result)).toMatchObject({ id, name: 'Sales' });
+      expect(requestPaths(harness.server)).toEqual([expectedPath]);
+    } finally {
+      await harness.close();
+    }
+  });
 
   it('drops null and unknown credential-shaped fields from a real granular response', async () => {
     const secretValues = [
@@ -112,7 +72,7 @@ describe('getDatasourceInfoTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ datasourceName: 'Safe name' });
+      const result = await harness.callTool({ datasourceId: 'safe-id' });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toEqual({
@@ -126,59 +86,7 @@ describe('getDatasourceInfoTool', () => {
       for (const secret of secretValues) {
         expect(serialized).not.toContain(secret);
       }
-      expect(requestPaths(harness.server)).toEqual([
-        '/v0/workbook/datasources',
-        '/v0/workbook/datasources/safe-id',
-      ]);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it.each([
-    {
-      label: 'ambiguous name',
-      datasourceName: 'Duplicate',
-      datasources: [
-        { id: 'first-id', name: 'Duplicate' },
-        { id: 'second-id', name: 'Duplicate' },
-      ],
-      expectedMessage: 'matched multiple datasources',
-    },
-    {
-      label: 'missing name',
-      datasourceName: 'Missing',
-      datasources: [{ id: 'sales-id', name: 'Sales' }],
-      expectedMessage: 'Datasource "Missing" was not found',
-    },
-  ])(
-    'returns the existing argument error for an $label without calling a granular route',
-    async ({ datasourceName, datasources, expectedMessage }) => {
-      const harness = await startHarness(datasources);
-      try {
-        const result = await harness.callTool({ datasourceName });
-
-        expect(result.isError).toBe(true);
-        expect(errorText(result)).toContain(expectedMessage);
-        expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources']);
-      } finally {
-        await harness.close();
-      }
-    },
-  );
-
-  it('reports a missing inventory route through the standard endpoint error', async () => {
-    const harness = await startHarness([{ id: 'sales-id', name: 'Sales' }], (server) => {
-      setRouteMissing(server, 'GET /v0/workbook/datasources');
-    });
-
-    try {
-      const result = await harness.callTool({ datasourceName: 'Sales' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('does not serve the workbook datasources endpoint');
-      expect(errorText(result)).toContain('Do not retry');
-      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources']);
+      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources/safe-id']);
     } finally {
       await harness.close();
     }
@@ -190,15 +98,12 @@ describe('getDatasourceInfoTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ datasourceName: 'Sales' });
+      const result = await harness.callTool({ datasourceId: 'sales-id' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('does not serve the datasource metadata endpoint');
       expect(errorText(result)).toContain('Do not retry');
-      expect(requestPaths(harness.server)).toEqual([
-        '/v0/workbook/datasources',
-        '/v0/workbook/datasources/sales-id',
-      ]);
+      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources/sales-id']);
     } finally {
       await harness.close();
     }
@@ -221,16 +126,13 @@ describe('getDatasourceInfoTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ datasourceName: 'Stale source' });
+      const result = await harness.callTool({ datasourceId: 'stale-id' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Datasource not found: stale-id');
       expect(errorText(result)).toContain('tableau-error-code: datasource-not-found');
       expect(errorText(result)).not.toContain('does not serve');
-      expect(requestPaths(harness.server)).toEqual([
-        '/v0/workbook/datasources',
-        '/v0/workbook/datasources/stale-id',
-      ]);
+      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources/stale-id']);
     } finally {
       await harness.close();
     }
@@ -249,7 +151,7 @@ async function startHarness(
   configure?.(server);
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const tool = getDatasourceInfoTool(new DesktopMcpServer());
+  const tool = getDatasourcesTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
     args: Record<string, unknown>,
     extra: ReturnType<typeof getMockRequestHandlerExtra>,
@@ -289,7 +191,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
-    instanceId: 'inst-datasource-info',
+    instanceId: 'inst-datasource-by-id',
     apiVersion: '0.2.10',
   };
 }
