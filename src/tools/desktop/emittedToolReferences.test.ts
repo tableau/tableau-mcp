@@ -74,6 +74,7 @@ const NON_TOOL_VOCABULARY = [
   'data-source',
   'data-source-order',
   'datasource-dependencies',
+  'datasource-not-found',
   'datatype-customized',
   'date-time',
   'dates-and-times',

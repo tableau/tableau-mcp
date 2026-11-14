@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
@@ -7,6 +7,7 @@ import {
   ExecuteCommandError,
   ExecuteCommandWarning,
 } from '../../../desktop/externalApi/executorTypes.js';
+import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
 import { DashboardRefreshOutcome, SheetKind } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
@@ -21,25 +22,24 @@ import { attachNextAction, prefillNextAction, withNextAction } from '../structur
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { nonCleanRefreshSubject } from './refreshOutcomeSubject.js';
-import { resolveSheetRef } from './resolveSheetRef.js';
+import { resolveSheetIdOfKind } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheet: z
+  sheetId: z
     .string()
-    .describe('Worksheet, dashboard, or storyboard name/id whose pending updates should run now.'),
+    .min(1)
+    .describe(
+      'Id of the sheet whose pending updates should run now. A unique sheet name also works.',
+    ),
   kind: z
     .enum(['worksheet', 'dashboard', 'storyboard'])
-    .optional()
-    .describe('Restrict the lookup to one kind. Use when a name is shared across kinds.'),
+    .describe('Which kind of sheet sheetId is.'),
 };
 const title = 'Refresh Auto Updates';
 
-type SheetBody =
-  | { worksheet: { id: string; name: string } }
-  | { dashboard: { id: string; name: string } }
-  | { storyboard: { id: string; name: string } };
-type RefreshToolResult = SheetBody & {
+type RefreshToolResult = {
+  sheet: { id: string; kind: SheetKind };
   message: string;
   refreshed?: boolean | DashboardRefreshOutcome['refreshed'];
   outcome?: DashboardRefreshOutcome['outcome'];
@@ -59,14 +59,14 @@ const MULTI_TARGET = {
     failedCode: 'dashboard-refresh-now-failed',
     failedMessage:
       'Desktop failed before refreshing any worksheet in the dashboard; nothing was refreshed.',
-    scope: (name: string) => `dashboard "${name}"`,
+    scope: (id: string) => `dashboard "${id}"`,
   },
   storyboard: {
     review: 'Review failed worksheet updates in the current story point',
     failedCode: 'storyboard-refresh-now-failed',
     failedMessage:
       'Desktop failed before refreshing any worksheet in the storyboard; nothing was refreshed.',
-    scope: (name: string) => `the current point of storyboard "${name}"`,
+    scope: (id: string) => `the current point of storyboard "${id}"`,
   },
 } as const;
 
@@ -88,10 +88,10 @@ export const getRefreshAutoUpdatesTool = (
       openWorldHint: false,
     },
     paramsSchema,
-    callback: async ({ session, sheet, kind }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, sheetId, kind }, extra): Promise<CallToolResult> => {
       return await refreshAutoUpdatesTool.logAndExecute<RefreshToolResult>({
         extra,
-        args: { session, sheet, kind },
+        args: { session, sheetId, kind },
         getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -99,58 +99,51 @@ export const getRefreshAutoUpdatesTool = (
             return sessionResult.error.toErr();
           }
 
-          const refResult = await resolveSheetRef({ session, sheet, kind, extra });
-          if (refResult.isErr()) {
-            return refResult.error.toErr();
-          }
-          const { ref, previousName } = refResult.value;
-          const target = { id: ref.id, name: previousName };
           const executor = await extra.getExecutor(sessionResult.value);
           const apiVersion = executor.desktopApiVersion;
-          if (
-            apiVersion !== undefined &&
-            !apiVersionAtLeast(apiVersion, MIN_API_VERSION[ref.kind])
-          ) {
-            return endpointNotInThisBuild(`${ref.kind} refresh`).toErr();
+          if (apiVersion !== undefined && !apiVersionAtLeast(apiVersion, MIN_API_VERSION[kind])) {
+            return endpointNotInThisBuild(`${kind} refresh`).toErr();
           }
 
-          if (ref.kind === 'worksheet') {
-            const result = await executor.refreshWorksheetNow(ref.id, extra.signal);
+          const dispatched = await refreshByIdThenName(executor, kind, sheetId, extra.signal);
+          if (dispatched.isErr()) {
+            return dispatched;
+          }
+          const { id } = dispatched.value;
+          const sheet = { id, kind };
+
+          if (dispatched.value.kind === 'worksheet') {
+            const { result } = dispatched.value;
             if (result.isErr()) {
               return refreshError(result.error, 'worksheet');
             }
             const completed = result.value.status === 'completed';
             const subject = completed
-              ? `Refreshed auto-updates for worksheet "${previousName}"`
-              : `Requested refreshing auto-updates for worksheet "${previousName}"; Desktop is still applying it`;
+              ? `Refreshed auto-updates for worksheet "${id}"`
+              : `Requested refreshing auto-updates for worksheet "${id}"; Desktop is still applying it`;
             return new Ok(
               commandOk(
-                { refreshed: completed, worksheet: target, message: `${subject}.` },
+                { refreshed: completed, sheet, message: `${subject}.` },
                 result.value,
                 subject,
               ),
             );
           }
 
-          const spec = MULTI_TARGET[ref.kind];
-          const sheetBody: SheetBody =
-            ref.kind === 'dashboard' ? { dashboard: target } : { storyboard: target };
-          const result =
-            ref.kind === 'dashboard'
-              ? await executor.refreshDashboardNow(ref.id, extra.signal)
-              : await executor.refreshStoryboardNow(ref.id, extra.signal);
+          const spec = MULTI_TARGET[dispatched.value.kind];
+          const { result } = dispatched.value;
           if (result.isErr()) {
             if (result.error.type === 'command-failed' && result.error.result !== undefined) {
               return new IncompleteOperationError(
                 attachNextAction(
-                  { ...sheetBody, ...result.error.result, error: result.error.error },
+                  { sheet, ...result.error.result, error: result.error.error },
                   prefillNextAction(spec.review),
                 ),
               ).toErr();
             }
             return refreshError(
               result.error,
-              ref.kind,
+              kind,
               result.error.type === 'command-failed' && result.error.error?.code === spec.failedCode
                 ? spec.failedMessage
                 : undefined,
@@ -158,20 +151,16 @@ export const getRefreshAutoUpdatesTool = (
           }
 
           if (result.value.status !== 'completed') {
-            const pending = `Requested refreshing auto-updates for ${ref.kind} "${previousName}"; Desktop is still applying it`;
+            const pending = `Requested refreshing auto-updates for ${kind} "${id}"; Desktop is still applying it`;
             return new Ok(
-              commandOk(
-                { refreshed: false, ...sheetBody, message: `${pending}.` },
-                result.value,
-                pending,
-              ),
+              commandOk({ refreshed: false, sheet, message: `${pending}.` }, result.value, pending),
             );
           }
 
-          const scope = spec.scope(previousName);
+          const scope = spec.scope(id);
           const nonClean = nonCleanRefreshSubject(scope, result.value.parsedResult);
           const subject = nonClean ?? `Refreshed auto-updates for ${scope}`;
-          const body = { ...sheetBody, ...result.value.parsedResult, message: `${subject}.` };
+          const body = { sheet, ...result.value.parsedResult, message: `${subject}.` };
           return new Ok(
             commandOk(
               nonClean === undefined ? body : withNextAction(body, prefillNextAction(spec.review)),
@@ -196,4 +185,57 @@ function refreshError(
     return endpointNotInThisBuild(`${kind} refresh`).toErr();
   }
   return new DesktopCommandExecutionError(error, message).toErr();
+}
+
+type Dispatched =
+  | {
+      kind: 'worksheet';
+      result: Awaited<ReturnType<ExternalApiToolExecutor['refreshWorksheetNow']>>;
+    }
+  | {
+      kind: 'dashboard' | 'storyboard';
+      result: Awaited<ReturnType<ExternalApiToolExecutor['refreshDashboardNow']>>;
+    };
+
+async function refreshByIdThenName(
+  executor: ExternalApiToolExecutor,
+  kind: SheetKind,
+  sheet: string,
+  signal: AbortSignal,
+): Promise<Result<Dispatched & { id: string }, McpToolError>> {
+  const byId = await dispatchRefresh(executor, kind, sheet, signal);
+  if (
+    !byId.result.isErr() ||
+    byId.result.error.type !== 'command-failed' ||
+    byId.result.error.error?.code !== 'sheet-not-found'
+  ) {
+    return new Ok({ ...byId, id: sheet });
+  }
+  const resolved = await resolveSheetIdOfKind({ executor, kind, sheet, signal });
+  if (resolved.isErr()) {
+    return resolved;
+  }
+  if (resolved.value === sheet) {
+    return new Ok({ ...byId, id: sheet });
+  }
+  return new Ok({
+    ...(await dispatchRefresh(executor, kind, resolved.value, signal)),
+    id: resolved.value,
+  });
+}
+
+async function dispatchRefresh(
+  executor: ExternalApiToolExecutor,
+  kind: SheetKind,
+  id: string,
+  signal: AbortSignal,
+): Promise<Dispatched> {
+  switch (kind) {
+    case 'worksheet':
+      return { kind, result: await executor.refreshWorksheetNow(id, signal) };
+    case 'dashboard':
+      return { kind, result: await executor.refreshDashboardNow(id, signal) };
+    case 'storyboard':
+      return { kind, result: await executor.refreshStoryboardNow(id, signal) };
+  }
 }

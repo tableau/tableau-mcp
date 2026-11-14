@@ -132,7 +132,42 @@ describe('get-datasources with datasourceId', () => {
       expect(errorText(result)).toContain('Datasource not found: stale-id');
       expect(errorText(result)).toContain('tableau-error-code: datasource-not-found');
       expect(errorText(result)).not.toContain('does not serve');
-      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources/stale-id']);
+      expect(requestPaths(harness.server)).toEqual([
+        '/v0/workbook/datasources/stale-id',
+        '/v0/workbook/datasources',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it.each([
+    ['name', 'sales_ds'],
+    ['caption', 'Sales'],
+  ])('falls back to a unique %s after the id misses', async (_label, datasourceId) => {
+    const harness = await startHarness([{ id: 'sales-id', name: 'sales_ds', caption: 'Sales' }]);
+    try {
+      const result = await harness.callTool({ datasourceId });
+
+      expect(result.isError).toBe(false);
+      expect(parseResult(result)).toMatchObject({ id: 'sales-id', name: 'sales_ds' });
+      expect(requestPaths(harness.server)).toEqual([
+        `/v0/workbook/datasources/${datasourceId}`,
+        '/v0/workbook/datasources',
+        '/v0/workbook/datasources/sales-id',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('reports a value that matches neither an id nor a name', async () => {
+    const harness = await startHarness([{ id: 'sales-id', name: 'sales_ds', caption: 'Sales' }]);
+    try {
+      const result = await harness.callTool({ datasourceId: 'Missing' });
+
+      expect(result.isError).toBe(true);
+      expect(errorText(result)).toContain('Datasource "Missing" was not found');
     } finally {
       await harness.close();
     }

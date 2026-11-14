@@ -331,20 +331,20 @@ const TOOL_CASES: Record<string, ToolCase> = {
   },
   'set-auto-updates-paused': {
     make: getSetAutoUpdatesPausedTool,
-    args: { sheet: 'Sales', isAutoUpdatesPaused: true },
+    args: { sheetId: 'ws1', kind: 'worksheet', isAutoUpdatesPaused: true },
     clean: {
       paused: true,
-      sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
-      message: 'Paused auto-updates for worksheet "Sales".',
+      sheet: { id: 'ws1', kind: 'worksheet' },
+      message: 'Paused auto-updates for worksheet "ws1".',
     },
   },
   'refresh-auto-updates': {
     make: getRefreshAutoUpdatesTool,
-    args: { sheet: 'Sales' },
+    args: { sheetId: 'ws1', kind: 'worksheet' },
     clean: {
       refreshed: true,
-      worksheet: { id: 'ws1', name: 'Sales' },
-      message: 'Refreshed auto-updates for worksheet "Sales".',
+      sheet: { id: 'ws1', kind: 'worksheet' },
+      message: 'Refreshed auto-updates for worksheet "ws1".',
     },
   },
   'activate-sheet': {
@@ -468,13 +468,13 @@ describe('Desktop command tools show Desktop warnings', () => {
 
   it('words a pending dashboard refresh as a request, not a completed refresh', async () => {
     const result = await callTool(
-      { ...TOOL_CASES['refresh-auto-updates'], args: { sheet: 'Dash' } },
+      { ...TOOL_CASES['refresh-auto-updates'], args: { sheetId: 'd1', kind: 'dashboard' } },
       undefined,
       'running',
     );
 
     expect(JSON.parse(textOf(result)).message).toBe(
-      'Requested refreshing auto-updates for dashboard "Dash"; Desktop is still applying it.',
+      'Requested refreshing auto-updates for dashboard "d1"; Desktop is still applying it.',
     );
   });
 

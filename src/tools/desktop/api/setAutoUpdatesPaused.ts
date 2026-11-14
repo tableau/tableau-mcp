@@ -5,20 +5,19 @@ import { z } from 'zod';
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
-import { resolveSheetRef } from './resolveSheetRef.js';
+import { resolveSheetIdOfKind } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheet: z.string().describe('Worksheet or dashboard name/id.'),
-  kind: z
-    .enum(['worksheet', 'dashboard'])
-    .optional()
-    .describe('Restrict the lookup to one kind. Use when a name is shared across kinds.'),
+  sheetId: z
+    .string()
+    .min(1)
+    .describe('Id of the worksheet or dashboard. A unique sheet name also works.'),
+  kind: z.enum(['worksheet', 'dashboard']).describe('Which kind of sheet sheetId is.'),
   isAutoUpdatesPaused: z
     .boolean()
     .describe('true pauses automatic query execution; false resumes it.'),
@@ -44,12 +43,12 @@ export const getSetAutoUpdatesPausedTool = (
     },
     paramsSchema,
     callback: async (
-      { session, sheet, kind, isAutoUpdatesPaused },
+      { session, sheetId, kind, isAutoUpdatesPaused },
       extra,
     ): Promise<CallToolResult> => {
       return await setAutoUpdatesPausedTool.logAndExecute({
         extra,
-        args: { session, sheet, kind, isAutoUpdatesPaused },
+        args: { session, sheetId, kind, isAutoUpdatesPaused },
         getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -57,45 +56,42 @@ export const getSetAutoUpdatesPausedTool = (
             return sessionResult.error.toErr();
           }
 
-          const refResult = await resolveSheetRef({ session, sheet, kind, extra });
-          if (refResult.isErr()) {
-            return refResult.error.toErr();
-          }
-          const { ref, previousName } = refResult.value;
-          const verb = isAutoUpdatesPaused ? 'paused' : 'resumed';
-
-          if (ref.kind === 'storyboard') {
-            return new ArgsValidationError(
-              `"${previousName}" is a storyboard; auto-updates can only be ${verb} on a worksheet or dashboard.`,
-            ).toErr();
-          }
-
           const executor = await extra.getExecutor(sessionResult.value);
+          const idResult = await resolveSheetIdOfKind({
+            executor,
+            kind,
+            sheet: sheetId,
+            signal: extra.signal,
+          });
+          if (idResult.isErr()) {
+            return idResult;
+          }
+          const id = idResult.value;
           const result = isAutoUpdatesPaused
-            ? ref.kind === 'worksheet'
-              ? await executor.pauseWorksheetAutoUpdates(ref.id, extra.signal)
-              : await executor.pauseDashboardAutoUpdates(ref.id, extra.signal)
-            : ref.kind === 'worksheet'
-              ? await executor.resumeWorksheetAutoUpdates(ref.id, extra.signal)
-              : await executor.resumeDashboardAutoUpdates(ref.id, extra.signal);
+            ? kind === 'worksheet'
+              ? await executor.pauseWorksheetAutoUpdates(id, extra.signal)
+              : await executor.pauseDashboardAutoUpdates(id, extra.signal)
+            : kind === 'worksheet'
+              ? await executor.resumeWorksheetAutoUpdates(id, extra.signal)
+              : await executor.resumeDashboardAutoUpdates(id, extra.signal);
           if (result.isErr()) {
             if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild(`${ref.kind} auto-updates`).toErr();
+              return endpointNotInThisBuild(`${kind} auto-updates`).toErr();
             }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
           const completed = result.value.status === 'completed';
-          const alsoResumedContainedWorksheets = !isAutoUpdatesPaused && ref.kind === 'dashboard';
-          const scope = `${ref.kind} "${previousName}"${alsoResumedContainedWorksheets ? ' and every worksheet it contains' : ''}`;
+          const alsoResumedContainedWorksheets = !isAutoUpdatesPaused && kind === 'dashboard';
+          const scope = `${kind} "${id}"${alsoResumedContainedWorksheets ? ' and every worksheet it contains' : ''}`;
           const subject = completed
             ? `${isAutoUpdatesPaused ? 'Paused' : 'Resumed'} auto-updates for ${scope}`
             : `Requested ${isAutoUpdatesPaused ? 'pausing' : 'resuming'} auto-updates for ${scope}; Desktop is still applying it`;
           return new Ok(
             commandOk(
               {
-                [verb]: completed,
-                sheet: { id: ref.id, kind: ref.kind, name: previousName },
+                [isAutoUpdatesPaused ? 'paused' : 'resumed']: completed,
+                sheet: { id, kind },
                 ...(alsoResumedContainedWorksheets ? { alsoResumedContainedWorksheets: true } : {}),
                 message: `${subject}.`,
               },

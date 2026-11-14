@@ -20,7 +20,6 @@ import { getRefreshAutoUpdatesTool } from './refreshAutoUpdates.js';
 vi.mock('../../../desktop/session/sessionResolution.js');
 
 const DASHBOARD_ID = 'dash-exec';
-const DASHBOARD_NAME = 'Executive Dashboard';
 const ROUTE = `/v0/workbook/dashboards/${DASHBOARD_ID}:refreshNow`;
 
 beforeEach(() => {
@@ -33,13 +32,10 @@ describe('refresh-auto-updates on a dashboard', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it.each([
-    ['name', DASHBOARD_NAME],
-    ['stable id', DASHBOARD_ID],
-  ])('resolves a dashboard by %s and POSTs the bodyless route', async (_label, dashboard) => {
+  it('POSTs the bodyless dashboard route', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: dashboard });
+      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
 
       expect(result.isError).toBe(false);
       expect(refreshRequests(harness.server)).toEqual([
@@ -51,14 +47,14 @@ describe('refresh-auto-updates on a dashboard', () => {
         }),
       ]);
       expect(parseText(result)).toEqual({
-        dashboard: { id: DASHBOARD_ID, name: DASHBOARD_NAME },
+        sheet: { id: DASHBOARD_ID, kind: 'dashboard' },
         outcome: 'COMPLETE',
         refreshed: [
           { worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' },
           { worksheetId: 'sheet-profit', worksheetName: 'Profit by Category' },
         ],
         failed: [],
-        message: `Refreshed auto-updates for dashboard "${DASHBOARD_NAME}".`,
+        message: `Refreshed auto-updates for dashboard "${DASHBOARD_ID}".`,
       });
       expect(result.structuredContent).toBeUndefined();
     } finally {
@@ -77,13 +73,13 @@ describe('refresh-auto-updates on a dashboard', () => {
         });
       });
       try {
-        const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+        const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
 
         expect(result.isError).toBe(false);
         expect(parseText(result)).toEqual({
           refreshed: false,
-          dashboard: { id: DASHBOARD_ID, name: DASHBOARD_NAME },
-          message: `Requested refreshing auto-updates for dashboard "${DASHBOARD_NAME}"; Desktop is still applying it.`,
+          sheet: { id: DASHBOARD_ID, kind: 'dashboard' },
+          message: `Requested refreshing auto-updates for dashboard "${DASHBOARD_ID}"; Desktop is still applying it.`,
         });
       } finally {
         await harness.close();
@@ -124,12 +120,12 @@ describe('refresh-auto-updates on a dashboard', () => {
         });
       });
       try {
-        const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+        const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
         const body = parseText(result);
 
         expect(result.isError).toBe(false);
         expect(body.message).toBe(
-          `Desktop reported a ${outcome} refresh of auto-updates for dashboard "${DASHBOARD_NAME}": ${counts}.`,
+          `Desktop reported a ${outcome} refresh of auto-updates for dashboard "${DASHBOARD_ID}": ${counts}.`,
         );
         expect(body).toMatchObject({ outcome });
         expect(result.structuredContent).toHaveProperty('nextAction.kind', 'prefill');
@@ -155,12 +151,12 @@ describe('refresh-auto-updates on a dashboard', () => {
       });
     });
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
       const body = parseText(result);
 
       expect(result.isError).toBe(false);
       expect(body.message).toContain(
-        `Desktop reported a PARTIAL refresh of auto-updates for dashboard "${DASHBOARD_NAME}": 0 worksheets refreshed, 0 failed, but Desktop reported 1 warning(s).`,
+        `Desktop reported a PARTIAL refresh of auto-updates for dashboard "${DASHBOARD_ID}": 0 worksheets refreshed, 0 failed, but Desktop reported 1 warning(s).`,
       );
       expect(body.message).toContain('Refresh was slow.');
       expect(body.warnings).toEqual([{ code: 'slow-refresh', message: 'Refresh was slow.' }]);
@@ -169,43 +165,6 @@ describe('refresh-auto-updates on a dashboard', () => {
         warnings: [{ code: 'slow-refresh', message: 'Refresh was slow.' }],
         nextAction: { kind: 'prefill' },
       });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('rejects a worksheet name when the lookup is restricted to dashboards', async () => {
-    const harness = await startHarness();
-    try {
-      const result = await harness.callTool({ sheet: 'Sales by Region', kind: 'dashboard' });
-
-      expect(result.isError).toBe(true);
-      expect(text(result)).toContain('Sheet "Sales by Region" was not found');
-      expect(refreshRequests(harness.server)).toHaveLength(0);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('rejects an ambiguous dashboard name before dispatch', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/dashboards', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          dashboards: [
-            { id: 'dash-a', name: 'Overview', hidden: false },
-            { id: 'dash-b', name: 'Overview', hidden: false },
-          ],
-        }),
-      });
-    });
-    try {
-      const result = await harness.callTool({ sheet: 'Overview' });
-
-      expect(result.isError).toBe(true);
-      expect(text(result)).toMatch(/matched multiple sheets.*dash-a.*dash-b/);
-      expect(refreshRequests(harness.server)).toHaveLength(0);
     } finally {
       await harness.close();
     }
@@ -259,12 +218,12 @@ describe('refresh-auto-updates on a dashboard', () => {
         });
       });
       try {
-        const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+        const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
         const body = parseText(result);
 
         expect(result.isError).toBe(true);
         expect(body).toMatchObject({
-          dashboard: { id: DASHBOARD_ID, name: DASHBOARD_NAME },
+          sheet: { id: DASHBOARD_ID, kind: 'dashboard' },
           outcome,
           refreshed,
           failed,
@@ -323,7 +282,7 @@ describe('refresh-auto-updates on a dashboard', () => {
       });
     });
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
       const body = parseText(result);
 
       expect(result.isError).toBe(true);
@@ -355,7 +314,7 @@ describe('refresh-auto-updates on a dashboard', () => {
       });
     });
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('The dashboard is closing.');
@@ -380,7 +339,7 @@ describe('refresh-auto-updates on a dashboard', () => {
       });
     });
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('invalid-response');
@@ -398,7 +357,7 @@ describe('refresh-auto-updates on a dashboard', () => {
       );
     });
     try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('Desktop build does not serve');
@@ -410,8 +369,8 @@ describe('refresh-auto-updates on a dashboard', () => {
 });
 
 type ToolArgs = {
-  sheet: string;
-  kind?: 'worksheet' | 'dashboard' | 'storyboard';
+  sheetId: string;
+  kind: 'worksheet' | 'dashboard' | 'storyboard';
   session?: string;
 };
 type Harness = {
@@ -434,7 +393,8 @@ async function startHarness(
   };
   return {
     server,
-    callTool: async ({ session, sheet, kind }) => await callback({ session, sheet, kind }, extra),
+    callTool: async ({ session, sheetId, kind }) =>
+      await callback({ session, sheetId, kind }, extra),
     close: async () => {
       executor.stop();
       await server.close();

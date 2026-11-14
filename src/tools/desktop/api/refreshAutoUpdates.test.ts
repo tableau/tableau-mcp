@@ -20,9 +20,6 @@ import { getRefreshAutoUpdatesTool } from './refreshAutoUpdates.js';
 vi.mock('../../../desktop/session/sessionResolution.js');
 
 const WORKSHEET_ID = 'sheet-sales';
-const WORKSHEET_NAME = 'Sales by Region';
-const DASHBOARD_NAME = 'Executive Dashboard';
-const STORYBOARD_NAME = 'QBR Story';
 const REFRESH_ROUTE = `/v0/workbook/worksheets/${WORKSHEET_ID}:refreshNow`;
 
 beforeEach(() => {
@@ -48,10 +45,10 @@ describe('refresh-auto-updates', () => {
     });
   });
 
-  it('resolves a worksheet name and POSTs its exact bodyless refresh route', async () => {
+  it('POSTs the exact bodyless worksheet refresh route', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
 
       expect(result.isError).toBe(false);
       const posted = refreshRequests(harness.server);
@@ -64,49 +61,23 @@ describe('refresh-auto-updates', () => {
       });
       expect(parseResult(result)).toEqual({
         refreshed: true,
-        worksheet: { id: WORKSHEET_ID, name: WORKSHEET_NAME },
-        message: `Refreshed auto-updates for worksheet "${WORKSHEET_NAME}".`,
+        sheet: { id: WORKSHEET_ID, kind: 'worksheet' },
+        message: `Refreshed auto-updates for worksheet "${WORKSHEET_ID}".`,
       });
     } finally {
       await harness.close();
     }
   });
 
-  it('resolves a stable worksheet id before dispatching refresh', async () => {
-    const harness = await startHarness();
-    try {
-      const result = await harness.callTool({ sheet: WORKSHEET_ID });
-
-      expect(result.isError).toBe(false);
-      expect(refreshRequests(harness.server)).toHaveLength(1);
-      expect(parseResult(result).worksheet).toEqual({ id: WORKSHEET_ID, name: WORKSHEET_NAME });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('restricts the lookup to the given kind', async () => {
-    const harness = await startHarness();
-    try {
-      const result = await harness.callTool({ sheet: DASHBOARD_NAME, kind: 'worksheet' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain(`Sheet "${DASHBOARD_NAME}" was not found`);
-      expect(refreshRequests(harness.server)).toHaveLength(0);
-    } finally {
-      await harness.close();
-    }
-  });
-
   it.each([
-    ['dashboard', DASHBOARD_NAME, '0.2.18'],
-    ['storyboard', STORYBOARD_NAME, '0.2.19'],
+    ['dashboard', 'dash-exec', '0.2.18'],
+    ['storyboard', 'story-qbr', '0.2.19'],
   ] as const)(
     'reports a %s refresh as unavailable below its floor without dispatching',
-    async (_kind, sheet, apiVersion) => {
+    async (kind, sheetId, apiVersion) => {
       const harness = await startHarness(undefined, apiVersion);
       try {
-        const result = await harness.callTool({ sheet });
+        const result = await harness.callTool({ sheetId, kind });
 
         expect(result.isError).toBe(true);
         expect(errorText(result)).toContain('Desktop build does not serve');
@@ -117,38 +88,36 @@ describe('refresh-auto-updates', () => {
     },
   );
 
-  it('rejects a missing sheet without dispatching refresh', async () => {
+  it.each([
+    ['worksheet', 'Sales by Region', '/v0/workbook/worksheets/sheet-sales:refreshNow'],
+    ['dashboard', 'Executive Dashboard', '/v0/workbook/dashboards/dash-exec:refreshNow'],
+    ['storyboard', 'QBR Story', '/v0/workbook/storyboards/story-qbr:refreshNow'],
+  ] as const)(
+    'falls back to a unique %s name after the id misses',
+    async (kind, sheetId, resolvedRoute) => {
+      const harness = await startHarness(undefined, '0.2.20');
+      try {
+        const result = await harness.callTool({ sheetId, kind });
+
+        expect(result.isError).toBe(false);
+        expect(refreshRequests(harness.server).map((request) => request.path)).toEqual([
+          `/v0/workbook/${kind}s/${encodeURIComponent(sheetId)}:refreshNow`,
+          resolvedRoute,
+        ]);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it('reports a value that matches neither an id nor a name of that kind', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ sheet: 'Missing Sheet' });
+      const result = await harness.callTool({ sheetId: 'Executive Dashboard', kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('was not found');
-      expect(refreshRequests(harness.server)).toHaveLength(0);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('rejects an ambiguous worksheet name without dispatching refresh', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          worksheets: [
-            { id: 'sheet-a', name: 'Regional Sales', hidden: false, isActiveSheet: false },
-            { id: 'sheet-b', name: 'Regional Sales', hidden: false, isActiveSheet: false },
-          ],
-        }),
-      });
-    });
-    try {
-      const result = await harness.callTool({ sheet: 'Regional Sales' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toMatch(/matched multiple sheets.*sheet-a.*sheet-b/);
-      expect(refreshRequests(harness.server)).toHaveLength(0);
+      expect(errorText(result)).toContain('Worksheet "Executive Dashboard" was not found');
+      expect(refreshRequests(harness.server)).toHaveLength(1);
     } finally {
       await harness.close();
     }
@@ -168,7 +137,7 @@ describe('refresh-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject({ refreshed: false });
@@ -190,7 +159,7 @@ describe('refresh-auto-updates', () => {
       );
     });
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Desktop build does not serve');
@@ -216,7 +185,7 @@ describe('refresh-auto-updates', () => {
       });
     });
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Worksheet refresh failed.');
@@ -234,7 +203,7 @@ describe('refresh-auto-updates', () => {
       );
     });
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Host failed to refresh worksheet.');
@@ -252,7 +221,7 @@ describe('refresh-auto-updates', () => {
       );
     });
     try {
-      const result = await harness.callTool({ sheet: WORKSHEET_NAME });
+      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain(`Worksheet not found: ${WORKSHEET_ID}`);
@@ -264,8 +233,8 @@ describe('refresh-auto-updates', () => {
 });
 
 type RefreshAutoUpdatesArgs = {
-  sheet: string;
-  kind?: 'worksheet' | 'dashboard' | 'storyboard';
+  sheetId: string;
+  kind: 'worksheet' | 'dashboard' | 'storyboard';
   session?: string;
 };
 
@@ -294,7 +263,8 @@ async function startHarness(
 
   return {
     server,
-    callTool: async ({ session, sheet, kind }) => await callback({ session, sheet, kind }, extra),
+    callTool: async ({ session, sheetId, kind }) =>
+      await callback({ session, sheetId, kind }, extra),
     close: async () => {
       executor.stop();
       await server.close();
@@ -320,7 +290,7 @@ function refreshRequests(server: MockExternalApiServer): RecordedRequest[] {
 
 type RefreshResult = {
   refreshed: boolean;
-  worksheet: { id: string; name: string };
+  sheet: { id: string; kind: string };
   message: string;
 };
 
