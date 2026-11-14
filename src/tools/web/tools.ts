@@ -48,7 +48,9 @@ import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getDownloadWorkbookTool } from './workbooks/downloadWorkbook.js';
+import { getDownloadWorkbookRevisionTool } from './workbooks/downloadWorkbookRevision.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
+import { getListWorkbookRevisionsTool } from './workbooks/listWorkbookRevisions.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 import { getMoveWorkbookTool } from './workbooks/moveWorkbook.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
@@ -90,6 +92,8 @@ export const webToolFactories = [
   getGeneratePulseInsightBriefTool,
   getGenerateInsightCardsTool,
   getDownloadWorkbookTool,
+  getDownloadWorkbookRevisionTool,
+  getListWorkbookRevisionsTool,
   getGetWorkbookTool,
   getRequestWorkbookUploadTool,
   getPublishWorkbookTool,

@@ -396,6 +396,14 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  'list-workbook-revisions': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES),
+  },
+  'download-workbook-revision': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'download-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -643,6 +651,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+    enabledTools.delete('download-workbook-revision');
   }
 
   if (!datasourceAuthoringEnabled) {
