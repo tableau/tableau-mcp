@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { Provider } from '../../../utils/provider.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { projectDatasource, ProjectedDatasource } from './datasourceResult.js';
@@ -103,4 +104,27 @@ export const getDatasourcesTool = (server: DesktopMcpServer): DesktopTool<typeof
   });
 
   return getDatasources;
+};
+
+const listParamsSchema = {
+  session: sessionParam(),
+};
+
+export const getListWorkbookDatasourcesTool = (
+  server: DesktopMcpServer,
+): DesktopTool<typeof listParamsSchema> => {
+  const getDatasources = getDatasourcesTool(server);
+  return new DesktopTool({
+    server,
+    name: 'list-workbook-datasources',
+    title: 'List Workbook Datasources',
+    description:
+      'Deprecated: use get-datasources instead. Same as get-datasources without datasourceId.',
+    paramsSchema: listParamsSchema,
+    annotations: getDatasources.annotations,
+    callback: async ({ session }, extra): Promise<CallToolResult> => {
+      const callback = await Provider.from(getDatasources.callback);
+      return await callback({ session, datasourceId: undefined }, extra);
+    },
+  });
 };

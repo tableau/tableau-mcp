@@ -17,7 +17,7 @@ import { getActiveDialogsTool } from './api/getActiveDialogs.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
-import { getDatasourcesTool } from './api/getDatasources.js';
+import { getDatasourcesTool, getListWorkbookDatasourcesTool } from './api/getDatasources.js';
 import { getDatasourceUnderlyingDataTool } from './api/getDatasourceUnderlyingData.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
@@ -39,7 +39,6 @@ import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalT
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListSavedDatasourcesTool } from './api/listSavedDatasources.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
-import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
