@@ -23,6 +23,7 @@ export type StagedUploadKind<FileType extends string> = {
   noun: string;
   fileTypes: ReadonlyArray<FileType>;
   xmlFileType: FileType;
+  contentTypes?: Readonly<Partial<Record<FileType, string>>>;
 };
 
 export type ResolvedStagedFile = {
@@ -59,7 +60,8 @@ export async function requestStagedUpload<FileType extends string>({
 
   const uploadId = randomUUID();
   const contentType =
-    fileType === kind.xmlFileType ? 'application/xml' : 'application/octet-stream';
+    kind.contentTypes?.[fileType] ??
+    (fileType === kind.xmlFileType ? 'application/xml' : 'application/octet-stream');
   const uploadUrl = await createPresignedPutUrlToS3({
     key: buildStagedUploadS3Key(kind, config.keyPrefix, tenant, uploadId, fileType),
     contentType,
