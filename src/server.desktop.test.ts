@@ -464,11 +464,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 82-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 83-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(82);
+      expect(selected).toHaveLength(83);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -496,6 +496,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'get-summary-data',
         'get-workbook-inventory',
         'get-datasources',
+        'list-workbook-datasources',
         'get-datasource-xml',
         'apply-datasource',
         'activate-sheet',

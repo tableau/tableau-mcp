@@ -64,6 +64,7 @@ export const desktopToolNames = [
   'export-storyboard-image',
   'get-workbook-inventory',
   'get-datasources',
+  'list-workbook-datasources',
   'get-datasource-xml',
   'apply-datasource',
   'validate-worksheet-xml',
