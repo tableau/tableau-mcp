@@ -82,6 +82,10 @@ Example:
 
 ### `filter`
 
+For exact tag-only discovery, use `tagLabels` on List Workbooks, List Views or List Datasources.
+This ranked search tool's filter does not expose tags; a free-text match is not an exact tag filter.
+See [Search Content by Tag](../content/search-content-by-tag.md).
+
 An object that allows you to limit search results based on:
 
 - `contentTypes`: Filter by content types (array of strings). Supported types are: `lens`,

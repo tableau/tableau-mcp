@@ -48,6 +48,8 @@ export const webToolNames = [
   'query-admin-insights',
   'update-user',
   'delete-content',
+  'add-content-tags',
+  'remove-content-tag',
   'confirm-delete-content',
   'render-interactive-viz',
   'query-knowledge-context',
@@ -130,7 +132,7 @@ export const webToolGroups = {
   'token-management': ['revoke-access-token', 'reset-consent'],
   'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
-  content: ['delete-content', 'confirm-delete-content'],
+  content: ['delete-content', 'confirm-delete-content', 'add-content-tags', 'remove-content-tag'],
   knowledge: ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
   'data-apps': ['scaffold-data-app'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;

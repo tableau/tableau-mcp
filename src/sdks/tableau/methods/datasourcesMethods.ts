@@ -15,6 +15,11 @@ import {
 } from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+import {
+  assertEmptyTagMutationResponse,
+  assertTagMutationResponse,
+  encodeTagLabel,
+} from './tagUtils.js';
 
 /**
  * Data Sources methods of the Tableau Server REST API
@@ -173,18 +178,19 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     siteId: string;
     tagLabels: ReadonlyArray<string>;
   }): Promise<void> => {
-    await this._apiClient.addTagsToDatasource(
+    const response = await this._apiClient.addTagsToDatasource(
       { tags: { tag: tagLabels.map((label) => ({ label })) } },
       {
         params: { siteId, datasourceId },
         ...this.authHeader,
       },
     );
+    assertTagMutationResponse(response);
   };
 
   /**
-   * Removes a single tag (by label) from the specified data source. Responds 204; removing a tag the
-   * data source does not carry is a no-op on the server.
+   * Removes a single tag (by exact decoded label) from the specified data source. Responds 204
+   * on success; a missing tag may return 404007. Other tags are preserved.
    *
    * Required scopes (Tableau Cloud): `tableau:datasource_tags:delete`
    *
@@ -202,10 +208,11 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     siteId: string;
     tagLabel: string;
   }): Promise<void> => {
-    await this._apiClient.deleteTagFromDatasource(undefined, {
-      params: { siteId, datasourceId, tagName: tagLabel },
+    const response = await this._apiClient.deleteTagFromDatasource(undefined, {
+      params: { siteId, datasourceId, tagName: encodeTagLabel(tagLabel) },
       ...this.authHeader,
     });
+    assertEmptyTagMutationResponse(response);
   };
 
   /**

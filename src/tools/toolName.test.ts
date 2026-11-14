@@ -1,7 +1,7 @@
 import { DesktopMcpServer } from '../server.desktop.js';
 import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './desktop/tools.js';
-import { isWebToolName, webToolNames } from './web/toolName.js';
+import { isWebToolName, webToolGroups, webToolNames } from './web/toolName.js';
 
 /** Names both variants register, each with its own implementation. */
 const crossVariantToolNames = new Set<string>(['scaffold-data-app']);
@@ -48,6 +48,15 @@ describe('ToolName', () => {
         const overlap = new Set(toolNamesA.filter((toolName) => isToolNameB(toolName)));
         expect(overlap).toEqual(crossVariantToolNames);
       }
+    }
+  });
+});
+
+describe('content tag tool groups', () => {
+  it('classifies generic tag operations as web content tools', () => {
+    for (const name of ['add-content-tags', 'remove-content-tag'] as const) {
+      expect(isWebToolName(name)).toBe(true);
+      expect(webToolGroups.content).toContain(name);
     }
   });
 });

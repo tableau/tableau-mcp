@@ -42,6 +42,8 @@ type JwtScopes =
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbook_tags:delete'
+  | 'tableau:view_tags:update'
+  | 'tableau:view_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'

@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
@@ -23,12 +22,23 @@ import {
   GetPageResult,
   MAX_PAGE_SIZE,
 } from '../../../utils/paginate.js';
+import {
+  contentTagSearchDescription,
+  contentTagSearchLabelsSchema,
+  withContentTagFilter,
+} from '../_lib/contentTagFilter.js';
+import { withContentTagResponseValidation } from '../_lib/contentTagResponse.js';
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {
+  tagLabels: contentTagSearchLabelsSchema
+    .optional()
+    .describe(
+      'Exact decoded tags to search for. One label matches that tag; multiple labels match ANY (OR). Cannot be combined with a tags clause in filter.',
+    ),
   filter: z.string().optional(),
   pageNumber: z
     .number()
@@ -87,6 +97,9 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
 
   ${genericFilterDescription}
 
+  **Tag-only discovery**
+  ${contentTagSearchDescription}
+
   **Example Usage:**
   - List views with the name "Overview":
       filter: "name:eq:Overview"
@@ -109,15 +122,19 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, tagLabels, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
 
       return await listViewsTool.logAndExecute<ListViewsResult>({
         extra,
-        args: {},
+        args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
+          const combinedFilter = withContentTagFilter(filter, tagLabels);
+          if (combinedFilter.isErr()) return combinedFilter;
+          const validatedFilter = combinedFilter.value
+            ? parseAndValidateViewsFilterString(combinedFilter.value)
+            : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,
             maxResultLimit,
@@ -126,9 +143,11 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
             return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
           }
 
-          return new Ok(
-            await useRestApi({
+          return await withContentTagResponseValidation(() =>
+            useRestApi({
               ...extra,
+              // Raw pages precede bounded-context checks.
+              disableLogging: true,
               jwtScopes: listViewsTool.requiredApiScopes,
               callback: async (restApi) => {
                 // Fast path: when results are scoped to a specific set of view IDs and the user

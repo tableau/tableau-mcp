@@ -1,7 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { OverridableConfig } from '../../../overridableConfig.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
@@ -54,6 +57,102 @@ describe('listViewsTool', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  describe('tag-only discovery', () => {
+    it.each([
+      { labels: ['Sales'], expected: 'tags:eq:Sales' },
+      { labels: ['Sales', 'Finance', 'Sales'], expected: 'tags:in:[Sales,Finance]' },
+      { labels: ['売上 #1'], expected: 'tags:eq:売上 #1' },
+      { labels: ['pending-deletion-2026-10-14'], expected: 'tags:eq:pending-deletion-2026-10-14' },
+    ])(
+      'passes $expected through the native list API with normal pagination',
+      async ({ labels, expected }) => {
+        mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
+        const result = await getToolResult({ tagLabels: labels, pageNumber: 2, limit: 5 });
+        expect(result.isError).toBe(false);
+        expect(vi.mocked(useRestApi).mock.calls.at(-1)?.[0].disableLogging).toBe(true);
+        expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            filter: expected,
+            pageNumber: 2,
+            pageSize: 1000,
+          }),
+        );
+      },
+    );
+
+    it('contains malformed tag-search response metadata without notifications', async () => {
+      const sentinel = 'SYNTHETIC_TAG_SEARCH_METADATA';
+      mocks.mockQueryViewsForSiteData.mockRejectedValueOnce(
+        new ZodiosError(`Malformed response ${sentinel}`),
+      );
+      const result = await getToolResult({ tagLabels: ['Sales'] });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        {
+          type: 'text',
+          text: 'Tableau returned an invalid content response. Tag search results could not be verified.',
+        },
+      ]);
+      expect(JSON.stringify(result)).not.toContain(sentinel);
+      expect(vi.mocked(useRestApi).mock.calls.at(-1)?.[0].disableLogging).toBe(true);
+    });
+
+    it('ANDs non-tag filter fields with the typed tag condition', async () => {
+      mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
+      const result = await getToolResult({
+        filter: 'projectName:eq:Finance',
+        tagLabels: ['Sales'],
+      });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'projectName:eq:Finance,tags:eq:Sales' }),
+      );
+    });
+
+    it('returns exact tag-clause conflict guidance before REST', async () => {
+      const result = await getToolResult({ filter: 'tags:eq:Old', tagLabels: ['Sales'] });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: 'text', text: 'Use tagLabels or a tags clause in filter, not both.' },
+      ]);
+      expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { labels: ['A,B'], filter: undefined },
+      { labels: ['Sales'], filter: 'tags:eq:Old' },
+    ])(
+      'renders expected tag-input guidance through getErrorText for $labels / $filter',
+      async ({ labels, filter }) => {
+        const render = vi
+          .spyOn(ArgsValidationError.prototype, 'getErrorText')
+          .mockReturnValue('Curated tag-search input guidance');
+        try {
+          const result = await getToolResult({ filter, tagLabels: labels });
+          expect(result.isError).toBe(true);
+          expect(result.content).toEqual([
+            { type: 'text', text: 'Curated tag-search input guidance' },
+          ]);
+          expect(render).toHaveBeenCalledOnce();
+          expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+        } finally {
+          render.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      { labels: ['A,B'], filter: undefined },
+      { labels: ['Sales],name:eq:Secret'], filter: undefined },
+      { labels: ['%252C'], filter: undefined },
+      { labels: ['Sales'], filter: 'tags:eq:Old' },
+    ])('rejects ambiguous tag inputs before REST', async ({ labels, filter }) => {
+      const result = await getToolResult({ filter, tagLabels: labels });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -244,7 +343,12 @@ describe('listViewsTool', () => {
 
       const callback = await Provider.from(getListViewsTool(new WebMcpServer()).callback);
       const result = await callback(
-        { filter: 'name:eq:Overview', pageNumber: undefined, limit: params.limit },
+        {
+          filter: 'name:eq:Overview',
+          tagLabels: undefined,
+          pageNumber: undefined,
+          limit: params.limit,
+        },
         extra,
       );
       expect(result.isError).toBe(false);
@@ -662,6 +766,7 @@ describe('listViewsTool', () => {
 });
 
 async function getToolResult(params: {
+  tagLabels?: string[];
   filter?: string;
   pageNumber?: number;
   limit?: number;
@@ -680,6 +785,7 @@ async function getToolResult(params: {
   return await callback(
     {
       filter: params.filter,
+      tagLabels: params.tagLabels,
       pageNumber: params.pageNumber,
       limit: params.limit,
     },
