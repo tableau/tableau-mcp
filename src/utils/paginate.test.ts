@@ -1014,7 +1014,33 @@ describe('getPageExceedsLimitMessage', () => {
   });
 });
 
-describe('pulsePaginate', () => {
+describe('TEST-PULSEPAGE-PAGINATOR: pulsePaginate', () => {
+  it('rejects a repeated continuation token without including it in the error', async () => {
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValue(
+        new Ok({ data: [{ id: 1 }], pagination: { next_page_token: 'private-token' } }),
+      );
+    await expect(pulsePaginate({ config: {}, getDataFn })).rejects.toThrow(
+      'Pulse pagination returned a repeated continuation token.',
+    );
+    expect(getDataFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a positive next-page size when a continuation outlives the reported total', async () => {
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Ok({ data: [{ id: 1 }], pagination: { total_available: 1, next_page_token: 'next' } }),
+      )
+      .mockResolvedValueOnce(new Ok({ data: [{ id: 2 }], pagination: {} }));
+    expect((await pulsePaginate({ config: {}, getDataFn })).unwrap()).toEqual([
+      { id: 1 },
+      { id: 2 },
+    ]);
+    expect(getDataFn).toHaveBeenNthCalledWith(2, 'next', 1);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
