@@ -38,6 +38,10 @@ import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderIntera
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
+import { getCreateSubscriptionTool } from './subscriptions/createSubscription.js';
+import { getListSubscriptionsTool } from './subscriptions/listSubscriptions.js';
+import { getResumeSubscriptionTool } from './subscriptions/resumeSubscription.js';
+import { getSuspendSubscriptionTool } from './subscriptions/suspendSubscription.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -55,6 +59,10 @@ import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
 export const webToolFactories = [
+  getListSubscriptionsTool,
+  getCreateSubscriptionTool,
+  getSuspendSubscriptionTool,
+  getResumeSubscriptionTool,
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,
