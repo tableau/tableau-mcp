@@ -704,3 +704,132 @@ describe('binder/bind-behavior-matrix — DISCOVER-AND-PIN (pinned-current-behav
     expect(res.status, `${ask} pinned not-bound`).not.toBe('bound');
   });
 });
+
+// ── DATE FILTERS: a valueless date filter binds only on a positive interactive cue ──
+const DATE_FILTER_BOUND: readonly string[] = [
+  'bar chart of Sales by Sub-Category with an Order Date filter, sorted descending',
+  'bar chart of Sales by Sub-Category with an Order Date filter on this sheet',
+  'bar chart of Sales by Sub-Category with an interactive Order Date filter',
+  'bar chart of Sales by Sub-Category filtered by Order Date',
+  'bar chart of Sales by Sub-Category with an Order Date year filter',
+  'bar chart of Sales by Sub-Category with Order Date filter',
+  'bar chart of Sales by Sub-Category with Order Date and Region filters',
+  'bar chart of Sales by Sub-Category with Region and Order Date filters',
+  'bar chart of Sales by Sub-Category, filter by Region and Order Date',
+  'top 1000 Sub-Category by Sales as a bar chart with an Order Date filter',
+];
+const DATE_FILTER_NOT_BOUND: readonly string[] = [
+  'bar chart of Sales by Sub-Category with an Order Date filter title it Summer',
+  'bar chart of Sales by Sub-Category with an Order Date filter, titled West Sales',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it Regional Overview',
+  'bar chart of Sales by Sub-Category with an Order Date filter, title it Current Sales',
+  'bar chart of Sales by Sub-Category for 2026 titled Second Half with an Order Date filter',
+  'bar chart of Sales by Sub-Category with an Order Date filter titled first half',
+  'bar chart of Sales by Sub-Category with an Order Date filter titled Christmas',
+  'bar chart of Sales by Sub-Category with an Order Date filter titled Weekends',
+  'bar chart of Sales by Sub-Category with an Order Date filter titled Overview excluding weekends',
+  "bar chart of Sales by Sub-Category with an Order Date filter titled 'Recap excluding holidays'",
+  'titled Spring, bar chart of Sales by Sub-Category, filter Order Date to 2026',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it H1 only',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it Q4 Holiday Sales',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it Last 30 Days',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it "Only 2025"',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it 2025 vs 2024',
+  'bar chart of Sales by Sub-Category with an Order Date filter titled it H1 only',
+  'bar chart of Sales by Sub-Category for H1 with an Order Date filter',
+  'bar chart of Sales by Sub-Category for the current year with an Order Date filter',
+  'bar chart of Sales by Sub-Category for the latest year, with an Order Date filter',
+  'bar chart of Sales by Sub-Category over the summer with an Order Date filter',
+  'bar chart of Sales by Sub-Category at Christmas with an Order Date filter',
+  'bar chart of Sales by Sub-Category for the first half with an Order Date filter',
+  'bar chart of Sales by Sub-Category for recent orders with an Order Date filter',
+  'bar chart of Sales by Sub-Category for twenty twenty five with an Order Date filter',
+  "bar chart of Sales by Sub-Category for '25 with an Order Date filter",
+  'bar chart of Sales by Sub-Category YTD-ish with an Order Date filter',
+  'bar chart of Sales by Sub-Category in fiscal 25 with an Order Date filter',
+  'bar chart of Sales by Sub-Category with an Order Date filter title it anything, only H1 data',
+  'bar chart of Sales by Sub-Category with an Order Date filter set to the most recent year, with an Order Date filter',
+  'bar chart of Sales by Sub-Category with an Order Date filter for 3/1/25, Ship Date filter',
+  'bar chart of Sales by Sub-Category with an Order Date filter, latest year only',
+  'bar chart of Sales by Sub-Category with an Order Date filter, year to date',
+  'bar chart of Sales by Sub-Category with an Order Date filter for the current year',
+  'bar chart of Sales by Sub-Category with an Order Date filter showing the most recent year',
+  'bar chart of Sales by Sub-Category with an Order Date filter for this year',
+  'bar chart of Sales by Sub-Category with an Order Date filter for the holidays',
+  'bar chart of Sales by Sub-Category with an Order Date filter for Christmas',
+  'bar chart of Sales by Sub-Category with an Order Date filter from twenty twenty five',
+  'bar chart of Sales by Sub-Category with an Order Date filter for 2025-2026',
+  "bar chart of Sales by Sub-Category with an Order Date filter for '25",
+  'bar chart of Sales by Sub-Category with an Order Date filter for H1',
+  'bar chart of Sales by Sub-Category with an Order Date filter for the first half',
+  'bar chart of Sales by Sub-Category with an Order Date filter for summer',
+  'bar chart of Sales by Sub-Category with an Order Date filter, excluding weekends',
+  'bar chart of Sales by Sub-Category with an Order Date filter for recent orders',
+  'bar chart of Sales by Sub-Category with an Order Date filter on the 15th',
+  'bar chart of Sales by Sub-Category with an Order Date filter, only the current month',
+  'bar chart of Sales by Sub-Category with an Order Date filter for 3/1/2025',
+  'bar chart of Sales by Sub-Category with an Order Date filter for 2026',
+  'bar chart of Sales by Sub-Category with an Order Date filter in 2026',
+  'bar chart of Sales by Sub-Category with an Order Date filter 2026',
+  'bar chart of Sales by Sub-Category with an Order Date filter for my 2026 review',
+  'bar chart of Sales by Sub-Category with an Order Date filter for our board',
+  'bar chart of Sales by Sub-Category with an Order Date filter, last bar highlighted',
+  'bar chart of Sales by Sub-Category with an Order Date filter for the last 12 months',
+  'bar chart of Sales by Sub-Category with an Order Date filter for the latest month',
+  'bar chart of Sales by Sub-Category with an Order Date filter, current year only',
+  'bar chart of Sales by Sub-Category with an Order Date filter, most recent 3 years',
+  'bar chart of Sales by Sub-Category with an Order Date filter, except 2025',
+  'bar chart of Sales by Sub-Category with an Order Date filter, not in 2025',
+  'bar chart of Sales by Sub-Category with an Order Date filter defaulting to the latest year',
+  'bar chart of Sales by Sub-Category with an interactive Order Date filter defaulting to the latest year',
+  'bar chart of Sales by Sub-Category with Order Date and Region filters for Q1',
+  'bar chart of Sales by Sub-Category filtered by Order Date and Segment = Consumer',
+  'bar chart of Sales by Sub-Category, filter Order Date to March',
+  'bar chart of Sales by Sub-Category, filter Order Date to January',
+  'bar chart of Sales by Sub-Category, filter Order Date to yesterday',
+  'bar chart of Sales by Sub-Category, filter Order Date to FY26',
+  'bar chart of Sales by Sub-Category, filter Order Date since June',
+  'bar chart of Sales by Sub-Category, filter Order Date for the week of Nov 3',
+  'bar chart of Sales by Sub-Category, filter Order Date to 2026',
+  'bar chart of Sales by Sub-Category with an Order Date filter for last quarter',
+  'bar chart of Sales by Sub-Category with an interactive Order Date filter set to March',
+  'bar chart of Sales by Sub-Category with an interactive Order Date filter for Q2',
+  'bar chart of Sales by Sub-Category showing only March with an Order Date filter',
+  'March sales by Sub-Category as a bar chart with an interactive Order Date filter',
+  'Q2 sales by Sub-Category as a bar chart with an interactive Order Date filter',
+  'bar chart of Sales by Sub-Category with an Order Date filter, March only',
+  'bar chart of Sales by Sub-Category limited to March with an Order Date filter',
+  'bar chart of Sales by Sub-Category with an Order Date filter: March',
+  'bar chart of Sales by Sub-Category with an Order Date filter (March)',
+  'bar chart of Sales by Sub-Category before June with an Order Date filter',
+  'bar chart of Sales by Sub-Category, exclude March, with an Order Date filter',
+  'bar chart of Sales by Sub-Category in Q4 with an Order Date filter',
+  'bar chart of Sales by Sub-Category for March, filter by Order Date',
+  'bar chart of Sales by Sub-Category with an Order Date filter for my Q1 review',
+];
+
+describe('binder/bind-behavior-matrix — date filters', () => {
+  it.each(DATE_FILTER_BOUND)('%s → bound with an Order Date filter', async (ask) => {
+    const res = await bind(ask);
+    expect(res.status, ask).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.filters?.map((f) => f.field)).toContain('Order Date');
+    }
+  });
+
+  it.each(DATE_FILTER_NOT_BOUND)('%s → NOT bound', async (ask) => {
+    const res = await bind(ask);
+    expect(res.status, ask).not.toBe('bound');
+  });
+});
+
+describe('binder/bind-behavior-matrix — titles without a date filter are unchanged', () => {
+  it.each([
+    'bar chart of Sales by Sub-Category, title it Q4 Review',
+    'bar chart of Sales by Sub-Category titled Summer',
+  ])('%s → bound with no filters', async (ask) => {
+    const res = await bind(ask);
+    expect(res.status, ask).toBe('bound');
+    if (res.status === 'bound') expect(res.args.filters).toBeUndefined();
+  });
+});

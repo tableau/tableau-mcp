@@ -1,5 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
+import fs from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -19,6 +21,7 @@ import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js
 import { extractSheetXml, extractWorksheetWindowXml } from '../../../../desktop/metadata/sheets.js';
 import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
 import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/route/route-state.js';
+import { injectTemplate } from '../../../../desktop/templates/injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
@@ -31,6 +34,7 @@ import { readTemplate } from '../../../../desktop/templates/templatePath.js';
 import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import * as validationRegistry from '../../../../desktop/validation/registry.js';
 import { calcFieldNamesRule } from '../../../../desktop/validation/rules/calcFieldNames.js';
+import { invalidColumnInstancePivotRule } from '../../../../desktop/validation/rules/invalidColumnInstancePivot.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import type { LoadWorkbookXmlError } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
@@ -2346,6 +2350,147 @@ describe('bindTemplateTool', () => {
       2,
       expect.objectContaining({ proposal: correctedProposal }),
     );
+  });
+
+  it('blocks a non-year date filter value after Call 1 with date-specific guidance and no Desktop work', async () => {
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Order Date', values: ['2026-03'] }],
+    };
+    const dateEscalation: BinderResult = {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail: 'filter field "Order Date" is a date; filter values must be 4-digit years',
+          candidates: [],
+        },
+      ],
+      proposal,
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(dateEscalation);
+
+    await getToolResult({ session: 'date-value', ask: 'P&L waterfall for March', getExecutor });
+    const result = await getToolResult({
+      session: 'date-value',
+      ask: 'P&L waterfall for March',
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('blocked');
+    expect(body.guidance).toContain('4-digit year(s) the user confirms');
+    expect(body.guidance).not.toContain('did not resolve to one dimension');
+    expect(body.guidance).not.toContain('ALREADY applied');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('a direct Call 2 that hits the date blocker tells the agent to ask for the year, not hand-build', async () => {
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Order Date' }],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce({
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail:
+            'filter field "Order Date" is a date and the ask gives no 4-digit year and no interactive year-filter request; confirm the year(s) with the user',
+          candidates: [],
+        },
+      ],
+      proposal,
+    });
+
+    const result = await getToolResult({
+      session: 'date-direct',
+      ask: 'P&L waterfall for March',
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('escalate');
+    expect(body.guidance).toContain('4-digit year(s) the user confirms');
+    expect(body.guidance).toContain('ask-user');
+    expect(body.guidance).not.toContain('apply-worksheet');
+    expect(body.guidance).not.toContain('guarded artifact path');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('real binder date escalation reaches the ask-user date guidance unmocked', async () => {
+    const actual = await vi.importActual<typeof binderModule>(
+      '../../../../desktop/binder/binder.js',
+    );
+    const workbook = P_AND_L_WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Order Date]' role='dimension' type='ordinal' datatype='date' /></datasource>",
+    );
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'field_base_2', field: 'line_item' },
+        { slot_id: 'field_base_1_sum', field: 'amount' },
+        { slot_id: 'field_base_1_none', field: 'amount' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Order Date', values: ['2026'] }],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [workbook],
+    });
+    vi.mocked(binderModule.bindTemplate).mockImplementationOnce((args) =>
+      actual.bindTemplate(args),
+    );
+
+    const result = await getToolResult({
+      session: 'date-real',
+      ask: 'P&L waterfall for March',
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('ask-user');
+    expect(body.guidance).toContain('4-digit year(s) the user confirms');
+    expect(body.guidance).not.toContain('apply-worksheet');
+    expect(body.guidance).not.toContain('guarded artifact path');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('stops for an ambiguous proposal filter with bounded candidates instead of losing the filter in fallback', async () => {
@@ -6333,6 +6478,187 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain("member='&quot;MCIS - Operations Team&quot;'");
     // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  describe('date filters', () => {
+    const DATE_WORKBOOK_XML = M7_WORKBOOK_XML.replace(
+      "<column caption='Segment' name='[segment]' role='dimension' type='nominal' datatype='string' />",
+      "<column caption='Order Date' name='[Order Date]' role='dimension' type='quantitative' datatype='date' />",
+    );
+    const boundDate = (filters: unknown[]): BinderResult =>
+      ({
+        ...boundM7TopNContextFilterResult,
+        args: { ...boundM7TopNContextFilterResult.args, top_n: undefined, filters },
+      }) as BinderResult;
+    const applyDate = async (
+      filters: Array<{ field: string; values?: string[] }>,
+      opts: { workbook?: string; inject?: string; ask?: string } = {},
+    ): Promise<{
+      result: CallToolResult;
+      xml: string;
+      applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    }> => {
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+        bind: boundDate(filters),
+        inject: { ok: true, xml: opts.inject ?? INJECTED_M7_RANKING_XML },
+        workbookReads: [opts.workbook ?? DATE_WORKBOOK_XML],
+      });
+      const result = await getToolResult({
+        session: '1',
+        ask: opts.ask ?? 'bar chart of Sales by Product, filter Order Date to 2026',
+        proposal: { ...sampleProposal, filters },
+        auto_apply: true,
+        getExecutor,
+      });
+      const calls = applyWorkbookDocument.mock.calls.length;
+      return {
+        result,
+        applyWorkbookDocument,
+        xml: calls > 0 ? appliedXml(applyWorkbookDocument) : '',
+      };
+    };
+
+    it('splices a Year filter, slice and card that pass the real preflight rule', async () => {
+      const { result, xml } = await applyDate([{ field: 'Order Date', values: ['2026'] }]);
+
+      expect(result.isError).toBe(false);
+      expect(xml).toContain(
+        "<column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />",
+      );
+      expect(xml).toContain(
+        "<column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />",
+      );
+      expect(xml).toContain("<filter class='categorical' column='[M7].[yr:Order Date:ok]'>");
+      expect(xml).toContain("member='2026'");
+      expect(xml).not.toContain("member='&quot;2026&quot;'");
+      expect(xml).toContain('<column>[M7].[yr:Order Date:ok]</column>');
+      expect(xml).toContain(
+        "<card mode='dropdown' param='[M7].[yr:Order Date:ok]' type='filter' />",
+      );
+      expect(xml).not.toContain('none:Order Date:qk');
+      expect(invalidColumnInstancePivotRule.validate(xml)).toEqual([]);
+    });
+
+    it('a valueless date filter becomes an all-years Year control that passes the real rule', async () => {
+      const { result, xml } = await applyDate([{ field: 'Order Date' }], {
+        ask: 'bar chart of Sales by Product with an interactive Order Date filter',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(xml).toContain(
+        "<groupfilter function='level-members' level='[yr:Order Date:ok]' user:ui-enumeration='all' />",
+      );
+      expect(xml).toContain('<column>[M7].[yr:Order Date:ok]</column>');
+      expect(xml).toContain(
+        "<card mode='dropdown' param='[M7].[yr:Order Date:ok]' type='filter' />",
+      );
+      expect(invalidColumnInstancePivotRule.validate(xml)).toEqual([]);
+    });
+
+    it('a datetime field gets the same Year form and no duplicate instance', async () => {
+      const datetimeWorkbook = DATE_WORKBOOK_XML.replace("datatype='date'", "datatype='datetime'");
+      const injected = INJECTED_M7_RANKING_XML.replace(
+        "<column-instance column='[product]'",
+        "<column caption='Order Date' datatype='datetime' name='[Order Date]' role='dimension' type='ordinal' /><column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' /><column-instance column='[product]'",
+      );
+      const { result, xml } = await applyDate([{ field: 'Order Date', values: ['2026'] }], {
+        workbook: datetimeWorkbook,
+        inject: injected,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(xml.match(/name='\[yr:Order Date:ok\]'/g)).toHaveLength(1);
+      expect(xml).toContain("<filter class='categorical' column='[M7].[yr:Order Date:ok]'>");
+    });
+
+    const TEMPLATE_YEAR_FILTER =
+      "<filter class='categorical' column='[M7].[yr:Order Date:ok]'><groupfilter function='except' user:ui-domain='relevant'><groupfilter function='level-members' level='[yr:Order Date:ok]' /><groupfilter function='member' level='[yr:Order Date:ok]' member='2024' /></groupfilter></filter>";
+    const withTemplateYearFilter = (filterXml: string): string =>
+      INJECTED_M7_RANKING_XML.replace(
+        '<aggregation value=',
+        "<column caption='Order Date' datatype='date' name='[Order Date]' role='dimension' type='ordinal' /><column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' /><aggregation value=",
+      ).replace('</datasource-dependencies>', `</datasource-dependencies>${filterXml}`);
+    // The real injector re-serializes with xmldom, which writes double-quoted attributes.
+    const throughRealSerializer = (xml: string): string =>
+      new XMLSerializer().serializeToString(new DOMParser().parseFromString(xml, 'text/xml'));
+
+    it.each([
+      ['single-quoted, class then column', TEMPLATE_YEAR_FILTER],
+      [
+        'single-quoted, column then class',
+        TEMPLATE_YEAR_FILTER.replace(
+          "class='categorical' column='[M7].[yr:Order Date:ok]'",
+          "column='[M7].[yr:Order Date:ok]' class='categorical'",
+        ),
+      ],
+      [
+        'real xmldom serializer output',
+        throughRealSerializer(withTemplateYearFilter(TEMPLATE_YEAR_FILTER)),
+      ],
+    ])(
+      'refuses to stack a second filter on a template year filter (%s)',
+      async (_label, variant) => {
+        const inject =
+          variant.includes('<filter') && variant.includes('<workbook')
+            ? variant
+            : withTemplateYearFilter(variant);
+        const { applyWorkbookDocument, result } = await applyDate(
+          [{ field: 'Order Date', values: ['2026'] }],
+          { inject },
+        );
+
+        expect(applyWorkbookDocument).not.toHaveBeenCalled();
+        expect(JSON.stringify(result)).toContain("conflicts with the template's own year filter");
+      },
+    );
+
+    it('conflicts with the real magnitude-paired-column-chart template year filter', async () => {
+      const superstoreWorkbook = DATE_WORKBOOK_XML.replace(/M7/g, 'Sample - Superstore');
+      const snapshot = createTemplateRuntimeSnapshot(
+        'magnitude-paired-column-chart',
+        fs.readFileSync('src/desktop/data/templates/magnitude-paired-column-chart.tbm', 'utf8'),
+      );
+      const inject = injectTemplate(superstoreWorkbook, snapshot.xml, 'worksheet')
+        .replace(/\{\{TITLE\}\}/g, 'Top 10 Products')
+        .replace(/\{\{DATASOURCE\}\}/g, 'Sample - Superstore')
+        .replace(/\{\{field_base_1\}\}/g, 'sales')
+        .replace(/\{\{field_base_2\}\}/g, 'product')
+        .replace(/\{\{field_base_3\}\}/g, 'Order Date');
+      expect(inject).toContain('yr:Order Date:ok');
+      const { applyWorkbookDocument, result } = await applyDate(
+        [{ field: 'Order Date', values: ['2026'] }],
+        { workbook: superstoreWorkbook, inject },
+      );
+
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).toContain("conflicts with the template's own year filter");
+    });
+
+    it('keeps a boolean-calc filter byte-identical (no Year rewrite)', async () => {
+      const boolWorkbook = DATE_WORKBOOK_XML.replace(
+        '</datasource>',
+        "<column caption='Order Year 2026' name='[Calculation_1]' role='dimension' type='nominal' datatype='boolean'><calculation class='tableau' formula='YEAR([Order Date]) = 2026' /></column></datasource>",
+      );
+      const { xml } = await applyDate([{ field: 'Order Year 2026', values: ['true'] }], {
+        workbook: boolWorkbook,
+        ask: 'bar chart of Sales by Product, filter Order Year 2026 = true',
+      });
+      const filterNode = xml.match(
+        /<filter class='categorical' column='[^']*Calculation_1[^']*'>.*?<\/filter>/s,
+      );
+      expect(filterNode?.[0]).toMatchInlineSnapshot(
+        "\"<filter class='categorical' column='[M7].[none:Calculation_1:nk]'><groupfilter function='union' user:ui-enumeration='inclusive' user:ui-marker='enumerate'><groupfilter function='member' level='[none:Calculation_1:nk]' member='true' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></groupfilter></filter>\"",
+      );
+      expect(xml).not.toContain('yr:Order Year 2026');
+    });
+
+    it('leaves a categorical Region filter byte-identical to the Year work', async () => {
+      const { xml } = await applyDate([{ field: 'Region' }], {
+        ask: 'bar chart of Sales by Product with an interactive Region filter',
+      });
+      expect(xml).toContain("<filter class='categorical' column='[M7].[none:region:nk]'>");
+      expect(xml).not.toContain('yr:Order Date');
+    });
   });
 
   it('leaves non-string categorical members unquoted', async () => {
