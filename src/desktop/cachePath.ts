@@ -182,6 +182,24 @@ function verificationFailure(error: unknown): ContainedCacheReadResult {
   return { ok: false, issue: 'read-error', error };
 }
 
+// Sync sleep: one chat per process, and sync callers can't await. Keep the total well under the 60 s call deadline.
+export const HARD_LINK_MAX_RETRIES = 20;
+export const HARD_LINK_RETRY_INTERVAL_MS = 500;
+
+function retryWhileHardLinked<T>(attempt: () => T): T {
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  for (let retries = 0; ; retries++) {
+    const result = attempt();
+    if (
+      retries === HARD_LINK_MAX_RETRIES ||
+      (result as { reason?: string } | undefined)?.reason !== 'hard-linked'
+    ) {
+      return result;
+    }
+    Atomics.wait(sleeper, 0, 0, HARD_LINK_RETRY_INTERVAL_MS);
+  }
+}
+
 /**
  * Read a regular cache file through the descriptor whose identity and containment were verified.
  * Callers may opt into this stricter boundary without changing the legacy local-cache behavior.
@@ -189,6 +207,13 @@ function verificationFailure(error: unknown): ContainedCacheReadResult {
 export function readContainedCacheTextFile(
   path: string,
   operations: ContainedCacheReadOperations = DEFAULT_CONTAINED_CACHE_READ_OPERATIONS,
+): ContainedCacheReadResult {
+  return retryWhileHardLinked(() => readContainedOnce(path, operations));
+}
+
+function readContainedOnce(
+  path: string,
+  operations: ContainedCacheReadOperations,
 ): ContainedCacheReadResult {
   const cacheDir = getCacheDir();
   const absolutePath = resolve(path);
@@ -280,6 +305,14 @@ export function writeContainedCacheTextFile(
   path: string,
   text: string,
   operations: ContainedCacheWriteOperations = DEFAULT_CONTAINED_CACHE_WRITE_OPERATIONS,
+): ContainedCacheWriteResult {
+  return retryWhileHardLinked(() => writeContainedOnce(path, text, operations));
+}
+
+function writeContainedOnce(
+  path: string,
+  text: string,
+  operations: ContainedCacheWriteOperations,
 ): ContainedCacheWriteResult {
   const cacheDir = getCacheDir();
   const absolutePath = resolve(path);
@@ -442,23 +475,37 @@ export function checkCacheFileArg(
   const resolved = resolveCacheFileArg(argName, raw);
   if (resolved.isErr()) return resolved;
   try {
-    const link = lstatSync(resolved.value);
-    const real = realpath(resolved.value);
-    if (
-      link.isSymbolicLink() ||
-      !link.isFile() ||
-      link.nlink > 1 ||
-      !isWithinCacheDir(real, realpath(getCacheDir()))
-    ) {
-      return new Err(new CacheFileOutsideCacheError(argName));
-    }
-    return new Ok(resolved.value);
+    const unsafe = retryWhileHardLinked(() => {
+      const link = lstatSync(resolved.value);
+      // Symlink first (like O_NOFOLLOW), so a link's target is never resolved or probed; then containment, so an outside file never waits.
+      if (link.isSymbolicLink()) return { reason: 'symlink' };
+      if (!isWithinCacheDir(realpath(resolved.value), realpath(getCacheDir()))) {
+        return { reason: 'outside-cache' };
+      }
+      if (!link.isFile()) return { reason: 'not-regular-file' };
+      return link.nlink > 1 ? { reason: 'hard-linked' } : undefined;
+    });
+    return unsafe
+      ? new Err(outsideError(argName, resolved.value, `\nReason: ${unsafe.reason}`))
+      : new Ok(resolved.value);
   } catch (error) {
     if (errnoCode(error) === 'ENOENT') {
       return new Err(missingCacheFileError(argName, resolved.value, raw, notFound));
     }
     return new Err(new CacheFileOutsideCacheError(argName));
   }
+}
+
+/** The Reason line is skipped for paths that resolve outside the cache, so they look like missing ones. */
+function outsideError(
+  argName: string,
+  absolutePath: string,
+  reasonLine: string,
+): CacheFileOutsideCacheError {
+  return new CacheFileOutsideCacheError(
+    argName,
+    resolvesOutsideCache(absolutePath) ? '' : reasonLine,
+  );
 }
 
 /** Says "inside" only when the nearest resolvable ancestor provably lives in the cache; anything else counts as outside. */
@@ -505,8 +552,9 @@ export function readCacheFileArg(
   if (read.ok) return new Ok({ path: read.path, text: read.text });
   switch (read.issue) {
     case CONTAINED_CACHE_READ_ISSUE.outsideCache:
-    case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
       return new Err(new CacheFileOutsideCacheError(argName));
+    case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
+      return new Err(outsideError(argName, resolved.value, unsafeFileReasonLine(read)));
     case CONTAINED_CACHE_READ_ISSUE.missing:
       return new Err(missingCacheFileError(argName, resolved.value, raw, notFound));
     default:
@@ -556,8 +604,9 @@ export function writeCacheFileArg(
   if (written.ok) return new Ok(written.path);
   switch (written.issue) {
     case CONTAINED_CACHE_WRITE_ISSUE.outsideCache:
-    case CONTAINED_CACHE_WRITE_ISSUE.unsafeFile:
       return new Err(new CacheFileOutsideCacheError(argName));
+    case CONTAINED_CACHE_WRITE_ISSUE.unsafeFile:
+      return new Err(outsideError(argName, resolved.value, unsafeFileReasonLine(written)));
     case CONTAINED_CACHE_WRITE_ISSUE.unsupportedNewPath:
       return new Err(
         new CacheFileWriteError(

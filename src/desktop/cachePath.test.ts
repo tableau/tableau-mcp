@@ -23,6 +23,8 @@ import {
   type ContainedCacheReadOperations,
   type ContainedCacheWriteOperations,
   getCacheDir,
+  HARD_LINK_MAX_RETRIES,
+  HARD_LINK_RETRY_INTERVAL_MS,
   isWithinCacheDir,
   readContainedCacheTextFile,
   unsafeFileReasonLine,
@@ -39,6 +41,7 @@ describe('readContainedCacheTextFile', () => {
   const temporaryPaths: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const path of temporaryPaths.splice(0)) {
       rmSync(path, { recursive: true, force: true });
     }
@@ -306,6 +309,7 @@ describe('readContainedCacheTextFile', () => {
   });
 
   it('reports hard-linked inside the cache but outside-cache for a hard link behind a directory symlink', () => {
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
     const directory = cacheDirectory('hard-link');
     const outside = outsideDirectory('hard-link');
     writeFileSync(join(directory, 'a.xml'), '<a/>');
@@ -320,6 +324,38 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(join(directory, 'linked', 'b.xml'))).toMatchObject({
       reason: 'outside-cache',
     });
+    expect(wait).toHaveBeenCalledTimes(HARD_LINK_MAX_RETRIES);
+    expect(wait).toHaveBeenCalledWith(expect.any(Int32Array), 0, 0, HARD_LINK_RETRY_INTERVAL_MS);
+  });
+
+  it('waits out a brief second link, then reads', () => {
+    const directory = cacheDirectory('brief-link');
+    const file = join(directory, 'a.xml');
+    const extra = join(directory, 'b.xml');
+    writeFileSync(file, '<a/>');
+    linkSync(file, extra);
+    const wait = vi.spyOn(Atomics, 'wait').mockImplementation(() => {
+      if (wait.mock.calls.length === 3) rmSync(extra);
+      return 'ok';
+    });
+
+    expect(readContainedCacheTextFile(file)).toMatchObject({ ok: true, text: '<a/>' });
+    expect(wait).toHaveBeenCalledTimes(3);
+  });
+
+  it('never waits for any other unsafe reason', () => {
+    const wait = vi.spyOn(Atomics, 'wait');
+    const directory = cacheDirectory('no-wait');
+    const outside = outsideDirectory('no-wait');
+    writeFileSync(join(outside, 'o.xml'), '<o/>');
+    symlinkSync(join(outside, 'o.xml'), join(directory, 'sym.xml'), 'file');
+    mkdirSync(join(directory, 'dir'));
+
+    for (const name of ['sym.xml', 'dir']) {
+      expect(readContainedCacheTextFile(join(directory, name))).toMatchObject({ ok: false });
+    }
+    expect(readContainedCacheTextFile(join(tmpdir(), 'x.xml'))).toMatchObject({ ok: false });
+    expect(wait).not.toHaveBeenCalled();
   });
 });
 
@@ -327,6 +363,7 @@ describe('writeContainedCacheTextFile', () => {
   const temporaryPaths: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const path of temporaryPaths.splice(0)) {
       rmSync(path, { recursive: true, force: true });
     }
@@ -602,6 +639,7 @@ describe('writeContainedCacheTextFile', () => {
   });
 
   it('reports hard-linked, or outside-cache behind a directory symlink, without writing', () => {
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
     const directory = cacheDirectory('write-hard-link');
     const outside = outsideDirectory('write-hard-link');
     writeFileSync(join(directory, 'a.xml'), '<a/>');
@@ -619,6 +657,37 @@ describe('writeContainedCacheTextFile', () => {
     for (const file of [join(directory, 'a.xml'), join(outside, 'a.xml')]) {
       expect(readFileSync(file, 'utf-8')).toBe('<a/>');
     }
+    expect(wait).toHaveBeenCalledTimes(HARD_LINK_MAX_RETRIES);
+  });
+
+  it('waits out a brief second link, then writes', () => {
+    const directory = cacheDirectory('write-brief-link');
+    const file = join(directory, 'a.xml');
+    const extra = join(directory, 'b.xml');
+    writeFileSync(file, '<a/>');
+    linkSync(file, extra);
+    const wait = vi.spyOn(Atomics, 'wait').mockImplementation(() => {
+      if (wait.mock.calls.length === 2) rmSync(extra);
+      return 'ok';
+    });
+
+    expect(writeContainedCacheTextFile(file, '<new/>')).toMatchObject({ ok: true });
+    expect(readFileSync(file, 'utf-8')).toBe('<new/>');
+    expect(wait).toHaveBeenCalledTimes(2);
+  });
+
+  it('never waits for a symlink or an outside path', () => {
+    const wait = vi.spyOn(Atomics, 'wait');
+    const directory = cacheDirectory('write-no-wait');
+    const outside = outsideDirectory('write-no-wait');
+    writeFileSync(join(outside, 'o.xml'), '<o/>');
+    symlinkSync(join(outside, 'o.xml'), join(directory, 'sym.xml'), 'file');
+
+    expect(writeContainedCacheTextFile(join(directory, 'sym.xml'), 'x')).toMatchObject({
+      ok: false,
+    });
+    expect(writeContainedCacheTextFile(join(outside, 'o.xml'), 'x')).toMatchObject({ ok: false });
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it('reports not-regular-file when a path component is a file', () => {

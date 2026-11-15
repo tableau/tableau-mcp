@@ -219,12 +219,13 @@ export class StoryboardXmlLoadFailedError extends McpToolError {
  * through a link that leaves it. Never echoes file contents.
  */
 export class CacheFileOutsideCacheError extends McpToolError {
-  constructor(argName: string) {
+  constructor(argName: string, reasonLine = '') {
     super({
       type: 'cache-file-outside-cache',
       message:
         `Security error: ${argName} must be a regular file inside the Desktop cache directory. ` +
-        'Use a file path returned by a get-*/read tool (for example get-workbook-xml or get-worksheet-xml).',
+        'Use a file path returned by a get-*/read tool (for example get-workbook-xml or get-worksheet-xml).' +
+        reasonLine,
       statusCode: 400,
     });
   }
