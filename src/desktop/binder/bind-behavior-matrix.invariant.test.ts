@@ -264,6 +264,7 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       expect(res.used_llm).toBe(false);
       expect(res.args.template_name).toBe(template);
       expect(res.args.template_parameters.DATASOURCE).toBe(EXPECTED_DATASOURCE);
+      expect(res.askCoverage).toBeUndefined();
     }
   });
 
@@ -696,11 +697,116 @@ describe('binder/bind-behavior-matrix — DISCOVER-AND-PIN (pinned-current-behav
       expect(res.used_llm).toBe(false);
       expect(res.args.template_name).toBe(template);
       expect(res.args.template_parameters.DATASOURCE).toBe(EXPECTED_DATASOURCE);
+      expect(res.askCoverage).toBeUndefined();
     }
   });
 
   it.each(PINNED_PROPOSE)('%s → NOT bound [%s]', async (ask) => {
     const res = await bind(ask);
     expect(res.status, `${ask} pinned not-bound`).not.toBe('bound');
+  });
+});
+
+// ── CONSTRAINT ASKS: bind applies, but the ask named parts the bind left out ──
+const CONSTRAINT_ASKS: ReadonlyArray<readonly [ask: string, dropped: string[]]> = [
+  [
+    'Bar chart of total Profit by Segment, only for items with Discount above 20% and Order Date in 2025',
+    ['Discount', 'Order Date', '2025'],
+  ],
+  [
+    'In 2025, did items sold at discounts above 20% lose money? How much profit or loss did they make in each segment? Show me with a bar chart.',
+    ['profit', '2025'],
+  ],
+  [
+    'Bar chart of profit by Segment for 2025 order lines with discount above 20%',
+    ['discount', '2025'],
+  ],
+  ['Bar chart of Sales by Region in 2025', ['2025']],
+  ['KPI text of total Sales for 2026 (Order Date year 2026)', ['Order Date', '2026']],
+  ['bar chart of Sales by Category sorted by Profit', ['Profit']],
+  ['highlight table of Profit by Sub-Category and Region', ['Region']],
+];
+
+const CALC_COLUMNS =
+  "<column caption='Gross Margin %' datatype='real' name='[Calculation_1111]' role='measure' type='quantitative'><calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' /></column>" +
+  "<column caption='Profit 2025 Discount over 20' datatype='real' name='[Calculation_2222]' role='measure' type='quantitative'><calculation class='tableau' formula='SUM(IF [Discount] &gt; 0.2 THEN [Profit] END)' /></column>";
+
+describe('binder/bind-behavior-matrix — ask coverage', () => {
+  it.each(CONSTRAINT_ASKS)('%s → bound with dropped parts reported', async (ask, dropped) => {
+    const res = await bind(ask);
+    expect(res.status).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.askCoverage?.unconsumed.map((g) => g.text)).toEqual(dropped);
+  });
+
+  it.each([
+    'bar chart of Gross Margin % by Segment',
+    'Bar chart of Profit 2025 Discount over 20 by Segment',
+    'Create a bar chart of Sales by Category',
+    'Create a filled map of Sales by state',
+  ])('%s → no dropped parts', async (ask) => {
+    const xml = FIXTURE.replace(
+      /(<datasource [^>]*name='Sample - Superstore'[^>]*>)/,
+      `$1${CALC_COLUMNS}`,
+    );
+    expect(xml).not.toBe(FIXTURE);
+    const res = await bind(ask, xml);
+    expect(res.status).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.askCoverage).toBeUndefined();
+  });
+});
+
+const ESCAPED_NAMES_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Spend'>
+      <column name='[Business Unit]' role='dimension' type='nominal' datatype='string' />
+      <column name="[Owner's Region]" role='dimension' type='nominal' datatype='string' />
+      <column name='[R&amp;D Spend]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+describe('binder/bind-behavior-matrix — ask coverage stays clean for used fields', () => {
+  it.each([
+    'bar chart of R&D Spend by Business Unit',
+    "bar chart of Sales by Owner's Region",
+    "pie chart of Sales by Owner's Region",
+  ])('%s → no dropped parts', async (ask) => {
+    const res = await bind(ask, ESCAPED_NAMES_WORKBOOK);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.askCoverage).toBeUndefined();
+  });
+
+  it('still reports a real year when the same number is the top-N count', async () => {
+    const res = await bind('bar chart of the top 2025 products by Sales in 2025');
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.askCoverage?.unconsumed.filter((g) => g.kind === 'year')).toEqual([
+      { kind: 'year', text: '2025' },
+    ]);
+  });
+
+  it('counts sort.by as used', async () => {
+    const res = await bind(
+      'waterfall of amount by line_item ordered by display_order',
+      WATERFALL_WORKBOOK,
+    );
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.askCoverage).toBeUndefined();
+  });
+
+  it.each([
+    'bar chart of the top 2000 products by Sales',
+    'bar chart of the bottom 2000 Sub-Category by Sales',
+  ])('%s → the count is not a year', async (ask) => {
+    const res = await bind(ask);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.askCoverage?.unconsumed.filter((g) => g.kind === 'year') ?? []).toEqual([]);
   });
 });

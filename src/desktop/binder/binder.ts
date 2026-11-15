@@ -21,6 +21,8 @@ import { CANONICAL_DERIVATION_SHORT_FORMS } from '../derivations.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
 import {
+  type AskCoverageGap,
+  askCoverageGaps,
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
   type EncodingFieldResolution,
@@ -192,6 +194,8 @@ export type BinderResult =
        * completion while `unfilled` is non-empty.
        */
       encodings?: EncodingReport;
+      /** Fields and years the ask named that this Call-1 bind did not use; absent when none. */
+      askCoverage?: { unconsumed: AskCoverageGap[] };
       requestCoverage?: {
         version: 1;
         kind: 'complete_single_sheet_binding';
@@ -593,6 +597,12 @@ function validateAndBuild(
   };
 }
 
+function attachAskCoverage(res: BinderResult, ask: string, summary: SchemaSummary): void {
+  if (res.status !== 'bound') return;
+  const gaps = askCoverageGaps(ask, summary, res.args);
+  if (gaps.length > 0) res.askCoverage = { unconsumed: gaps };
+}
+
 function requestNotCovered(): Extract<BinderResult, { status: 'escalate' }> {
   return {
     status: 'escalate',
@@ -631,7 +641,7 @@ export async function bindTemplate(args: {
     if (args.requireCompleteRequest) {
       return requestNotCovered();
     }
-    return validateAndBuild(
+    const proposed = validateAndBuild(
       args.proposal,
       args.manifests,
       summary,
@@ -642,6 +652,8 @@ export async function bindTemplate(args: {
         ? { allowLargePie: true }
         : undefined,
     );
+    if (args.ask) attachAskCoverage(proposed, args.ask, summary);
+    return proposed;
   }
 
   // ── FAIL-CLOSED cost guard ───────────────────────
@@ -695,6 +707,7 @@ export async function bindTemplate(args: {
       if (cls.encodings) {
         res.encodings = cls.encodings;
       }
+      attachAskCoverage(res, args.ask, summary);
       if (args.requireCompleteRequest) {
         const manifest = args.manifests.get(cls.template);
         if (

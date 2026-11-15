@@ -46,6 +46,7 @@ interface SchemaField {
   datasource: string;
   table?: string; // metadata-record parent-name for federated grain disambiguation
   isAggregated: boolean;
+  formula?: string;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
 }
 
@@ -1713,6 +1714,170 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       masked.slice(0, match.start) + ' '.repeat(match.end - match.start) + masked.slice(match.end);
   }
   return masked;
+}
+
+export type AskCoverageGap =
+  | { kind: 'field'; field: string; text: string }
+  | { kind: 'year'; text: string };
+
+interface UsedFields {
+  field_mapping: Record<string, string>;
+  filters?: ReadonlyArray<{ field: string; values?: string[] }>;
+  sort?: { by: string };
+  dateparse_axis?: { sourceField: string };
+  template_parameters?: Record<string, string>;
+}
+
+// validate.ts stores field_mapping values XML-escaped; undo it once, `&` last.
+function unescapeXmlRef(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/** True when a mapping column instance or filter references this schema field by identity. */
+export function schemaFieldIsUsed(
+  field: SchemaField,
+  used: UsedFields,
+  s?: SchemaSummary,
+): boolean {
+  // Only a helper calc is cleared through a formula; a raw field the ask asked to show is not.
+  return (
+    directlyUsed(field, used) ||
+    (!!s && !!field.formula && usedCalcClosure(used, s).includes(field))
+  );
+}
+
+/** Fields that a directly used calc's formula references, directly or through other calcs. */
+function usedCalcClosure(used: UsedFields, s: SchemaSummary): SchemaField[] {
+  return calcClosure(
+    s.fields.filter((f) => f.formula && directlyUsed(f, used)),
+    s,
+  );
+}
+
+function calcClosure(roots: SchemaField[], s: SchemaSummary): SchemaField[] {
+  const out = new Set<SchemaField>();
+  const queue = [...roots];
+  for (const calc of queue) {
+    for (const f of s.fields) {
+      if (out.has(f) || !formulaReferences(calc.formula ?? '', f)) continue;
+      out.add(f);
+      if (f.formula) queue.push(f);
+    }
+  }
+  return [...out];
+}
+
+/** True when `calc`'s formula references `target`, directly or through other calcs. */
+export function calcReferencesField(
+  calc: Pick<SchemaField, 'column_ref'>,
+  target: Pick<SchemaField, 'column_ref'>,
+  s: SchemaSummary,
+): boolean {
+  const root = s.fields.find((f) => f.column_ref === calc.column_ref);
+  if (!root?.formula) return false;
+  const measures = rawMeasuresReached(root, s);
+  return measures.length === 1 && measures[0].column_ref === target.column_ref;
+}
+
+/** Raw (formula-less) measures a calc reaches. A calc stands in for a named measure only if this is one. */
+function rawMeasuresReached(calc: SchemaField, s: SchemaSummary): SchemaField[] {
+  return calcClosure([calc], s).filter((f) => !f.formula && f.role === 'measure');
+}
+
+function carriesYear(calc: SchemaField, year: string, s: SchemaSummary): boolean {
+  const re = new RegExp(`(?<!\\d)${year}(?!\\d)`);
+  return [calc, ...calcClosure([calc], s)].some((f) => !!f.formula && re.test(f.formula));
+}
+
+function fieldNamesOf(field: SchemaField): string[] {
+  return [bareName(field.columnName), field.name, field.caption].filter((n): n is string => !!n);
+}
+
+function formulaReferences(formula: string, field: SchemaField): boolean {
+  return fieldNamesOf(field).some((n) => formula.includes(`[${n}]`));
+}
+
+function directlyUsed(field: SchemaField, used: UsedFields): boolean {
+  const bare = bareName(field.columnName);
+  const names = new Set([bare, field.name, field.caption].filter((n): n is string => !!n));
+  if ((used.filters ?? []).some((f) => names.has(f.field))) return true;
+  if (used.sort && names.has(used.sort.by)) return true;
+  if (used.dateparse_axis && names.has(used.dateparse_axis.sourceField)) return true;
+  return Object.values(used.field_mapping).some((rawRef) => {
+    const ref = unescapeXmlRef(rawRef);
+    const column = ref.slice(ref.lastIndexOf('.[') + 2).replace(/\]$/, '');
+    // [sum:Calculation_1:qk] -> Calculation_1; a bare [Region] has no derivation parts.
+    const parts = column.split(':');
+    const core = parts.length >= 3 ? parts.slice(1, -1).join(':') : column;
+    return core === bare;
+  });
+}
+
+/**
+ * Parts of the ask this bind left out: schema fields the ask names (longest literal
+ * match first, no overlaps) that no binding or filter uses, and 4-digit years that remain
+ * after field names and captions are masked. Call-1 filters carry no values, so a year
+ * left in the ask was never applied.
+ */
+export function askCoverageGaps(ask: string, s: SchemaSummary, used: UsedFields): AskCoverageGap[] {
+  const isDateField = (name: string): boolean =>
+    s.fields.some(
+      (f) => (f.datatype === 'date' || f.datatype === 'datetime') && fieldNamesOf(f).includes(name),
+    );
+  // Only the date-range parameters scope data; TITLE, DATASOURCE and the rest never carry a year.
+  const yearParameters = [
+    used.template_parameters?.DATE_MIN,
+    used.template_parameters?.DATE_MAX,
+  ].filter((v): v is string => !!v);
+  const yearCarriers = [
+    ...(used.filters ?? []).filter((f) => isDateField(f.field)).flatMap((f) => f.values ?? []),
+    ...yearParameters,
+    ...[...s.fields.filter((f) => directlyUsed(f, used)), ...usedCalcClosure(used, s)]
+      .map((f) => f.formula)
+      .filter((f): f is string => !!f),
+  ];
+  // A year calc built on a measure (Sales 2025 over Sales) is that measure the ask named.
+  const askYears = ask.match(/\b(?:19|20)\d{2}\b/g) ?? [];
+  const yearCalcStandsIn = s.fields
+    .filter((f) => f.formula && directlyUsed(f, used) && askYears.some((y) => carriesYear(f, y, s)))
+    .flatMap((f) => {
+      const measures = rawMeasuresReached(f, s);
+      return measures.length === 1 ? measures : [];
+    });
+  const gaps: AskCoverageGap[] = [];
+  const spans = literalFieldMatchesInAsk(ask, s)
+    .filter(
+      (h): h is FieldMatch & { start: number; end: number } =>
+        h.start !== undefined && h.end !== undefined,
+    )
+    .sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);
+  const taken: Array<[number, number]> = [];
+  const fieldGaps: Array<{ start: number; gap: AskCoverageGap }> = [];
+  for (const hit of spans) {
+    if (taken.some(([a, b]) => hit.start < b && a < hit.end)) continue;
+    taken.push([hit.start, hit.end]);
+    if (!schemaFieldIsUsed(hit.field, used, s) && !yearCalcStandsIn.includes(hit.field)) {
+      fieldGaps.push({
+        start: hit.start,
+        gap: { kind: 'field', field: hit.field.name, text: ask.slice(hit.start, hit.end) },
+      });
+    }
+  }
+  gaps.push(...fieldGaps.sort((a, b) => a.start - b.start).map((g) => g.gap));
+  const masked = maskFieldNames(ask, s);
+  for (const m of masked.matchAll(/\b(?:19|20)\d{2}\b/g)) {
+    if (/\b(?:top|bottom)\s+$/i.test(masked.slice(0, m.index))) continue;
+    if (yearCarriers.some((c) => new RegExp(`(?<!\\d)${m[0]}(?!\\d)`).test(c))) continue;
+    if (!gaps.some((g) => g.kind === 'year' && g.text === m[0])) {
+      gaps.push({ kind: 'year', text: m[0] });
+    }
+  }
+  return gaps;
 }
 
 /** Fields whose name/caption/bare column name appear in the ask, earliest-first. */

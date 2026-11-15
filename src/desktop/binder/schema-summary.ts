@@ -32,6 +32,7 @@ export interface SchemaField {
   table?: string; // metadata-record parent-name for federated grain disambiguation
   isAggregated: boolean;
   isGroup?: boolean;
+  formula?: string;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
 }
 
@@ -82,6 +83,7 @@ export function summarizeSchema(workbookXml: string, datasource?: string): Schem
       ...(f.table ? { table: f.table } : {}),
       isAggregated: !!f.isAggregated,
       ...(f.isGroup ? { isGroup: true } : {}),
+      ...(f.formula ? { formula: f.formula } : {}),
       column_ref: f.column_ref,
     };
   });
