@@ -2434,6 +2434,8 @@ function roleGreedyBind(
     ) {
       capacity += 1;
     }
+    const lineSeries = optionalLineSeriesSlots(m);
+    if (lineSeries && !isActive(lineSeries.color)) capacity += 1;
     return unconsumedNonTemporalDims.length > capacity;
   };
 
@@ -2761,6 +2763,67 @@ function colorSeriesBinding(
   const spares = candidates.filter((field) => isCategorical(field) && !boundFields.has(field.name));
   if (spares.length !== 1) return null;
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
+}
+
+const PLAIN_LINE_GRAIN_WORDS: Readonly<Record<string, Derivation>> = {
+  month: 'tmn',
+  monthly: 'tmn',
+};
+
+// A colorless plain line may carry only these words besides field names; anything else
+// (a grain, year, member, top/YTD, a symbol, a trend line) is uncovered, so the bind proposes.
+const PLAIN_LINE_COVERED_WORDS = new Set([
+  ...['a', 'an', 'the', 'of', 'over', 'by', 'across', 'per', 'my', 'our', 'me', 'please'],
+  ...['show', 'create', 'make', 'plot', 'display', 'build', 'draw', 'give'],
+  ...['line', 'lines', 'chart', 'graph', 'trend', 'trends', 'time', 'series', 'continuous'],
+  ...['month', 'monthly', 'sum', 'total', 'how', 'has', 'have'],
+]);
+
+function plainLineHasUncoveredCue(maskedAsk: string, derivation: Derivation | undefined): boolean {
+  const lower = maskedAsk.toLowerCase();
+  if (/[^a-z0-9\s,.'-]/.test(lower) || /trend[\s-]*lines?\b/.test(lower)) return true;
+  for (const word of lower.match(/[a-z0-9]+/g) ?? []) {
+    if (!PLAIN_LINE_COVERED_WORDS.has(word)) return true;
+    const grain = PLAIN_LINE_GRAIN_WORDS[word];
+    if (grain && grain !== derivation) return true;
+  }
+  return false;
+}
+
+/**
+ * Ask-named fields no binding uses. A field counts as a separate mention when ANY of its
+ * matches survives after every longer field name's span is blanked ("Sub-Category" owns its
+ * span, but a second bare "Category" elsewhere in the ask is still named).
+ */
+function unusedNamedFields(
+  ask: string,
+  summary: SchemaSummary,
+  matched: readonly SchemaField[],
+  bindings: ReadonlyArray<{ field: string }>,
+): SchemaField[] {
+  const exactNames = fieldExactNames(summary.fields);
+  const namesOf = (f: SchemaField): string[] =>
+    [bareName(f.columnName), f.caption, f.name].filter((n): n is string => !!n && n.length > 0);
+  const byLongestName = [...summary.fields].sort(
+    (x, y) =>
+      Math.max(...namesOf(y).map((n) => n.length)) - Math.max(...namesOf(x).map((n) => n.length)),
+  );
+  const separate = new Set<SchemaField>();
+  const anyMatch = new Set<SchemaField>();
+  let working = ask;
+  for (const field of byLongestName) {
+    for (const name of namesOf(field)) {
+      if (fieldNameMatchInAskSpan(ask, name, exactNames)) anyMatch.add(field);
+      for (let m = fieldNameMatchInAskSpan(working, name, exactNames); m; ) {
+        separate.add(field);
+        working = working.slice(0, m.start) + ' '.repeat(m.end - m.start) + working.slice(m.end);
+        m = fieldNameMatchInAskSpan(working, name, exactNames);
+      }
+    }
+  }
+  return matched.filter(
+    (f) => !bindings.some((b) => b.field === f.name) && (separate.has(f) || !anyMatch.has(f)),
+  );
 }
 
 type BasicLineSlots = {
@@ -4514,8 +4577,23 @@ export function classifyNoLlm(
       }
     }
   } else {
-    const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
-    if (colorSeries) bindings.push(colorSeries);
+    const lineSlots = optionalLineSeriesSlots(chosen);
+    if (lineSlots && !facet) {
+      const unused = unusedNamedFields(ask, summary, matched, bindings);
+      const series = unused.filter((f) => isCategorical(f));
+      if (series.length > 1) return null;
+      if (series.length === 1) {
+        bindings.push({ slot_id: lineSlots.color.slot_id, field: series[0].name });
+      } else if (
+        unused.length > 0 ||
+        plainLineHasUncoveredCue(maskedAsk, lineSlots.temporal.derivation)
+      ) {
+        return null;
+      }
+    } else {
+      const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
+      if (colorSeries) bindings.push(colorSeries);
+    }
   }
   // Attach provenance (e.g. geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.

@@ -148,14 +148,12 @@ describe('loadRuntimeTemplateCatalogSnapshots', () => {
       vi.stubEnv('TEMPLATES_DIR', root);
       writeFileSync(join(root, 'trend-line-chart.tbm'), bookmark);
       writeFileSync(join(root, 'trend-custom-line.tbm'), bookmark);
-      const catalog = loadRuntimeTemplateCatalogSnapshots({
-        includeProtected: false,
-        completeRequestLineColorOptional: true,
-      });
+      const catalog = loadRuntimeTemplateCatalogSnapshots({ includeProtected: false });
       const original = catalog.get('trend-line-chart')?.descriptor;
       const renamed = catalog.get('trend-custom-line')?.descriptor;
       expect(original).toBeDefined();
       expect(renamed).toBeDefined();
+      expect(original?.slots.find((slot) => slot.role.includes('color'))?.required).toBe(false);
       expect(renamed?.slots.map((slot) => ({ role: slot.role, required: slot.required }))).toEqual(
         original?.slots.map((slot) => ({ role: slot.role, required: slot.required })),
       );

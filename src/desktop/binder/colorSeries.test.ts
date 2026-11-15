@@ -113,15 +113,41 @@ const activeUsersXml = (
   );
 
 describe('classifyNoLlm — trend color series', () => {
-  it('auto-colors monthly active users by the sole spare categorical', () => {
+  it('does not add an unasked sole-spare series to a plain line', () => {
+    const result = classifyNoLlm(
+      'line chart of mau over month',
+      manifests,
+      summarizeSchema(activeUsersXml()),
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'mau' },
+    ]);
+  });
+
+  it('no longer binds the sole spare categorical for the original monthly-active-users ask', () => {
     const result = classifyNoLlm(
       'Show me monthly active users over the last 12 months.',
       manifests,
       summarizeSchema(activeUsersXml()),
     );
 
+    expect(result).toBeNull();
+    expect(result?.bindings.some((binding) => binding.slot_id === 'color_series') ?? false).toBe(
+      false,
+    );
+  });
+
+  it('puts an ask-named categorical on color even when other spares exist', () => {
+    const result = classifyNoLlm(
+      'mau over time by product',
+      manifests,
+      summarizeSchema(activeUsersXml(['product', 'region'], 'date')),
+    );
+
     expect(result).not.toBeNull();
-    expect(result!.template).toBe('trend-line-chart');
     expect(result!.bindings).toEqual([
       { slot_id: 'order_date', field: 'month' },
       { slot_id: 'sales', field: 'mau' },
@@ -156,7 +182,7 @@ describe('classifyNoLlm — trend color series', () => {
     ]);
   });
 
-  it('fails closed when two spare categoricals remain', () => {
+  it('binds the plain line colorless regardless of how many spare categoricals exist', () => {
     const result = classifyNoLlm(
       'mau over time',
       manifests,

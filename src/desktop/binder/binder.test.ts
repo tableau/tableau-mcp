@@ -90,7 +90,6 @@ const METRICS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 
 let descriptors: Map<string, RuntimeTemplateDescriptor>;
 let allDescriptors: Map<string, RuntimeTemplateDescriptor>;
-let completeRequestDescriptors: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
   const projection = createPuppetCompatibilityProjection(
@@ -98,13 +97,6 @@ beforeAll(() => {
   );
   descriptors = projection.descriptors;
   allDescriptors = projection.allDescriptors;
-  completeRequestDescriptors = createPuppetCompatibilityProjection(
-    loadRuntimeTemplateCatalogSnapshots({
-      automaticOnly: true,
-      includeExternal: false,
-      completeRequestLineColorOptional: true,
-    }),
-  ).descriptors;
 });
 
 function workbookWithApproxCount(field: string, count: number): string {
@@ -175,29 +167,18 @@ describe('opt-in complete request binding', () => {
     if (result.status === 'bound') expect(result.requestCoverage).toBeUndefined();
   });
 
-  it.each([
-    [true, false],
-    [false, true],
-  ])('keeps strict and ordinary line catalogs isolated in order %s, %s', async (...order) => {
+  it('binds the plain line ask on both strict and ordinary paths from one catalog', async () => {
     const ask = 'Create a line chart of monthly Sales by Order Date.';
-    for (const strict of order) {
-      const projection = createPuppetCompatibilityProjection(
-        loadRuntimeTemplateCatalogSnapshots({
-          automaticOnly: true,
-          includeExternal: false,
-          ...(strict ? { completeRequestLineColorOptional: true } : {}),
-        }),
-      );
-      const line = projection.descriptors.get('trend-line-chart');
-      expect(line).toBeDefined();
-      expect(line?.slots.find((slot) => slot.role.includes('color'))?.required).toBe(!strict);
+    for (const strict of [true, false]) {
+      const line = descriptors.get('trend-line-chart');
+      expect(line?.slots.find((slot) => slot.role.includes('color'))?.required).toBe(false);
       const result = await bindTemplate({
         ask,
         workbookXml: WORKBOOK_XML,
-        manifests: projection.descriptors,
+        manifests: descriptors,
         ...(strict ? { requireCompleteRequest: true } : {}),
       });
-      expect(result.status).toBe(strict ? 'bound' : 'propose');
+      expect(result.status).toBe('bound');
     }
   });
 
@@ -207,7 +188,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('bound');
@@ -232,7 +213,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('bound');
@@ -247,7 +228,7 @@ describe('opt-in complete request binding', () => {
   });
 
   it('proves a structurally compatible chart with a new template ID and noun', async () => {
-    const bar = completeRequestDescriptors.get('ranking-ordered-bar');
+    const bar = descriptors.get('ranking-ordered-bar');
     expect(bar).toBeDefined();
     if (!bar) return;
     const column: RuntimeTemplateDescriptor = {
@@ -289,7 +270,7 @@ describe('opt-in complete request binding', () => {
   it.each([[['Bar']], [['Automatic']]])(
     'proves a bar-pair chart whose mark classes are %j',
     async (markClasses) => {
-      const bar = completeRequestDescriptors.get('ranking-ordered-bar');
+      const bar = descriptors.get('ranking-ordered-bar');
       if (!bar) throw new Error('missing ranking-ordered-bar');
       const column: RuntimeTemplateDescriptor = {
         ...bar,
@@ -313,7 +294,7 @@ describe('opt-in complete request binding', () => {
   it.each([[['Circle']], [['Bar', 'Circle']]])(
     'does not prove a bar-pair chart whose mark classes are %j',
     async (markClasses) => {
-      const bar = completeRequestDescriptors.get('ranking-ordered-bar');
+      const bar = descriptors.get('ranking-ordered-bar');
       if (!bar) throw new Error('missing ranking-ordered-bar');
       const column: RuntimeTemplateDescriptor = {
         ...bar,
@@ -337,8 +318,8 @@ describe('opt-in complete request binding', () => {
   it('requires scatter measure order to match the bound x and y roles', () => {
     const ask = 'Create a scatter plot of Sales and Profit by Customer Name.';
     const summary = summarizeSchema(WORKBOOK_XML);
-    const classified = classifyNoLlm(ask, completeRequestDescriptors, summary, true);
-    const scatter = completeRequestDescriptors.get('correlation-scatter-plot-chart');
+    const classified = classifyNoLlm(ask, descriptors, summary, true);
+    const scatter = descriptors.get('correlation-scatter-plot-chart');
     expect(classified?.template).toBe(scatter?.template);
     expect(scatter).toBeDefined();
     if (!classified || !scatter) return;
@@ -358,7 +339,7 @@ describe('opt-in complete request binding', () => {
   });
 
   it('uses the selected chart noun when descriptor text has a descriptive suffix', async () => {
-    const bar = completeRequestDescriptors.get('ranking-ordered-bar');
+    const bar = descriptors.get('ranking-ordered-bar');
     expect(bar).toBeDefined();
     if (!bar) return;
     const column: RuntimeTemplateDescriptor = {
@@ -388,7 +369,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('bound');
@@ -412,7 +393,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('bound');
@@ -427,7 +408,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask: 'Create a line chart of average Sales over Order Date and explain the spike.',
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('escalate');
@@ -438,7 +419,7 @@ describe('opt-in complete request binding', () => {
     const ordinary = await bindTemplate({
       ask: 'Create a histogram of Sales.',
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
     });
     expect(ordinary.status).toBe('bound');
     if (ordinary.status === 'bound') {
@@ -453,7 +434,7 @@ describe('opt-in complete request binding', () => {
     ['Create a histogram chart of Sales.', 'Sales'],
     ['Create a histogram chart of Revenue.', 'Revenue'],
   ])('proves %s through its actual shared-measure slot metadata', async (ask, field) => {
-    const histogram = completeRequestDescriptors.get('distribution-histogram');
+    const histogram = descriptors.get('distribution-histogram');
     expect(histogram).toBeDefined();
     const requiredMeasureSlots = histogram?.slots.filter(
       (slot) => slot.required && slot.bindable && slot.kind === 'quantitative',
@@ -464,7 +445,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml: WORKBOOK_XML.replace('[Sales]', `[${field}]`),
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('bound');
@@ -495,7 +476,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('escalate');
@@ -514,7 +495,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask: 'Create a histogram of Sales.',
       workbookXml,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('escalate');
@@ -525,7 +506,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask: 'Create a histogram of Region.',
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('escalate');
@@ -545,7 +526,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask: 'Create a line chart of monthly Sales by Order Date.',
       workbookXml,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('escalate');
@@ -566,7 +547,7 @@ describe('opt-in complete request binding', () => {
     const result = await bindTemplate({
       ask,
       workbookXml: WORKBOOK_XML,
-      manifests: completeRequestDescriptors,
+      manifests: descriptors,
       requireCompleteRequest: true,
     });
     expect(result.status).toBe('escalate');
