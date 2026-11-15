@@ -1,6 +1,7 @@
 import { Document, DOMParser, Element, XMLSerializer } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { worksheetZoneName } from '../validation/rules/dashboardZoneContext.js';
 import type { ValidationIssue } from '../validation/types.js';
 import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../xmlElement.js';
 import {
@@ -33,13 +34,6 @@ export function dashboardWorksheetNames(dashboardXml: string): string[] {
     return [];
   }
   return worksheetNamesIn(doc.documentElement!);
-}
-
-/** The worksheet a zone shows, or undefined for containers, filters, text and other non-worksheet zones. */
-export function worksheetZoneName(zone: Element): string | undefined {
-  const name = zone.getAttribute('name');
-  const type = zone.getAttribute('type-v2');
-  return name && (!type || type === 'visual') ? name : undefined;
 }
 
 function worksheetNamesIn(dashboard: Element): string[] {

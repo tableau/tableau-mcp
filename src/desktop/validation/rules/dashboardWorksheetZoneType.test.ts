@@ -77,6 +77,6 @@ describe('dashboard-worksheet-zone-type', () => {
     const baseline = dashboardWorksheetZoneTypeRule.validate(dashboard(malformed));
     const candidate = dashboardWorksheetZoneTypeRule.validate(dashboard(malformed + malformed));
 
-    expect(introducedBlockingValidationIssues(baseline, candidate)).toEqual(candidate);
+    expect(introducedBlockingValidationIssues(baseline, candidate, 'dashboard')).toEqual(candidate);
   });
 });

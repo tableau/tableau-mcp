@@ -1,9 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as cachePathModule from '../../../desktop/cachePath.js';
+import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loadDashboardXmlModule from '../../../desktop/wrappers/loadDashboardXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
@@ -227,6 +229,82 @@ describe('applyDashboardTool', () => {
     expect(mockLoad).toHaveBeenCalledWith(
       expect.objectContaining({ xml: mockXml, signal: customSignal }),
     );
+  });
+});
+
+describe('applyDashboardTool saved Datasource Filters documents (live-shaped)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
+  });
+
+  let nameless = '';
+  let named = '';
+  beforeAll(async () => {
+    const { readFileSync: readReal } = await vi.importActual<typeof import('node:fs')>('node:fs');
+    const load = (name: string): string => readReal(join(__dirname, 'fixtures', name), 'utf-8');
+    nameless = load('dashboardFiltersNamelessCardZone.xml');
+    named = load('dashboardFiltersNamedCardZone.xml');
+  });
+
+  async function run(xml: string): Promise<{
+    result: CallToolResult;
+    applyDashboardDocument: ReturnType<typeof vi.fn>;
+  }> {
+    const actual = await vi.importActual<typeof loadDashboardXmlModule>(
+      '../../../desktop/wrappers/loadDashboardXml.js',
+    );
+    vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockImplementation(actual.loadDashboardXml);
+    const uuid = /uuid='([^']+)'/.exec(xml)![1];
+    const sheets = ['Revenue by Product per Period', 'Total Revenue']
+      .map(
+        (n) =>
+          `<worksheet name="${n}"><table><rows>[Superstore].[sum:Sales:qk]</rows><cols/></table></worksheet>`,
+      )
+      .join('');
+    const live = `<workbook><worksheets>${sheets}</worksheets><dashboards><dashboard name="Datasource Filters"><zones/><simple-id uuid="${uuid}"/></dashboard></dashboards><windows><window class="dashboard" name="Datasource Filters"><viewpoints><viewpoint name="Revenue by Product per Period"/><viewpoint name="Total Revenue"/></viewpoints></window></windows></workbook>`;
+    const applyDashboardDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'c', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: live })),
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [{ id: uuid, name: 'Datasource Filters' }],
+        }),
+      ),
+      getDashboardDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: `<dashboard name="Datasource Filters"><zones/><simple-id uuid="${uuid}"/></dashboard>`,
+        }),
+      ),
+      applyDashboardDocument,
+    });
+    const result = await getToolResult({
+      dashboardName: 'Datasource Filters',
+      dashboardXml: xml,
+      mockExecutor: vi.fn().mockResolvedValue(executor),
+    });
+    return { result, applyDashboardDocument };
+  }
+
+  it('refuses the saved nameless Product Line filter zone with nothing sent', async () => {
+    const { result, applyDashboardDocument } = await run(nameless);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const text = result.content[0].text;
+    expect(text).toContain('dashboard-card-zone-name');
+    expect(text).toContain('Revenue by Product per Period');
+    expect(text).toContain('Total Revenue');
+    expect(applyDashboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('applies the saved named-zone document Desktop accepted', async () => {
+    const { result, applyDashboardDocument } = await run(named);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('dashboard-card-zone-name');
+    expect(result.isError).toBe(false);
+    expect(applyDashboardDocument).toHaveBeenCalledOnce();
   });
 });
 
