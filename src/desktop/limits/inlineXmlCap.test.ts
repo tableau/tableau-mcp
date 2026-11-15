@@ -119,7 +119,7 @@ describe('inlineXmlCap', () => {
       const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 
       logInlineXmlCapHit({
-        tool: 'get-workbook-xml',
+        tool: 'get-xml',
         bytes: 40000,
         capBytes: 16384,
         file: '/cache/workbook-1.xml',
@@ -132,7 +132,7 @@ describe('inlineXmlCap', () => {
           message: expect.stringContaining('Inline XML cap exceeded'),
           data: expect.objectContaining({
             capHit: true,
-            tool: 'get-workbook-xml',
+            tool: 'get-xml',
             bytes: 40000,
             capBytes: 16384,
             file: '/cache/workbook-1.xml',

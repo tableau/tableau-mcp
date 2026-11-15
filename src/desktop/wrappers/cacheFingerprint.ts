@@ -58,10 +58,10 @@ export interface CheckSidecarResult {
 export type FingerprintResolver = (sessionId: string) => InstanceFingerprint | undefined;
 
 const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
-  worksheet: 'get-worksheet-xml',
-  workbook: 'get-workbook-xml',
-  dashboard: 'get-dashboard-xml',
-  storyboard: 'get-storyboard-xml',
+  worksheet: 'get-xml (kind=worksheet)',
+  workbook: 'get-xml (kind=workbook)',
+  dashboard: 'get-xml (kind=dashboard)',
+  storyboard: 'get-xml (kind=storyboard)',
   datasource: 'get-datasource-xml',
 };
 

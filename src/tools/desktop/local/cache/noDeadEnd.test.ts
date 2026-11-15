@@ -8,7 +8,7 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorkbookTool } from '../../api/applyWorkbook.js';
-import { getGetWorkbookXmlTool } from '../../api/getWorkbookXml.js';
+import { getXmlTool } from '../../api/getXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getReadCachedXmlTool } from './readCachedXml.js';
@@ -75,8 +75,11 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
 
     // 1) GET: inline requested, but the cap forces file mode. Agent gets a path + summary,
     //    NOT the 20KB workbook.
-    const getCb = await Provider.from(getGetWorkbookXmlTool(new DesktopMcpServer()).callback);
-    const getResult = await getCb({ session: 's1', mode: 'inline' }, extra());
+    const getCb = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
+    const getResult = await getCb(
+      { session: 's1', kind: 'workbook', sheetId: undefined, mode: 'inline' },
+      extra(),
+    );
     invariant(getResult.content[0].type === 'text');
     expect(getResult.content[0].text).not.toContain('[Profit]');
     const file = (JSON.parse(getResult.content[0].text) as { file: string }).file;

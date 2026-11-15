@@ -410,7 +410,7 @@ async function finalizeWorksheetApply({
  * applies the raw XML, and what upsertSheetIntoWorkbook's own name check matches.
  *
  * Only a single top-level `<worksheet>` fragment is a legal payload here (the same fragment
- * get-worksheet-xml returns and upsertSheetIntoWorkbook requires). A `<workbook>`-wrapped document has
+ * get-xml returns and upsertSheetIntoWorkbook requires). A `<workbook>`-wrapped document has
  * no top-level identity to gate on, so it is rejected before apply with a recovery hint rather than
  * failing as a misleading mismatch against an empty XML name.
  */
@@ -443,7 +443,7 @@ export function resolveCanonicalWorksheetName(
           'just that element, write-cached-xml with the same selector to splice your edit back, then ' +
           'apply-worksheet with that file.'
         : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the cached file. ' +
-          `FIX: get-worksheet-xml for ${callerRef ? `"${callerRef}"` : 'the worksheet'} mints a file holding exactly that fragment; edit it ` +
+          `FIX: get-xml with kind=worksheet for ${callerRef ? `"${callerRef}"` : 'the worksheet'} mints a file holding exactly that fragment; edit it ` +
           'with read-cached-xml/write-cached-xml and pass that path to apply-worksheet.',
     });
   }
@@ -458,9 +458,9 @@ export function resolveCanonicalWorksheetName(
       type: 'name-mismatch',
       message:
         `worksheetName "${worksheetName}" does not match <worksheet name="${xmlName}"> in the file, and apply-worksheet cannot rename a worksheet. ` +
-        `FIX: check the worksheet's name in Desktop with list-worksheets. If it is "${xmlName}", pass "${xmlName}" as worksheetName. ` +
+        `FIX: check the worksheet's name in Desktop with get-sheets. If it is "${xmlName}", pass "${xmlName}" as worksheetName. ` +
         `If it is "${worksheetName}", set the name in the file to "${worksheetName}" and apply; to rename the worksheet, call rename-sheet afterwards. ` +
-        'If it is neither, re-read the worksheet with get-worksheet-xml and redo your edit in that file. No changes were sent to Tableau.',
+        'If it is neither, re-read the worksheet with get-xml and redo your edit in that file. No changes were sent to Tableau.',
     });
   }
 
@@ -469,7 +469,7 @@ export function resolveCanonicalWorksheetName(
 function worksheetAbsentMessage(canonicalName: string): string {
   return (
     `No worksheet named "${canonicalName}" is open to update. This updates an existing worksheet ` +
-    'in place and does not create one. FIX: check the name with list-worksheets, or create a new ' +
+    'in place and does not create one. FIX: check the name with get-sheets, or create a new ' +
     'worksheet with build-worksheets-from-templates and apply-worksheet.'
   );
 }
@@ -708,7 +708,7 @@ export async function loadWorksheetXml({
             message:
               `The file names this worksheet "${applyOutcome.submittedName}", but in Desktop it is "${applyOutcome.liveName}", and apply-worksheet cannot rename a worksheet. ` +
               `FIX: if you edited the name to rename it, set it to "${applyOutcome.liveName}" in the file, apply, then call rename-sheet. ` +
-              'If the file is older than the worksheet in Desktop, re-read it with get-worksheet-xml and redo your edit. No changes were sent to Tableau.',
+              'If the file is older than the worksheet in Desktop, re-read it with get-xml and redo your edit. No changes were sent to Tableau.',
           },
         });
       }
@@ -724,7 +724,7 @@ export async function loadWorksheetXml({
           error: {
             type: 'source-drift',
             message:
-              'The worksheet changed since this cache was read. Re-read it with get-worksheet-xml, reapply your edit to the new cache file, then retry apply-worksheet. No changes were sent to Tableau.',
+              'The worksheet changed since this cache was read. Re-read it with get-xml, reapply your edit to the new cache file, then retry apply-worksheet. No changes were sent to Tableau.',
           },
         });
       }

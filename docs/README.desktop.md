@@ -59,7 +59,7 @@ For example, this edits a URL action:
 
 Delete with `{"operation":"delete","actionName":"[Action1]"}` and an optional `session`. An unknown
 name returns the available names and captions. Existing actions can also be inspected with
-`get-workbook-xml`; use their internal `name`, rather than their caption. Edits/deletes require a
+`get-xml` with `kind=workbook`; use their internal `name`, rather than their caption. Edits/deletes require a
 Desktop build that replaces actions during whole-workbook applies. The tool verifies the resulting
 action identities and edited settings after applying; `undo-redo-workbook` can reverse and
 restore the change.

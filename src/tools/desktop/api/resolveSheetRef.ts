@@ -1,5 +1,6 @@
 import { Ok } from 'ts-results-es';
 
+import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind, SheetRef } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
@@ -87,6 +88,10 @@ export async function resolveSheetRef({
       });
     },
   });
+}
+
+export function isSheetNotFound(error: ExecuteCommandError): boolean {
+  return error.type === 'command-failed' && error.error?.code === 'sheet-not-found';
 }
 
 const SHEET_LABEL: Record<SheetKind, string> = {

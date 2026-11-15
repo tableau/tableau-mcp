@@ -118,7 +118,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'dense-scatter-bubble',
-    text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
+    text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-xml(kind:worksheet, mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
   },
   {
     kind: 'prose',
@@ -190,11 +190,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard-edit-fallback',
     trigger: 'an existing dashboard edit the bounded batch cannot express',
     action:
-      'use list-dashboards -> format-worksheets for constituent worksheet properties; reserve cached dashboard editing for dashboard-level properties: get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
+      'use get-sheets(kind:dashboard) -> format-worksheets for constituent worksheet properties; reserve cached dashboard editing for dashboard-level properties: get-xml(kind:dashboard) -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
     toolSequence: [
-      'list-dashboards',
+      'get-sheets',
       'format-worksheets',
-      'get-dashboard-xml',
+      'get-xml',
       'read-cached-xml',
       'write-cached-xml',
       'apply-dashboard',
@@ -210,10 +210,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'story-edit-fallback',
     trigger: 'an existing story edit',
     action:
-      'use compose-story for ordered dashboard points and matching size. Set replaceExisting only after an explicit rebuild/replace request; otherwise use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
+      'use compose-story for ordered dashboard points and matching size. Set replaceExisting only after an explicit rebuild/replace request; otherwise use get-xml(kind:storyboard) -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
     toolSequence: [
       'compose-story',
-      'get-storyboard-xml',
+      'get-xml',
       'read-cached-xml',
       'write-cached-xml',
       'apply-storyboard',
@@ -226,8 +226,8 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'whole-workbook-fallback',
     trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
     action:
-      'use get-workbook-xml -> read-cached-xml -> write-cached-xml -> apply-workbook; use only for datasource definitions or cross-artifact changes, and prefer a scoped apply whenever possible.',
-    toolSequence: ['get-workbook-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
+      'use get-xml(kind:workbook) -> read-cached-xml -> write-cached-xml -> apply-workbook; use only for datasource definitions or cross-artifact changes, and prefer a scoped apply whenever possible.',
+    toolSequence: ['get-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
     stopConditions: [
       'use only for datasource definitions or cross-artifact changes',
       'prefer a scoped apply whenever possible',
@@ -239,8 +239,8 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'rounded-corners',
     trigger: 'rounded corners on dashboard objects or containers',
     action:
-      'For dashboard or container corners, call list-dashboards, then call format-dashboard-zones. If the tool refuses, report the reason and stop. Never claim dashboard or container rounded corners are impossible before the typed tool refuses. Never use shell commands, raw whole-workbook XML, or cached XML for this ask.',
-    toolSequence: ['list-dashboards', 'format-dashboard-zones'],
+      'For dashboard or container corners, call get-sheets with kind=dashboard, then call format-dashboard-zones. If the tool refuses, report the reason and stop. Never claim dashboard or container rounded corners are impossible before the typed tool refuses. Never use shell commands, raw whole-workbook XML, or cached XML for this ask.',
+    toolSequence: ['get-sheets', 'format-dashboard-zones'],
     stopConditions: [
       'If the tool refuses, report the reason and stop',
       'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
@@ -280,10 +280,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use set-member-colors to color specific members; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
+      'use existing-sheet tools only: get-sheets -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use set-member-colors to color specific members; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
-      'list-worksheets',
-      'list-dashboards',
+      'get-sheets',
       'ask-user',
       'refine-worksheet',
       'set-member-colors',

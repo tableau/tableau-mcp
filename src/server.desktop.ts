@@ -51,7 +51,7 @@ const serverVersion = pkg.version;
 /**
  * Small tool set for demos, selected by TOOL_PROFILE=demo. Registering fewer tools keeps the
  * serialized schemas small, which cuts per-turn latency and token cost. It holds the fast-path
- * and coordination tools plus the fallback chain (get-workbook-xml, apply-worksheet) the model
+ * and coordination tools plus the fallback chain (get-xml, apply-worksheet) the model
  * needs when the fast path cannot finish. Experimental: it may change or be removed in a minor
  * release.
  */
@@ -59,8 +59,10 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
   'bind-template',
   'run-dashboard-batch',
   'list-instances',
+  'get-sheets',
   'list-worksheets',
   'list-available-fields',
+  'get-xml',
   'get-worksheet-xml',
   'apply-workbook',
   'get-workbook-xml',
@@ -88,9 +90,9 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'resolve-field',
     // The manual field-edit path's read leg: mints the worksheetFile cache path that
     // add-field/remove-field/apply-worksheet consume. Without it the manual path cannot start.
+    'get-xml',
     'get-worksheet-xml',
     'get-dashboard-xml',
-    'get-storyboard-xml',
     'get-workbook-xml',
     'export-worksheet-image',
     'export-dashboard-image',
@@ -143,11 +145,10 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'invoke-dialog-action',
     'list-available-fields',
     'search-workbook-fields',
+    'get-sheets',
     'list-worksheets',
     'get-show-me-options',
     'list-dashboards',
-    'list-storyboards',
-    'get-sheet-info',
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
@@ -177,7 +178,7 @@ export const ALWAYS_LOAD_TOOL_NAMES: ReadonlySet<DesktopToolName> = new Set<Desk
   'rename-sheet',
   'read-expertise-resource',
   'run-dashboard-batch',
-  'get-dashboard-xml',
+  'get-xml',
   'invoke-dialog-action',
   'search-expertise',
 ]);

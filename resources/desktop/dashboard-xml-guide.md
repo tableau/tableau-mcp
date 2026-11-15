@@ -274,7 +274,7 @@ a blank worksheet, change its zone type, or replace the whole workbook as a work
 1. Confirm the dashboard and referenced worksheets exist in the open workbook.
 2. Check the discovered Desktop API version. On older or unknown versions, add any unregistered
    worksheets to the dashboard in Desktop first, without changing their content.
-3. Use `get-dashboard-xml` to read the current dashboard fragment.
+3. Use `get-xml` with `kind=dashboard` to read the current dashboard fragment.
 4. Edit the fragment's zones, retaining the dashboard identity and valid worksheet zone types.
 5. Use `apply-dashboard` for the surgical dashboard-only write, then inspect readback.
 

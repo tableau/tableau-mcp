@@ -498,7 +498,7 @@ describe('composeDashboardCore', () => {
       });
       if (outcome.state === 'applied') throw new Error('Expected fatal failure');
       expect(outcome.error.getErrorText()).toContain('restart Tableau Desktop');
-      expect(outcome.error.getErrorText()).not.toContain('Call list-dashboards');
+      expect(outcome.error.getErrorText()).not.toContain('Call get-sheets');
       expect(harness.postedXml).toHaveLength(1);
       expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(stage === 'apply' ? 1 : 2);
     },

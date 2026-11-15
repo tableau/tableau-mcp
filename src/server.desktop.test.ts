@@ -97,7 +97,7 @@ describe('DesktopMcpServer', () => {
         vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
       ).map(([name]) => name);
       expect(registeredNames).toContain('list-instances');
-      expect(registeredNames).toContain('list-worksheets');
+      expect(registeredNames).toContain('get-sheets');
     } finally {
       spy.mockRestore();
     }
@@ -259,7 +259,7 @@ describe('desktop tools/list serialized surface', () => {
     // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
     // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
     // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(10_014);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(10_040);
   });
 });
 
@@ -298,8 +298,9 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
 
 describe('desktop tools/list Tableau vocabulary', () => {
   it('does not expose XML in tool titles, descriptions, or parameter descriptions', async () => {
+    const toolNamePattern = new RegExp(`\\b(${desktopToolNames.join('|')})\\b(?!-)`, 'g');
     const offenders = (await collectDesktopToolVocabularySurface())
-      .filter((value) => /\bxml\b/i.test(value))
+      .filter((value) => /\bxml\b/i.test(value.replace(toolNamePattern, '')))
       .sort();
 
     expect(offenders).toEqual([]);
@@ -411,21 +412,17 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
       const names = selectToolsForProfile(allTools(), profile).map((tool) => tool.name);
 
       expect(names).toContain('list-available-fields');
-      expect(names).toContain('get-worksheet-xml');
+      expect(names).toContain('get-xml');
     },
   );
 
   it('makes the repair read available before authoring in full and default profiles', async () => {
     const tools = allTools();
-    const defaultTool = selectToolsForProfile(tools, '').find(
-      (tool) => tool.name === 'get-worksheet-xml',
-    )!;
-    const fullTool = selectToolsForProfile(tools, 'full').find(
-      (tool) => tool.name === 'get-worksheet-xml',
-    )!;
+    const defaultTool = selectToolsForProfile(tools, '').find((tool) => tool.name === 'get-xml')!;
+    const fullTool = selectToolsForProfile(tools, 'full').find((tool) => tool.name === 'get-xml')!;
     const extra = { ...getMockRequestHandlerExtra(), getExecutor: vi.fn() };
     type OrientationCallback = (
-      args: { session?: string },
+      args: { session?: string; kind: 'worksheet'; sheetId: string },
       callbackExtra: ReturnType<typeof getMockRequestHandlerExtra>,
     ) => Promise<CallToolResult>;
     const defaultCallback = (await Provider.from(
@@ -433,8 +430,9 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     )) as unknown as OrientationCallback;
     const fullCallback = (await Provider.from(fullTool.callback)) as unknown as OrientationCallback;
 
-    const defaultResult = await defaultCallback({ session: 'S1' }, extra);
-    const fullResult = await fullCallback({ session: 'S1' }, extra);
+    const args = { session: 'S1', kind: 'worksheet' as const, sheetId: 'sheet-sales' };
+    const defaultResult = await defaultCallback(args, extra);
+    const fullResult = await fullCallback(args, extra);
 
     expect(fullResult.isError).toBe(true);
     expect(defaultResult.isError).toBe(true);
@@ -453,22 +451,17 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     expect(selected.map((tool) => tool.name)).toContain('run-dashboard-batch');
     expect(selected.map((tool) => tool.name)).not.toContain('dashboard-auto-apply');
     // The fallback chain used when the fast path cannot finish must survive in the demo set.
-    for (const fallback of [
-      'bind-template',
-      'get-workbook-xml',
-      'apply-workbook',
-      'apply-worksheet',
-    ]) {
+    for (const fallback of ['bind-template', 'get-xml', 'apply-workbook', 'apply-worksheet']) {
       expect(selected.map((t) => t.name)).toContain(fallback);
     }
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 83-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 82-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(83);
+      expect(selected).toHaveLength(82);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -494,6 +487,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'read-expertise-resource',
         'search-expertise',
         'get-summary-data',
+        'get-sheets',
         'get-workbook-inventory',
         'get-datasources',
         'list-workbook-datasources',
@@ -518,8 +512,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'list-worksheets',
         'get-show-me-options',
         'list-dashboards',
-        'list-storyboards',
-        'get-sheet-info',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
         'list-datasource-logical-tables',
@@ -539,11 +531,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'get-workspace-extensions',
         'reload-workspace-extension',
         'refresh-datasource',
+        'get-xml',
         'get-workbook-xml',
         'apply-workbook',
         'get-dashboard-xml',
         'apply-dashboard',
-        'get-storyboard-xml',
         'apply-storyboard',
         'export-worksheet-image',
         'export-dashboard-image',

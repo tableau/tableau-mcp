@@ -229,9 +229,7 @@ export class WorkbookReadGateway {
     return Ok({ xml: documentResult.value.xml, name: dashboardResult.value.name });
   }
 
-  private async getWorksheetXmlViaWorkbookDocument(
-    worksheetRef: string,
-  ): Promise<GetWorksheetXmlResult> {
+  async getWorksheetXmlViaWorkbookDocument(worksheetRef: string): Promise<GetWorksheetXmlResult> {
     const workbookResult = await getWorkbookXml({ executor: this.executor, signal: this.signal });
     if (workbookResult.isErr()) {
       return Err({ type: 'execute-command-error', error: workbookResult.error });
@@ -261,9 +259,7 @@ export class WorkbookReadGateway {
     return Ok({ xml: worksheetXml, name: resolvedName });
   }
 
-  private async getDashboardXmlViaWorkbookDocument(
-    dashboardRef: string,
-  ): Promise<GetDashboardXmlResult> {
+  async getDashboardXmlViaWorkbookDocument(dashboardRef: string): Promise<GetDashboardXmlResult> {
     const workbookResult = await getWorkbookXml({ executor: this.executor, signal: this.signal });
     if (workbookResult.isErr()) {
       return Err({ type: 'execute-command-error', error: workbookResult.error });
