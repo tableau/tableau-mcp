@@ -18,6 +18,7 @@ import { CacheFileOutsideCacheError } from '../errors/mcpToolError.desktop.js';
 import { FileNotFoundError } from '../errors/mcpToolError.js';
 import {
   checkCacheFileArg,
+  HARD_LINK_MAX_RETRIES,
   readCacheFileArg,
   readContainedCacheTextFile,
   writeCacheFileArg,
@@ -363,7 +364,7 @@ describe.skipIf(process.platform === 'win32')('file-argument refusal reasons', (
     ]) {
       expect(result.isErr() && result.error.message).toBe(refusal(tail));
     }
-    expect(wait).toHaveBeenCalledTimes(60);
+    expect(wait).toHaveBeenCalledTimes(3 * HARD_LINK_MAX_RETRIES);
   });
 
   it('check waits out a brief second link', () => {

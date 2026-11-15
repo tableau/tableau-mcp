@@ -23,6 +23,8 @@ import {
   type ContainedCacheReadOperations,
   type ContainedCacheWriteOperations,
   getCacheDir,
+  HARD_LINK_MAX_RETRIES,
+  HARD_LINK_RETRY_INTERVAL_MS,
   isWithinCacheDir,
   readContainedCacheTextFile,
   unsafeFileReasonLine,
@@ -322,7 +324,8 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(join(directory, 'linked', 'b.xml'))).toMatchObject({
       reason: 'outside-cache',
     });
-    expect(wait).toHaveBeenCalledTimes(20);
+    expect(wait).toHaveBeenCalledTimes(HARD_LINK_MAX_RETRIES);
+    expect(wait).toHaveBeenCalledWith(expect.any(Int32Array), 0, 0, HARD_LINK_RETRY_INTERVAL_MS);
   });
 
   it('waits out a brief second link, then reads', () => {
@@ -654,7 +657,7 @@ describe('writeContainedCacheTextFile', () => {
     for (const file of [join(directory, 'a.xml'), join(outside, 'a.xml')]) {
       expect(readFileSync(file, 'utf-8')).toBe('<a/>');
     }
-    expect(wait).toHaveBeenCalledTimes(20);
+    expect(wait).toHaveBeenCalledTimes(HARD_LINK_MAX_RETRIES);
   });
 
   it('waits out a brief second link, then writes', () => {

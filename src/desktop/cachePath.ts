@@ -182,15 +182,21 @@ function verificationFailure(error: unknown): ContainedCacheReadResult {
   return { ok: false, issue: 'read-error', error };
 }
 
-// A sync sleep: this Node process serves one chat, and a sync-only caller can't await. 20 x 500 ms = 10 s.
+// Sync sleep: one chat per process, and sync callers can't await. Keep the total well under the 60 s call deadline.
+export const HARD_LINK_MAX_RETRIES = 20;
+export const HARD_LINK_RETRY_INTERVAL_MS = 500;
+
 function retryWhileHardLinked<T>(attempt: () => T): T {
   const sleeper = new Int32Array(new SharedArrayBuffer(4));
-  for (let i = 0; ; i++) {
+  for (let retries = 0; ; retries++) {
     const result = attempt();
-    if (i === 20 || (result as { reason?: string } | undefined)?.reason !== 'hard-linked') {
+    if (
+      retries === HARD_LINK_MAX_RETRIES ||
+      (result as { reason?: string } | undefined)?.reason !== 'hard-linked'
+    ) {
       return result;
     }
-    Atomics.wait(sleeper, 0, 0, 500);
+    Atomics.wait(sleeper, 0, 0, HARD_LINK_RETRY_INTERVAL_MS);
   }
 }
 
