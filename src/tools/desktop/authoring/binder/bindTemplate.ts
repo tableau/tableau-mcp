@@ -1712,24 +1712,52 @@ function describeAskCoverageGaps(gaps: AskCoverageGap[]): string {
 }
 
 function askCoverageNextActionLabel(gaps: AskCoverageGap[]): string {
-  const full = `Ask named ${gaps.map((g) => (g.kind === 'year' ? g.text : g.field)).join(', ')}; not used`;
-  if (full.length <= 60) return full;
-  const cut = full.slice(0, 60);
-  const boundary = cut.lastIndexOf(' ');
-  return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/[,;]$/, '');
+  const names = gaps.map((g) => (g.kind === 'year' ? g.text : g.field));
+  const label = (shown: string[]): string => {
+    const more = names.length - shown.length;
+    return `Ask named ${shown.join(', ')}${more > 0 ? `, +${more} more` : ''}; not used`;
+  };
+  for (let n = names.length; n > 1; n--) {
+    if (label(names.slice(0, n)).length <= 60) return label(names.slice(0, n));
+  }
+  return label(names.slice(0, 1)).slice(0, 60);
+}
+
+interface CoverageGuidanceContext {
+  sheetName: string;
+  /** slot_id of the template's measure slot, named so the resubmitted proposal can bind the calc there. */
+  measureSlot?: string;
+  /** A proposal call cannot be corrected again, so the only honest next step is telling the user. */
+  proposalCall: boolean;
+}
+
+function appendCoverageAfter(
+  guidance: string,
+  gaps: AskCoverageGap[] | undefined,
+  context: CoverageGuidanceContext,
+): string {
+  return gaps ? appendAskCoverageGuidance(guidance, gaps, context) : guidance;
 }
 
 function appendAskCoverageGuidance(
   receipt: string,
-  sheetName: string,
   gaps: AskCoverageGap[],
+  { sheetName, measureSlot, proposalCall }: CoverageGuidanceContext,
 ): string {
   const named = describeAskCoverageGaps(gaps);
-  return (
+  const head =
     `${receipt} INCOMPLETE — the ask named ${named}; this bind did not use ${gaps.length === 1 ? 'it' : 'them'}, ` +
-    `so sheet "${sheetName}" does not answer the ask yet. Do NOT tell the user it is done. ` +
-    'For a year or a measure condition, author-calc a calculation that applies that condition, ' +
-    `then call bind-template with the calc's caption and target_worksheet:'${sheetName}'. ` +
+    `so sheet "${sheetName}" does not answer the ask yet. Do NOT tell the user it is done. `;
+  if (proposalCall) {
+    return (
+      `${head}Do NOT call bind-template again for this ask: another bind is refused after a proposal. ` +
+      `Tell the user plainly that the sheet leaves out ${named}, and offer to add it by hand with author-calc and add-field.`
+    );
+  }
+  return (
+    `${head}For a year or a measure condition, author-calc a calculation that applies that condition, ` +
+    `then call bind-template again with the SAME ask, target_worksheet:'${sheetName}' and a proposal that binds the calc's caption in ` +
+    `${measureSlot ? `slot ${measureSlot}` : 'the measure slot'} (a bare ask still binds the raw measure). ` +
     'For a field the bind left out, add-field it then apply-worksheet, or ask-user which chart is wanted.'
   );
 }
@@ -2714,6 +2742,7 @@ async function performAutoApply({
   idempotencyKey,
   deterministicBindingFields,
   keepLargePie,
+  proposalSupplied,
   dryBindOffer,
   reportProgress,
 }: {
@@ -2738,6 +2767,7 @@ async function performAutoApply({
   deterministicBindingFields?: string[];
   /** The user explicitly chose a pie above the slice limit; do not warn about it again. */
   keepLargePie?: boolean;
+  proposalSupplied?: boolean;
   reportProgress: (progress: 1 | 2 | 3, message: string) => Promise<void>;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
@@ -3057,16 +3087,27 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
-  const calcGaps: AskCoverageGap[] = schemaSummary
-    ? successfulCalcCaptions.flatMap((caption): AskCoverageGap[] => {
-        const field = schemaSummary.fields.find((f) => f.caption === caption || f.name === caption);
-        return field && !schemaFieldIsUsed(field, args)
-          ? [{ kind: 'field', field: caption, text: caption }]
-          : [];
-      })
-    : [];
+  // Explicit-binding callers pass no free text, so there is no ask for a calc to be left out of.
+  const calcGaps: AskCoverageGap[] =
+    schemaSummary && ask.trim().length > 0
+      ? successfulCalcCaptions.flatMap((caption): AskCoverageGap[] => {
+          const field = schemaSummary.fields.find(
+            (f) => f.caption === caption || f.name === caption,
+          );
+          return field && !schemaFieldIsUsed(field, args, schemaSummary)
+            ? [{ kind: 'field', field: caption, text: caption }]
+            : [];
+        })
+      : [];
   const askCoverageGaps = [...(res.askCoverage?.unconsumed ?? []), ...calcGaps];
   const askCoverageGap = askCoverageGaps.length > 0 ? askCoverageGaps : undefined;
+  const coverageContext: CoverageGuidanceContext = {
+    sheetName: literalTitle,
+    measureSlot: templateSnapshot.descriptor.slots.find(
+      (slot) => slot.bindable && slot.kind === 'quantitative',
+    )?.slot_id,
+    proposalCall: proposalSupplied === true || appliedDefault !== undefined,
+  };
   const summaryStart = Date.now();
   // Trusted deterministic callers use one structural workbook readback for the
   // authored calculations and worksheet. Avoid a second summary-data round trip;
@@ -3146,15 +3187,19 @@ async function performAutoApply({
     promiseOutcome === 'failed' || postApplyUncertain
       ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
       : unfilledEncodings
-        ? appendUnfilledEncodingGuidance(
-            receiptText,
-            literalTitle,
-            unfilledEncodings,
-            ask,
-            schemaSummary,
+        ? appendCoverageAfter(
+            appendUnfilledEncodingGuidance(
+              receiptText,
+              literalTitle,
+              unfilledEncodings,
+              ask,
+              schemaSummary,
+            ),
+            askCoverageGap,
+            coverageContext,
           )
         : askCoverageGap
-          ? appendAskCoverageGuidance(receiptText, literalTitle, askCoverageGap)
+          ? appendAskCoverageGuidance(receiptText, askCoverageGap, coverageContext)
           : needsFollowUp
             ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
             : documentWarnings.length > 0
@@ -4380,6 +4425,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   ? proposal?.bindings.map((binding) => binding.field)
                   : undefined,
                 keepLargePie: largePieConfirmed,
+                proposalSupplied: proposal !== undefined,
                 dryBindOffer: async (offeredAsk) => {
                   // The follow-up call has no proposal and no complete-request flag, so use its catalog.
                   const followUp = createPuppetCompatibilityProjection(

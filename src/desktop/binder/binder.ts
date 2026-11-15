@@ -597,6 +597,12 @@ function validateAndBuild(
   };
 }
 
+function attachAskCoverage(res: BinderResult, ask: string, summary: SchemaSummary): void {
+  if (res.status !== 'bound') return;
+  const gaps = askCoverageGaps(ask, summary, res.args);
+  if (gaps.length > 0) res.askCoverage = { unconsumed: gaps };
+}
+
 function requestNotCovered(): Extract<BinderResult, { status: 'escalate' }> {
   return {
     status: 'escalate',
@@ -635,7 +641,7 @@ export async function bindTemplate(args: {
     if (args.requireCompleteRequest) {
       return requestNotCovered();
     }
-    return validateAndBuild(
+    const proposed = validateAndBuild(
       args.proposal,
       args.manifests,
       summary,
@@ -646,6 +652,8 @@ export async function bindTemplate(args: {
         ? { allowLargePie: true }
         : undefined,
     );
+    if (args.ask) attachAskCoverage(proposed, args.ask, summary);
+    return proposed;
   }
 
   // ── FAIL-CLOSED cost guard ───────────────────────
@@ -699,8 +707,7 @@ export async function bindTemplate(args: {
       if (cls.encodings) {
         res.encodings = cls.encodings;
       }
-      const coverageGaps = askCoverageGaps(args.ask, summary, res.args);
-      if (coverageGaps.length > 0) res.askCoverage = { unconsumed: coverageGaps };
+      attachAskCoverage(res, args.ask, summary);
       if (args.requireCompleteRequest) {
         const manifest = args.manifests.get(cls.template);
         if (

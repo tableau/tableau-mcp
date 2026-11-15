@@ -2028,3 +2028,339 @@ describe('binder/schemaFieldIsUsed', () => {
     expect(schemaFieldIsUsed(field, { field_mapping: {} })).toBe(false);
   });
 });
+
+describe('binder/ask coverage after the year calc is authored and Call 2', () => {
+  const calcXml = (formula: string, extra = ''): string =>
+    WORKBOOK_XML.replace(
+      '</datasource>',
+      `<column name='[Calculation_1]' caption='Orders YTD' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='${formula}' /></column>${extra}</datasource>`,
+    );
+  const ask = 'bar chart of Orders YTD by Region in 2025';
+  const barProposal = (measure: string): BindingProposal => ({
+    template: 'ranking-ordered-bar',
+    title: 'Orders by Region',
+    bindings: [
+      { slot_id: 'field_base_1', field: 'Region' },
+      { slot_id: 'field_base_2', field: measure },
+    ],
+    confidence: 1,
+  });
+
+  it('rebinding the verbatim ask with a calc that carries the year has no year gap', async () => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: calcXml('SUM(IF YEAR([Order Date])=2025 THEN [Sales] END)'),
+      manifests: descriptors,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage).toBeUndefined();
+  });
+
+  it('still flags the year when the bound calc formula does not carry it', async () => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: calcXml('SUM([Sales])'),
+      manifests: descriptors,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage?.unconsumed.map((g) => g.text)).toEqual(['2025']);
+  });
+
+  it('Call 2 reports a year the proposal dropped', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region in 2025',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: barProposal('Sales'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage?.unconsumed).toEqual([{ kind: 'year', text: '2025' }]);
+  });
+
+  it('Call 2 reports a named field the proposal dropped', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region, label by Customer Name',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: barProposal('Sales'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage?.unconsumed.map((g) => g.text)).toEqual(['Customer Name']);
+  });
+
+  it('Call 2 counts a year carried by a filter value as covered', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region in 2025',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: { ...barProposal('Sales'), filters: [{ field: 'Order Date', values: ['2025'] }] },
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage).toBeUndefined();
+  });
+
+  it('a helper calc referenced by a bound calc counts as used', () => {
+    const s = summarizeSchema(
+      WORKBOOK_XML.replace(
+        '</datasource>',
+        "<column name='[Calculation_2]' caption='Total Profit' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='SUM([Profit])' /></column><column name='[Calculation_3]' caption='Profit Ratio' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='[Total Profit] / SUM([Sales])' /></column></datasource>",
+      ),
+    );
+    const helper = s.fields.find((f) => f.caption === 'Total Profit')!;
+    const used = { field_mapping: { '{{field_base_1}}': '[Superstore].[usr:Calculation_3:qk]' } };
+    expect(schemaFieldIsUsed(helper, used)).toBe(false);
+    expect(schemaFieldIsUsed(helper, used, s)).toBe(true);
+  });
+});
+
+describe('binder/ask coverage: verbatim-ask recovery and false-Done guards', () => {
+  const withCols = (cols: string, dsName = 'Superstore'): string =>
+    WORKBOOK_XML.replace('</datasource>', `${cols}</datasource>`).replace(
+      "name='Superstore'",
+      `name='${dsName}'`,
+    );
+  const ask = 'bar chart of Sales by Region in 2025';
+  const proposal = (measure: string, extra: Partial<BindingProposal> = {}): BindingProposal => ({
+    template: 'ranking-ordered-bar',
+    title: 'Sales by Region',
+    bindings: [
+      { slot_id: 'field_base_1', field: 'Region' },
+      { slot_id: 'field_base_2', field: measure },
+    ],
+    confidence: 1,
+    ...extra,
+  });
+  const calc = (caption: string, formula: string, id: string): string =>
+    `<column name='[${id}]' caption='${caption}' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='${formula}' /></column>`;
+  const salesYear = calc('Sales 2025', 'SUM(IF YEAR([Order Date])=2025 THEN [Sales] END)', 'C1');
+
+  it('Call 1 with the verbatim ask still binds raw Sales and reports the year', async () => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: withCols(salesYear),
+      manifests: descriptors,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage?.unconsumed.map((g) => g.text)).toEqual(['2025']);
+  });
+
+  it('a Call 2 proposal that binds the year calc with the verbatim ask has no gap', async () => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: withCols(salesYear),
+      manifests: descriptors,
+      proposal: proposal('Sales 2025'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage).toBeUndefined();
+  });
+
+  it('reads the year through a helper calc that the bound calc references', async () => {
+    const xml = withCols(
+      calc('Is TY', 'YEAR([Order Date])=2025', 'C2') +
+        calc('Sales TY', 'SUM(IF [Is TY] THEN [Sales] END)', 'C3'),
+    );
+    const result = await bindTemplate({
+      ask,
+      workbookXml: xml,
+      manifests: descriptors,
+      proposal: proposal('Sales TY'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage).toBeUndefined();
+  });
+
+  it('a year in the datasource name is not coverage', async () => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: withCols('', 'Superstore 2025'),
+      manifests: descriptors,
+      proposal: proposal('Sales'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage?.unconsumed.map((g) => g.text)).toEqual(['2025']);
+  });
+
+  it('a year in a non-date filter value is not coverage; one on a date field is', async () => {
+    const onRegion = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: proposal('Sales', { filters: [{ field: 'Region', values: ['West 2025'] }] }),
+    });
+    expect(onRegion.status === 'bound' && onRegion.askCoverage?.unconsumed.length).toBe(1);
+    const onDate = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: proposal('Sales', { filters: [{ field: 'Order Date', values: ['2025'] }] }),
+    });
+    expect(onDate.status === 'bound' && onDate.askCoverage).toBeUndefined();
+  });
+});
+
+describe('binder/ask coverage round 4: dead ends and false Done', () => {
+  const calcCol = (caption: string, formula: string, id: string): string =>
+    `<column name='[${id}]' caption='${caption}' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='${formula}' /></column>`;
+  const withCols = (cols: string): string =>
+    WORKBOOK_XML.replace('</datasource>', `${cols}</datasource>`);
+  const bar = (measure: string, extra: Partial<BindingProposal> = {}): BindingProposal => ({
+    template: 'ranking-ordered-bar',
+    title: 'Chart',
+    bindings: [
+      { slot_id: 'field_base_1', field: 'Region' },
+      { slot_id: 'field_base_2', field: measure },
+    ],
+    confidence: 1,
+    ...extra,
+  });
+  const kpi = (measure: string): BindingProposal => ({
+    template: 'kpi-text',
+    title: 'Sales',
+    bindings: [{ slot_id: 'field_base_1', field: measure }],
+    confidence: 1,
+  });
+  const yearCalc = calcCol('Sales 2025', 'SUM(IF YEAR([Order Date])=2025 THEN [Sales] END)', 'C1');
+
+  it('a KPI that binds a year calc built on the named measure is accepted', async () => {
+    const result = await bindTemplate({
+      ask: 'KPI of Sales in 2025',
+      workbookXml: withCols(yearCalc),
+      manifests: descriptors,
+      proposal: kpi('Sales 2025'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.askCoverage).toBeUndefined();
+  });
+
+  it('a KPI that binds a calc not built on the named measure is still blocked', async () => {
+    const result = await bindTemplate({
+      ask: 'KPI of Sales in 2025',
+      workbookXml: withCols(
+        calcCol('Profit 2025', 'SUM(IF YEAR([Order Date])=2025 THEN [Profit] END)', 'C2'),
+      ),
+      manifests: descriptors,
+      proposal: kpi('Profit 2025'),
+    });
+    expect(result.status).toBe('escalate');
+  });
+
+  it.each([
+    'bar chart of Profit Ratio by Region with Sales in the tooltip',
+    'bar chart of Profit Ratio and Sales by Region',
+  ])('a bound calc that references Sales does not make a named Sales "used": %s', async (ask) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: withCols(calcCol('Profit Ratio', 'SUM([Profit])/SUM([Sales])', 'C3')),
+      manifests: descriptors,
+      proposal: bar('Profit Ratio'),
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect((result.askCoverage?.unconsumed ?? []).map((g) => g.text)).toContain('Sales');
+  });
+
+  it('a template parameter does not carry a year, but DATE_MIN and DATE_MAX do', async () => {
+    const ask = 'bar chart of Sales by Region in 2025';
+    const other = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: bar('Sales', { template_parameters: { YEAR: '2025', TITLE: 'Sales 2025' } }),
+    });
+    expect(other.status === 'bound' && other.askCoverage?.unconsumed.length).toBe(1);
+    const dated = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: bar('Sales', {
+        template_parameters: { DATE_MIN: '2025-01-01', DATE_MAX: '2025-12-31' },
+      }),
+    });
+    expect(dated.status === 'bound' && dated.askCoverage).toBeUndefined();
+  });
+});
+
+describe('binder/ask coverage round 5: a year calc stands in for exactly one raw measure', () => {
+  const calcCol = (caption: string, formula: string, id: string): string =>
+    `<column name='[${id}]' caption='${caption}' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='${formula}' /></column>`;
+  const book = WORKBOOK_XML.replace(
+    '</datasource>',
+    calcCol('Sales 2025', 'SUM(IF YEAR([Order Date])=2025 THEN [Sales] END)', 'C1') +
+      calcCol(
+        'Profit Ratio 2025',
+        'SUM(IF YEAR([Order Date])=2025 THEN [Profit] END)/SUM(IF YEAR([Order Date])=2025 THEN [Sales] END)',
+        'C2',
+      ) +
+      calcCol(
+        'Sales minus Profit 2025',
+        'SUM(IF YEAR([Order Date])=2025 THEN [Sales]-[Profit] END)',
+        'C3',
+      ) +
+      '</datasource>',
+  );
+  const bar = (measure: string): BindingProposal => ({
+    template: 'ranking-ordered-bar',
+    title: 'Chart',
+    bindings: [
+      { slot_id: 'field_base_1', field: 'Region' },
+      { slot_id: 'field_base_2', field: measure },
+    ],
+    confidence: 1,
+  });
+  const kpi = (measure: string): BindingProposal => ({
+    template: 'kpi-text',
+    title: 'KPI',
+    bindings: [{ slot_id: 'field_base_1', field: measure }],
+    confidence: 1,
+  });
+  const run = (ask: string, proposal: BindingProposal): ReturnType<typeof bindTemplate> =>
+    bindTemplate({ ask, workbookXml: book, manifests: descriptors, proposal });
+
+  it.each([
+    ['KPI of Sales in 2025', 'Profit Ratio 2025'],
+    ['KPI of Profit in 2025', 'Profit Ratio 2025'],
+    ['KPI of Sales', 'Profit Ratio 2025'],
+  ])('kpi-text blocks "%s" bound to %s', async (ask, measure) => {
+    const result = await run(ask, kpi(measure));
+    expect(result.status).toBe('escalate');
+  });
+
+  it.each([
+    ['bar chart of Sales by Region in 2025', 'Profit Ratio 2025', ['Sales']],
+    [
+      'bar chart of Sales by Region in 2025, Profit in tooltip',
+      'Profit Ratio 2025',
+      ['Sales', 'Profit'],
+    ],
+    [
+      'bar chart of Sales and Profit by Region in 2025',
+      'Sales minus Profit 2025',
+      ['Sales', 'Profit'],
+    ],
+  ])('"%s" bound to %s still reports the raw measures', async (ask, measure, named) => {
+    const result = await run(ask, bar(measure));
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    const texts = (result.askCoverage?.unconsumed ?? []).map((g) => g.text);
+    for (const n of named) expect(texts).toContain(n);
+  });
+
+  it('keeps the single-measure recoveries', async () => {
+    const barResult = await run('bar chart of Sales by Region in 2025', bar('Sales 2025'));
+    expect(barResult.status === 'bound' && barResult.askCoverage).toBeUndefined();
+    const kpiResult = await run('KPI of Sales in 2025', kpi('Sales 2025'));
+    expect(kpiResult.status).toBe('bound');
+    expect(kpiResult.status === 'bound' && kpiResult.askCoverage).toBeUndefined();
+  });
+});

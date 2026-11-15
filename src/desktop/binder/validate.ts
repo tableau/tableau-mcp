@@ -38,6 +38,7 @@ import {
 import { templateLiveSupportBlocker } from '../templates/templateLiveSupport.js';
 import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
 import {
+  calcReferencesField,
   matchAvoidWhen,
   MAX_CLASSIFIABLE_FIELDS,
   parseExplicitBoxRolePhrases,
@@ -814,7 +815,9 @@ export function validateBinding(
       } else if (
         namedMeasures.length === 1 &&
         boundMeasure &&
-        namedMeasures[0].column_ref !== boundMeasure.column_ref
+        namedMeasures[0].column_ref !== boundMeasure.column_ref &&
+        // A calc built on the named measure (e.g. a year calc) is that measure, restricted.
+        !calcReferencesField(boundMeasure, namedMeasures[0], s)
       ) {
         blockers.push({
           code: 'kind-mismatch',

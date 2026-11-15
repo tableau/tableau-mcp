@@ -8939,6 +8939,224 @@ describe('bind-template — ask coverage gaps are not Done', () => {
   });
 });
 
+describe('bind-template — ask coverage follow-ups', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+  });
+
+  const RATIO_COLUMN_XML =
+    "<column caption='Profit Ratio' datatype='real' name='[Calculation_B]' role='measure' type='quantitative'><calculation class='tableau' formula='[Total Profit] / SUM([Sales])' /></column>";
+  const HELPER_BASE_XML = CALC_BASE_XML.replace(
+    "<column caption='Sales'",
+    "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' /><column caption='Sales'",
+  ).replace('</datasource>', `${RATIO_COLUMN_XML}</datasource>`);
+  const HELPER_READBACK_XML = HELPER_BASE_XML.replace(
+    '</datasource>',
+    "<column caption='Total Profit' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='SUM([Profit])' /></column></datasource>",
+  );
+  const ratioBind = (mapping: Record<string, string>): BinderResult => {
+    invariant(boundResult.status === 'bound');
+    return { ...boundResult, args: { ...boundResult.args, field_mapping: mapping } };
+  };
+
+  async function runCalcs(
+    bind: BinderResult,
+    ask: string,
+    calcs: Array<{ caption: string; formula: string }>,
+  ): Promise<Record<string, any>> {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind,
+      workbookReads: [HELPER_BASE_XML, HELPER_READBACK_XML, INJECTED_RANKING_WORKBOOK_XML],
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
+    const result = await getToolResult({ session: '1', ask, calcs, auto_apply: true, getExecutor });
+    invariant(result.content[0].type === 'text');
+    return JSON.parse(result.content[0].text) as Record<string, any>;
+  }
+  const helperCalcs = [{ caption: 'Total Profit', formula: 'SUM([Profit])' }];
+  const ratioMapping = { '{{field_base_1}}': '[Superstore].[usr:Calculation_B:qk]' };
+
+  it('does not flag a helper calc that a bound calc formula references', async () => {
+    const out = await runCalcs(
+      ratioBind(ratioMapping),
+      'bar chart of Profit Ratio by Region',
+      helperCalcs,
+    );
+    expect(out.guidance).not.toContain('INCOMPLETE');
+    expect(out.guidance).toContain('Done — no further tool calls needed.');
+  });
+
+  it('flags an authored calc nothing uses when an ask was supplied (control)', async () => {
+    const out = await runCalcs(ratioBind({}), 'bar chart of Profit Ratio by Region', helperCalcs);
+    expect(out.guidance).toContain('INCOMPLETE');
+  });
+
+  it('does not flag authored calcs for a caller that passed no ask', async () => {
+    const out = await runCalcs(ratioBind({}), '', helperCalcs);
+    expect(out.guidance).not.toContain('INCOMPLETE');
+  });
+
+  it('keeps the unfilled-encoding steer and adds the coverage clause', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundWithAskCoverageGapResult,
+        encodings: { filled: ['size'], unfilled: ['color'] },
+      },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region in 2025, color by Category',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const out = JSON.parse(result.content[0].text) as Record<string, any>;
+    expect(out.guidance).toContain('did NOT fill it');
+    expect(out.guidance).toContain('the ask named');
+    expect(out.guidance).toContain('2025');
+    expect(out.guidance).not.toContain('Done — no further tool calls needed.');
+  });
+
+  it('keeps "; not used" when the next-action label is shortened', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundResult,
+        encodings: { filled: [], unfilled: [] },
+        askCoverage: {
+          unconsumed: [
+            { kind: 'field', field: 'Customer Name', text: 'Customer Name' },
+            { kind: 'field', field: 'Sub-Category', text: 'Sub-Category' },
+            { kind: 'field', field: 'Regional Manager', text: 'Regional Manager' },
+            { kind: 'year', text: '2025' },
+            { kind: 'year', text: '2024' },
+          ],
+        },
+      },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    const label = (result.structuredContent as any)?.nextAction?.label as string;
+    expect(label).toMatch(/^Ask named .*\+\d+ more; not used$/);
+    expect(label.length).toBeLessThanOrEqual(60);
+  });
+});
+
+describe('bind-template — year recovery round trip with the real binder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+  });
+
+  const YEAR_BASE_XML = [
+    "<?xml version='1.0' encoding='utf-8'?>",
+    "<workbook version='18.1'><datasources><datasource name='Superstore'>",
+    "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' />",
+    "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+    "<column caption='Order Date' datatype='date' name='[Order Date]' role='dimension' type='ordinal' />",
+    '</datasource></datasources>',
+    "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+  ].join('');
+  const YEAR_CALC_XML = YEAR_BASE_XML.replace(
+    '</datasource>',
+    "<column caption='Sales 2025' datatype='real' name='[Calculation_9]' role='measure' type='quantitative'><calculation class='tableau' formula='SUM(IF YEAR([Order Date])=2025 THEN [Sales] END)' /></column></datasource>",
+  );
+  const ASK = 'bar chart of Sales by Region in 2025';
+
+  let realBinderSession = 100;
+  async function bindWithRealBinder(
+    workbook: string,
+    ask: string,
+    proposal?: Record<string, unknown>,
+    sameSession = false,
+  ): Promise<Record<string, any>> {
+    invariant(boundResult.status === 'bound');
+    const injected = INJECTED_RANKING_WORKBOOK_XML.replaceAll(
+      'Sales by Region',
+      String(proposal?.title ?? ask),
+    );
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundResult,
+        args: { ...boundResult.args, template_name: 'ranking-ordered-bar' },
+      },
+      workbookReads: [workbook, injected],
+      inject: { ok: true, xml: injected },
+      structuralReadback: true,
+    });
+    const actual = await vi.importActual<typeof import('../../../../desktop/binder/binder.js')>(
+      '../../../../desktop/binder/binder.js',
+    );
+    vi.mocked(binderModule.bindTemplate).mockImplementation(actual.bindTemplate);
+    const result = await getToolResult({
+      session: String(sameSession ? realBinderSession : ++realBinderSession),
+      ask,
+      auto_apply: true,
+      ...(proposal ? { proposal } : {}),
+      getExecutor,
+    } as any);
+    invariant(result.content[0].type === 'text');
+    return JSON.parse(result.content[0].text) as Record<string, any>;
+  }
+
+  it('keeps the verbatim ask end to end: INCOMPLETE, author the calc, resubmit as the guidance says, Done', async () => {
+    const first = await bindWithRealBinder(YEAR_BASE_XML, ASK);
+    expect(first.guidance).toContain('INCOMPLETE');
+    expect(first.guidance).toContain('author-calc');
+    expect(first.guidance).toContain('SAME ask');
+    expect(first.guidance).toContain('proposal that binds the calc');
+    expect(first.guidance).toContain('slot field_base_2');
+
+    // A bare rebind of the verbatim ask still picks raw Sales, so it stays INCOMPLETE.
+    const bare = await bindWithRealBinder(YEAR_CALC_XML, ASK);
+    expect(bare.guidance).toContain('INCOMPLETE');
+
+    const resubmitted = await bindWithRealBinder(
+      YEAR_CALC_XML,
+      ASK,
+      {
+        template: 'ranking-ordered-bar',
+        title: 'Sales by Region',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Region' },
+          { slot_id: 'field_base_2', field: 'Sales 2025' },
+        ],
+        confidence: 1,
+      },
+      true,
+    );
+    expect(resubmitted.guidance).not.toContain('INCOMPLETE');
+    expect(resubmitted.guidance).toContain('Done — no further tool calls needed.');
+  });
+
+  it('a Call 2 proposal that drops the year is INCOMPLETE too', async () => {
+    const out = await bindWithRealBinder(YEAR_BASE_XML, 'bar chart of Sales by Region in 2025', {
+      template: 'ranking-ordered-bar',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    });
+    expect(out.guidance).toContain('INCOMPLETE');
+    expect(out.guidance).toContain('2025');
+    // A proposal call is terminal: no resubmit path, so the user is told what was left out.
+    expect(out.guidance).toContain('Tell the user plainly');
+    expect(out.guidance).not.toContain('SAME ask');
+  });
+});
+
 describe('bind-template — reports what it actually built', () => {
   beforeEach(() => {
     vi.clearAllMocks();
