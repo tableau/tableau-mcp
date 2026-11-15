@@ -1295,6 +1295,13 @@ function boundedBlockers(blockers: Blocker[]): Blocker[] {
   }));
 }
 
+function isDateFilterValueBlocker(blocker: Blocker): boolean {
+  return (
+    blocker.detail.includes('filter values must be 4-digit years') ||
+    blocker.detail.includes('is a date and the ask gives no 4-digit year')
+  );
+}
+
 function proposalFilterResolutionFailedResult({
   contract,
   proposal,
@@ -1306,6 +1313,20 @@ function proposalFilterResolutionFailedResult({
   blockers: Blocker[];
   correctionAvailable: boolean;
 }): StructuredBindTemplateToolResult {
+  if (blockers.some(isDateFilterValueBlocker)) {
+    return withNextAction(
+      {
+        status: 'blocked',
+        reason: 'proposal_filter_resolution_failed',
+        blockers: boundedBlockers(blockers),
+        call_2_contract: contract,
+        rejected_proposal: proposal,
+        guidance:
+          'Blocked before Desktop mutation: a date filter needs the 4-digit year(s) the user confirms and cannot take other periods or ranges. Use ask-user to confirm the year, then make a new bind-template ask. Do not guess with raw XML or drop the filter.',
+      },
+      prefillNextAction('Ask user for the filter year'),
+    );
+  }
   const correctionGuidance = correctionAvailable
     ? 'One changed corrected proposal may proceed: change only the unresolved filter field to one exact candidate and preserve every other binding and modifier.'
     : 'The correction allowance is exhausted. Stop calling bind-template.';
@@ -1570,6 +1591,13 @@ function renderBlockers(blockers: Blocker[]): string {
 }
 
 function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): string {
+  if (blockers.some(isDateFilterValueBlocker)) {
+    return (
+      `Escalated (${reason}). No worksheet was produced. Blockers: ${renderBlockers(blockers)}. ` +
+      'Next: a date filter needs the 4-digit year(s) the user confirms. Use ask-user to confirm the year, ' +
+      'then make a new bind-template ask. Do not build the sheet by hand or drop the filter.'
+    );
+  }
   return (
     `Escalated (${reason}). No worksheet was produced. Blockers: ${renderBlockers(blockers)}. ` +
     'Next: use the guarded artifact path: list-templates, list-available-fields, ' +
@@ -2275,6 +2303,30 @@ function ensureFilterColumnDependency(
   };
 }
 
+function asYearFilterField(
+  field: NonNullable<ReturnType<typeof resolveInSummary>['field']>,
+): NonNullable<ReturnType<typeof resolveInSummary>['field']> | undefined {
+  const parsed = parseQualifiedColumnInstance(field.column_ref);
+  const bare = bareColumnName(field.columnName);
+  const datasource = parsed?.datasource ?? field.column_ref.match(/^\[([^\]]+)\]/)?.[1];
+  if (!datasource) return undefined;
+  return { ...field, type: 'ordinal', column_ref: `[${datasource}].[yr:${bare}:ok]` };
+}
+
+function worksheetFiltersColumn(worksheetXml: string, columnRef: string): boolean {
+  for (const tag of worksheetXml.matchAll(/<filter\b[^>]*>/g)) {
+    const attrs = new Map<string, string>();
+    for (const m of tag[0].matchAll(/\b([\w:-]+)\s*=\s*(?:'([^']*)'|"([^"]*)")/g)) {
+      attrs.set(m[1], m[2] ?? m[3]);
+    }
+    const column = attrs.get('column');
+    if (attrs.get('class') === 'categorical' && column !== undefined) {
+      if (column === columnRef || column === escapeXmlAttribute(columnRef)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Emit an interactive dimension filter node. A `context:true` filter carries
  * `context='true'` — Tableau order-of-operations step 3, which runs BEFORE the Top-N
@@ -2517,7 +2569,22 @@ function applyProposalSplices({
         warnings.push(`filter splice skipped: no unique field named "${filter.field}"`);
         continue;
       }
-      const declared = ensureFilterColumnDependency(out, resolved.field);
+      // Desktop filters a date by its Year instance; a continuous none:<date>:qk filter card is rejected by preflight.
+      const isDate = resolved.field.datatype === 'date' || resolved.field.datatype === 'datetime';
+      const spliceField = isDate ? asYearFilterField(resolved.field) : resolved.field;
+      if (!spliceField) {
+        return {
+          ok: false,
+          reason: `date filter on "${filter.field}" could not resolve its datasource`,
+        };
+      }
+      if (isDate && worksheetFiltersColumn(out, spliceField.column_ref)) {
+        return {
+          ok: false,
+          reason: `date filter on "${filter.field}" conflicts with the template's own year filter`,
+        };
+      }
+      const declared = ensureFilterColumnDependency(out, spliceField);
       if (!declared.ok) {
         warnings.push(`filter splice skipped: ${declared.reason}`);
         continue;
@@ -2525,7 +2592,7 @@ function applyProposalSplices({
       const filterNode = buildInteractiveFilterNode({
         columnRef: declared.columnRef,
         level: declared.level,
-        datatype: resolved.field.datatype,
+        datatype: isDate ? 'integer' : resolved.field.datatype,
         context: filter.context === true,
         values: filter.values,
       });

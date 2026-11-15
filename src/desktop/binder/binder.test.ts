@@ -1683,6 +1683,402 @@ describe('binder/bindTemplate — two-call protocol', () => {
   });
 });
 
+describe('binder/date filters', () => {
+  const dateProposal = (values?: string[]): Record<string, unknown> => ({
+    ...rankingProposal(),
+    bindings: [
+      { slot_id: 'field_base_1', field: 'Category' },
+      { slot_id: 'field_base_2', field: 'Sales' },
+    ],
+    filters: [values ? { field: 'Order Date', values } : { field: 'Order Date' }],
+  });
+
+  it.each([['2026-03'], ['last 30 days'], ['26'], ['2026', 'Q1']])(
+    'declines a date filter with non-year values %j',
+    async (...values) => {
+      const result = await bindTemplate({
+        ask: 'bar chart of Sales by Category filtered by Order Date',
+        workbookXml: WORKBOOK_XML,
+        manifests: descriptors,
+        proposal: dateProposal(values.flat() as string[]) as never,
+      });
+
+      expect(result.status).toBe('escalate');
+      if (result.status !== 'escalate') return;
+      expect(result.reason).toBe('kind-mismatch');
+      expect(result.blockers[0].detail).toContain('filter values must be 4-digit years');
+    },
+  );
+
+  it('admits a date filter with 4-digit year values', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category for 2026',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: dateProposal(['2026']) as never,
+    });
+    expect(result.status).toBe('bound');
+  });
+
+  it('admits a valueless date filter when the ask names no period', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category with an Order Date filter',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: dateProposal() as never,
+    });
+    expect(result.status).toBe('bound');
+  });
+
+  it.each([
+    'bar chart of Sales by Category for 2026',
+    'bar chart of Sales by Category for last quarter',
+    'bar chart of Sales by Category YTD with an Order Date filter',
+  ])('declines a valueless date filter when the ask names a period: %s', async (ask) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: dateProposal() as never,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('kind-mismatch');
+    expect(result.blockers[0].detail).toContain('gives no 4-digit year');
+  });
+
+  it.each([
+    'bar chart of Sales by Category with an Order Date filter on this sheet',
+    'top 1000 Category by Sales as a bar chart with an Order Date filter',
+  ])('Call 2 admits a valueless date filter with an interactive cue: %s', async (ask) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: dateProposal() as never,
+    });
+    expect(result.status).toBe('bound');
+  });
+
+  it.each([
+    'filter Order Date to March',
+    'filter Order Date to January',
+    'filter Order Date to yesterday',
+    'filter Order Date to FY26',
+    'filter Order Date since June',
+    'filter Order Date for the week of Nov 3',
+  ])('Call 2 declines a valueless date filter with no interactive cue: %s', async (phrase) => {
+    const result = await bindTemplate({
+      ask: `bar chart of Sales by Category, ${phrase}`,
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: dateProposal() as never,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('kind-mismatch');
+    expect(result.blockers[0].detail).toContain('gives no 4-digit year');
+  });
+
+  it('does not read field names such as "Last Name" or "Quarter" as period words', async () => {
+    const workbook = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Last Name]' role='dimension' type='nominal' datatype='string' /><column name='[Quarter]' role='dimension' type='nominal' datatype='string' /></datasource>",
+    );
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category and Last Name and Quarter with an Order Date filter',
+      workbookXml: workbook,
+      manifests: descriptors,
+      proposal: dateProposal() as never,
+    });
+    expect(result.status).toBe('bound');
+  });
+
+  it('writes trimmed year values back into args.filters', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category for 2026',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: dateProposal([' 2026 ']) as never,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.filters).toEqual([{ field: 'Order Date', values: ['2026'] }]);
+  });
+
+  it.each([
+    'KPI of total Sales for 2026 only (filter Order Date year = 2026), worksheet named "Sales KPI"',
+    'Bar chart of Sales by Sub-Category, filter Order Date to 2026',
+    'Bar chart of Sales by Sub-Category, filter Order Date to last quarter',
+  ])('does not bind the valueless deterministic date filter: %s', async (ask) => {
+    const result = await bindTemplate({ ask, workbookXml: WORKBOOK_XML, manifests: descriptors });
+    expect(result.status).not.toBe('bound');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.decline_reason?.detail).toContain('kind-mismatch');
+  });
+});
+
+describe('binder/date filters: Call 2 value and gate holes', () => {
+  const prop = (values?: string[], field = 'Order Date'): never =>
+    ({
+      ...rankingProposal(),
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Category' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      filters: [values ? { field, values } : { field }],
+    }) as never;
+  const run = (
+    ask: string,
+    proposal: never,
+    workbookXml = WORKBOOK_XML,
+  ): ReturnType<typeof bindTemplate> =>
+    bindTemplate({ ask, workbookXml, manifests: descriptors, proposal });
+
+  it.each([
+    'bar chart of Sales by Category for March',
+    'bar chart of Sales by Category for last quarter',
+    'bar chart of Sales by Category, filter Order Date since June',
+    'bar chart of Sales by Category since 2020',
+    'bar chart of Sales by Category between 2020 and 2026',
+    'bar chart of Sales by Category for March 2026',
+    'bar chart of Sales by Category for Q1 2026',
+  ])('escalates valued year filter when ask is not a clean year: %s', async (ask) => {
+    const result = await run(ask, prop(['2026']));
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('kind-mismatch');
+  });
+
+  it.each<[string, string[], string]>([
+    ['Sales by Category for 2025 to 2027', ['2025', '2027'], 'escalate'],
+    ['Sales by Category for 2025 to 2027', ['2025', '2026', '2027'], 'escalate'],
+    ['Sales by Category for 2025 through 2027', ['2025', '2027'], 'escalate'],
+    ['Sales by Category for 2025-2026', ['2025', '2026'], 'escalate'],
+    ['Sales by Category for 2025 and later', ['2025'], 'escalate'],
+    ['Sales by Category 2025 onward', ['2025'], 'escalate'],
+    ['Sales by Category except 2025', ['2025'], 'escalate'],
+    ['Sales by Category excluding 2025', ['2025'], 'escalate'],
+    ['Sales by Category not in 2025', ['2025'], 'escalate'],
+    ['Sales by Category in 2025 without 2026', ['2025'], 'escalate'],
+    ['Sales by Category, Order ID 2025', ['2025'], 'escalate'],
+    ['top 2025 Category by Sales', ['2025'], 'escalate'],
+    ['Sales by Category 2025 vs 2026', ['2025', '2026'], 'escalate'],
+    ['Sales by Category filtered to 2025', ['2026'], 'escalate'],
+    ['Sales by Category in FY2025', ['2025'], 'escalate'],
+    ['Sales by Category filtered to 2025', ['2025'], 'bound'],
+    ['Sales by Category in 2025, 2026 and 2027', ['2025', '2026', '2027'], 'bound'],
+    ['Sales by Category during 2026', ['2026'], 'bound'],
+    ['Sales by Category, only 2026', ['2026'], 'bound'],
+  ])('Call 2 strict year phrase: %s %j -> %s', async (ask, values, expected) => {
+    const r = await run(ask, prop(values));
+    expect(r.status).toBe(expected);
+  });
+
+  it.each<[string, string[], string]>([
+    ['Sales by Category for 2025+', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 and beyond', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 and up', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 or newer', ['2025'], 'escalate'],
+    ['Sales by Category in 2025 and subsequent years', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 going forward', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 and prior', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 H1', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 first half', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 year to date', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 summer', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 in the fourth qtr', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 in 4th quarter', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 but not December', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 till now', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 up to 2027', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 / 2026', ['2025', '2026'], 'escalate'],
+    ['Sales by Category for 2025 - 2026', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 2026', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 vs. 2024', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 minus 2024', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 monthly', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 holiday season', ['2025'], 'escalate'],
+    ['Sales by Category YoY growth for 2025', ['2025'], 'escalate'],
+    ['Sales by Category for 2025, not just totals', ['2025'], 'escalate'],
+    ['Sales by Category for 2025 without labels', ['2025'], 'escalate'],
+    ['Sales by Category with Ship Date in 2025', ['2025'], 'escalate'],
+    ['Sales by Category, Ship Date 2025', ['2025'], 'escalate'],
+    ['Sales by Category for 2025, Ship Date filter', ['2025'], 'escalate'],
+    ['Sales by Category for 2025, title it Through 2027', ['2025'], 'escalate'],
+    ['Sales by Category for 2025, title it "Jan-Mar"', ['2025'], 'escalate'],
+    ['Sales by Category for 2025, title it H1 only', ['2025'], 'escalate'],
+    ['Sales by Category for 2025, title it Regional Overview', ['2025'], 'escalate'],
+    ['Sales by Category for 2026 titled Second Half', ['2026'], 'escalate'],
+    ['Sales by Category for 2026 titled first half', ['2026'], 'escalate'],
+    ['Sales by Category for 2026 titled Summer', ['2026'], 'escalate'],
+    ['Sales by Category for 2026 titled Christmas', ['2026'], 'escalate'],
+    ['Sales by Category for 2026 titled Weekends', ['2026'], 'escalate'],
+    ['Sales by Category for 2026 titled Overview excluding weekends', ['2026'], 'escalate'],
+    ["Sales by Category for 2026 titled 'Recap excluding holidays'", ['2026'], 'escalate'],
+    ['titled Spring, Sales by Category, filter Order Date to 2026', ['2026'], 'escalate'],
+    ['Sales by Category for 0000', ['0000'], 'escalate'],
+    ['Sales by Category for 999', ['0999'], 'escalate'],
+    ['Sales by Category for 2025 with an Order Date filter', ['2025'], 'bound'],
+    ['Build an executive dashboard for 2026', ['2026'], 'bound'],
+    ['Sales by Category for 2025 and 2026', ['2025', '2026'], 'bound'],
+    ['Sales by Category for 2025, 2026', ['2025', '2026'], 'bound'],
+  ])('Call 2 whole-ask allowlist: %s %j -> %s', async (ask, values, expected) => {
+    const r = await run(ask, prop(values));
+    expect(r.status).toBe(expected);
+  });
+
+  it('binds a Ship Date year filter when the ask names Ship Date', async () => {
+    const wb = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Ship Date]' role='dimension' type='ordinal' datatype='date' /></datasource>",
+    );
+    const r = await run(
+      'Sales by Category for 2025, Ship Date filter',
+      prop(['2025'], 'Ship Date'),
+      wb,
+    );
+    expect(r.status).toBe('bound');
+    if (r.status !== 'bound') return;
+    expect(r.args.filters).toEqual([{ field: 'Ship Date', values: ['2025'] }]);
+  });
+
+  it('explains that a title in a date-filtered ask needs the period confirmed', async () => {
+    const r = await run('Sales by Category for 2026, title it Regional Overview', prop(['2026']));
+    expect(r.status).toBe('escalate');
+    if (r.status !== 'escalate') return;
+    expect(r.blockers[0].detail).toContain('title');
+    expect(r.blockers[0].detail).toContain('confirm the period');
+  });
+
+  describe('eval asks E1 and E2', () => {
+    const E1 = 'Show me a bar chart of Sales by Sub-Category. Filter Order Date to 2026.';
+    const E2 = 'Show me a bar chart of Sales by Sub-Category with an interactive Region filter.';
+    const subProp = (filter: Record<string, unknown>): never =>
+      ({
+        ...rankingProposal(),
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Sub-Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        filters: [filter],
+      }) as never;
+
+    it('E1 Call 1 never binds an all-years date filter', async () => {
+      const r = await bindTemplate({ ask: E1, workbookXml: WORKBOOK_XML, manifests: descriptors });
+      expect(r.status).toBe('propose');
+    });
+
+    it('E1 Call 2 binds Order Date = 2026', async () => {
+      const r = await run(E1, subProp({ field: 'Order Date', values: ['2026'] }));
+      expect(r.status).toBe('bound');
+      if (r.status !== 'bound') return;
+      expect(r.args.filters).toEqual([{ field: 'Order Date', values: ['2026'] }]);
+    });
+
+    it('E2 Call 1 binds a Region filter', async () => {
+      const r = await bindTemplate({ ask: E2, workbookXml: WORKBOOK_XML, manifests: descriptors });
+      expect(r.status).toBe('bound');
+      if (r.status !== 'bound') return;
+      expect(r.args.filters).toEqual([{ field: 'Region' }]);
+    });
+
+    it('E2 Call 2 binds a Region filter', async () => {
+      const r = await run(E2, subProp({ field: 'Region' }));
+      expect(r.status).toBe('bound');
+    });
+
+    it('E1 with a period-naming title does not bind', async () => {
+      const r = await run(
+        `${E1.slice(0, -1)} and title it Sales 2026.`,
+        subProp({ field: 'Order Date', values: ['2026'] }),
+      );
+      expect(r.status).toBe('escalate');
+    });
+  });
+
+  it('escalates one year phrase carrying two date filters', async () => {
+    const wb = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Ship Date]' role='dimension' type='ordinal' datatype='date' /></datasource>",
+    );
+    const p = {
+      ...(prop(['2025']) as object),
+      filters: [
+        { field: 'Order Date', values: ['2025'] },
+        { field: 'Ship Date', values: ['2025'] },
+      ],
+    } as never;
+    expect((await run('Sales by Category for 2025', p, wb)).status).toBe('escalate');
+    const dup = {
+      ...(prop(['2025']) as object),
+      filters: [
+        { field: 'Order Date', values: ['2025'] },
+        { field: 'Order Date', values: ['2025'] },
+      ],
+    } as never;
+    expect((await run('Sales by Category for 2025', dup)).status).toBe('escalate');
+  });
+
+  it('stays linear on pathological asks', async () => {
+    const t = Date.now();
+    const asks = [
+      'Sales for ' + Array(1200).fill('2025').join(', ') + ' to',
+      'Sales for ' + Array(1200).fill('2025').join(' and ') + 'x',
+      'Sales by Category with ' + 'Order Date '.repeat(500) + 'filter',
+      'Sales by Category filtered by ' + 'Order Date '.repeat(500) + '9',
+    ];
+    for (const ask of asks) {
+      expect((await run(ask, prop(['2025']))).status).not.toBe('bound');
+      await run(ask, prop());
+    }
+    expect(Date.now() - t).toBeLessThan(5000);
+  });
+
+  it('binds year values present in the ask', async () => {
+    expect(
+      (await run('bar chart of Sales by Category Order Date 2026', prop(['2026']))).status,
+    ).toBe('bound');
+    const r = await run('bar chart of Sales by Category for 2025 and 2026', prop(['2025', '2026']));
+    expect(r.status).toBe('bound');
+  });
+
+  it('dedupes trimmed year values', async () => {
+    const r = await run('bar chart of Sales by Category for 2026', prop(['2026', '2026 ']));
+    expect(r.status).toBe('bound');
+    if (r.status !== 'bound') return;
+    expect(r.args.filters).toEqual([{ field: 'Order Date', values: ['2026'] }]);
+  });
+
+  it('escalates a valueless filter that names a period even with an interactive cue', async () => {
+    const r = await run(
+      'bar chart of Sales by Category with an interactive Order Date filter set to March',
+      prop(),
+    );
+    expect(r.status).toBe('escalate');
+  });
+
+  it('masks captions that start or end with a non-word character', async () => {
+    const wb = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Order Date (UTC)]' role='dimension' type='ordinal' datatype='date' /></datasource>",
+    );
+    const p = prop(undefined, 'Order Date (UTC)');
+    const ok = await run(
+      'bar chart of Sales by Category with an interactive Order Date (UTC) filter',
+      p,
+      wb,
+    );
+    expect(ok.status).toBe('bound');
+    const bad = await run(
+      'bar chart of Sales by Category for March with an Order Date (UTC) filter',
+      p,
+      wb,
+    );
+    expect(bad.status).toBe('escalate');
+  });
+});
+
 describe('binder/within-datasource resolution of sort and filters', () => {
   const twoDatasources = WORKBOOK_XML.replace(
     '</datasources>',

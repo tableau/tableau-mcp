@@ -364,6 +364,94 @@ function foundOnlyInOtherDatasource(
   return `"${name}" exists only in datasource '${other}'; bind-template ${kind} must come from the bound datasource '${bound}'.`;
 }
 
+const ESCAPE_RE = /[.*+?^${}()|[\]\\]/g;
+
+function maskedAskForDateGate(
+  ask: string,
+  summary: ReturnType<typeof summarizeSchema>,
+  filterField: { name: string; caption?: string; columnName?: string },
+): string {
+  const strip = (n: string | undefined): string | undefined => n?.replace(/^\[|\]$/g, '');
+  const own = new Set([filterField.name, filterField.caption, filterField.columnName].map(strip));
+  const tokenFor = new Map<string, string>();
+  for (const f of summary.fields) {
+    const isDate = f.datatype === 'date' || f.datatype === 'datetime';
+    for (const raw of [f.name, f.caption, f.columnName]) {
+      const n = strip(raw);
+      if (!n) continue;
+      const token = own.has(n) ? 'FIELDX' : isDate ? 'OTHERDATE' : 'OTHERFIELD';
+      if (!tokenFor.has(n) || token === 'FIELDX') tokenFor.set(n, token);
+    }
+  }
+  let masked = ask;
+  for (const n of [...tokenFor.keys()].sort((x, y) => y.length - x.length)) {
+    masked = masked.replace(
+      new RegExp(
+        `(?<![\\p{L}\\p{N}_])${n.replace(ESCAPE_RE, (m) => `\\${m}`)}(?![\\p{L}\\p{N}_])`,
+        'giu',
+      ),
+      () => tokenFor.get(n) ?? 'OTHERFIELD',
+    );
+  }
+  return masked;
+}
+
+const TITLE_NOTE = /\btitle(?:d)?\b/i;
+
+const FT = '(?:fieldx|otherfield|otherdate)';
+const FT_LIST = `${FT}(?:(?:\\s*,\\s*(?:and\\s+)?|\\s+and\\s+)${FT})*`;
+const DATE_FILTER_CUES: readonly RegExp[] = [
+  new RegExp('\\bfieldx(?:\\s+year)?\\s+filters?\\b'),
+  new RegExp(`\\b${FT_LIST}\\s+filters\\b`),
+  new RegExp(`\\bfilter(?:ed|s)?\\s+by\\s+${FT_LIST}`),
+];
+const FILTER_PHRASES: readonly RegExp[] = [
+  new RegExp(`\\b${FT_LIST}(?:\\s+year)?\\s+filters?\\b`, 'g'),
+  /\bfilter(?:ed|s)?\s+by\b/g,
+  /\bfilter\s+(?:control|card|widget)s?\b/g,
+  /\b(?:on|in)\s+this\s+(?:sheet|worksheet|chart|view)\b/g,
+  /\bso\s+(?:i|we|users?|managers?|people)\s+can\s+(?:pick|choose|select|change)\s+(?:the\s+)?years?\b/g,
+  /\b(?:top|bottom)\s+\d+\b/g,
+];
+const PHRASE_WORDS = new Set(
+  (
+    'a an the of me please build create make show give draw generate interactive executive with by and over per vs versus as ' +
+    'sorted ascending descending asc desc color colored split chart graph viz sheet worksheet dashboard bar line area column ' +
+    'pie donut scatter bubble treemap heatmap heat map stacked horizontal vertical dual-axis dual axis combo box plot bullet ' +
+    'slope bump control ranking ordered packed dot strip lollipop waterfall funnel gantt histogram kpi text highlight table ' +
+    'density symbol filled fieldx otherfield'
+  ).split(' '),
+);
+const YEAR_LIST = '[1-9]\\d{3}(?:(?:\\s*,\\s*(?:and\\s+)?|\\s+and\\s+)[1-9]\\d{3})*';
+const YEAR_PHRASE = new RegExp(
+  `\\b(?:for|in|during|filtered\\s+to|filter\\s+fieldx\\s+to|only|fieldx)\\s+(${YEAR_LIST})(?![\\w+/-])`,
+  'g',
+);
+
+/**
+ * The whole masked ask must be made of known clauses; any leftover word means the ask may narrow or widen the date
+ * filter in a way we do not model. 'valueless' = Call 1 all-years Year control; a years array = Call 2 values.
+ */
+function askIsCleanForDateFilter(maskedAsk: string, mode: 'valueless' | string[]): boolean {
+  // Titles are never stripped here: a title in a date-filtered ask must fail the allowlist.
+  let s = maskedAsk.toLowerCase();
+  if (!DATE_FILTER_CUES.some((re) => re.test(s)) && mode === 'valueless') return false;
+  if (mode !== 'valueless' && s.includes('otherdate')) return false;
+  if (mode !== 'valueless') {
+    const phrases = [...s.matchAll(YEAR_PHRASE)];
+    if (phrases.length !== 1) return false;
+    const years = new Set(phrases[0][1].match(/\d{4}/g));
+    const want = new Set(mode);
+    if (years.size !== want.size || ![...want].every((y) => years.has(y))) return false;
+    s = s.replace(phrases[0][0], ' ');
+  }
+  for (const re of FILTER_PHRASES) s = s.replace(re, ' ');
+  return s
+    .split(/[\s,.;:!?()]+/)
+    .filter(Boolean)
+    .every((w) => PHRASE_WORDS.has(w) && (mode === 'valueless' ? true : w !== 'otherdate'));
+}
+
 /**
  * Validate a concrete proposal against its manifest and, on success, build the
  * injector-ready args. Shared by Call 2 (agent proposal), the no-LLM Call 1 path,
@@ -498,8 +586,10 @@ function validateAndBuild(
   // dimension. Applying the chart after dropping one would silently change the user's ask.
   // The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the accepted field
   // to its CI, declares the dependency, and emits the context filter + shown card.
-  if (proposal.filters && proposal.filters.length > 0) {
-    for (const filter of proposal.filters) {
+  const filters = proposal.filters?.map((f) => ({ ...f }));
+  let dateValuedFilters = 0;
+  if (filters && filters.length > 0) {
+    for (const filter of filters) {
       const r = resolveInSummary(boundSummary, filter.field);
       if (r.kind === 'ambiguous') {
         return {
@@ -545,6 +635,30 @@ function validateAndBuild(
           proposal,
         };
       }
+      if (r.field.datatype === 'date' || r.field.datatype === 'datetime') {
+        const values = [...new Set((filter.values ?? []).map((v) => String(v).trim()))];
+        const masked = maskedAskForDateGate(ask, summary, r.field);
+        if (values.length > 0) dateValuedFilters += 1;
+        const detail =
+          values.length > 0
+            ? !values.every((v) => /^[1-9]\d{3}$/.test(v))
+              ? `filter field "${filter.field}" is a date; filter values must be 4-digit years`
+              : dateValuedFilters > 1 || !askIsCleanForDateFilter(masked, values)
+                ? `filter field "${filter.field}" is a date and the ask gives no 4-digit year matching the filter values, or names another period; confirm the year(s) with the user${TITLE_NOTE.test(ask) ? '. A title in a date-filtered ask needs the user to confirm the period' : ''}`
+                : undefined
+            : askIsCleanForDateFilter(masked, 'valueless')
+              ? undefined
+              : `filter field "${filter.field}" is a date and the ask gives no 4-digit year and no interactive year-filter request; confirm the year(s) with the user`;
+        if (detail) {
+          return {
+            status: 'escalate',
+            reason: 'kind-mismatch',
+            blockers: [{ code: 'kind-mismatch', detail, candidates: [] }],
+            proposal,
+          };
+        }
+        if (values.length > 0) filter.values = values;
+      }
     }
   }
 
@@ -578,7 +692,7 @@ function validateAndBuild(
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
     ...(proposal.bin_size !== undefined ? { bin_size: proposal.bin_size } : {}),
-    ...(proposal.filters && proposal.filters.length > 0 ? { filters: proposal.filters } : {}),
+    ...(filters && filters.length > 0 ? { filters } : {}),
     ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
     ...(v.optional_field_prunes ? { optional_field_prunes: v.optional_field_prunes } : {}),
   };

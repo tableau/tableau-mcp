@@ -21,6 +21,14 @@ describe('invalid-column-instance-pivot rule', () => {
     expect(rule.validate(xml)).toHaveLength(0);
   });
 
+  it('does not flag a yr:...:ok filter card in the worksheet window', () => {
+    const xml = `<workbook><worksheets><worksheet name='S'><table><view>
+      <datasource-dependencies datasource='ds'><column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' /></datasource-dependencies>
+      <filter class='categorical' column='[ds].[yr:Order Date:ok]'/><slices><column>[ds].[yr:Order Date:ok]</column></slices>
+    </view></table></worksheet></worksheets><windows><window class='worksheet' name='S'><cards><edge name='left'><strip size='160'><card mode='dropdown' param='[ds].[yr:Order Date:ok]' type='filter' /></strip></edge></cards></window></windows></workbook>`;
+    expect(rule.validate(xml)).toHaveLength(0);
+  });
+
   it('does not flag valid date-trunc or aggregate instances', () => {
     const xml = `<worksheet>
       <cols>[ds].[tmn:Order Date:ok]</cols>
