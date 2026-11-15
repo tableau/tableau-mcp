@@ -6619,6 +6619,32 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
+  it('does not say Done when a calc authored in the call is not used by the bind', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, CALC_READBACK_XML, INJECTED_RANKING_WORKBOOK_XML],
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Margin by Region',
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.guidance).toContain('INCOMPLETE');
+    expect(body.guidance).toContain('Margin');
+    expect(body.guidance).not.toContain('Done — no further tool calls needed.');
+    expect(body.completionEvidence).toBeUndefined();
+    expect((result.structuredContent as any)?.nextAction?.kind).not.toBe('done');
+  });
+
   it('authors inline calcs before binding and auto-applies against the readback workbook', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
@@ -8843,6 +8869,75 @@ const boundWithUnfilledColorResult: BinderResult = {
   ...boundResult,
   encodings: { filled: ['size'], unfilled: ['color'] },
 };
+
+const boundWithAskCoverageGapResult: BinderResult = {
+  ...boundResult,
+  encodings: { filled: [], unfilled: [] },
+  askCoverage: {
+    unconsumed: [
+      { kind: 'field', field: 'Order Date', text: 'Order Date' },
+      { kind: 'year', text: '2025' },
+    ],
+  },
+};
+const boundCleanEncodingsResult: BinderResult = {
+  ...boundResult,
+  encodings: { filled: [], unfilled: [] },
+};
+
+describe('bind-template — ask coverage gaps are not Done', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+  });
+
+  async function run(bind: BinderResult): Promise<{
+    body: Record<string, any>;
+    nextAction?: { kind: string };
+    structured: Record<string, any> | undefined;
+  }> {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region in 2025, Order Date',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const structured = result.structuredContent as Record<string, any> | undefined;
+    return {
+      body: JSON.parse(result.content[0].text) as Record<string, any>,
+      nextAction: structured?.nextAction,
+      structured,
+    };
+  }
+
+  it('a clean bind with the same ask is Done (control)', async () => {
+    const { body, nextAction } = await run(boundCleanEncodingsResult);
+    expect(body.guidance).toContain('Done — no further tool calls needed.');
+    expect(nextAction?.kind).toBe('done');
+  });
+
+  it('a bind that left out a named field or year is INCOMPLETE, not Done', async () => {
+    const { body, nextAction, structured } = await run(boundWithAskCoverageGapResult);
+    expect(body.applied).toBe(true);
+    expect(body.incomplete ?? true).toBeTruthy();
+    expect(body.guidance).not.toContain('Done — no further tool calls needed.');
+    expect(body.guidance).toContain('INCOMPLETE');
+    expect(body.guidance).toContain('Order Date');
+    expect(body.guidance).toContain('2025');
+    expect(body.guidance).toContain('author-calc');
+    expect(body.guidance).not.toContain('Do NOT call bind-template again');
+    expect(nextAction?.kind).not.toBe('done');
+    expect(body.completionEvidence).toBeUndefined();
+    expect(structured?.completionEvidence).toBeUndefined();
+    expect(body.askCoverage.unconsumed).toHaveLength(2);
+  });
+});
 
 describe('bind-template — reports what it actually built', () => {
   beforeEach(() => {

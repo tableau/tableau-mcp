@@ -1715,6 +1715,81 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
   return masked;
 }
 
+export type AskCoverageGap =
+  | { kind: 'field'; field: string; text: string }
+  | { kind: 'year'; text: string };
+
+interface UsedFields {
+  field_mapping: Record<string, string>;
+  filters?: ReadonlyArray<{ field: string }>;
+  sort?: { by: string };
+  dateparse_axis?: { sourceField: string };
+}
+
+// validate.ts stores field_mapping values XML-escaped; undo it once, `&` last.
+function unescapeXmlRef(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/** True when a mapping column instance or filter references this schema field by identity. */
+export function schemaFieldIsUsed(field: SchemaField, used: UsedFields): boolean {
+  const bare = bareName(field.columnName);
+  const names = new Set([bare, field.name, field.caption].filter((n): n is string => !!n));
+  if ((used.filters ?? []).some((f) => names.has(f.field))) return true;
+  if (used.sort && names.has(used.sort.by)) return true;
+  if (used.dateparse_axis && names.has(used.dateparse_axis.sourceField)) return true;
+  return Object.values(used.field_mapping).some((rawRef) => {
+    const ref = unescapeXmlRef(rawRef);
+    const column = ref.slice(ref.lastIndexOf('.[') + 2).replace(/\]$/, '');
+    // [sum:Calculation_1:qk] -> Calculation_1; a bare [Region] has no derivation parts.
+    const parts = column.split(':');
+    const core = parts.length >= 3 ? parts.slice(1, -1).join(':') : column;
+    return core === bare;
+  });
+}
+
+/**
+ * Parts of the ask this bind left out: schema fields the ask names (longest literal
+ * match first, no overlaps) that no binding or filter uses, and 4-digit years that remain
+ * after field names and captions are masked. Call-1 filters carry no values, so a year
+ * left in the ask was never applied.
+ */
+export function askCoverageGaps(ask: string, s: SchemaSummary, used: UsedFields): AskCoverageGap[] {
+  const gaps: AskCoverageGap[] = [];
+  const spans = literalFieldMatchesInAsk(ask, s)
+    .filter(
+      (h): h is FieldMatch & { start: number; end: number } =>
+        h.start !== undefined && h.end !== undefined,
+    )
+    .sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);
+  const taken: Array<[number, number]> = [];
+  const fieldGaps: Array<{ start: number; gap: AskCoverageGap }> = [];
+  for (const hit of spans) {
+    if (taken.some(([a, b]) => hit.start < b && a < hit.end)) continue;
+    taken.push([hit.start, hit.end]);
+    if (!schemaFieldIsUsed(hit.field, used)) {
+      fieldGaps.push({
+        start: hit.start,
+        gap: { kind: 'field', field: hit.field.name, text: ask.slice(hit.start, hit.end) },
+      });
+    }
+  }
+  gaps.push(...fieldGaps.sort((a, b) => a.start - b.start).map((g) => g.gap));
+  const masked = maskFieldNames(ask, s);
+  for (const m of masked.matchAll(/\b(?:19|20)\d{2}\b/g)) {
+    if (/\b(?:top|bottom)\s+$/i.test(masked.slice(0, m.index))) continue;
+    if (!gaps.some((g) => g.kind === 'year' && g.text === m[0])) {
+      gaps.push({ kind: 'year', text: m[0] });
+    }
+  }
+  return gaps;
+}
+
 /** Fields whose name/caption/bare column name appear in the ask, earliest-first. */
 function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
   const literalHits = literalFieldMatchesInAsk(ask, s);

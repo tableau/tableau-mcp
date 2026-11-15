@@ -14,8 +14,9 @@ import {
   summarizeSchema,
   TITLE_CONTROL_CHAR_RE,
 } from './binder.js';
-import { provesCompleteSingleSheetRequest } from './classify.js';
+import { provesCompleteSingleSheetRequest, schemaFieldIsUsed } from './classify.js';
 import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
+import type { SchemaField } from './schema-summary.js';
 
 const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
@@ -854,6 +855,7 @@ describe('binder/classifyNoLlm', () => {
     expect(result.status).toBe('bound');
     if (result.status !== 'bound') return;
     expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Regional Manager' }]);
+    expect(result.askCoverage?.unconsumed.map((g) => g.text)).toEqual(['Customer Name']);
   });
 
   it('keeps Order Date in a multi-filter clause instead of treating it as a modifier', async () => {
@@ -2011,5 +2013,18 @@ describe('binder/KPI derivation and injected proposal seam', () => {
 
     expect(result.status).toBe('escalate');
     if (result.status === 'escalate') expect(result.reason).toBe('kind-mismatch');
+  });
+});
+
+describe('binder/schemaFieldIsUsed', () => {
+  const field = { name: 'src_month', columnName: '[src_month]' } as SchemaField;
+  it('counts a dateparse source field as used', () => {
+    expect(
+      schemaFieldIsUsed(field, {
+        field_mapping: {},
+        dateparse_axis: { sourceField: 'src_month' },
+      }),
+    ).toBe(true);
+    expect(schemaFieldIsUsed(field, { field_mapping: {} })).toBe(false);
   });
 });

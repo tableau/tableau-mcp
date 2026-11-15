@@ -22,9 +22,11 @@ import {
 } from '../../../../desktop/binder/binder.js';
 import { PIE_SLICE_WORKABLE_MAX } from '../../../../desktop/binder/cardinality.js';
 import {
+  type AskCoverageGap,
   type ExactFilterIntent,
   type ExactFilterValueConstraint,
   parseExactFilterIntent,
+  schemaFieldIsUsed,
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
@@ -1703,6 +1705,35 @@ function appendUnfilledEncodingGuidance(
   );
 }
 
+function describeAskCoverageGaps(gaps: AskCoverageGap[]): string {
+  return gaps
+    .map((g) => (g.kind === 'year' ? `the year ${g.text}` : `${g.field} ("${g.text}")`))
+    .join(', ');
+}
+
+function askCoverageNextActionLabel(gaps: AskCoverageGap[]): string {
+  const full = `Ask named ${gaps.map((g) => (g.kind === 'year' ? g.text : g.field)).join(', ')}; not used`;
+  if (full.length <= 60) return full;
+  const cut = full.slice(0, 60);
+  const boundary = cut.lastIndexOf(' ');
+  return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/[,;]$/, '');
+}
+
+function appendAskCoverageGuidance(
+  receipt: string,
+  sheetName: string,
+  gaps: AskCoverageGap[],
+): string {
+  const named = describeAskCoverageGaps(gaps);
+  return (
+    `${receipt} INCOMPLETE — the ask named ${named}; this bind did not use ${gaps.length === 1 ? 'it' : 'them'}, ` +
+    `so sheet "${sheetName}" does not answer the ask yet. Do NOT tell the user it is done. ` +
+    'For a year or a measure condition, author-calc a calculation that applies that condition, ' +
+    `then call bind-template with the calc's caption and target_worksheet:'${sheetName}'. ` +
+    'For a field the bind left out, add-field it then apply-worksheet, or ask-user which chart is wanted.'
+  );
+}
+
 /** Label for the same steer, short enough for the 60-char nextAction label bound. */
 function unfilledEncodingNextActionLabel(encodings: EncodingReport): string {
   return `Add ${encodings.unfilled.join(', ')}, then apply-worksheet`;
@@ -3026,6 +3057,16 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
+  const calcGaps: AskCoverageGap[] = schemaSummary
+    ? successfulCalcCaptions.flatMap((caption): AskCoverageGap[] => {
+        const field = schemaSummary.fields.find((f) => f.caption === caption || f.name === caption);
+        return field && !schemaFieldIsUsed(field, args)
+          ? [{ kind: 'field', field: caption, text: caption }]
+          : [];
+      })
+    : [];
+  const askCoverageGaps = [...(res.askCoverage?.unconsumed ?? []), ...calcGaps];
+  const askCoverageGap = askCoverageGaps.length > 0 ? askCoverageGaps : undefined;
   const summaryStart = Date.now();
   // Trusted deterministic callers use one structural workbook readback for the
   // authored calculations and worksheet. Avoid a second summary-data round trip;
@@ -3077,8 +3118,12 @@ async function performAutoApply({
           unfilledEncodings: unfilledEncodings !== undefined,
         })
       : undefined;
+  // Not `incomplete`: cannotKnowGate.test.ts allowlists `incomplete =` text, and a coverage gap is a different claim.
   const followUpBesidesPie =
-    incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+    incomplete ||
+    askCoverageGaps.length > 0 ||
+    (injected.warnings?.length ?? 0) > 0 ||
+    postApplyUncertain;
   const coreNeedsFollowUp = followUpBesidesPie || pieSliceWarning !== undefined;
   const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
@@ -3108,11 +3153,13 @@ async function performAutoApply({
             ask,
             schemaSummary,
           )
-        : needsFollowUp
-          ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
-          : documentWarnings.length > 0
-            ? receiptText
-            : `${receiptText} ${terminalGuidance}`
+        : askCoverageGap
+          ? appendAskCoverageGuidance(receiptText, literalTitle, askCoverageGap)
+          : needsFollowUp
+            ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
+            : documentWarnings.length > 0
+              ? receiptText
+              : `${receiptText} ${terminalGuidance}`
   }${documentWarnings.length > 0 ? ` ${DESKTOP_WARNINGS_GUIDANCE}${formatDesktopWarnings(documentWarnings)}` : ''}${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const nativeFindings = verificationReport.findings ?? [];
   const nativeFieldUnverified =
@@ -3244,6 +3291,7 @@ async function performAutoApply({
         }
       : {}),
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
+    ...(askCoverageGap ? { askCoverage: { unconsumed: askCoverageGap } } : {}),
   };
   if (documentWarnings.length > 0) {
     return {
@@ -3262,6 +3310,15 @@ async function performAutoApply({
       result: withNextAction(
         applied,
         prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings)),
+      ),
+    };
+  }
+  if (askCoverageGap && promiseOutcome !== 'failed' && !postApplyUncertain) {
+    return {
+      incomplete: true,
+      result: withNextAction(
+        applied,
+        prefillNextAction(askCoverageNextActionLabel(askCoverageGap)),
       ),
     };
   }
