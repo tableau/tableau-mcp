@@ -9,7 +9,8 @@ Knowledge. This read-only tool is available on Tableau+ sites.
 
 :::warning[Disabled by Default]
 Set [`KNOWLEDGE_TOOLS_ENABLED=true`](../../configuration/mcp-config/env-vars.md#knowledge_tools_enabled)
-to enable this tool. It then appears only on sites where Tableau Knowledge is available.
+to enable this tool. It then appears only on sites where Tableau Knowledge is available, which
+the server checks when it registers tools.
 :::
 
 ## Intents

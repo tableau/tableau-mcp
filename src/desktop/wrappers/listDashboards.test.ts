@@ -18,7 +18,6 @@ describe('listDashboards', () => {
     };
     const executor = makeExecutorMock({
       listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [dashboard] })),
-      executeCommand: vi.fn(),
     });
 
     const result = await listDashboards({ executor, signal });
@@ -28,7 +27,6 @@ describe('listDashboards', () => {
       count: 1,
       dashboards: [dashboard],
     });
-    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('falls back to the External API whole-document read when the first-class route is missing', async () => {

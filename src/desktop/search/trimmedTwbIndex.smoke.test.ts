@@ -1,10 +1,10 @@
 import { statSync } from 'fs';
 import { join } from 'path';
 
-import { searchWorkbookExamples } from './searchLibrary.js';
+import { searchWorkbookExamples } from './workbookSearch.js';
 
 // Smoke test for the TRIMMED, committed twb-example-index.json (see
-// src/scripts/trimTwbExampleIndex.ts); this file never mocks searchLibrary, so it exercises the real file.
+// src/scripts/trimTwbExampleIndex.ts); this file never mocks workbookSearch, so it exercises the real file.
 const TRIMMED_INDEX_PATH = join(process.cwd(), 'src', 'desktop', 'data', 'twb-example-index.json');
 
 interface TwbSnippet {

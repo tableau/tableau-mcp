@@ -55,9 +55,6 @@ describe('bind-template public complete-request callback', () => {
       desktopInstanceId: 'inst-test',
       desktopApiVersion: '0.2.16',
       applyWorkbookDocument,
-      executeCommand: vi.fn(async () =>
-        Ok({ command_id: 'focus-1', status: 'completed', submitted_at: '', result: {} }),
-      ),
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       ),
@@ -106,10 +103,7 @@ describe('bind-template public complete-request callback', () => {
       nextAction: { kind: 'done' },
     });
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    const writesAfterSupported = {
-      apply: applyWorkbookDocument.mock.calls.length,
-      command: executor.executeCommand.mock.calls.length,
-    };
+    const writesAfterSupported = applyWorkbookDocument.mock.calls.length;
 
     const declined = await callback(
       {
@@ -126,9 +120,6 @@ describe('bind-template public complete-request callback', () => {
       writeAttempts: 0,
       requestCoverage: { version: 1, kind: 'declined' },
     });
-    expect({
-      apply: applyWorkbookDocument.mock.calls.length,
-      command: executor.executeCommand.mock.calls.length,
-    }).toEqual(writesAfterSupported);
+    expect(applyWorkbookDocument.mock.calls.length).toBe(writesAfterSupported);
   });
 });

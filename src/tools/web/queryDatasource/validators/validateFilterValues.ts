@@ -28,6 +28,7 @@ export async function validateFilterValues(
   query: Query,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
+  interpretFieldCaptionsAsFieldNames = false,
 ): Promise<Result<void, FilterValidationError[]>> {
   if (!query.filters) {
     return Ok.EMPTY;
@@ -58,12 +59,22 @@ export async function validateFilterValues(
 
     try {
       if (filter.filterType === 'SET') {
-        const result = await validateSetFilter(filter, vizqlDataServiceMethods, datasource);
+        const result = await validateSetFilter(
+          filter,
+          vizqlDataServiceMethods,
+          datasource,
+          interpretFieldCaptionsAsFieldNames,
+        );
         if (result.isErr()) {
           validationErrors.push(result.error);
         }
       } else if (filter.filterType === 'MATCH') {
-        const result = await validateMatchFilter(filter, vizqlDataServiceMethods, datasource);
+        const result = await validateMatchFilter(
+          filter,
+          vizqlDataServiceMethods,
+          datasource,
+          interpretFieldCaptionsAsFieldNames,
+        );
         if (result.isErr()) {
           validationErrors.push(result.error);
         }
@@ -90,6 +101,7 @@ async function validateSetFilter(
   filter: SetFilter,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
+  interpretFieldCaptionsAsFieldNames: boolean,
 ): Promise<Result<void, FilterValidationError>> {
   if ('calculation' in filter.field || 'function' in filter.field) {
     return Ok.EMPTY;
@@ -115,6 +127,7 @@ async function validateSetFilter(
       returnFormat: 'OBJECTS',
       debug: true,
       disaggregate: false,
+      ...(interpretFieldCaptionsAsFieldNames ? { interpretFieldCaptionsAsFieldNames: true } : {}),
     },
   };
 
@@ -169,6 +182,7 @@ async function validateMatchFilter(
   filter: MatchFilter,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
+  interpretFieldCaptionsAsFieldNames: boolean,
 ): Promise<Result<void, FilterValidationError>> {
   if ('calculation' in filter.field) {
     return Ok.EMPTY;
@@ -193,6 +207,7 @@ async function validateMatchFilter(
       returnFormat: 'OBJECTS',
       debug: true,
       disaggregate: false,
+      ...(interpretFieldCaptionsAsFieldNames ? { interpretFieldCaptionsAsFieldNames: true } : {}),
     },
   };
 

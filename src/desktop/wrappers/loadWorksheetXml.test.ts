@@ -140,33 +140,18 @@ describe('loadWorksheetXml (External Client API transport)', () => {
   function dispatchingExecutor(workbookXml: string): {
     executor: ExternalApiToolExecutor;
     calls: Array<{
-      kind: 'command' | 'apply' | 'goto';
-      namespace?: string;
-      command?: string;
-      args?: Record<string, unknown>;
+      kind: 'apply' | 'goto';
       xml?: string;
       sheetId?: string;
       sheetName?: string;
     }>;
   } {
     const calls: Array<{
-      kind: 'command' | 'apply' | 'goto';
-      namespace?: string;
-      command?: string;
-      args?: Record<string, unknown>;
+      kind: 'apply' | 'goto';
       xml?: string;
       sheetId?: string;
       sheetName?: string;
     }> = [];
-    const executeCommand = vi.fn(async (params: any) => {
-      calls.push({
-        kind: 'command',
-        namespace: params.namespace,
-        command: params.command,
-        args: params.args,
-      });
-      return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
-    });
     let liveXml = workbookXml;
     const sheetItems = (tagName: string): { id: string; name: string; hidden: boolean }[] =>
       Array.from(
@@ -203,7 +188,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     });
     return {
       executor: makeExecutorMock({
-        executeCommand,
         getWorkbook,
         goToSheet,
         getWorkbookDocument,
@@ -379,8 +363,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-
     const applyCall = calls.find((c) => c.kind === 'apply');
     expect(typeof applyCall?.xml).toBe('string');
     expect(applyCall?.xml).toContain('name="Sheet 1"');
@@ -470,7 +452,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
     const applyCall = calls.find((c) => c.kind === 'apply');
     expect(applyCall).toBeDefined();
     expect(applyCall?.xml).toContain('class="worksheet" name="Sheet 1"');
@@ -602,7 +583,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
   // route, so the list route stays untouched for them).
   function absentSheetExecutor(liveWorksheetNames: string[]): {
     executor: ExternalApiToolExecutor;
-    calls: Array<{ kind: 'command' | 'apply' | 'goto'; xml?: string }>;
+    calls: Array<{ kind: 'apply' | 'goto'; xml?: string }>;
   } {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(liveWorksheetNames));
     (executor as unknown as { listWorksheets: unknown }).listWorksheets = vi.fn().mockResolvedValue(

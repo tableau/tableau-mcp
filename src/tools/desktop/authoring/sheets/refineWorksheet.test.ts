@@ -754,9 +754,6 @@ describe('refineWorksheetTool — source drift', () => {
         }),
       ),
       applyWorksheetDocument,
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'cmd-focus', status: 'completed', submitted_at: '' })),
     });
     const actualLoadWorksheetXml = await vi.importActual<typeof loadWorksheetXmlModule>(
       '../../../../desktop/wrappers/loadWorksheetXml.js',

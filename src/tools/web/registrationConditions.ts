@@ -190,11 +190,13 @@ const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
     'Do not offer Pulse metrics or insights; if the user asks for them, explain that Pulse is ' +
     'not available and suggest they contact their Tableau administrator. For setup guidance ' +
     'on Tableau Cloud, see https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
+  // Kept generic: the probe cannot tell a site without Tableau+ from a denied check.
   RequiresPulsePremium:
-    'NOTE: AI-powered Tableau Pulse insight tools were omitted from this session because this ' +
-    'site does not have the Tableau+ entitlement those insights require. Basic Pulse metric ' +
-    'tools may still be available. Do not offer AI-generated Pulse insights or briefs; if the ' +
-    'user asks for them, explain that the feature requires Tableau+.',
+    'NOTE: AI-powered Tableau Pulse insight tools were omitted from this session because the ' +
+    'Tableau+ entitlement could not be confirmed. The site may not have Tableau+, or the check ' +
+    'was denied. Basic Pulse metric tools may still be available. Do not offer AI-generated ' +
+    'Pulse insights or briefs; if the user asks for them, explain that they are not available ' +
+    'in this session and suggest they contact their Tableau administrator.',
   // Developer-facing only: reached when a RegistrationCondition is declared on a tool but has
   // no corresponding case in checkRegistrationConditions. Reconnecting cannot help.
   MissingConditionCheck:

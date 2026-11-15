@@ -295,7 +295,7 @@ async function applyDocumentForKind(
   client: ExternalApiToolExecutor,
   signal: AbortSignal,
   expectedInstanceId?: string,
-): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+): Promise<Result<ExecuteCommandResult, ExecuteCommandError>> {
   switch (kind) {
     case 'worksheet':
       return expectedInstanceId

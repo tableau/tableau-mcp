@@ -424,9 +424,6 @@ async function getToolResult({
     start: vi.fn(async () => undefined),
     stop: vi.fn(),
     isAvailable: vi.fn(() => true),
-    executeCommand: vi
-      .fn()
-      .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null })),
     getWorkbookDocument,
     applyWorkbookDocument,
   });

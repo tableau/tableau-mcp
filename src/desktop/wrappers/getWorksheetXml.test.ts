@@ -17,7 +17,6 @@ describe('getWorksheetXml', () => {
         }),
       ),
       getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: '<worksheet name="Profit" />' })),
-      executeCommand: vi.fn(),
     });
 
     const result = await getWorksheetXml({
@@ -30,7 +29,6 @@ describe('getWorksheetXml', () => {
     expect(result.unwrap().xml).toBe('<worksheet name="Profit" />');
     expect(result.unwrap().name).toBe('Profit');
     expect(executor.getWorksheetDocument).toHaveBeenCalledWith('sheet-2', expect.any(AbortSignal));
-    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('accepts worksheet id directly before name matching', async () => {

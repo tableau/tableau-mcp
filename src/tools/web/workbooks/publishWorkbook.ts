@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -21,6 +22,7 @@ import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/sc
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
+import { deleteStagedUpload } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
@@ -41,7 +43,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path.',
+      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path. Each upload id can be published once.',
     ),
   workbookFilePath: z
     .string()
@@ -199,11 +201,17 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
-              const resolvedWorkbookFile = await resolveWorkbookInput({
+              const tenant: TenantIdentitySource = extra;
+              const resolvedWorkbookInput = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
+                tenant,
               });
+              if (resolvedWorkbookInput.isErr()) {
+                return resolvedWorkbookInput;
+              }
+              const resolvedWorkbookFile = resolvedWorkbookInput.value;
               const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -249,6 +257,12 @@ export const getPublishWorkbookTool = (
                 }
                 throw error;
               }
+
+              await deleteStagedUpload(
+                resolvedWorkbookFile.stagedKey,
+                extra.config.bucketS3,
+                'publish-workbook',
+              );
 
               if (personalSpaceTarget !== undefined) {
                 const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');
@@ -399,11 +413,13 @@ async function resolveWorkbookInput({
   config,
   workbookUploadId,
   workbookFilePath,
+  tenant,
 }: {
   config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
   workbookFilePath?: string;
-}): Promise<ResolvedWorkbook> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ResolvedWorkbook, McpToolError>> {
   if (workbookUploadId && workbookFilePath) {
     throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
   }
@@ -414,7 +430,7 @@ async function resolveWorkbookInput({
         'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
-    return await resolveLocalWorkbookFile(workbookFilePath);
+    return new Ok(await resolveLocalWorkbookFile(workbookFilePath));
   }
 
   if (!workbookUploadId) {
@@ -427,10 +443,13 @@ async function resolveWorkbookInput({
       'MCP_S3_BUCKET must be configured before publishing staged workbook uploads.',
     );
   }
-  return await resolveStagedWorkbookUpload({
-    workbookUploadId,
-    config,
-  });
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  return new Ok(
+    await resolveStagedWorkbookUpload({ workbookUploadId, config, tenant: tenantLuids.value }),
+  );
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {

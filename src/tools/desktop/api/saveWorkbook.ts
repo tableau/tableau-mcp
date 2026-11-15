@@ -32,8 +32,10 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
     description:
       'Save the open workbook in place, or pass an absolute .twb/.twbx path to Save As: the workbook is ' +
       'written there and becomes the open document (use workbook-export-as for a copy). ' +
-      'A workbook that has never been saved has no path, so omitting filePath then opens the ' +
-      'Save As dialog and blocks until a person responds — pass filePath to save it headlessly.',
+      'Omitting filePath opens the Save As dialog and blocks until a person responds when the ' +
+      'workbook has no writable path: it was never saved, its file cannot be written, or it was ' +
+      'recovered from an autosave draft. Saving a workbook from an older version may also show an ' +
+      'upgrade prompt. Pass filePath to save headlessly.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,

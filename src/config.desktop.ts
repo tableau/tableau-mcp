@@ -51,9 +51,6 @@ export class Config extends BaseConfig {
    */
   userAgentPrefix: string | undefined;
 
-  /** Optional directory holding the Desktop command-param and codegen registry JSON files. */
-  commandsRegistryDir: string | undefined;
-
   /**
    * Session id (Desktop pid) the launching Tableau Desktop pinned via
    * `TABLEAU_DESKTOP_SESSION_ID`. When set, every session-scoped tool defaults to
@@ -105,8 +102,8 @@ export class Config extends BaseConfig {
    */
   allowSkipValidation: boolean;
 
-  /** Ordered knowledge roots (TABLEAU_KNOWLEDGE_DIR, split on the path delimiter by assets.ts). */
-  knowledgeDir: string | undefined;
+  /** Ordered expertise roots (TABLEAU_EXPERTISE_DIR, split on the path delimiter by assets.ts). */
+  expertiseDir: string | undefined;
 
   /**
    * Absolute root for durable data-app source packages (TABLEAU_DATA_APP_WORKSPACE_DIR).
@@ -129,7 +126,6 @@ export class Config extends BaseConfig {
       INLINE_IMAGE_MAX_BYTES: inlineImageMaxBytes,
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
-      TABLEAU_COMMANDS_REGISTRY_DIR: commandsRegistryDir,
       TABLEAU_USER_AGENT_PREFIX: userAgentPrefix,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
@@ -145,7 +141,6 @@ export class Config extends BaseConfig {
     }
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
-    this.commandsRegistryDir = commandsRegistryDir?.trim() || undefined;
     this.userAgentPrefix = parseUserAgentPrefix(userAgentPrefix);
     this.desktopSessionId =
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
@@ -188,12 +183,12 @@ export class Config extends BaseConfig {
     this.allowSkipValidation = allowSkipValidation === 'true';
 
     const {
-      TABLEAU_KNOWLEDGE_DIR: knowledgeDir,
+      TABLEAU_EXPERTISE_DIR: expertiseDir,
       WORKBOOK_XSD_PATH: workbookXsdPath,
       EXAMPLES_DIR: examplesDir,
       TWB_INDEX_PATH: twbIndexPath,
     } = cleansedVars;
-    this.knowledgeDir = knowledgeDir || undefined;
+    this.expertiseDir = expertiseDir || undefined;
     const dataAppWorkspaceDir = cleansedVars.TABLEAU_DATA_APP_WORKSPACE_DIR?.trim();
     this.dataAppWorkspaceDir =
       dataAppWorkspaceDir && isAbsolute(dataAppWorkspaceDir)

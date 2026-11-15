@@ -27,7 +27,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 import { registerSkills } from './index.js';
-import { SkillsGetHandlerRequestSchema, SkillsListRequestSchema } from './types.js';
+import { SkillsGetHandlerRequestSchema, SkillsListHandlerRequestSchema } from './types.js';
 
 type SkillFile = { uri: string; path: string; mimeType: string };
 type ServerArg = Parameters<typeof registerSkills>[0];
@@ -97,7 +97,10 @@ describe('registerSkills', () => {
     await registerSkills(server);
 
     expect(setRequestHandler).toHaveBeenCalledTimes(2);
-    expect(setRequestHandler).toHaveBeenCalledWith(SkillsListRequestSchema, expect.any(Function));
+    expect(setRequestHandler).toHaveBeenCalledWith(
+      SkillsListHandlerRequestSchema,
+      expect.any(Function),
+    );
     expect(setRequestHandler).toHaveBeenCalledWith(
       SkillsGetHandlerRequestSchema,
       expect.any(Function),

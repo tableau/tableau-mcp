@@ -44,12 +44,6 @@ const makeInstance = (baseUrl: string, token = 'valid-token'): ExternalApiInstan
   apiVersion: '1.0',
 });
 
-const invokeBody = (
-  namespace: string,
-  command: string,
-  parameters: Record<string, unknown> = {},
-): Record<string, unknown> => ({ namespace, command, parameters });
-
 const invokeDialogActionRequest: InvokeDialogActionRequest = {
   requestId: 'request-1',
   dialog: {
@@ -206,23 +200,6 @@ describe('ExternalApiHttp', () => {
     }
   });
 
-  it('invokes a command and surfaces the operation envelope result and state', async () => {
-    const result = await http.postJsonEnvelope(
-      EXTERNAL_API_ROUTES.invokeCommand,
-      invokeBody('tabdoc', 'undo', { steps: 1 }),
-    );
-    expect(result.isOk()).toBe(true);
-    const envelope = result.unwrap();
-    expect(envelope.state).toBe('succeeded');
-    expect(envelope.result).toEqual({
-      namespace: 'tabdoc',
-      command: 'undo',
-      echoedParameters: { steps: 1 },
-    });
-    expect(envelope.createdAt).toBe('2026-07-07T10:00:00Z');
-    expect(envelope.completedAt).toBe('2026-07-07T10:00:01Z');
-  });
-
   describe('start-page visibility contract', () => {
     it('pins the route and requires a boolean visibility result', () => {
       expect(EXTERNAL_API_ROUTES.appToggleStartPage).toBe('/v0/app:toggleStartPage');
@@ -300,34 +277,6 @@ describe('ExternalApiHttp', () => {
         code: 'operation-failed',
       });
     });
-  });
-
-  it('maps a command-not-found problem', async () => {
-    const result = await http.postJsonEnvelope(
-      EXTERNAL_API_ROUTES.invokeCommand,
-      invokeBody('tabdoc', 'missing-command'),
-    );
-    expect(result.isErr()).toBe(true);
-    const error = result.unwrapErr();
-    if (error.type === 'problem') {
-      expect(error.status).toBe(404);
-      expect(error.code).toBe('command-not-found');
-    } else {
-      throw new Error(`expected problem error, got ${error.type}`);
-    }
-  });
-
-  it('maps an invalid-command-parameter problem', async () => {
-    const result = await http.postJsonEnvelope(
-      EXTERNAL_API_ROUTES.invokeCommand,
-      invokeBody('tabdoc', 'bad-param', { nope: true }),
-    );
-    const error = result.unwrapErr();
-    if (error.type === 'problem') {
-      expect(error.code).toBe('invalid-command-parameter');
-    } else {
-      throw new Error(`expected problem error, got ${error.type}`);
-    }
   });
 
   it('gets the API root from GET /v0/', async () => {

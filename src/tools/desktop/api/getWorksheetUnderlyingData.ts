@@ -121,6 +121,7 @@ export const getWorksheetUnderlyingDataTool = (
 
               const query: WorksheetUnderlyingDataQuery = {
                 maxRows: Math.min(maxRows ?? DEFAULT_MAX_ROWS, MAX_ROWS_CAP),
+                ignoreSelection: true,
                 ...(includeAllColumns !== undefined ? { includeAllColumns } : {}),
                 ...(qualifiedColumns ? { columnsToIncludeByFieldName: qualifiedColumns } : {}),
               };

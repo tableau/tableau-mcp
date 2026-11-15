@@ -516,11 +516,14 @@ describe('getUnmetConditionInstructions', () => {
     expect(message).toContain('https://help.tableau.com/current/online/en-us/pulse_set_up.htm');
   });
 
-  it('explains that AI insights require the Tableau+ entitlement', async () => {
+  it('explains that the Tableau+ entitlement could not be confirmed, without claiming the site lacks it', async () => {
     const message = getUnmetConditionInstructions('RequiresPulsePremium');
 
     expect(message).toContain('Tableau+');
-    expect(message).toContain('insight');
+    expect(message).toContain('could not be confirmed');
+    expect(message).toContain('the check was denied');
+    expect(message).toContain('contact their Tableau administrator');
+    expect(message).not.toContain('does not have the Tableau+ entitlement');
   });
 
   it('describes a missing condition check as an unimplemented check, without a reconnect suggestion', async () => {

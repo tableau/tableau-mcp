@@ -92,16 +92,16 @@ describe('desktop SEA asset access', () => {
   });
 
   it('verifies resources/desktop assets through the same manifest', async () => {
-    const assetText = '# knowledge';
+    const assetText = '# expertise';
     const { readResourceAsset } = await importWithSeaAssets({
       'asset-manifest.json': JSON.stringify({
-        'resources/desktop/knowledge/strategy/viz-design/chart-selection.md':
+        'resources/desktop/expertise/strategy/viz-design/chart-selection.md':
           manifestEntry(assetText),
       }),
-      'resources/desktop/knowledge/strategy/viz-design/chart-selection.md': assetText,
+      'resources/desktop/expertise/strategy/viz-design/chart-selection.md': assetText,
     });
 
-    expect(readResourceAsset('knowledge/strategy/viz-design/chart-selection.md')).toBe(assetText);
+    expect(readResourceAsset('expertise/strategy/viz-design/chart-selection.md')).toBe(assetText);
   });
 
   it('verifies raw bytes, so a non-UTF-8 asset passes when its build-time byte hash matches', async () => {

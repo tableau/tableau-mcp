@@ -143,13 +143,6 @@ describe('derivation preflight — apply-worksheet path', () => {
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd-2', status: 'completed', submitted_at: '' }));
     const mockExecutor = makeExecutorMock({
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-1',
-          status: 'completed',
-          submitted_at: '',
-        }),
-      ),
       getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
           xml: workbookWithDerivation('Month-Trunc'),

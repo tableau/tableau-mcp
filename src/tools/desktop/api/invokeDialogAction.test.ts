@@ -248,6 +248,13 @@ describe('invoke-dialog-action tool', () => {
           action: { kind: 'save-file', path: 'C:\\report.twb', filterId: 'twb' },
         },
         { ...defaultRequest, action: { kind: 'choose-color', red: 999, green: 0, blue: 0 } },
+        ...['firstPage', 'lastPage', 'copies'].map((field) => ({
+          ...defaultRequest,
+          action: {
+            ...nativeActions.find((action) => action.kind === 'submit-print'),
+            [field]: 2_147_483_648,
+          },
+        })),
       ]) {
         const result = await client.callTool({ name: tool.name, arguments: arguments_ });
         expect(result.isError).toBe(true);

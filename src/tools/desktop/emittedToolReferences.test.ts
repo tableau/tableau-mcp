@@ -60,7 +60,6 @@ const NON_TOOL_VOCABULARY = [
   'clear-option',
   'column-instance',
   'command-failed',
-  'command-postcondition',
   'computed-sort',
   'corner-radius',
   'count-d',
@@ -72,7 +71,6 @@ const NON_TOOL_VOCABULARY = [
   'data-app-template-missing',
   'data-app-worksheet',
   'data-app-workspace-unconfigured',
-  'data-catalog-connect-to-file',
   'data-source',
   'data-source-order',
   'datasource-dependencies',
@@ -104,7 +102,6 @@ const NON_TOOL_VOCABULARY = [
   'filter-group',
   'follow-up',
   'formatted-text',
-  'generate-viz-from-notional-spec',
   'get-dashboard-xml-error',
   'get-worksheet-xml-error',
   'in-dashboard',
@@ -113,14 +110,11 @@ const NON_TOOL_VOCABULARY = [
   'in-use',
   'include-null',
   'input-validation',
-  'instance-unavailable',
   'intermediate-leg',
   'invalid-data-app-name',
   'invalid-formula',
   'invalid-response',
   'invalid-xml',
-  'is-leaf-connection',
-  'is-leaf-connection-ui',
   'keep-current',
   'kind-mismatch',
   'kpi-text',
@@ -156,11 +150,11 @@ const NON_TOOL_VOCABULARY = [
   'on-hover',
   'on-menu',
   'on-select',
-  'operation-pending',
   'order-dependent',
-  'output-serialization-failed',
   'packaged-workbook',
   'param-domain-type',
+  // Template id compared in code, not emitted guidance.
+  'part-to-whole-pie-chart',
   // Field resolver transformation marker, not a callable tool.
   'part-to-whole-waterfall',
   'percent-encoded',
@@ -171,13 +165,16 @@ const NON_TOOL_VOCABULARY = [
   'pre-dispatch-validation',
   'pre-dispatch-workbook-drift',
   'preflight-invariant',
+  // Native dialog completion effect, not a callable tool.
+  'print-prepared',
   'prior-version',
   'quantitative-or-categorical',
+  // Template id compared in code, not emitted guidance.
+  'ranking-ordered-bar',
   're-call',
   're-enables',
   're-read',
   're-reading',
-  're-run',
   'readback-verification',
   // Health-check repair-primitive codes, not tools the model can call.
   'required-slot-missing',
@@ -201,7 +198,6 @@ const NON_TOOL_VOCABULARY = [
   'source-field',
   'special-fields',
   'specific-zone',
-  'stable-id',
   'start-page',
   'std-dev',
   'std-dev-p',
@@ -215,12 +211,8 @@ const NON_TOOL_VOCABULARY = [
   'summary-data',
   'tableau-agent-idempotency-key',
   'tableau-mcp-data-app-template',
-  'target-changed',
   'target-group',
   'target-parameter',
-  'target-read-failed',
-  'target-unproven',
-  'target-unresolved',
   'template-artifact-unavailable',
   'template-not-found',
   'template-not-offered',
@@ -334,7 +326,7 @@ const PREFIXED_ALLOWED_TOKENS = new Set([
 ]);
 const PREFIXED_ALLOWED_FILES = new Set([
   // QUERY_TOOL_JARGON is a search stop-word list, never rendered.
-  'src/desktop/knowledge/index.ts',
+  'src/desktop/expertise/index.ts',
 ]);
 
 const scannedCandidates = sourceFiles().flatMap((fullPath) => {

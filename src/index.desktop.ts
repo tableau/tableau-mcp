@@ -77,6 +77,9 @@ async function startWebProfile(): Promise<void> {
     basePath: 'tableau-mcp',
     config,
     logLevel: notificationLevel,
+    // The bundled binary is spawned locally and may run without a base credential (passthrough
+    // auth), so default to loopback even if the spawner doesn't set HTTP_HOST.
+    host: config.httpHost || '127.0.0.1',
   });
 
   // Port is now open. Wait for server info before logging the ready message.

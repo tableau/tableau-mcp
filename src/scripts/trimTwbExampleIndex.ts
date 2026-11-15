@@ -5,7 +5,7 @@
  *
  * WHY: Desktop source builds stage this index and Desktop SEA builds embed it. Only
  * `searchWorkbookExamples` consumes it, through
- * `src/desktop/search/searchLibrary.ts::searchWorkbookExamples`, which:
+ * `src/desktop/search/workbookSearch.ts::searchWorkbookExamples`, which:
  *   - scores each entry on its `features` tags (exact +10 / partial +5),
  *     `name` substring (+3), and — only when nothing else matched — a literal
  *     substring hit in a snippet's `xml` (+1);
@@ -75,7 +75,7 @@ export const TWB_RESULTS_LIMIT = 15;
 
 /**
  * VERBATIM mirror of `FEATURE_ALIASES` in
- * `src/desktop/search/searchLibrary.ts`. The oracle must score with the exact
+ * `src/desktop/search/workbookSearch.ts`. The oracle must score with the exact
  * production semantics; if that table changes, update this copy (and the
  * regression test cross-checks the real scorer to catch drift).
  */
@@ -148,7 +148,7 @@ export const SMOKE_QUERIES = [
   'centersize',
 ];
 
-/** VERBATIM mirror of `expandQueryAliases` in searchLibrary.ts. */
+/** VERBATIM mirror of `expandQueryAliases` in workbookSearch.ts. */
 export function expandQueryAliases(query: string): { tags: string[]; rawQuery: string } {
   const lower = query.toLowerCase().trim();
   const tags = new Set<string>();

@@ -305,6 +305,18 @@ describe('server', () => {
       expect(instructions).toContain('site-administration capabilities');
       expect(instructions).toContain('general admin/site-health');
       expect(instructions).toContain('query-admin-insights');
+      // Every query-admin-insights kind must be named with its routing gloss so the model can map
+      // intent to a kind (W-23757366). Assert kind+gloss, not the bare kind: bare kinds collide
+      // with other substrings (e.g. 'stale-content' is inside 'stale-content-cleanup-inform').
+      for (const kindRouting of [
+        'ts-events audit events',
+        'ts-users logins/last access',
+        'site-content metadata/size',
+        'job-performance refresh history',
+        'stale-content stale report',
+      ]) {
+        expect(instructions).toContain(kindRouting);
+      }
       // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
       // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
       // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
@@ -1933,7 +1945,7 @@ describe('server', () => {
       expect(getWarningLogs()).toHaveLength(0);
     });
 
-    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true and the site lacks Knowledge', async () => {
+    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true, conditions are enforced, and the site lacks Knowledge', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
@@ -1959,7 +1971,7 @@ describe('server', () => {
       }
     });
 
-    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true and the probe fails transiently', async () => {
+    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true, conditions are enforced, and the probe fails transiently', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
@@ -2011,20 +2023,15 @@ describe('server', () => {
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
     });
 
-    it('does not check other registration conditions when only KNOWLEDGE_TOOLS_ENABLED=true', async () => {
+    it('checks no registration conditions when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is off', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
 
-      const server = getServer();
-      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
-      await server.registerTools();
+      const { registered } = await registerKnowledgeTools();
 
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
-        'mock-conditional-tool',
-        expect.anything(),
-        expect.any(Function),
-      );
+      expect(registered).toEqual(knowledgeToolNames);
     });
   });
 
@@ -2240,4 +2247,36 @@ describe('server', () => {
       expect.anything(),
     );
   });
+  it.each([
+    { mcpApps: true, interactiveViz: false, vizToolsPresent: false, recordEventPresent: true },
+    { mcpApps: true, interactiveViz: true, vizToolsPresent: true, recordEventPresent: true },
+    { mcpApps: false, interactiveViz: true, vizToolsPresent: false, recordEventPresent: false },
+  ])(
+    'gates the interactive-viz tools and app resource (mcp-apps=$mcpApps, interactive-viz=$interactiveViz)',
+    async ({ mcpApps, interactiveViz, vizToolsPresent, recordEventPresent }) => {
+      // render-interactive-viz is otherwise disabled under the default PAT auth.
+      vi.stubEnv('AUTH', 'uat');
+      vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+      vi.stubEnv('UAT_ISSUER', 'https://tableau-mcp.local/uat');
+      vi.stubEnv('UAT_USERNAME_CLAIM', 'test@example.com');
+      vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (name: string) =>
+          (name === 'mcp-apps' && mcpApps) || (name === 'interactive-viz' && interactiveViz),
+      );
+
+      const server = getServer({ capabilities: uiCapableClientCapabilities });
+      await server.registerTools();
+
+      const registeredNames = [
+        ...vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]),
+        ...mocks.mockRegisterAppTool.mock.calls.map((call) => call[1]),
+      ];
+      const resourceNames = mocks.mockRegisterAppResource.mock.calls.map((call) => call[1]);
+      expect(registeredNames.includes('render-interactive-viz')).toBe(vizToolsPresent);
+      expect(registeredNames.includes('get-embed-token')).toBe(vizToolsPresent);
+      expect(resourceNames.includes('render-interactive-viz')).toBe(vizToolsPresent);
+      expect(registeredNames.includes('record-event')).toBe(recordEventPresent);
+    },
+  );
 });

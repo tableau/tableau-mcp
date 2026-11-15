@@ -54,33 +54,18 @@ describe('loadDashboardXml (External Client API transport)', () => {
   function dispatchingExecutor(workbookXml: string): {
     executor: ExternalApiToolExecutor;
     calls: Array<{
-      kind: 'command' | 'apply' | 'goto';
-      namespace?: string;
-      command?: string;
-      args?: Record<string, unknown>;
+      kind: 'apply' | 'goto';
       xml?: string;
       sheetId?: string;
       sheetName?: string;
     }>;
   } {
     const calls: Array<{
-      kind: 'command' | 'apply' | 'goto';
-      namespace?: string;
-      command?: string;
-      args?: Record<string, unknown>;
+      kind: 'apply' | 'goto';
       xml?: string;
       sheetId?: string;
       sheetName?: string;
     }> = [];
-    const executeCommand = vi.fn(async (params: any) => {
-      calls.push({
-        kind: 'command',
-        namespace: params.namespace,
-        command: params.command,
-        args: params.args,
-      });
-      return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
-    });
     let liveXml = workbookXml;
     const sheetItems = (tagName: string): { id: string; name: string; hidden: boolean }[] =>
       Array.from(
@@ -118,7 +103,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
     return {
       executor: makeExecutorMock({
-        executeCommand,
         getWorkbook,
         goToSheet,
         getWorkbookDocument,
@@ -222,7 +206,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
         });
         expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
         expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-        expect(executor.executeCommand).not.toHaveBeenCalled();
       },
     );
 
@@ -275,8 +258,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-
     const applyCall = calls.find((c) => c.kind === 'apply');
     const applied = applyCall?.xml as string;
     expect(parseXML(applied).dashboard?.['@_name']).toBe('Sales Dashboard');
@@ -1073,7 +1054,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
   // Resolves absent targets without a workbook fallback, regardless of the legacy flag.
   function absentDashboardExecutor(liveDashboardNames: string[]): {
     executor: ExternalApiToolExecutor;
-    calls: Array<{ kind: 'command' | 'apply' | 'goto'; xml?: string }>;
+    calls: Array<{ kind: 'apply' | 'goto'; xml?: string }>;
   } {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(liveDashboardNames));
     (executor as unknown as { listDashboards: unknown }).listDashboards = vi.fn().mockResolvedValue(
@@ -1574,7 +1555,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
   });
 
   it('should return invalid-xml error when xml is empty', async () => {
-    const mockExecutor = makeExecutorMock({ executeCommand: vi.fn() });
+    const mockExecutor = makeExecutorMock();
 
     const result = await loadDashboardXml({
       dashboardName,
@@ -1591,11 +1572,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
         expect(result.error.error.type).toBe('invalid-xml');
       }
     }
-    expect(mockExecutor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('should return validation-failed error when XML is not well-formed', async () => {
-    const mockExecutor = makeExecutorMock({ executeCommand: vi.fn() });
+    const mockExecutor = makeExecutorMock();
 
     const result = await loadDashboardXml({
       dashboardName,
@@ -1612,7 +1592,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
         expect(result.error.error.type).toBe('validation-failed');
       }
     }
-    expect(mockExecutor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('should return error when the workbook fetch fails', async () => {

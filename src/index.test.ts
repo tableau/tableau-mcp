@@ -2,6 +2,7 @@ const startupState = vi.hoisted(() => ({
   transport: 'http' as 'http' | 'stdio',
   auth: 'pat' as string,
   oauthEnabled: true,
+  httpHost: '',
   connectPromise: Promise.resolve(),
   serverInfoPromise: Promise.resolve({}),
   expressPromise: Promise.resolve({ url: 'http://localhost:3927/tableau-mcp' }),
@@ -26,6 +27,7 @@ vi.mock('./config.js', () => ({
     server: 'https://tableau.example.com',
     auth: startupState.auth,
     oauth: { enabled: startupState.oauthEnabled },
+    httpHost: startupState.httpHost,
     defaultNotificationLevel: 'info',
     loggers: new Set<string>(),
     fileLoggerDirectory: '/tmp',
@@ -139,6 +141,7 @@ describe('default entrypoint startup', () => {
     startupState.transport = 'http';
     startupState.auth = 'pat';
     startupState.oauthEnabled = true;
+    startupState.httpHost = '';
     startupState.connectPromise = Promise.resolve();
     startupState.serverInfoPromise = Promise.resolve({});
     startupState.expressPromise = Promise.resolve({
@@ -182,6 +185,21 @@ describe('default entrypoint startup', () => {
       ),
     );
   });
+
+  it.each([
+    ['', ''],
+    ['10.0.0.5', '10.0.0.5'],
+  ])(
+    'passes httpHost %j to the listener as %j (default stays all interfaces)',
+    async (httpHost, expected) => {
+      startupState.httpHost = httpHost;
+
+      await import('./index.js');
+      await vi.waitFor(() => expect(startExpressServer).toHaveBeenCalledOnce());
+
+      expect(startExpressServer).toHaveBeenCalledWith(expect.objectContaining({ host: expected }));
+    },
+  );
 
   it.each([
     ['pat', true],

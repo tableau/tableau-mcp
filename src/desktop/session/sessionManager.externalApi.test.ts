@@ -1,4 +1,5 @@
 import pkg from '../../../package.json';
+import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../errors/externalApiAccess.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { SessionManager } from './sessionManager.js';
 
@@ -6,7 +7,8 @@ const mocks = vi.hoisted(() => ({
   discoverInstances: vi.fn(() => []),
 }));
 
-vi.mock('../externalApi/discovery.js', () => ({
+vi.mock('../externalApi/discovery.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../externalApi/discovery.js')>()),
   discoverInstances: mocks.discoverInstances,
 }));
 
@@ -80,19 +82,39 @@ describe('SessionManager executor selection', () => {
     );
   });
 
-  it('throws an honest update-required error when an unpinned Desktop does not serve the External Client API', async () => {
+  it('names the External API access toggle when no Desktop is accepting connections', async () => {
     mocks.discoverInstances.mockReturnValue([]);
 
-    await expect(new SessionManager().getExecutor('12345')).rejects.toThrow(
-      'This Tableau Desktop build does not serve the External Client API — update Desktop.',
+    const promise = new SessionManager().getExecutor('12345');
+    await expect(promise).rejects.toThrow('No Tableau Desktop is accepting agent connections.');
+    await expect(promise).rejects.toThrow(EXTERNAL_API_ACCESS_HOW_TO_FIX);
+    await expect(promise).rejects.toThrow(
+      `${EXTERNAL_API_ACCESS_HOW_TO_FIX} Requested session: 12345.`,
     );
+  });
+
+  it('gives a hedged turn-it-on message when the pinned Desktop is alive but has no discovery file', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
+    mocks.discoverInstances.mockReturnValue([]);
+
+    const promise = new SessionManager({ isPidAlive: () => true }).getExecutor('12345');
+    await expect(promise).rejects.toThrow(
+      "A process with PID 12345 is still running but isn't accepting agent connections. If it is Tableau Desktop and has finished starting, External API access is probably turned off.",
+    );
+    await expect(promise).rejects.toThrow(
+      `${EXTERNAL_API_ACCESS_HOW_TO_FIX} Then relaunch the agent from Tableau Desktop to reconnect.`,
+    );
+    await expect(promise).rejects.toThrow('Cached XML from the old session');
+    await expect(promise).rejects.toThrow(EXTERNAL_API_ACCESS_HOW_TO_FIX);
   });
 
   it('throws a restart-recovery error when the pinned Desktop is no longer reachable', async () => {
     vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
     mocks.discoverInstances.mockReturnValue([]);
 
-    await expect(new SessionManager().getExecutor('12345')).rejects.toThrow(
+    await expect(
+      new SessionManager({ isPidAlive: () => false }).getExecutor('12345'),
+    ).rejects.toThrow(
       'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.',
     );
   });

@@ -83,7 +83,7 @@ describe('trimmed twb-example-index.json retrieval regression (oracle-seeded)', 
     // Guards against drift between this file's FEATURE_ALIASES/scoring mirror and
     // the real implementation: the shipped scorer must rank the trimmed file
     // identically to topKForQuery for the seeded smoke queries.
-    const { searchWorkbookExamples } = await import('./searchLibrary.js');
+    const { searchWorkbookExamples } = await import('./workbookSearch.js');
     for (const query of SMOKE_QUERIES) {
       const real = (searchWorkbookExamples(query).twbExamples as Entry[]).map((e) => e.id).sort();
       const replicated = ids(topKForQuery(trimmed, query));

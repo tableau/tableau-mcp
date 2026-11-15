@@ -78,7 +78,6 @@ describe('non-waivable dashboard worksheet-zone crash guard', () => {
     });
     expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
     expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-    expect(executor.executeCommand).not.toHaveBeenCalled();
     expect(live()).toBe(before);
   });
 

@@ -150,14 +150,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
-    id: 'knowledge-consult',
+    id: 'expertise-consult',
     trigger:
       'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design)',
     action:
-      'FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.',
-    toolSequence: ['search-knowledge', 'read-knowledge-resource'],
+      'FIRST search-expertise; use read-expertise-resource to read the top hit once, then proceed.',
+    toolSequence: ['search-expertise', 'read-expertise-resource'],
     stopConditions: ['read the top hit once, then proceed'],
-    requiredEvidence: ['one targeted knowledge module or no search hit'],
+    requiredEvidence: ['one targeted expertise module or no search hit'],
   },
   {
     kind: 'route',
@@ -254,9 +254,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one (examples include running total, LOD, and interactivity on mark interaction such as by selecting or hovering over marks or selecting a link in a tooltip menu)',
     action:
-      'Do not create or change workbook content for an analytical question alone. Before authoring, consult the knowledge docs via search-knowledge. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'Do not create or change workbook content for an analytical question alone. Before authoring, consult the expertise docs via search-expertise. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
-      'search-knowledge',
+      'search-expertise',
       'author-parameter',
       'author-set',
       'author-calc',
@@ -296,7 +296,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings.',
   },
 ];
 
@@ -312,11 +312,6 @@ const DEMO_PROFILE_INSTRUCTIONS = [
   'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
   "For a chart request, use bind-template with the user's ask. Use the returned fallback tools when it cannot apply.",
   'For a dashboard, use bind-template to place views, then call run-dashboard-batch compose-only with existingWorksheetNames set to the live worksheet names.',
-] as const;
-
-const SPEC_LOOP_PROFILE_INSTRUCTIONS = [
-  'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
-  'Use execute-tableau-command for supported authoring operations and the list tools for discovery and readback.',
 ] as const;
 
 /**
@@ -335,12 +330,6 @@ export function buildDesktopInstructions({
   if (normalizedProfile === 'demo') {
     return [
       ...DEMO_PROFILE_INSTRUCTIONS,
-      sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
-    ].join('\n\n');
-  }
-  if (normalizedProfile === 'spec-loop') {
-    return [
-      ...SPEC_LOOP_PROFILE_INSTRUCTIONS,
       sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
     ].join('\n\n');
   }

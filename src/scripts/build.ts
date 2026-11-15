@@ -122,10 +122,10 @@ const checkNoDesktopSources = variant === 'default';
     const desktopDataSrc = './src/desktop/data';
     const desktopDataOut = './build/desktop/data';
     const stagedDesktopData = [
-      'twb_2026.2.0.xsd', // searchLibrary WORKBOOK_XSD_PATH
-      'corpus.json', // searchLibrary corpus
-      'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
-      'examples', // searchLibrary EXAMPLES_DIR
+      'twb_2026.2.0.xsd', // workbookSearch WORKBOOK_XSD_PATH
+      'corpus.json', // workbookSearch corpus
+      'twb-example-index.json', // workbookSearch TWB_INDEX_PATH — committed trimmed index (~920 KB)
+      'examples', // workbookSearch EXAMPLES_DIR
       'templates', // Compatibility fallback until TAS materializes the published content pack.
     ];
     await mkdir(desktopDataOut, { recursive: true });

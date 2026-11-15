@@ -82,23 +82,23 @@ describe('DesktopConfig', () => {
     expect(new Config()[field]).toBe(2_147_483_647);
   });
 
-  describe('knowledge and search overrides', () => {
+  describe('expertise and search overrides', () => {
     it('leaves them undefined by default', () => {
       const config = new Config();
-      expect(config.knowledgeDir).toBeUndefined();
+      expect(config.expertiseDir).toBeUndefined();
       expect(config.workbookXsdPath).toBeUndefined();
       expect(config.examplesDir).toBeUndefined();
       expect(config.twbIndexPath).toBeUndefined();
     });
 
     it('reads them from the environment', () => {
-      vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', '/a:/b');
+      vi.stubEnv('TABLEAU_EXPERTISE_DIR', '/a:/b');
       vi.stubEnv('WORKBOOK_XSD_PATH', '/x.xsd');
       vi.stubEnv('EXAMPLES_DIR', '/ex');
       vi.stubEnv('TWB_INDEX_PATH', '/i.json');
 
       const config = new Config();
-      expect(config.knowledgeDir).toBe('/a:/b');
+      expect(config.expertiseDir).toBe('/a:/b');
       expect(config.workbookXsdPath).toBe('/x.xsd');
       expect(config.examplesDir).toBe('/ex');
       expect(config.twbIndexPath).toBe('/i.json');
@@ -114,19 +114,6 @@ describe('DesktopConfig', () => {
     it('should leave the discovery-dir override undefined by default', () => {
       vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', undefined);
       expect(new Config().externalApiDiscoveryDir).toBeUndefined();
-    });
-  });
-
-  describe('commands registry dir', () => {
-    it('should expose a trimmed TABLEAU_COMMANDS_REGISTRY_DIR', () => {
-      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '  /registry  ');
-      expect(new Config().commandsRegistryDir).toBe('/registry');
-    });
-
-    it('should be undefined when unset or an unresolved bundle placeholder', () => {
-      expect(new Config().commandsRegistryDir).toBeUndefined();
-      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '${user_config.registry}');
-      expect(new Config().commandsRegistryDir).toBeUndefined();
     });
   });
 

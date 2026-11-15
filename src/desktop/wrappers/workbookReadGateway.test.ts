@@ -149,7 +149,6 @@ function makeExecutor(): ExternalApiToolExecutor {
     start: vi.fn(),
     stop: vi.fn(),
     isAvailable: vi.fn(() => true),
-    executeCommand: vi.fn(),
     getWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
   });

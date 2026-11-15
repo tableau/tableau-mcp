@@ -213,7 +213,7 @@ export class DashboardApplyScenario {
       'If apply reports a layout validation error, correct it and retry. Read back the dashboard after a successful apply. ' +
       'If the current Desktop API cannot register the requested worksheet views safely, stop and explain the blocker without replacing the workbook. ' +
       'If a referenced worksheet has no visual representation, stop and explain the blocker; do not populate it or change the selected worksheets.';
-    const completed = (): Ok<ExecuteCommandResult<undefined>> =>
+    const completed = (): Ok<ExecuteCommandResult> =>
       Ok({ command_id: 'eval-apply', status: 'completed' as const, submitted_at: '' });
     this.executor = makeExecutorMock({
       listDashboards: vi

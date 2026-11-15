@@ -33,24 +33,20 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
   });
 
   it.each(['E71AE512', '0xE71AE512', '0xe71ae512'])(
-    'classifies a command failure with Tableau code %s as session-fatal',
+    'classifies an undo failure with Tableau code %s as session-fatal',
     async (tableauErrorCode) => {
-      server.setOverride('POST /v0/app:invokeCommand', {
+      server.setOverride('POST /v0/workbook:undo', {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: 'failed-command',
-          kind: 'command.invoke',
+          id: 'failed-undo',
+          kind: 'tabdoc:undo',
           state: 'FAILED',
           error: { code: 'operation-failed', message: 'Internal Error', tableauErrorCode },
         }),
       });
 
-      const result = await executor.executeCommand({
-        namespace: 'tabdoc',
-        command: 'undo',
-        signal,
-      });
+      const result = await executor.undo(signal);
 
       expect(result.unwrapErr()).toMatchObject({
         type: 'command-failed',
@@ -62,7 +58,7 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
         },
       });
       expect(
-        server.requests.filter((request) => request.path === '/v0/app:invokeCommand'),
+        server.requests.filter((request) => request.path === '/v0/workbook:undo'),
       ).toHaveLength(1);
     },
   );

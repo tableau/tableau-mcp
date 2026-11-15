@@ -17,7 +17,6 @@ describe('getDashboardXml', () => {
         }),
       ),
       getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: '<dashboard name="Sales" />' })),
-      executeCommand: vi.fn(),
     });
 
     const result = await getDashboardXml({
@@ -33,7 +32,6 @@ describe('getDashboardXml', () => {
       'dashboard-2',
       expect.any(AbortSignal),
     );
-    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('accepts dashboard id directly before name matching', async () => {

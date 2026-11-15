@@ -32,8 +32,7 @@ export const placeholderDatasourceRefRule: ValidationRule = {
         suggestion:
           'Replace the placeholder with the REAL datasource name (e.g. [Sample - Superstore], or the federated id from ' +
           'list-available-fields). Build every column ref from a real field instance — ' +
-          `[<real datasource>].[<derivation:Field:pivot>] — not from a generic [${token}] example. Do NOT fall back to ` +
-          'an imperative command (e.g. tabdoc:sort) to work around it; fix the reference and re-apply the XML.',
+          `[<real datasource>].[<derivation:Field:pivot>] — not from a generic [${token}] example. Fix the reference and re-apply the XML.`,
       });
     }
 

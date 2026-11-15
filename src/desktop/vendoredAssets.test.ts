@@ -3,7 +3,7 @@
  *
  * A live session hit "Template 'ww-ou-diff' not found" because the product catalog and the
  * apply path disagreed about what was loadable. TBMs are now the sole template artifact, so
- * this suite exercises the runtime catalog directly and keeps the knowledge-corpus coverage.
+ * this suite exercises the runtime catalog directly and keeps the expertise-corpus coverage.
  */
 import { loadRuntimeTemplateCatalogSnapshots } from './templates/runtimeTemplateCatalog.js';
 
