@@ -3,7 +3,11 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
+import {
+  AdminInsightsUnavailableError,
+  AdminOnlyError,
+  ArgsValidationError,
+} from '../../../errors/mcpToolError.js';
 import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { QueryOutput, querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
@@ -50,11 +54,52 @@ const kindSchema = z.enum([
 ]);
 type Kind = z.infer<typeof kindSchema>;
 
+/**
+ * Known field captions per raw-VDS kind, rendered into the tool description so the model does not
+ * invent captions (W-23757366). Not exhaustive. Must stay a superset of the captions the packaged
+ * admin prompts send (src/prompts/userLicenseReclamation, src/prompts/_lib/jobPerformance.ts);
+ * queryAdminInsights.test.ts enforces this so the two cannot drift.
+ */
+export const KNOWN_FIELD_CAPTIONS: Readonly<
+  Record<Exclude<Kind, 'stale-content'>, ReadonlyArray<string>>
+> = {
+  'ts-events': ['Actor User Name', 'Event Type', 'Event Date', 'Item Type', 'Item Name'],
+  'ts-users': [
+    'User Email',
+    'User Name',
+    'Tableau Desktop - Last Access Date',
+    'Tableau Prep - Last Access Date',
+  ],
+  'site-content': ['Item Type', 'Item Name', 'Owner Email', 'Item Parent Project Name'],
+  'job-performance': [
+    'Item Name',
+    'Job Type',
+    'Job Result',
+    'Started At',
+    'Job Duration',
+    'Job Execution Duration',
+    'Schedule Name',
+    'Was Manual Run',
+    'Error Message',
+    'Extract File Size',
+  ],
+};
+
+const knownFieldCaptionsText = Object.entries(KNOWN_FIELD_CAPTIONS)
+  .map(([kind, captions]) => `${kind}: ${captions.join(', ')}`)
+  .join('; ');
+
+const UNKNOWN_FIELD_HINT =
+  ' Field captions must match the dataset exactly; see the query-admin-insights tool ' +
+  'description for known captions.';
+
 const paramsSchema = {
   kind: kindSchema.describe(
-    'Which admin-insights backend to query. Use "ts-events", "ts-users", "site-content", or ' +
-      '"job-performance" for raw VDS queries; use "stale-content" for the deterministic ' +
-      'stale-content anti-join.',
+    'Which admin-insights backend to query. Raw VDS queries: "ts-events" (audit events: access, ' +
+      'publish, update, delete), "ts-users" (per-user last login, Desktop/Prep access), ' +
+      '"site-content" (content metadata, owners, size), "job-performance" (extract-refresh and ' +
+      'subscription run history). Use "stale-content" for the deterministic stale-content ' +
+      'anti-join.',
   ),
   query: querySchema
     .optional()
@@ -131,8 +176,14 @@ administrators on Tableau Cloud sites with Admin Insights enabled.
 
 Dispatches on \`kind\`:
 - \`ts-events\` / \`ts-users\` / \`site-content\` / \`job-performance\` — raw VDS query. Pass
-  \`query\` (required) and optional \`limit\`. Use \`ts-users\` for per-user activity signals such
-  as last login and Tableau Desktop / Prep last-access dates.
+  \`query\` (required) and optional \`limit\`.
+  - \`ts-events\`: audit events (access, publish, update, delete).
+  - \`ts-users\`: per-user activity signals such as last login and Tableau Desktop / Prep
+    last-access dates.
+  - \`site-content\`: content metadata, owners, size.
+  - \`job-performance\`: extract-refresh and subscription run history.
+  Field captions are dataset-specific and must match exactly; do not guess. Known captions:
+  ${knownFieldCaptionsText}.
 - \`stale-content\` — server-side stale-content report. Pass optional \`minAgeDays\`, \`projectIds\`,
   \`itemTypes\`; do NOT pass \`query\` or \`limit\`.
 
@@ -292,6 +343,18 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
             query,
             rowLimit: rowLimit === undefined ? undefined : rowLimit + 1,
           });
+          // The caller authored this query, so an Unknown Field error is a bad caption in its
+          // fields, filters, or calculations — point it at the known captions. Server-built queries
+          // (stale-content, staleness checks) skip this path, where the hint would be misleading.
+          if (
+            result.isErr() &&
+            result.error instanceof AdminInsightsUnavailableError &&
+            /Unknown Field/i.test(result.error.message)
+          ) {
+            return new AdminInsightsUnavailableError(
+              `${result.error.message}${UNKNOWN_FIELD_HINT}`,
+            ).toErr();
+          }
           if (result.isErr() || rowLimit === undefined) {
             return result;
           }

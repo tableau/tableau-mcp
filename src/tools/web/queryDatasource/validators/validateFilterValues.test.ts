@@ -683,3 +683,31 @@ describe('validateFilterValues', () => {
     }
   });
 });
+
+it.each(['SET', 'MATCH'] as const)(
+  'uses internal names in %s validation queries',
+  async (filterType) => {
+    vi.clearAllMocks();
+    vi.mocked(mockVizqlDataServiceMethods.queryDatasource).mockResolvedValue(
+      Ok({ data: [{ DistinctValues: 'A', SampleValues: 'A' }] }),
+    );
+    const filter =
+      filterType === 'SET'
+        ? { filterType, field: { fieldCaption: 'Team (FORECAST)' }, values: ['A'] }
+        : { filterType, field: { fieldCaption: 'Team (FORECAST)' }, contains: 'A' };
+    const result = await validateFilterValues(
+      new WebMcpServer(),
+      { fields: [{ fieldCaption: 'Team (FORECAST)' }], filters: [filter] },
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+      true,
+    );
+    expect(result.isOk()).toBe(true);
+    expect(mockVizqlDataServiceMethods.queryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ interpretFieldCaptionsAsFieldNames: true }),
+        query: { fields: [expect.objectContaining({ fieldCaption: 'Team (FORECAST)' })] },
+      }),
+    );
+  },
+);

@@ -7,7 +7,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getPublishDatasourceTool } from './publishDatasource.js';
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   mockUploadFileInChunks: vi.fn(),
   mockResolveStagedDatasourceUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+  mockDeleteObject: vi.fn(),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -39,6 +40,11 @@ vi.mock('../../../restApiInstance.js', () => ({
 vi.mock('./stagedDatasourceUpload.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./stagedDatasourceUpload.js')>()),
   resolveStagedDatasourceUpload: mocks.mockResolveStagedDatasourceUpload,
+}));
+
+vi.mock('../s3Client.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../s3Client.js')>()),
+  deleteObjectFromS3: mocks.mockDeleteObject,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -68,6 +74,9 @@ const validLocalArgs = {
   projectId: 'target-project-id',
 };
 
+const STAGED_KEY = 'datasource-uploads/site/user/upload/datasource.tds';
+const STAGED_DELETE = { key: STAGED_KEY, bucket: 'tableau-workbooks', region: 'us-east-1' };
+
 describe('publishDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,10 +87,13 @@ describe('publishDatasourceTool', () => {
     mocks.mockResolveStagedDatasourceUpload.mockReset();
     mocks.mockReadFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
+    mocks.mockDeleteObject.mockReset();
+    mocks.mockDeleteObject.mockResolvedValue(undefined);
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<datasource source="local" />'));
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tds',
       bytes: Buffer.from('<datasource source="new" />'),
+      stagedKey: STAGED_KEY,
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishDatasource.mockResolvedValue(mockPublishedDatasource);
@@ -207,6 +219,7 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockResolveStagedDatasourceUpload).toHaveBeenCalledWith({
       datasourceUploadId: validArgs.datasourceUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -221,12 +234,25 @@ describe('publishDatasourceTool', () => {
       projectId: 'target-project-id',
       overwrite: false,
     });
+    expect(mocks.mockDeleteObject).toHaveBeenCalledExactlyOnceWith(STAGED_DELETE);
+  });
+
+  it('still returns the published datasource when deleting the staged upload fails', async () => {
+    mocks.mockDeleteObject.mockRejectedValue(new Error('AccessDenied'));
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).status).toBe('published');
+    expect(mocks.mockDeleteObject).toHaveBeenCalledWith(STAGED_DELETE);
   });
 
   it('uploads and publishes a staged TDSX file', async () => {
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tdsx',
       bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      stagedKey: 'datasource-uploads/site/user/upload/datasource.tdsx',
     });
 
     const result = await getToolResult(validArgs);
@@ -240,6 +266,10 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
+    expect(mocks.mockDeleteObject).toHaveBeenCalledExactlyOnceWith({
+      ...STAGED_DELETE,
+      key: 'datasource-uploads/site/user/upload/datasource.tdsx',
+    });
   });
 
   it('uploads and publishes a local TDSX data source file path', async () => {
@@ -261,6 +291,7 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
+    expect(mocks.mockDeleteObject).not.toHaveBeenCalled();
   });
 
   it('uploads and publishes a local TDS data source file path', async () => {
@@ -305,6 +336,8 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'My New Datasource', overwrite: false }),
     );
+    // Kept so the user can retry the publish.
+    expect(mocks.mockDeleteObject).not.toHaveBeenCalled();
   });
 
   it('rejects local data source file paths when staged S3 uploads are configured', async () => {
@@ -355,6 +388,24 @@ describe('publishDatasourceTool', () => {
 
     expect(result.isError).toBe(false);
     expect(mocks.mockPublishDatasource).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed without resolving the staged upload when the session has no valid tenant LUIDs', async () => {
+    const result = await getToolResult(validArgs, {
+      transport: 'http',
+      extraOverrides: { _siteLuid: '' },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "couldn't determine the signed-in Tableau site and user",
+    );
+    // Returned as an Err from the useRestApi callback, not thrown.
+    const callbackResult = await vi.mocked(useRestApi).mock.results[0].value;
+    expect(callbackResult.isErr()).toBe(true);
+    expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
 
   it('returns an args-validation error when local data source path is neither tds nor tdsx', async () => {
@@ -468,6 +519,7 @@ async function getToolResult(
     boundedProjectIds?: Set<string> | null;
     bucketS3Enabled?: boolean;
     transport?: 'stdio' | 'http';
+    extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
   } = {},
 ): Promise<CallToolResult> {
   const tool = getPublishDatasourceTool(new WebMcpServer());
@@ -488,12 +540,14 @@ function getMockExtra({
   boundedProjectIds = null,
   bucketS3Enabled = true,
   transport = 'stdio',
+  extraOverrides = {},
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
   transport?: 'stdio' | 'http';
+  extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
+  const extra = getMockRequestHandlerExtra(extraOverrides);
   return {
     ...extra,
     getConfigWithOverrides: vi.fn().mockResolvedValue({

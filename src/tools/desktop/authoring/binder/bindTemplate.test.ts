@@ -43,7 +43,7 @@ import { Provider } from '../../../../utils/provider.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolContext } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { appliedSheetSignature } from './appliedSheetSignature.js';
-import { getBindTemplateTool } from './bindTemplate.js';
+import { getBindTemplateTool, POST_APPLY_UNCERTAINTY_GUIDANCE } from './bindTemplate.js';
 import { proposalSignature } from './proposalSignature.js';
 
 // Auto-mock the live-read command. Partial-mock the binder core so the pure
@@ -404,6 +404,29 @@ const boundResult: BinderResult = {
     template_parameters: { DATASOURCE: 'Superstore' },
     field_mapping: { cat: '[Region]', val: '[Sales]' },
   },
+};
+const PIE_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Superstore'>
+      <column caption='Region' name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Sales' name='[Sales]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+const boundPieResult: Extract<BinderResult, { status: 'bound' }> = {
+  ...boundResult,
+  args: {
+    template_name: 'part-to-whole-pie-chart',
+    title: 'Sales by Region',
+    sheet_type: 'worksheet',
+    template_parameters: { DATASOURCE: 'Superstore' },
+    field_mapping: {
+      '{{field_base_1}}': '[Superstore].[none:Region:nk]',
+      '{{field_base_2}}': '[Superstore].[sum:Sales:qk]',
+    },
+  },
+  encodings: { filled: [], unfilled: [] },
 };
 const LEGACY_APPLY_INSTRUCTION =
   'tabdoc:new-worksheet tableau-apply-worksheet tableau-inject-template apply-workbook build-and-apply-worksheet';
@@ -3501,6 +3524,532 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 
+  it('tells the agent to build a sorted bar when Call 2 hits the pie slice gate', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    const pieDetail =
+      'pie slice field "State" has 56 distinct values, above the workable maximum of 12; keep "State" and build a sorted bar instead (template ranking-ordered-bar), and tell the user a pie with 56 slices is unreadable';
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce({
+        ...proposeResult,
+        decline_reason: { code: 'no_llm_validation_declined', detail: pieDetail },
+      } as BinderResult)
+      .mockResolvedValueOnce({
+        status: 'escalate',
+        reason: 'kind-mismatch',
+        blockers: [
+          {
+            code: 'kind-mismatch',
+            detail: pieDetail,
+            pie_slice_gate: true,
+            datasource: 'M7',
+          },
+          { code: 'kind-mismatch', detail: 'unrelated blocker' },
+        ],
+      });
+
+    const call1 = await getToolResult({ session: '1', ask: 'pie chart of Sales by State' });
+    invariant(call1.content[0].type === 'text');
+    const call1Detail = JSON.parse(call1.content[0].text).decline_reason.detail;
+    expect(call1Detail).toContain('"State"');
+    expect(call1Detail).toContain('56');
+    expect(call1Detail).toContain('sorted bar');
+
+    const call2 = await getToolResult({
+      session: '1',
+      ask: 'pie chart of Sales by State',
+      proposal: sampleProposal,
+    });
+    expect(call2.isError).toBe(true);
+    invariant(call2.content[0].type === 'text');
+    const body = JSON.parse(call2.content[0].text);
+    expect(body.reason).toBe('fallback_required');
+    expect(body.guidance).toContain('"State"');
+    expect(body.guidance).toContain('56');
+    expect(body.guidance).toContain('sorted bar');
+    expect(body.guidance).toContain('ranking-ordered-bar');
+    expect(body.guidance).not.toContain('unrelated blocker');
+  });
+
+  it('admits the offered ranking-ordered-bar as the Call 2 choice after the pie gate declines', async () => {
+    const ask = 'pie chart of Sales by Region';
+    const slots = (cat: string, val: string): any[] => [
+      { slot_id: cat, role: ['dimension'], kind: 'categorical', required: true },
+      { slot_id: val, role: ['measure'], kind: 'quantitative', required: true },
+    ];
+    const pieDeclined: BinderResult = {
+      ...proposeResult,
+      decline_reason: {
+        code: 'no_llm_validation_declined',
+        detail:
+          'pie slice field "Region" has 56 distinct values; keep "Region" and build a sorted bar instead (template ranking-ordered-bar)',
+      },
+      llm_input: {
+        ...(proposeResult as Extract<BinderResult, { status: 'propose' }>).llm_input,
+        ask,
+        candidate_templates: [
+          {
+            template: 'part-to-whole-pie-chart',
+            description: 'Pie',
+            intent_keywords: ['pie'],
+            slots: slots('field_base_1', 'field_base_2'),
+          },
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: slots('field_base_1', 'field_base_2'),
+          },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    };
+    const barProposal: BindingProposal & { confidence: number } = {
+      template: 'ranking-ordered-bar',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundM7TwoFilterResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+      structuralReadback: true,
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(pieDeclined)
+      .mockResolvedValueOnce({
+        ...boundM7TwoFilterResult,
+        args: { ...(boundM7TwoFilterResult as any).args, filters: undefined },
+      } as BinderResult);
+
+    const call1 = await getToolResult({ session: 'pie-bar', ask, getExecutor });
+    invariant(call1.content[0].type === 'text');
+    const contract = JSON.parse(call1.content[0].text).call_2_contract;
+    expect(contract.proposal_choices.map((c: any) => c.template)).toEqual([
+      'part-to-whole-pie-chart',
+      'ranking-ordered-bar',
+    ]);
+    const call2 = await getToolResult({
+      session: 'pie-bar',
+      ask,
+      proposal: barProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    expect(call2.isError, JSON.stringify(call2)).toBe(false);
+    invariant(call2.content[0].type === 'text');
+    expect(call2.content[0].text).not.toContain('template-not-offered');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  describe('keep_large_pie after the pie slice gate', () => {
+    beforeEach(() => {
+      vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    });
+    const ask = 'pie chart of Sales by Region';
+    const slots = (): any[] => [
+      { slot_id: 'field_base_1', role: ['dimension'], kind: 'categorical', required: true },
+      { slot_id: 'field_base_2', role: ['measure'], kind: 'quantitative', required: true },
+    ];
+    const pieDetail =
+      'pie slice field "Region" has 49 distinct values, above the workable maximum of 12; tell the user a pie with 49 slices is hard to read and offer a sorted bar of "Region" (template ranking-ordered-bar)';
+    const pieDeclined = (): BinderResult => ({
+      ...proposeResult,
+      decline_reason: { code: 'no_llm_validation_declined', detail: pieDetail },
+      llm_input: {
+        ...(proposeResult as Extract<BinderResult, { status: 'propose' }>).llm_input,
+        ask,
+        candidate_templates: [
+          {
+            template: 'part-to-whole-pie-chart',
+            description: 'Pie',
+            intent_keywords: ['pie'],
+            slots: slots(),
+          },
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: slots(),
+          },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    });
+    const pieOnlyEscalate: BinderResult = {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail: pieDetail,
+          pie_slice_gate: true,
+          datasource: 'M7',
+        },
+      ],
+    };
+    const pieProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-pie-chart',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    };
+    const boundPie = (): BinderResult => ({
+      ...boundM7TwoFilterResult,
+      used_llm: true,
+      args: {
+        ...(boundM7TwoFilterResult as any).args,
+        filters: undefined,
+        template_name: 'part-to-whole-pie-chart',
+      },
+    });
+    const setup = (): ReturnType<typeof setupAutoApplyMocks> => {
+      const mocks = setupAutoApplyMocks({
+        bind: boundPie(),
+        inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+        workbookReads: [M7_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(pieDeclined())
+        .mockResolvedValueOnce(pieOnlyEscalate);
+      return mocks;
+    };
+
+    it('warns and offers on the Call 2 pie block instead of ordering a rebuild', async () => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      await getToolResult({ session: 'pie-keep-1', ask, getExecutor });
+      const call2 = await getToolResult({
+        session: 'pie-keep-1',
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      expect(call2.isError).toBe(true);
+      invariant(call2.content[0].type === 'text');
+      const body = JSON.parse(call2.content[0].text);
+      expect(body.reason).toBe('pie_slice_limit');
+      expect(body.guidance).toContain('49');
+      expect(body.guidance).toContain('ranking-ordered-bar');
+      expect(body.guidance).toContain('explicitly');
+      expect(body.guidance).toContain('keep_large_pie:true');
+      expect(body.guidance).not.toContain('Stop calling bind-template');
+      expect(body.guidance).not.toContain('build-worksheets-from-templates');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('admits a same-proposal resubmit with keep_large_pie after the blocked Call 2, and applies', async () => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      await getToolResult({ session: 'pie-keep-2', ask, getExecutor });
+      await getToolResult({
+        session: 'pie-keep-2',
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      const call3 = await getToolResult({
+        session: 'pie-keep-2',
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(call3.isError, JSON.stringify(call3)).toBe(false);
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+        proposal: pieProposal,
+        keepLargePie: true,
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['without the flag', pieProposal, undefined],
+      [
+        'with the flag on a different proposal',
+        {
+          ...pieProposal,
+          bindings: [
+            { slot_id: 'field_base_1', field: 'Region' },
+            { slot_id: 'field_base_2', field: 'Profit' },
+          ],
+        },
+        true,
+      ],
+    ] as const)('keeps blocking a resubmit %s', async (_label, proposal, keepLargePie) => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      const session = `pie-keep-${_label}`;
+      await getToolResult({ session, ask, getExecutor });
+      await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+      const call3 = await getToolResult({
+        session,
+        ask,
+        proposal: proposal as BindingProposal & { confidence: number },
+        auto_apply: true,
+        ...(keepLargePie ? { keep_large_pie: true } : {}),
+        getExecutor,
+      });
+      expect(call3.isError).toBe(true);
+      invariant(call3.content[0].type === 'text');
+      const blocked = JSON.parse(call3.content[0].text);
+      expect(blocked.status).toBe('blocked');
+      expect(blocked.guidance).not.toContain('build-worksheets-from-templates');
+      expect(blocked.guidance).toContain('keep_large_pie:true');
+      expect(blocked.guidance).toContain('ranking-ordered-bar');
+      expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('keeps a direct first-call pie block non-terminal and admits the flagged resubmit', async () => {
+      const { getExecutor, applyWorkbookDocument } = setupAutoApplyMocks({
+        bind: boundPie(),
+        inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+        workbookReads: [M7_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(pieOnlyEscalate);
+      const session = 'pie-keep-direct';
+      const blocked = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      invariant(blocked.content[0].type === 'text');
+      expect(JSON.parse(blocked.content[0].text).reason).toBe('pie_slice_limit');
+      expect(sessionRouteState.getBindRecovery(session, normalizeAskForMatch(ask))).toMatchObject({
+        phase: 'proposal-attempted',
+        largePieConfirmation: { proposalSignature: proposalSignature(pieProposal) },
+      });
+      const kept = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(kept.isError, JSON.stringify(kept)).toBe(false);
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores keep_large_pie on a first Call 2 the server never blocked, then admits the flagged resubmit', async () => {
+      const { getExecutor, applyWorkbookDocument } = setupAutoApplyMocks({
+        bind: boundPie(),
+        inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+        workbookReads: [M7_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      // Mirrors the binder: the slice gate lifts only when keepLargePie reaches it.
+      vi.mocked(binderModule.bindTemplate).mockImplementation(async (args) =>
+        (args as { keepLargePie?: boolean }).keepLargePie === true ? boundPie() : pieOnlyEscalate,
+      );
+      const session = 'pie-keep-unearned';
+      const first = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(first.isError).toBe(true);
+      invariant(first.content[0].type === 'text');
+      expect(JSON.parse(first.content[0].text).reason).toBe('pie_slice_limit');
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[0]?.[0]).not.toHaveProperty(
+        'keepLargePie',
+      );
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(sessionRouteState.getBindRecovery(session, normalizeAskForMatch(ask))).toMatchObject({
+        phase: 'proposal-attempted',
+        largePieConfirmation: { proposalSignature: proposalSignature(pieProposal) },
+      });
+      const kept = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        getExecutor,
+      });
+      expect(kept.isError, JSON.stringify(kept)).toBe(false);
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[1]?.[0]).toMatchObject({
+        keepLargePie: true,
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('admits a confirmed resubmit that names the datasource, and applies', async () => {
+      const { getExecutor, applyWorkbookDocument } = setup();
+      const session = 'pie-keep-datasource';
+      await getToolResult({ session, ask, getExecutor });
+      await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+      const call3 = await getToolResult({
+        session,
+        ask,
+        proposal: pieProposal,
+        auto_apply: true,
+        keep_large_pie: true,
+        datasource: 'M7',
+        getExecutor,
+      });
+      expect(call3.isError, JSON.stringify(call3)).toBe(false);
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+        proposal: pieProposal,
+        keepLargePie: true,
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    });
+
+    describe('exits before the binder leave the confirmation intact', () => {
+      const confirmed = (session: string, getExecutor: any): Promise<CallToolResult> =>
+        getToolResult({
+          session,
+          ask,
+          proposal: pieProposal,
+          auto_apply: true,
+          keep_large_pie: true,
+          getExecutor,
+        });
+
+      it('replays a confirmed pie after getWorkbookXml fails', async () => {
+        const { getExecutor, applyWorkbookDocument } = setup();
+        const session = 'pie-keep-preflight-err';
+        await getToolResult({ session, ask, getExecutor });
+        await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+        const read = vi.mocked(getWorkbookXmlModule.getWorkbookXml);
+        const original = read.getMockImplementation()!;
+        read.mockImplementationOnce(async () => Err('workbook read failed' as any));
+        const failed = await confirmed(session, getExecutor);
+        expect(failed.isError).toBe(true);
+        read.mockImplementation(original);
+        const retry = await confirmed(session, getExecutor);
+        expect(retry.isError, JSON.stringify(retry)).toBe(false);
+        expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+          keepLargePie: true,
+        });
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+
+      it('replays a confirmed pie after getExecutor throws', async () => {
+        const { getExecutor, applyWorkbookDocument } = setup();
+        const session = 'pie-keep-executor-throw';
+        await getToolResult({ session, ask, getExecutor });
+        await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+        getExecutor.mockRejectedValueOnce(new Error('desktop unavailable'));
+        const failed = await confirmed(session, getExecutor);
+        expect(failed.isError).toBe(true);
+        const retry = await confirmed(session, getExecutor);
+        expect(retry.isError, JSON.stringify(retry)).toBe(false);
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets an ordinary Call 2 retry after getWorkbookXml fails', async () => {
+        const { getExecutor, applyWorkbookDocument } = setupAutoApplyMocks({
+          bind: boundPie(),
+          inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+          workbookReads: [M7_WORKBOOK_XML],
+          structuralReadback: true,
+        });
+        vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(pieDeclined());
+        const session = 'pie-keep-ordinary-call2';
+        await getToolResult({ session, ask, getExecutor });
+        const read = vi.mocked(getWorkbookXmlModule.getWorkbookXml);
+        const original = read.getMockImplementation()!;
+        read.mockImplementationOnce(async () => Err('workbook read failed' as any));
+        const failed = await getToolResult({
+          session,
+          ask,
+          proposal: pieProposal,
+          auto_apply: true,
+          getExecutor,
+        });
+        expect(failed.isError).toBe(true);
+        read.mockImplementation(original);
+        const retry = await getToolResult({
+          session,
+          ask,
+          proposal: pieProposal,
+          auto_apply: true,
+          getExecutor,
+        });
+        expect(retry.isError, JSON.stringify(retry)).toBe(false);
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+
+      it('blocks a concurrent duplicate of an in-flight confirmed call with the duplicate block', async () => {
+        const { getExecutor, applyWorkbookDocument } = setup();
+        const session = 'pie-keep-concurrent';
+        await getToolResult({ session, ask, getExecutor });
+        await getToolResult({ session, ask, proposal: pieProposal, auto_apply: true, getExecutor });
+        // A datasource-scoped grant reserves after the workbook read, so pause at the binder.
+        const bind = vi.mocked(binderModule.bindTemplate);
+        let releaseBind!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          releaseBind = resolve;
+        });
+        bind.mockImplementationOnce(async () => {
+          await gate;
+          return boundPie();
+        });
+        const bindCalls = bind.mock.calls.length;
+        const inFlight = confirmed(session, getExecutor);
+        await vi.waitFor(() => expect(bind).toHaveBeenCalledTimes(bindCalls + 1));
+        const duplicate = await confirmed(session, getExecutor);
+        expect(duplicate.isError).toBe(true);
+        invariant(duplicate.content[0].type === 'text');
+        const duplicateBody = JSON.parse(duplicate.content[0].text);
+        expect(duplicateBody.reason).toBe('fallback_required');
+        expect(duplicateBody.reason).not.toBe('pie_slice_limit');
+        releaseBind();
+        const done = await inFlight;
+        expect(done.isError, JSON.stringify(done)).toBe(false);
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('declines keep_large_pie under requireCompleteRequest without minting coverage', async () => {
+      vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+      const result = await getToolResult({
+        session: 'pie-keep-strict',
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        keep_large_pie: true,
+      });
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.reason).toBe('request_not_covered');
+      expect(body.requestCoverage.kind).toBe('declined');
+      expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    });
+  });
+
+  it('keeps advisories on the applied auto-apply result', async () => {
+    const advisory = 'slot cat has 80 distinct values in "Region" - a legibility hint';
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: { ...(boundResult as any), advisories: [advisory] } as BinderResult,
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.advisories).toEqual([advisory]);
+  });
+
   it('blocks an identical Call 2 retry when the admitted Call 2 fails before binding', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);
@@ -3823,6 +4372,7 @@ async function getToolResult({
   datasource,
   calcs,
   skip_validation,
+  keep_large_pie,
   allowSkipValidation,
   customSignal,
   getExecutor,
@@ -3846,6 +4396,7 @@ async function getToolResult({
     role?: string;
   }>;
   skip_validation?: boolean;
+  keep_large_pie?: boolean;
   allowSkipValidation?: boolean;
   customSignal?: AbortSignal;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
@@ -3882,6 +4433,7 @@ async function getToolResult({
       datasource,
       calcs,
       skip_validation,
+      keep_large_pie,
     } as any,
     extra,
   );
@@ -3943,7 +4495,14 @@ function setupAutoApplyMocks({
     }
     return Ok(liveXml);
   });
-  vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
+  // The offered-bar dry bind lands on the stock SUM bar over Region and Sales, as the real binder does for a clean ask.
+  vi.mocked(binderModule.bindTemplate).mockImplementation(async (args) =>
+    bind.status === 'bound' &&
+    bind.args.template_name === 'part-to-whole-pie-chart' &&
+    args.ask.startsWith('sorted bar chart of ')
+      ? { ...bind, args: { ...boundPieResult.args, template_name: 'ranking-ordered-bar' } }
+      : bind,
+  );
   const template = bind.status === 'bound' ? bind.args.template_name : 'bar-basic';
   const catalog = mockedRuntimeCatalog();
   const base = catalog.get(template) ?? catalog.get('ranking-ordered-bar');
@@ -8892,6 +9451,45 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     };
   }
 
+  it.each([
+    ['advisories only', true, { advisories: ['slot cat has 80 distinct values in "Region"'] }],
+    ['a genuine inject warning', false, { injectWarnings: ['dropped an encoding'] }],
+  ] as const)(
+    'complete-request verified apply with %s keeps completion evidence and done: %s',
+    async (label, keeps, extra) => {
+      const ask = 'bar chart of Sales by Region';
+      const bind = completeBar(ask);
+      invariant(bind.status === 'bound');
+      const mocks = setupAutoApplyMocks({
+        bind: 'advisories' in extra ? { ...bind, advisories: [...extra.advisories] } : bind,
+        inject: {
+          ok: true,
+          xml: INJECTED_RANKING_WORKBOOK_XML,
+          ...('injectWarnings' in extra ? { warnings: [...extra.injectWarnings] } : {}),
+        },
+        workbookReads: [CURRENCY_WORKBOOK_XML],
+      });
+      const result = await getToolResult({
+        session: `completion-${label}`,
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        getExecutor: summaryRowsExecutor(mocks, SUMMARY_ROWS),
+      });
+      const applied = body(result);
+      expect(applied.applied).toBe(true);
+      expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      if (keeps) {
+        expect(applied.advisories).toEqual(['slot cat has 80 distinct values in "Region"']);
+        expect(applied.completionEvidence).toMatchObject({ coverage: 'complete_request' });
+        expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+      } else {
+        expect(applied.completionEvidence).toBeUndefined();
+        expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+      }
+    },
+  );
+
   it('withholds complete-request evidence and keeps base guidance when the summary read returns zero rows', async () => {
     const ask = 'bar chart of Sales by Region';
     const mocks = setupAutoApplyMocks({
@@ -9783,5 +10381,772 @@ describe('bindTemplateTool escalation fallback', () => {
     expect(escalated.guidance).not.toContain('call_2_contract.proposal_choices');
     expect(escalated.guidance).toContain('build-worksheets-from-templates');
     expect(escalated.guidance).not.toContain('build-and-apply-worksheet');
+  });
+});
+
+describe('bindTemplateTool pie slice count after apply', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+  });
+
+  const pieRows = (count: number): unknown[][] =>
+    Array.from({ length: count }, (_, index) => [`Region ${index}`, index * 100]);
+  const summaryColumns = [
+    { name: 'Region', dataType: 'string' },
+    { name: 'Sales', dataType: 'real' },
+  ];
+
+  async function applyPie(
+    rows: unknown[][] | ReturnType<typeof Err> | 'pending',
+    bind: BinderResult = boundPieResult,
+    ask = 'pie chart of Sales by Region',
+    requireCompleteRequest = false,
+    workbook = PIE_WORKBOOK_XML,
+  ): Promise<{ body: Record<string, any>; result: Awaited<ReturnType<typeof getToolResult>> }> {
+    const mocks = setupAutoApplyMocks({
+      bind,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [workbook],
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask,
+      auto_apply: true,
+      ...(requireCompleteRequest ? { requireCompleteRequest: true } : {}),
+      getExecutor: summaryRowsExecutor(
+        mocks,
+        Array.isArray(rows) ? { columns: summaryColumns, rows } : rows,
+      ),
+    });
+    invariant(result.content[0].type === 'text');
+    return { body: JSON.parse(result.content[0].text), result };
+  }
+
+  const PIE_ASK = 'pie chart of Sales by Region';
+  const applyPieOn = (
+    workbook: string,
+  ): Promise<{ body: Record<string, any>; result: Awaited<ReturnType<typeof getToolResult>> }> =>
+    applyPie(pieRows(13), boundPieResult, PIE_ASK, false, workbook);
+  function expectUncertainPieGuidance(guidance: string, caption = 'Region'): void {
+    expect(guidance).toContain(POST_APPLY_UNCERTAINTY_GUIDANCE);
+    expect(guidance).toContain(`has 13 slices of ${caption}`);
+    expect(guidance).toContain('A sorted bar would read better; offer it to the user.');
+    expect(guidance).not.toContain('call bind-template with ask');
+    expect(guidance).not.toContain('nothing more is needed');
+    expect(guidance).not.toContain('already on the sheet');
+  }
+  const pieCoverage = {
+    version: 1 as const,
+    kind: 'complete_single_sheet_binding' as const,
+    template: 'part-to-whole-pie-chart',
+    askSha256: createHash('sha256').update(PIE_ASK, 'utf8').digest('hex'),
+  };
+
+  describe.each([
+    ['plain', false],
+    ['complete request', true],
+  ])('evidence gating (%s)', (_label, complete) => {
+    async function run(rows: number): Promise<{
+      body: Record<string, any>;
+      result: CallToolResult;
+      remembered: unknown;
+    }> {
+      const mocks = setupAutoApplyMocks({
+        bind: complete ? { ...boundPieResult, requestCoverage: pieCoverage } : boundPieResult,
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+        workbookReads: [PIE_WORKBOOK_XML],
+      });
+      sessionRouteState.clear();
+      const result = await getToolResult({
+        session: '1',
+        ask: PIE_ASK,
+        auto_apply: true,
+        ...(complete ? { requireCompleteRequest: true } : {}),
+        getExecutor: summaryRowsExecutor(mocks, {
+          columns: summaryColumns,
+          rows: pieRows(rows),
+        }),
+      });
+      invariant(result.content[0].type === 'text');
+      return {
+        body: JSON.parse(result.content[0].text) as Record<string, any>,
+        result,
+        remembered: sessionRouteState.getAppliedSheet(
+          '1',
+          appliedSheetSignature(boundPieResult.args),
+        ),
+      };
+    }
+
+    it('12 rows: terminal success with evidence, done, and sheet memory', async () => {
+      const { body, result, remembered } = await run(12);
+      expect(body.pie_slice_warning).toBeUndefined();
+      expect(body.guidance).not.toContain('slices of');
+      expect(body.completionEvidence).toBeDefined();
+      expect(result.structuredContent?.completionEvidence).toBeDefined();
+      expect((result.structuredContent?.nextAction as { kind: string }).kind).toBe('done');
+      expect(remembered).toBeDefined();
+    });
+
+    it.each([13, 21])(
+      '%i rows: no evidence, not done, no sheet memory, offer in guidance',
+      async (n) => {
+        const { body, result, remembered } = await run(n);
+        expect(body.applied).toBe(true);
+        expect(body.completionEvidence).toBeUndefined();
+        expect(result.structuredContent?.completionEvidence).toBeUndefined();
+        expect(
+          (result.structuredContent?.nextAction as { kind: string } | undefined)?.kind,
+        ).not.toBe('done');
+        expect(remembered).toBeUndefined();
+        expect(body.pie_slice_warning).toEqual({
+          field: 'Region',
+          rows: n,
+          max: 12,
+          rows_exceed_preview: n > 20,
+        });
+        expect(body.guidance).toContain(
+          `The pie is already on the sheet and has ${n > 20 ? 'more than 20' : n} slices of Region, above the workable maximum of 12.`,
+        );
+        expect(body.guidance).toContain(
+          'A sorted bar of Sales by Region would read better. Offer to build it; only if the user says yes, call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "Sales by Region".',
+        );
+        expect(body.guidance).toContain('If the user wants the pie, nothing more is needed.');
+        expect(body.guidance).not.toContain('Do NOT call bind-template again');
+      },
+    );
+  });
+
+  it('falls back to a bare offer when captions do not resolve', async () => {
+    const { body } = await applyPie(pieRows(13), {
+      ...boundPieResult,
+      args: {
+        ...boundPieResult.args,
+        field_mapping: {
+          '{{field_base_1}}': '[Nope].[none:Missing:nk]',
+          '{{field_base_2}}': '[Nope].[sum:Missing2:qk]',
+        },
+      },
+    } as BinderResult);
+    expect(body.pie_slice_warning.field).toBe('the slice field');
+    expect(body.guidance).toContain('A sorted bar would read better; offer it to the user.');
+    expect(body.guidance).not.toContain('call bind-template with ask');
+  });
+
+  it('does not touch a non-pie template with many rows', async () => {
+    const { body, result } = await applyPie(pieRows(50), {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        template_name: 'ranking-ordered-bar',
+        field_mapping: {
+          Region: '[Superstore].[none:Region:nk]',
+          Sales: '[Superstore].[sum:Sales:qk]',
+        },
+      },
+    } as BinderResult);
+    expect(body.pie_slice_warning).toBeUndefined();
+    expect(body.guidance).not.toContain('slices of');
+    expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+  });
+
+  it('uncertain apply (readback unavailable): slice count and a bare offer only', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [PIE_WORKBOOK_XML],
+    });
+    const base = summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) });
+    const executor = await base('1');
+    executor.getWorksheetDiagnostics = vi
+      .fn()
+      .mockResolvedValue(Err({ type: 'command-timed-out', error: 'diagnostics timeout' }));
+    const result = await getToolResult({
+      session: '1',
+      ask: PIE_ASK,
+      auto_apply: true,
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expectUncertainPieGuidance(body.guidance);
+  });
+
+  it('promise-failed apply (dropped mark): slice count and a bare offer only', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    let read = 0;
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockImplementation(async () =>
+      Ok(
+        read++ === 0
+          ? XML
+          : INJECTED_RANKING_WORKBOOK_XML.replace(
+              "<mark class='Bar' />",
+              "<mark class='Circle' />",
+            ),
+      ),
+    );
+    const result = await getToolResult({
+      session: '1',
+      ask: PIE_ASK,
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) }),
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expectUncertainPieGuidance(body.guidance, 'the slice field');
+  });
+
+  it('unfilled encodings: drops the "nothing more is needed" line', async () => {
+    const { body } = await applyPie(pieRows(13), {
+      ...boundPieResult,
+      encodings: { filled: [], unfilled: ['tooltip'] },
+    });
+    expect(body.guidance).toContain('slices of Region');
+    expect(body.guidance).not.toContain('nothing more is needed');
+    expect(body.guidance).not.toContain('call bind-template with ask');
+  });
+
+  it.each([
+    ['a filter', { filters: [{ field: 'Region', values: ['Region 1'] }] }],
+    ['a context filter', { filters: [{ field: 'Region', values: ['Region 1'], context: true }] }],
+    ['top_n', { top_n: 5 }],
+    [
+      'an AVG derivation',
+      {
+        field_mapping: {
+          '{{field_base_1}}': '[Superstore].[none:Region:nk]',
+          '{{field_base_2}}': '[Superstore].[avg:Sales:qk]',
+        },
+      },
+    ],
+    [
+      'a COUNT derivation',
+      {
+        field_mapping: {
+          '{{field_base_1}}': '[Superstore].[none:Region:nk]',
+          '{{field_base_2}}': '[Superstore].[cnt:Sales:qk]',
+        },
+      },
+    ],
+  ])('a pie with %s gets the generic offer, not a call that drops it', async (_label, extra) => {
+    const { body } = await applyPie(pieRows(13), {
+      ...boundPieResult,
+      args: { ...boundPieResult.args, ...extra },
+    } as BinderResult);
+    expect(body.pie_slice_warning).toMatchObject({ field: 'Region', rows: 13 });
+    expect(body.guidance).toContain('A sorted bar would read better; offer it to the user.');
+    expect(body.guidance).not.toContain('call bind-template with ask');
+  });
+
+  it('a plain SUM unfiltered pie still gets the concrete bar call', async () => {
+    const { body } = await applyPie(pieRows(13));
+    expect(body.guidance).toContain(
+      'call bind-template with ask "sorted bar chart of Sales by Region" and target_worksheet "Sales by Region".',
+    );
+  });
+
+  async function applyFilteredPie(
+    workbook: string,
+    filterField: string,
+  ): Promise<{ body: Record<string, any>; result: CallToolResult }> {
+    const mocks = setupAutoApplyMocks({
+      bind: {
+        ...boundPieResult,
+        args: { ...boundPieResult.args, filters: [{ field: filterField, values: ['A'] }] },
+      },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [workbook],
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: PIE_ASK,
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) }),
+    });
+    invariant(result.content[0].type === 'text');
+    return { body: JSON.parse(result.content[0].text), result };
+  }
+
+  it('a skipped filter suppresses "nothing more is needed" and withholds done', async () => {
+    const { body, result } = await applyFilteredPie(PIE_WORKBOOK_XML, 'Segment');
+    expect(body.warnings).toEqual(['filter splice skipped: no unique field named "Segment"']);
+    expect(body.pie_slice_warning).toMatchObject({ rows: 13 });
+    expect(body.guidance).toContain('slices of Region');
+    expect(body.guidance).not.toContain('nothing more is needed');
+    expect(body.completionEvidence).toBeUndefined();
+    expect(result.structuredContent?.completionEvidence).toBeUndefined();
+    expect((result.structuredContent?.nextAction as { kind: string } | undefined)?.kind).not.toBe(
+      'done',
+    );
+  });
+
+  it('an injector warning suppresses "nothing more is needed"', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML, warnings: ['dropped x'] },
+      workbookReads: [PIE_WORKBOOK_XML],
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: PIE_ASK,
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) }),
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('slices of Region');
+    expect(body.guidance).not.toContain('nothing more is needed');
+  });
+
+  it('a binder warning suppresses "nothing more is needed"', async () => {
+    const { body } = await applyPie(pieRows(13), {
+      ...boundPieResult,
+      warnings: ['avoid_when: pie with many slices'],
+    } as BinderResult);
+    expect(body.guidance).toContain('slices of Region');
+    expect(body.guidance).not.toContain('nothing more is needed');
+  });
+
+  it('operation path: a currency caveat suppresses "nothing more is needed"', async () => {
+    const { body } = await applyPieOn(CURRENCY_WORKBOOK_XML);
+    expect(body.requestCoverage).toBeUndefined();
+    expect(body.guidance).toContain('summed across [Currency Code] without conversion');
+    expect(body.guidance).toContain('slices of Region');
+    expect(body.guidance).not.toContain('nothing more is needed');
+  });
+
+  it('operation path: an applied tool default suppresses "nothing more is needed"', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      // Profit resolves, so the context-measure garnish lands without adding a base warning.
+      workbookReads: [
+        PIE_WORKBOOK_XML.replace(
+          '    </datasource>',
+          "      <column caption='Profit' name='[Profit]' role='measure' type='quantitative' datatype='real' />\n    </datasource>",
+        ),
+      ],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(recommendedProposeResult)
+      .mockResolvedValueOnce(boundPieResult);
+    const result = await getToolResult({
+      session: '1',
+      ask: PIE_ASK,
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) }),
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.requestCoverage).toBeUndefined();
+    expect(body.applied_default).toMatchObject({ measure: 'Sales', context_measures: ['Profit'] });
+    expect(body.warnings).toBeUndefined();
+    expect(body.guidance).toContain('slices of Region');
+    expect(body.guidance).not.toContain('nothing more is needed');
+  });
+
+  it('operation path: readback evidence (native invalid field) suppresses "nothing more is needed"', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [PIE_WORKBOOK_XML],
+    });
+    const executor = await summaryRowsExecutor(mocks, {
+      columns: summaryColumns,
+      rows: pieRows(13),
+    })('1');
+    executor.getWorksheetDiagnostics = vi.fn(async (worksheetId: string) =>
+      Ok({
+        worksheets: [
+          {
+            worksheetId,
+            status: 'complete',
+            invalidFields: [
+              {
+                fieldName: '[none:Region:nk]',
+                shelf: 'color',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'color',
+                reason: 'Field is unavailable.',
+              },
+            ],
+          },
+        ],
+      }),
+    ) as unknown as typeof executor.getWorksheetDiagnostics;
+    const result = await getToolResult({
+      session: '1',
+      ask: PIE_ASK,
+      auto_apply: true,
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.requestCoverage).toBeUndefined();
+    expect(body.guidance).toContain('Field verification failed after apply');
+    expect(body.guidance).toContain('slices of');
+    expect(body.guidance).not.toContain('nothing more is needed');
+  });
+
+  it('complete request: a pie-only withhold names the slice count, not a failed requirement', async () => {
+    const { body } = await applyPie(
+      pieRows(13),
+      { ...boundPieResult, requestCoverage: pieCoverage },
+      PIE_ASK,
+      true,
+    );
+    expect(body.guidance).toContain(
+      'Completion evidence was withheld only because of the pie slice count below.',
+    );
+    expect(body.guidance).not.toContain('did not satisfy every complete request');
+    expect(body.guidance).toContain('If the user wants the pie, nothing more is needed.');
+  });
+
+  it('complete request: a pie plus another withhold reason keeps the generic withhold line', async () => {
+    const { body } = await applyPie(
+      pieRows(13),
+      {
+        ...boundPieResult,
+        args: { ...boundPieResult.args, filters: [{ field: 'Segment', values: ['A'] }] },
+        requestCoverage: pieCoverage,
+      },
+      PIE_ASK,
+      true,
+    );
+    expect(body.guidance).toContain(
+      'did not satisfy every complete request verification requirement',
+    );
+    expect(body.guidance).not.toContain('only because of the pie slice count');
+    expect(body.guidance).not.toContain('nothing more is needed');
+  });
+
+  describe('keep_large_pie (user already chose the pie)', () => {
+    const pieSlots = (): any[] => [
+      { slot_id: 'field_base_1', role: ['dimension'], kind: 'categorical', required: true },
+      { slot_id: 'field_base_2', role: ['measure'], kind: 'quantitative', required: true },
+    ];
+    const piePropose = (): BinderResult => ({
+      ...proposeResult,
+      llm_input: {
+        ...(proposeResult as Extract<BinderResult, { status: 'propose' }>).llm_input,
+        ask: PIE_ASK,
+        candidate_templates: [
+          {
+            template: 'part-to-whole-pie-chart',
+            description: 'Pie',
+            intent_keywords: ['pie'],
+            slots: pieSlots(),
+          },
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: pieSlots(),
+          },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    });
+    const pieGateEscalate: BinderResult = {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail:
+            'pie slice field "Region" has 49 distinct values, above the workable maximum of 12',
+          pie_slice_gate: true,
+          datasource: 'Superstore',
+        },
+      ],
+    };
+    const pieProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-pie-chart',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      confidence: 1,
+    };
+
+    function pieMocks(
+      bind: BinderResult = boundPieResult,
+    ): TableauDesktopToolContext['getExecutor'] {
+      const mocks = setupAutoApplyMocks({
+        bind,
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+        workbookReads: [PIE_WORKBOOK_XML],
+      });
+      sessionRouteState.clear();
+      return summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) });
+    }
+
+    function parse(result: CallToolResult): {
+      body: Record<string, any>;
+      result: CallToolResult;
+      remembered: unknown;
+    } {
+      invariant(result.content[0].type === 'text');
+      return {
+        body: JSON.parse(result.content[0].text),
+        result,
+        remembered: sessionRouteState.getAppliedSheet(
+          '1',
+          appliedSheetSignature(boundPieResult.args),
+        ),
+      };
+    }
+
+    function expectPieWarnsAndNotDone({ body, result }: ReturnType<typeof parse>): void {
+      expect(body.applied).toBe(true);
+      expect(body.pie_slice_warning).toMatchObject({ rows: 13 });
+      expect(body.completionEvidence).toBeUndefined();
+      expect((result.structuredContent?.nextAction as { kind: string } | undefined)?.kind).not.toBe(
+        'done',
+      );
+    }
+
+    // Call 1 proposes, Call 2 hits the pie gate (grant), Call 3 resubmits with the flag.
+    async function confirmedPie(
+      bind: BinderResult = boundPieResult,
+    ): Promise<ReturnType<typeof parse>> {
+      const getExecutor = pieMocks(bind);
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(piePropose())
+        .mockResolvedValueOnce(pieGateEscalate)
+        .mockResolvedValueOnce(bind);
+      await getToolResult({ session: '1', ask: PIE_ASK, getExecutor });
+      const blocked = await getToolResult({
+        session: '1',
+        ask: PIE_ASK,
+        proposal: pieProposal,
+        auto_apply: true,
+        getExecutor,
+      });
+      invariant(blocked.content[0].type === 'text');
+      expect(JSON.parse(blocked.content[0].text).reason).toBe('pie_slice_limit');
+      return parse(
+        await getToolResult({
+          session: '1',
+          ask: PIE_ASK,
+          proposal: pieProposal,
+          auto_apply: true,
+          keep_large_pie: true,
+          getExecutor,
+        }),
+      );
+    }
+
+    it('(a) confirmed via the gate: 13 rows apply with no warning, done and evidence mint', async () => {
+      const { body, result, remembered } = await confirmedPie();
+      expect(vi.mocked(binderModule.bindTemplate).mock.calls[2]?.[0]).toMatchObject({
+        proposal: pieProposal,
+        keepLargePie: true,
+      });
+      expect(body.applied).toBe(true);
+      expect(body.pie_slice_warning).toBeUndefined();
+      expect(body.guidance).not.toContain('slices of');
+      expect(body.guidance).not.toContain('sorted bar');
+      expect(body.completionEvidence).toMatchObject({ coverage: 'applied_operation' });
+      expect(result.structuredContent?.completionEvidence).toBeDefined();
+      expect((result.structuredContent?.nextAction as { kind: string }).kind).toBe('done');
+      expect(remembered).toBeDefined();
+    });
+
+    it('(b) 13 rows without the flag: still warns and withholds done', async () => {
+      const getExecutor = pieMocks();
+      expectPieWarnsAndNotDone(
+        parse(await getToolResult({ session: '1', ask: PIE_ASK, auto_apply: true, getExecutor })),
+      );
+    });
+
+    it('(c) a confirmed pie with a skipped filter still withholds done', async () => {
+      const { body, result } = await confirmedPie({
+        ...boundPieResult,
+        args: { ...boundPieResult.args, filters: [{ field: 'Segment', values: ['A'] }] },
+      });
+      expect(body.pie_slice_warning).toBeUndefined();
+      expect(body.warnings).toEqual(['filter splice skipped: no unique field named "Segment"']);
+      expect(body.completionEvidence).toBeUndefined();
+      expect(result.structuredContent?.completionEvidence).toBeUndefined();
+      expect((result.structuredContent?.nextAction as { kind: string } | undefined)?.kind).not.toBe(
+        'done',
+      );
+    });
+
+    it('(d) the flag on Call 1 with no proposal still warns', async () => {
+      const getExecutor = pieMocks();
+      expectPieWarnsAndNotDone(
+        parse(
+          await getToolResult({
+            session: '1',
+            ask: PIE_ASK,
+            auto_apply: true,
+            keep_large_pie: true,
+            getExecutor,
+          }),
+        ),
+      );
+    });
+
+    it('(e) the flag on a first Call 2 with no prior grant still warns', async () => {
+      const getExecutor = pieMocks();
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(piePropose())
+        .mockResolvedValueOnce(boundPieResult);
+      await getToolResult({ session: '1', ask: PIE_ASK, getExecutor });
+      expectPieWarnsAndNotDone(
+        parse(
+          await getToolResult({
+            session: '1',
+            ask: PIE_ASK,
+            proposal: pieProposal,
+            auto_apply: true,
+            keep_large_pie: true,
+            getExecutor,
+          }),
+        ),
+      );
+    });
+  });
+
+  it('a clean pie with 13 rows keeps "nothing more is needed"', async () => {
+    const { body } = await applyPie(pieRows(13));
+    expect(body.guidance).toContain('If the user wants the pie, nothing more is needed.');
+  });
+
+  const boundBarResult: BinderResult = {
+    ...boundResult,
+    args: {
+      ...boundResult.args,
+      template_name: 'ranking-ordered-bar',
+      field_mapping: {
+        Region: '[Superstore].[none:Region:nk]',
+        Sales: '[Superstore].[sum:Sales:qk]',
+      },
+    },
+  } as BinderResult;
+
+  function withBothTemplates(): void {
+    const catalog = mockedRuntimeCatalog();
+    vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockReturnValue(
+      new Map([
+        ['part-to-whole-pie-chart', catalog.get('part-to-whole-pie-chart')!],
+        ['ranking-ordered-bar', catalog.get('ranking-ordered-bar')!],
+      ]),
+    );
+  }
+
+  async function reaskOutput(viaCall2: boolean): Promise<unknown> {
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [PIE_WORKBOOK_XML],
+    });
+    const mocked = vi.mocked(binderModule.bindTemplate);
+    if (viaCall2) {
+      mocked.mockResolvedValueOnce(proposeResult).mockResolvedValue(boundPieResult);
+    } else {
+      mocked.mockResolvedValue(boundPieResult);
+    }
+    const getExecutor = summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) });
+    const ask = 'pie chart of Sales by Region';
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    if (viaCall2) {
+      await getToolResult({
+        session: '1',
+        ask,
+        auto_apply: true,
+        proposal: sampleProposal,
+        getExecutor,
+      });
+    }
+    const again = await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    invariant(again.content[0].type === 'text');
+    const out = JSON.parse(again.content[0].text);
+    return { isError: again.isError, status: out.status, reason: out.reason, applied: out.applied };
+  }
+
+  async function guidedRebuildBody(viaCall2: boolean): Promise<Record<string, unknown>> {
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+    const mocks = setupAutoApplyMocks({
+      bind: boundPieResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [PIE_WORKBOOK_XML],
+    });
+    withBothTemplates();
+    const mocked = vi.mocked(binderModule.bindTemplate);
+    if (viaCall2) mocked.mockResolvedValueOnce(proposeResult);
+    // Order: [propose], pie bind, [Call-2 dry re-classify], the offered-bar dry bind, the real rebuild.
+    mocked.mockResolvedValueOnce(boundPieResult);
+    if (viaCall2) mocked.mockResolvedValueOnce(boundBarResult);
+    mocked.mockResolvedValueOnce(boundBarResult).mockResolvedValueOnce(boundBarResult);
+    const getExecutor = summaryRowsExecutor(mocks, { columns: summaryColumns, rows: pieRows(13) });
+    const ask = 'pie chart of Sales by Region';
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    if (viaCall2) {
+      await getToolResult({
+        session: '1',
+        ask,
+        auto_apply: true,
+        proposal: sampleProposal,
+        getExecutor,
+      });
+    }
+    const rebuild = await getToolResult({
+      session: '1',
+      ask: 'sorted bar chart of Sales by Region',
+      auto_apply: true,
+      target_worksheet: 'Sales by Region',
+      getExecutor,
+    });
+    invariant(rebuild.content[0].type === 'text');
+    expect(mocked).toHaveBeenCalledTimes(viaCall2 ? 5 : 3);
+    return JSON.parse(rebuild.content[0].text);
+  }
+
+  it('7a: the offered sorted-bar rebuild is not blocked after a flagged Call-1 pie', async () => {
+    const body = await guidedRebuildBody(false);
+    expect(body.reason).toBeUndefined();
+    expect(body.applied).toBe(true);
+  });
+
+  it('7b: the offered sorted-bar rebuild is not blocked after a flagged Call-2 pie', async () => {
+    const body = await guidedRebuildBody(true);
+    expect(body.reason).toBeUndefined();
+    expect(body.applied).toBe(true);
+  });
+
+  it('known gap: re-asking the original pie ask after a flagged Call-1 pie', async () => {
+    expect(await reaskOutput(false)).toMatchInlineSnapshot(`
+      {
+        "applied": undefined,
+        "isError": true,
+        "reason": "awaiting_proposal",
+        "status": "blocked",
+      }
+    `);
+  });
+
+  it('known gap: re-asking the original pie ask after a flagged Call-2 pie', async () => {
+    expect(await reaskOutput(true)).toMatchInlineSnapshot(`
+      {
+        "applied": undefined,
+        "isError": true,
+        "reason": "fallback_required",
+        "status": "blocked",
+      }
+    `);
+  });
+
+  it('adds no flag when the summary read errors (known gap: unchecked)', async () => {
+    const { body } = await applyPie(Err({ type: 'command-timed-out', error: 'boom' }));
+    expect(body.pie_slice_warning).toBeUndefined();
+    expect(body.summary_rows_error).toBeDefined();
   });
 });

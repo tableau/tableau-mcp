@@ -48,18 +48,15 @@ the tool returns an error instead of a scaffolded workspace.
 ### `datappName`
 
 Name for the new data app. Used verbatim as the workbook (`.twb`) filename and the extension
-display name, and slugified into the extension package id (`com.tableau.mcp.<slug>`). Letters,
-digits, spaces, dot, underscore, and hyphen only; must start and end with a letter or digit; no
-path separators or `..`; 1–100 characters.
-
-Example: `Sales Demo` → package id `com.tableau.mcp.sales-demo`
+display name, and to derive the extension package id. Letters, digits, spaces, dot, underscore,
+and hyphen only; must start and end with a letter or digit; no path separators or `..`; 1–100
+characters.
 
 ## Derived values
 
 From `datappName` the tool derives the following identity:
 
-- **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
-  to a single hyphen.
+- **package id**: derived from `datappName`.
 - **display name**: `datappName` verbatim.
 
 - **version**: `1.0.0`.

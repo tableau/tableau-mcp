@@ -60,6 +60,7 @@ describe('getRecordEventTool', () => {
         message: 'bad json',
         site_luid: extra.getSiteLuid(),
         user_luid: extra.getUserLuid(),
+        auth_type: 'pat',
       }),
     );
   });

@@ -12,6 +12,8 @@
  * S3 client rather than each constructing their own.
  */
 
+import { buildTenantBlobKey, type TenantLuids } from '../../blobStorage/tenantKey.js';
+
 /**
  * Socket-idle timeouts (ms) for the S3 client's Node HTTP handler.
  *
@@ -28,6 +30,8 @@
  */
 const S3_CONNECTION_TIMEOUT_MS = 5_000;
 const S3_REQUEST_TIMEOUT_MS = 180_000;
+// Total cap for the post-publish delete: it is best-effort and the bucket lifecycle rule backstops it.
+const S3_DELETE_TIMEOUT_MS = 5_000;
 
 /**
  * Configuration needed to upload a payload to S3 and presign a URL.
@@ -62,6 +66,8 @@ let s3BundlePromise:
 
       GetObjectCommand: any;
 
+      DeleteObjectCommand: any;
+
       getSignedUrl: any;
     }>
   | undefined;
@@ -73,11 +79,14 @@ async function getS3Bundle(region: string): Promise<{
 
   GetObjectCommand: any;
 
+  DeleteObjectCommand: any;
+
   getSignedUrl: any;
 }> {
   if (!s3BundlePromise) {
     s3BundlePromise = (async () => {
-      const { S3Client, PutObjectCommand, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } =
+        await import('@aws-sdk/client-s3');
       const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
       // Credentials are resolved via the default AWS credential chain (Model A):
       // IAM role / instance profile / standard AWS_* env vars. We only pass the
@@ -93,7 +102,7 @@ async function getS3Bundle(region: string): Promise<{
           requestTimeout: S3_REQUEST_TIMEOUT_MS,
         },
       });
-      return { client, PutObjectCommand, GetObjectCommand, getSignedUrl };
+      return { client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, getSignedUrl };
     })();
   }
 
@@ -113,6 +122,19 @@ export function joinS3Prefix(base: string, segment: string): string {
     .filter(Boolean)
     .join('/');
   return joined ? `${joined}/` : '';
+}
+
+/**
+ * Builds a tenant-scoped object key, `<keyPrefix>/<folder>/<siteLuid>/<userLuid>/<rest>`.
+ * Throws if the tenant LUIDs or folder are not safe key segments, so an unscoped key is never built.
+ */
+export function buildTenantS3Key(
+  keyPrefix: string,
+  tenant: TenantLuids,
+  folder: string,
+  rest: string,
+): string {
+  return `${joinS3Prefix(keyPrefix, '')}${buildTenantBlobKey(tenant, folder, rest)}`;
 }
 
 /**
@@ -178,12 +200,14 @@ async function presignGetObjectUrl({
 export async function createPresignedPutUrlToS3({
   key,
   contentType,
+  contentLength,
   bucket,
   region,
   presignTtlSeconds,
 }: {
   key: string;
   contentType: string;
+  contentLength: number;
   bucket: string;
   region: string;
   presignTtlSeconds: number;
@@ -196,6 +220,8 @@ export async function createPresignedPutUrlToS3({
       Bucket: bucket,
       Key: key,
       ContentType: contentType,
+      // Signing Content-Length makes S3 reject any PUT whose body size differs.
+      ContentLength: contentLength,
     }),
     { expiresIn: presignTtlSeconds },
   );
@@ -347,6 +373,22 @@ function isAsyncIterable(body: unknown): body is AsyncIterable<Buffer | Uint8Arr
     Symbol.asyncIterator in body &&
     typeof body[Symbol.asyncIterator] === 'function'
   );
+}
+
+/** Deletes `key`. S3 reports success for an already-absent key, so a repeat delete is harmless. */
+export async function deleteObjectFromS3({
+  key,
+  bucket,
+  region,
+}: {
+  key: string;
+  bucket: string;
+  region: string;
+}): Promise<void> {
+  const { client, DeleteObjectCommand } = await getS3Bundle(region);
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), {
+    abortSignal: AbortSignal.timeout(S3_DELETE_TIMEOUT_MS),
+  });
 }
 
 export const exportedForTesting = {

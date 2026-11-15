@@ -56,6 +56,10 @@ describe('getAuthTypeForTelemetry', () => {
     expect(getAuthTypeForTelemetry(configWithAuth('oauth'), undefined)).toBe('embedded-oauth');
   });
 
+  it("returns 'passthrough' for config.auth='passthrough' with no tableauAuthInfo", () => {
+    expect(getAuthTypeForTelemetry(configWithAuth('passthrough'), undefined)).toBe('passthrough');
+  });
+
   it("returns 'passthrough' for Passthrough auth", () => {
     expect(getAuthTypeForTelemetry(configWithAuth('pat'), passthroughAuthInfo)).toBe('passthrough');
   });

@@ -5,19 +5,19 @@ vi.mock('fs');
 import { Dirent, readdirSync, readFileSync } from 'fs';
 
 import {
-  _resetKnowledgeSearchCache,
-  clearKnowledgeCache,
-  listKnowledgeResources,
-  readKnowledgeResource,
-  readKnowledgeSections,
-  searchKnowledgeWithFallback,
+  _resetExpertiseSearchCache,
+  clearExpertiseCache,
+  listExpertiseResources,
+  readExpertiseResource,
+  readExpertiseSections,
+  searchExpertiseWithFallback,
   stripExtendedSearchOperators,
   ZERO_HIT_NEAREST_MATCHES_NOTE,
 } from './index.js';
 
-// Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). The fs mock below
+// Expertise is served only from external roots (TABLEAU_EXPERTISE_DIR). The fs mock below
 // stands in for one such root; each test declares the files it contains by absolute path.
-const KNOWLEDGE_ROOT = join('/', 'mock', 'knowledge');
+const EXPERTISE_ROOT = join('/', 'mock', 'expertise');
 
 function makeDirent(name: string, isDir: boolean): Dirent {
   return {
@@ -52,23 +52,23 @@ function setupFsMock(files: Record<string, string>): void {
   });
 }
 
-describe('knowledge/index', () => {
+describe('expertise/index', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearKnowledgeCache();
-    _resetKnowledgeSearchCache();
-    vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', KNOWLEDGE_ROOT);
+    clearExpertiseCache();
+    _resetExpertiseSearchCache();
+    vi.stubEnv('TABLEAU_EXPERTISE_DIR', EXPERTISE_ROOT);
   });
 
-  describe('listKnowledgeResources', () => {
+  describe('listExpertiseResources', () => {
     it('returns resources with correct URIs', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'strategy', 'viz-design', 'chart-selection.md')]:
+        [join(EXPERTISE_ROOT, 'strategy', 'viz-design', 'chart-selection.md')]:
           '# Chart Selection\nPick the right chart.',
-        [join(KNOWLEDGE_ROOT, 'tactics', 'viz', 'filters.md')]: '# Filters\nHow to use filters.',
+        [join(EXPERTISE_ROOT, 'tactics', 'viz', 'filters.md')]: '# Filters\nHow to use filters.',
       });
 
-      const resources = listKnowledgeResources();
+      const resources = listExpertiseResources();
 
       expect(resources).toHaveLength(2);
       expect(resources.map((r) => r.uri)).toEqual([
@@ -77,56 +77,56 @@ describe('knowledge/index', () => {
       ]);
     });
 
-    it('returns [] when no knowledge root is configured', () => {
+    it('returns [] when no expertise root is configured', () => {
       // No external root -> empty corpus, not an error.
-      vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', undefined);
+      vi.stubEnv('TABLEAU_EXPERTISE_DIR', undefined);
       setupFsMock({});
 
-      expect(listKnowledgeResources()).toEqual([]);
+      expect(listExpertiseResources()).toEqual([]);
     });
 
     it('returns [] when the configured root has no modules', () => {
       setupFsMock({});
 
-      expect(listKnowledgeResources()).toEqual([]);
+      expect(listExpertiseResources()).toEqual([]);
     });
 
     it('extracts name from h1 heading', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'test.md')]: '# My Resource\nDescription here.',
+        [join(EXPERTISE_ROOT, 'test.md')]: '# My Resource\nDescription here.',
       });
 
-      const [resource] = listKnowledgeResources();
+      const [resource] = listExpertiseResources();
       expect(resource.name).toBe('My Resource');
     });
 
     it('extracts description from first non-heading text line', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'test.md')]: '# Title\n\nFirst paragraph.',
+        [join(EXPERTISE_ROOT, 'test.md')]: '# Title\n\nFirst paragraph.',
       });
 
-      const [resource] = listKnowledgeResources();
+      const [resource] = listExpertiseResources();
       expect(resource.description).toBe('First paragraph.');
     });
 
     it('caches results across calls', () => {
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'test.md')]: '# Test\nContent.' });
+      setupFsMock({ [join(EXPERTISE_ROOT, 'test.md')]: '# Test\nContent.' });
 
-      listKnowledgeResources();
-      listKnowledgeResources();
+      listExpertiseResources();
+      listExpertiseResources();
 
       expect(readdirSync).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('readKnowledgeResource', () => {
+  describe('readExpertiseResource', () => {
     it('returns content for a valid URI', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'strategy', 'viz-design', 'chart-selection.md')]:
+        [join(EXPERTISE_ROOT, 'strategy', 'viz-design', 'chart-selection.md')]:
           '# Chart Selection\nContent.',
       });
 
-      const result = readKnowledgeResource(
+      const result = readExpertiseResource(
         'expertise://tableau/strategy/viz-design/chart-selection',
       );
       expect(result).toBe('# Chart Selection\nContent.');
@@ -134,32 +134,32 @@ describe('knowledge/index', () => {
 
     it('returns null for unknown slug', () => {
       setupFsMock({});
-      expect(readKnowledgeResource('expertise://tableau/nonexistent')).toBeNull();
+      expect(readExpertiseResource('expertise://tableau/nonexistent')).toBeNull();
     });
 
     it('returns null for wrong URI scheme', () => {
       setupFsMock({});
       expect(
-        readKnowledgeResource('http://tableau/strategy/viz-design/chart-selection'),
+        readExpertiseResource('http://tableau/strategy/viz-design/chart-selection'),
       ).toBeNull();
     });
 
     it('returns null for path traversal attempt', () => {
       setupFsMock({});
-      expect(readKnowledgeResource('expertise://tableau/../../../etc/passwd')).toBeNull();
+      expect(readExpertiseResource('expertise://tableau/../../../etc/passwd')).toBeNull();
     });
 
     it('returns null for slug with backslash', () => {
       setupFsMock({});
-      expect(readKnowledgeResource('expertise://tableau/viz\\chart')).toBeNull();
+      expect(readExpertiseResource('expertise://tableau/viz\\chart')).toBeNull();
     });
   });
 
-  describe('searchKnowledgeWithFallback', () => {
+  describe('searchExpertiseWithFallback', () => {
     it('returns no hits when the corpus is empty', () => {
       setupFsMock({});
 
-      const result = searchKnowledgeWithFallback('chart choice', 3);
+      const result = searchExpertiseWithFallback('chart choice', 3);
 
       expect(result.hits).toEqual([]);
       expect(result).not.toHaveProperty('topHitBody');
@@ -173,9 +173,9 @@ describe('knowledge/index', () => {
         '## When to Use',
         'Use this for margin calculations.',
       ].join('\n');
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: body });
+      setupFsMock({ [join(EXPERTISE_ROOT, 'margin-calculation.md')]: body });
 
-      const result = searchKnowledgeWithFallback('margin calculation', 5);
+      const result = searchExpertiseWithFallback('margin calculation', 5);
 
       expect(result.hits).toHaveLength(1);
       expect(result.topHitBody).toBe(body);
@@ -190,11 +190,11 @@ describe('knowledge/index', () => {
         'Use this for margin calculations.',
       ].join('\n');
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'alpha.md')]: `# Alpha\n${sharedMetadata}`,
-        [join(KNOWLEDGE_ROOT, 'beta.md')]: `# Beta\n${sharedMetadata}`,
+        [join(EXPERTISE_ROOT, 'alpha.md')]: `# Alpha\n${sharedMetadata}`,
+        [join(EXPERTISE_ROOT, 'beta.md')]: `# Beta\n${sharedMetadata}`,
       });
 
-      const result = searchKnowledgeWithFallback('margin calculation', 5);
+      const result = searchExpertiseWithFallback('margin calculation', 5);
 
       expect(result.hits).toHaveLength(2);
       expect(result.hits[0].score - result.hits[1].score).toBeLessThan(0.15);
@@ -210,12 +210,12 @@ describe('knowledge/index', () => {
         'Use this for margin calculations.',
       ].join('\n');
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: topBody,
-        [join(KNOWLEDGE_ROOT, 'margin-overview.md')]:
+        [join(EXPERTISE_ROOT, 'margin-calculation.md')]: topBody,
+        [join(EXPERTISE_ROOT, 'margin-overview.md')]:
           '# Margin Overview\n- Relevant user prompts/search terms: margin',
       });
 
-      const result = searchKnowledgeWithFallback('margin calculation', 5);
+      const result = searchExpertiseWithFallback('margin calculation', 5);
 
       expect(result.hits).toHaveLength(2);
       expect(result.hits[0].score - result.hits[1].score).toBeGreaterThanOrEqual(0.15);
@@ -232,9 +232,9 @@ describe('knowledge/index', () => {
         '',
         'x'.repeat(7_000),
       ].join('\n');
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: body });
+      setupFsMock({ [join(EXPERTISE_ROOT, 'margin-calculation.md')]: body });
 
-      const result = searchKnowledgeWithFallback('margin calculation', 5);
+      const result = searchExpertiseWithFallback('margin calculation', 5);
 
       expect(result.topHitBody).toContain('[TRUNCATED: body exceeds 6144-byte cap]');
       expect(Buffer.byteLength(result.topHitBody ?? '', 'utf8')).toBeLessThanOrEqual(6_144);
@@ -242,7 +242,7 @@ describe('knowledge/index', () => {
 
     it('routes a token-free query through the whole-string fuse', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'greeting.md')]: [
+        [join(EXPERTISE_ROOT, 'greeting.md')]: [
           '# Greeting Guide',
           '- Relevant user prompts/search terms: use the greeting',
           '',
@@ -253,7 +253,7 @@ describe('knowledge/index', () => {
 
       // "use"/"the" are stopwords, so queryTokens() is empty and the search must
       // fall back to a whole-string fuse match rather than keyword intersection.
-      const result = searchKnowledgeWithFallback('use the', 5);
+      const result = searchExpertiseWithFallback('use the', 5);
 
       expect(result.hits.length).toBeGreaterThan(0);
       expect(result.hits[0].match).toBe('whole-string');
@@ -261,7 +261,7 @@ describe('knowledge/index', () => {
 
     it('broadens to nearest matches when nothing scores as a hit', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: [
+        [join(EXPERTISE_ROOT, 'margin-calculation.md')]: [
           '# Margin Calculation',
           '- Relevant user prompts/search terms: margin calculation',
           '',
@@ -270,7 +270,7 @@ describe('knowledge/index', () => {
         ].join('\n'),
       });
 
-      const result = searchKnowledgeWithFallback('zzzznotfound', 5);
+      const result = searchExpertiseWithFallback('zzzznotfound', 5);
 
       expect(result.hits).toEqual([]);
       expect(result.nearestMatches?.length).toBeGreaterThan(0);
@@ -278,7 +278,7 @@ describe('knowledge/index', () => {
     });
   });
 
-  describe('readKnowledgeResource section fragments (extractSection)', () => {
+  describe('readExpertiseResource section fragments (extractSection)', () => {
     const doc = [
       '# Guide',
       'intro line',
@@ -291,9 +291,9 @@ describe('knowledge/index', () => {
     ].join('\n');
 
     it('returns a section from its heading through the next same-or-higher heading', () => {
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'guide.md')]: doc });
+      setupFsMock({ [join(EXPERTISE_ROOT, 'guide.md')]: doc });
 
-      const section = readKnowledgeResource('expertise://tableau/guide#first');
+      const section = readExpertiseResource('expertise://tableau/guide#first');
 
       expect(section).toContain('## First');
       expect(section).toContain('first body');
@@ -305,30 +305,30 @@ describe('knowledge/index', () => {
 
     it('matches a fragment against the literal heading text', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'guide.md')]: '# Guide\n\n## When To Use\nuse it here',
+        [join(EXPERTISE_ROOT, 'guide.md')]: '# Guide\n\n## When To Use\nuse it here',
       });
 
-      const section = readKnowledgeResource('expertise://tableau/guide#When%20To%20Use');
+      const section = readExpertiseResource('expertise://tableau/guide#When%20To%20Use');
 
       expect(section).toContain('## When To Use');
       expect(section).toContain('use it here');
     });
 
     it('falls back to the raw fragment when the percent-escape is malformed', () => {
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'guide.md')]: '# Guide\n\n## ab\nab body' });
+      setupFsMock({ [join(EXPERTISE_ROOT, 'guide.md')]: '# Guide\n\n## ab\nab body' });
 
       // "a%b" is not a valid percent-escape; decodeURIComponent throws and the raw
       // fragment is slugged instead (-> "ab"). This must not crash.
-      const section = readKnowledgeResource('expertise://tableau/guide#a%b');
+      const section = readExpertiseResource('expertise://tableau/guide#a%b');
 
       expect(section).toContain('## ab');
       expect(section).toContain('ab body');
     });
 
     it('returns null when the fragment names no section', () => {
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'guide.md')]: doc });
+      setupFsMock({ [join(EXPERTISE_ROOT, 'guide.md')]: doc });
 
-      expect(readKnowledgeResource('expertise://tableau/guide#missing')).toBeNull();
+      expect(readExpertiseResource('expertise://tableau/guide#missing')).toBeNull();
     });
   });
 
@@ -337,7 +337,7 @@ describe('knowledge/index', () => {
       'treats %s as plain text, not Fuse extended-search syntax',
       (query) => {
         setupFsMock({
-          [join(KNOWLEDGE_ROOT, 'zq-chart.md')]: [
+          [join(EXPERTISE_ROOT, 'zq-chart.md')]: [
             '# Zq Chart',
             '- Relevant user prompts/search terms: zq',
             '',
@@ -346,7 +346,7 @@ describe('knowledge/index', () => {
           ].join('\n'),
         });
 
-        expect(searchKnowledgeWithFallback(query, 3).hits.map((hit) => hit.slug)).toEqual([
+        expect(searchExpertiseWithFallback(query, 3).hits.map((hit) => hit.slug)).toEqual([
           'zq-chart',
         ]);
       },
@@ -369,22 +369,22 @@ describe('knowledge/index', () => {
     });
 
     it('returns no hits for a query of only operators', () => {
-      setupFsMock({ [join(KNOWLEDGE_ROOT, 'zq-chart.md')]: '# Zq Chart\nzq' });
-      expect(searchKnowledgeWithFallback('!!!', 3).hits).toEqual([]);
+      setupFsMock({ [join(EXPERTISE_ROOT, 'zq-chart.md')]: '# Zq Chart\nzq' });
+      expect(searchExpertiseWithFallback('!!!', 3).hits).toEqual([]);
     });
   });
 
-  describe('readKnowledgeSections', () => {
+  describe('readExpertiseSections', () => {
     it('does not open a fence on a line that starts with inline code', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'guide.md')]: ['# Guide', '```x``` inline', '## Real'].join('\n'),
+        [join(EXPERTISE_ROOT, 'guide.md')]: ['# Guide', '```x``` inline', '## Real'].join('\n'),
       });
-      expect(readKnowledgeSections('guide')).toEqual(['guide', 'real']);
+      expect(readExpertiseSections('guide')).toEqual(['guide', 'real']);
     });
 
     it('keeps a block open past a ```js line inside it', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'guide.md')]: [
+        [join(EXPERTISE_ROOT, 'guide.md')]: [
           '# Guide',
           '```',
           '```js',
@@ -393,12 +393,12 @@ describe('knowledge/index', () => {
           '## Real',
         ].join('\n'),
       });
-      expect(readKnowledgeSections('guide')).toEqual(['guide', 'real']);
+      expect(readExpertiseSections('guide')).toEqual(['guide', 'real']);
     });
 
     it('ignores # lines inside code fences', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'guide.md')]: [
+        [join(EXPERTISE_ROOT, 'guide.md')]: [
           '# Guide',
           '```bash',
           '# not a heading',
@@ -410,17 +410,17 @@ describe('knowledge/index', () => {
         ].join('\n'),
       });
 
-      expect(readKnowledgeSections('guide')).toEqual(['guide', 'real']);
+      expect(readExpertiseSections('guide')).toEqual(['guide', 'real']);
     });
 
     it('lists H1/H2 slugs and omits deeper headings', () => {
       setupFsMock({
-        [join(KNOWLEDGE_ROOT, 'guide.md')]: ['# Guide', '## First', '### Nested', '## Second'].join(
+        [join(EXPERTISE_ROOT, 'guide.md')]: ['# Guide', '## First', '### Nested', '## Second'].join(
           '\n',
         ),
       });
 
-      expect(readKnowledgeSections('guide')).toEqual(['guide', 'first', 'second']);
+      expect(readExpertiseSections('guide')).toEqual(['guide', 'first', 'second']);
     });
   });
 });

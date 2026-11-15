@@ -42,7 +42,11 @@ This tool resolves the embed token from the current session's signing material â
         visibility: ['app'], // Only visible to the app, not the model
       },
     },
-    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('mcp-apps'))),
+    disabled: new Provider(
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('mcp-apps')) ||
+        !(await getFeatureGate().isFeatureEnabled('interactive-viz')),
+    ),
     callback: async (_args, extra): Promise<CallToolResult> => {
       return getEmbedTokenTool.logAndExecute<{ token: string }>({
         extra,

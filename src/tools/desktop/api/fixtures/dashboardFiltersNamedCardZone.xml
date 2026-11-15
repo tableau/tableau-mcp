@@ -1,0 +1,15 @@
+<dashboard enable-sort-zone-taborder='true' name='Datasource Filters' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <style />
+  <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />
+  <zones>
+    <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>
+      <zone h='100000' id='5' param='horz' type-v2='layout-flow' w='100000' x='0' y='0'>
+        <zone h='100000' id='6' name='Revenue by Product per Period' w='40000' x='0' y='0' />
+        <zone h='100000' id='7' name='Total Revenue' w='40000' x='40000' y='0' />
+        <zone h='100000' id='8' name='Revenue by Product per Period' param='[federated.csv040059ff380b040059ff380b].[none:product_line:nk]' type-v2='filter' w='20000' x='80000' y='0' />
+      </zone>
+    </zone>
+  </zones>
+  <simple-id uuid='{46CF9BEA-1D17-4EC7-B325-AC646FB8E33D}' />
+</dashboard>
+

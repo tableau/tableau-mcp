@@ -15,6 +15,7 @@ import { getActivateSheetTool } from './api/activateSheet.js';
 import { getAddDashboardTool } from './api/addDashboard.js';
 import { getAddStoryboardTool } from './api/addStoryboard.js';
 import { getAddWorksheetTool } from './api/addWorksheet.js';
+import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
@@ -25,6 +26,7 @@ import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getReloadExtensionsTool } from './api/reloadExtensions.js';
+import { getReloadWorkspaceExtensionTool } from './api/reloadWorkspaceExtension.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -229,6 +231,11 @@ const SORT_XML = `<?xml version="1.0"?>
 </worksheet>`;
 
 const TOOL_CASES: Record<string, ToolCase> = {
+  'close-workbook': {
+    make: getCloseWorkbookTool,
+    args: {},
+    clean: { message: 'Closed the open workbook.' },
+  },
   'undo-workbook': {
     make: getUndoWorkbookTool,
     args: {},
@@ -308,6 +315,11 @@ const TOOL_CASES: Record<string, ToolCase> = {
     make: getSetDataSourcePageActiveTool,
     args: { isDataSourcePageActive: true },
     clean: { isDataSourcePageActive: true, message: 'The Data Source page is active.' },
+  },
+  'reload-workspace-extension': {
+    make: getReloadWorkspaceExtensionTool,
+    args: { extensionId: 'ext-1' },
+    clean: { extensionId: 'ext-1', message: 'Reloaded workspace extension "ext-1".' },
   },
   'reload-extensions': {
     make: getReloadExtensionsTool,

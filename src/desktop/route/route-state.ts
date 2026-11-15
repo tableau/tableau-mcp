@@ -126,7 +126,17 @@ export interface BindRecoveryCorrectionInvariant {
   allowedChanges: BindRecoveryCorrectionChange[];
 }
 
+/** Record fields an admission can write, kept to undo a pre-binder exit. */
+export interface BindRecoveryReservedFields {
+  phase?: BindRecoveryPhase;
+  lastProposalSignature?: string;
+  preDispatchRetryAllowance?: { proposalSignature: string; remaining: 0 | 1 };
+  consecutiveBareResubmitCount?: number;
+}
+
 export interface BindAttempt {
+  /** Pending reservations only: the fields before the admission and what it wrote; dropped at outcome. */
+  reserved?: { before: BindRecoveryReservedFields; wrote: BindRecoveryReservedFields };
   /** ISO timestamp the bind recovery observation was recorded. */
   ts: string;
   /** Store-scoped reservation id returned by admission; outcome recording uses it to correlate concurrency. */
@@ -153,6 +163,21 @@ export interface BindRecoveryRecord {
   };
   /** Outcome records that could not be correlated to a live pending reservation. */
   uncorrelatedOutcomeCount?: number;
+  /**
+   * Set when a proposal's only blocker was the too-many-slices pie gate: the same proposal may
+   * come back once with the user's keep-the-pie confirmation. The confirmed call's recorded
+   * outcome drops it.
+   */
+  largePieConfirmation?: {
+    proposalSignature: string;
+    detail: string;
+    /** Internal datasource name the blocked pie was bound on; a replay must stay on it. */
+    datasource: string;
+    /** Raw target_worksheet of the blocked call; a replay must repeat it. */
+    targetWorksheet?: string;
+    /** Set while the confirmed call that borrowed this grant is in flight; only an untagged grant is honored. */
+    reservationId?: number;
+  };
 }
 
 export interface BindRecoveryAttemptInput {
@@ -167,6 +192,8 @@ export interface BindRecoveryAttemptInput {
 
 export interface BindRecoveryAdmissionInput {
   proposalSignature?: string;
+  /** True only for the admission a keep_large_pie confirmation was read for. */
+  borrowsLargePie?: boolean;
 }
 
 export type BindProposalProgress = 'new' | 'repeat' | 'limit';
@@ -620,10 +647,8 @@ export class SessionRouteStateStore {
     }
 
     const attempts = previousAttempts.slice();
-    attempts[reservedAttemptIndex] = {
-      ...reservedAttempt,
-      outcome: bindAttempt.outcome,
-    };
+    const { reserved: _reserved, ...settled } = reservedAttempt;
+    attempts[reservedAttemptIndex] = { ...settled, outcome: bindAttempt.outcome };
     return { attempts, uncorrelated: false };
   }
 
@@ -638,7 +663,8 @@ export class SessionRouteStateStore {
     const previousAttempts = previous?.attempts ?? [];
     const lastAttempt = previousAttempts.at(-1);
     if (!lastAttempt) return [bindAttempt];
-    return [...previousAttempts.slice(0, -1), { ...lastAttempt, outcome: bindAttempt.outcome }];
+    const { reserved: _reserved, ...settled } = lastAttempt;
+    return [...previousAttempts.slice(0, -1), { ...settled, outcome: bindAttempt.outcome }];
   }
 
   private withUncorrelatedOutcomeCount(
@@ -674,17 +700,47 @@ export class SessionRouteStateStore {
     };
     const reservationId = this.nextBindRecoveryReservationId++;
     const nextProposalSignature = admission.proposalSignature ?? previous?.lastProposalSignature;
+    const lastProposalSignature = this.withLastProposalSignature(
+      previous,
+      admission.proposalSignature,
+    );
+    const consecutiveBareResubmitCount = this.withConsecutiveBareResubmitCount(
+      admission.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
+    );
+    const preDispatchRetryAllowance = this.withPreDispatchRetryAllowance(
+      previous,
+      nextProposalSignature,
+    );
+    const reserved = {
+      before: {
+        phase: previous?.phase,
+        lastProposalSignature: previous?.lastProposalSignature,
+        preDispatchRetryAllowance: previous?.preDispatchRetryAllowance,
+        consecutiveBareResubmitCount: previous?.consecutiveBareResubmitCount,
+      },
+      wrote: {
+        phase,
+        ...lastProposalSignature,
+        ...preDispatchRetryAllowance,
+        ...consecutiveBareResubmitCount,
+      },
+    };
+    const priorGrant = previous?.largePieConfirmation;
     const record: BindRecoveryRecord = {
       phase,
-      attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId }],
-      ...this.withLastProposalSignature(previous, admission.proposalSignature),
+      attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId, reserved }],
+      ...lastProposalSignature,
       ...this.withProposalContext(previous, undefined),
       ...this.withCorrectionInvariant(previous, undefined),
-      ...this.withConsecutiveBareResubmitCount(
-        admission.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
-      ),
-      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
+      ...consecutiveBareResubmitCount,
+      ...preDispatchRetryAllowance,
       ...this.withUncorrelatedOutcomeCount(previous, false),
+      // Only the confirmed admission borrows an untagged grant; an already-borrowed grant stays as is.
+      ...(priorGrant !== undefined && priorGrant.reservationId !== undefined
+        ? { largePieConfirmation: priorGrant }
+        : priorGrant !== undefined && admission.borrowsLargePie === true
+          ? { largePieConfirmation: { ...priorGrant, reservationId } }
+          : {}),
     };
 
     if (this.touchBindRecovery(state, ask, record)) {
@@ -751,6 +807,11 @@ export class SessionRouteStateStore {
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
+      // Recording the confirmed call's outcome consumes its grant; another call's grant survives.
+      ...(previous?.largePieConfirmation?.reservationId !== undefined &&
+      previous.largePieConfirmation.reservationId !== attempt.reservationId
+        ? { largePieConfirmation: previous.largePieConfirmation }
+        : {}),
     };
 
     this.touchBindRecovery(state, ask, record);
@@ -828,6 +889,34 @@ export class SessionRouteStateStore {
     });
   }
 
+  grantLargePieConfirmation(
+    sessionId: string | undefined,
+    ask: string,
+    proposalSignature: string,
+    detail: string,
+    scope: { datasource: string; targetWorksheet?: string },
+  ): boolean {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (
+      !state ||
+      !record ||
+      record.phase === 'terminal' ||
+      record.lastProposalSignature !== proposalSignature
+    ) {
+      return false;
+    }
+    return this.touchBindRecovery(state, ask, {
+      ...record,
+      largePieConfirmation: {
+        proposalSignature,
+        detail,
+        datasource: scope.datasource,
+        ...(scope.targetWorksheet !== undefined ? { targetWorksheet: scope.targetWorksheet } : {}),
+      },
+    });
+  }
+
   consumePreDispatchRetryAllowance(
     sessionId: string | undefined,
     ask: string,
@@ -851,8 +940,10 @@ export class SessionRouteStateStore {
   }
 
   /**
-   * Undo one reservation: drop only the attempt that carries `reservationId`, and delete the
-   * record only when no attempts remain, so a concurrent call's outcome on the same ask survives.
+   * Undo one reservation so an exit before the binder runs leaves no trace. Idempotent, and a
+   * no-op once the reservation has an outcome. Drops only this reservation's pending attempt,
+   * returns a borrowed pie grant, and (when no other attempt landed since) restores the
+   * pre-reservation phase and proposal signature so an identical retry is not "unchanged".
    */
   releaseBindRecoveryReservation(
     sessionId: string | undefined,
@@ -863,13 +954,39 @@ export class SessionRouteStateStore {
     const state = this.get(sessionId);
     const record = state?.bindRecoveryByAsk.get(ask);
     if (!state || !record) return false;
-    const attempts = record.attempts.filter((attempt) => attempt.reservationId !== reservationId);
-    if (attempts.length === record.attempts.length) return false;
+    const index = record.attempts.findIndex((attempt) => attempt.reservationId === reservationId);
+    if (index === -1 || record.attempts[index].outcome !== undefined) return false;
+    const attempts = record.attempts.filter((_, i) => i !== index);
+    const reserved = record.attempts[index].reserved;
     if (attempts.length === 0) {
       state.bindRecoveryByAsk.delete(ask);
-    } else {
-      state.bindRecoveryByAsk.set(ask, { ...record, attempts });
+      return true;
     }
+    const { largePieConfirmation, ...rest } = record;
+    const next: BindRecoveryRecord = { ...rest, attempts };
+    if (largePieConfirmation !== undefined) {
+      const { reservationId: tag, ...grant } = largePieConfirmation;
+      if (tag !== reservationId) next.largePieConfirmation = largePieConfirmation;
+      else next.largePieConfirmation = grant;
+    }
+    // Restore only fields this reservation wrote and nothing since changed, and only when no
+    // later attempt landed; a terminal phase is never rolled back.
+    if (reserved !== undefined && index === record.attempts.length - 1) {
+      const target: Record<string, unknown> = next as unknown as Record<string, unknown>;
+      const fields = [
+        'phase',
+        'lastProposalSignature',
+        'preDispatchRetryAllowance',
+        'consecutiveBareResubmitCount',
+      ] as const;
+      for (const field of fields) {
+        if (field === 'phase' && record.phase === 'terminal') continue;
+        if (JSON.stringify(record[field]) !== JSON.stringify(reserved.wrote[field])) continue;
+        if (reserved.before[field] === undefined) delete target[field];
+        else target[field] = reserved.before[field];
+      }
+    }
+    state.bindRecoveryByAsk.set(ask, next);
     return true;
   }
 

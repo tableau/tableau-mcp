@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.31), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.34), derived from
  * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
@@ -16,6 +16,8 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appExtensions: '/v0/app/extensions',
+  appExtensionReload: '/v0/app/extensions/{id}:reload',
   appScreenshot: '/v0/app/screenshot',
   appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
@@ -46,6 +48,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
+  workbookClose: '/v0/workbook:close',
   workbookExportAs: '/v0/workbook:exportAs',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
@@ -271,6 +274,10 @@ function seg(raw: string): string {
   } catch {
     throw new ExternalApiRouteError('Refused a malformed path segment in an External API route.');
   }
+}
+
+export function appExtensionReloadRoute(extensionId: string): string {
+  return `${EXTERNAL_API_ROUTES.appExtensions}/${seg(extensionId)}:reload`;
 }
 
 export function worksheetRoute(worksheetId: string): string {
@@ -629,6 +636,7 @@ export const PROBLEM_CODES = [
   'not-found',
   'datasource-not-found',
   'sheet-not-found',
+  'workspace-extension-not-found',
   'logical-table-not-found',
   'operation-not-found',
   'operation-pending',
@@ -735,6 +743,8 @@ const dialogNonemptyInputStringSchema = dialogInputStringSchema.refine(
   },
 );
 const dialogColorChannelSchema = z.number().int().min(0).max(255);
+// Desktop accepts only signed 32-bit integers for print values; OpenAPI omits this maximum.
+const dialogPrintIntegerSchema = z.number().int().max(2_147_483_647);
 
 /** Only caller-selected input fields belong on the wire; descriptors are read-only. */
 export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
@@ -779,9 +789,9 @@ export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
       printerId: dialogInputStringSchema,
       range: z.enum(['all-pages', 'page-range', 'current-page', 'selection']),
       sheetScope: z.enum(['entire-workbook', 'active-sheet', 'selected-sheets']),
-      firstPage: z.number().int().min(0),
-      lastPage: z.number().int().min(0),
-      copies: z.number().int().min(1),
+      firstPage: dialogPrintIntegerSchema.min(0),
+      lastPage: dialogPrintIntegerSchema.min(0),
+      copies: dialogPrintIntegerSchema.min(1),
       collate: z.boolean(),
       exportSelection: z.boolean(),
       outputPath: dialogNonemptyInputStringSchema.optional(),
@@ -1144,6 +1154,24 @@ export const workbookExtensionListSchema = z
   })
   .passthrough();
 export type WorkbookExtensionList = z.infer<typeof workbookExtensionListSchema>;
+
+export const workspaceExtensionSchema = z
+  .object({
+    id: z.string(),
+    extensionKey: workbookExtensionKeySchema,
+    name: z.string(),
+    author: z.string(),
+    isEnabled: z.boolean(),
+  })
+  .passthrough();
+
+/** User-installed workspace extensions, from `GET /v0/app/extensions`. */
+export const workspaceExtensionListSchema = z
+  .object({
+    extensions: z.array(workspaceExtensionSchema),
+  })
+  .passthrough();
+export type WorkspaceExtensionList = z.infer<typeof workspaceExtensionListSchema>;
 
 /** Tabular data returned by the summary-data and logical-table data reads. */
 export const dataTableSchema = z

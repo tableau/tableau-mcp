@@ -102,8 +102,8 @@ export class Config extends BaseConfig {
    */
   allowSkipValidation: boolean;
 
-  /** Ordered knowledge roots (TABLEAU_KNOWLEDGE_DIR, split on the path delimiter by assets.ts). */
-  knowledgeDir: string | undefined;
+  /** Ordered expertise roots (TABLEAU_EXPERTISE_DIR, split on the path delimiter by assets.ts). */
+  expertiseDir: string | undefined;
 
   /**
    * Absolute root for durable data-app source packages (TABLEAU_DATA_APP_WORKSPACE_DIR).
@@ -183,12 +183,12 @@ export class Config extends BaseConfig {
     this.allowSkipValidation = allowSkipValidation === 'true';
 
     const {
-      TABLEAU_KNOWLEDGE_DIR: knowledgeDir,
+      TABLEAU_EXPERTISE_DIR: expertiseDir,
       WORKBOOK_XSD_PATH: workbookXsdPath,
       EXAMPLES_DIR: examplesDir,
       TWB_INDEX_PATH: twbIndexPath,
     } = cleansedVars;
-    this.knowledgeDir = knowledgeDir || undefined;
+    this.expertiseDir = expertiseDir || undefined;
     const dataAppWorkspaceDir = cleansedVars.TABLEAU_DATA_APP_WORKSPACE_DIR?.trim();
     this.dataAppWorkspaceDir =
       dataAppWorkspaceDir && isAbsolute(dataAppWorkspaceDir)

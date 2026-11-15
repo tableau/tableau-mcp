@@ -275,6 +275,65 @@ describe('listAvailableFields', () => {
     expect(listAvailableFields(xml)[0]?.approxCount).toBeUndefined();
   });
 
+  describe('extract approx-count', () => {
+    const rec = (name: string, parent: string, count?: number): string =>
+      `<metadata-record class='column'><local-name>[${name}]</local-name><local-type>string</local-type>` +
+      `<parent-name>${parent}</parent-name>${count === undefined ? '' : `<approx-count>${count}</approx-count>`}</metadata-record>`;
+    const build = (opts: {
+      extract?: string;
+      enabled?: string;
+      top?: string;
+    }): string => `<workbook><datasources><datasource name='DS'>
+  <column name='[State]' role='dimension' type='nominal' datatype='string' />
+  <column name='[Category]' role='dimension' type='nominal' datatype='string' />
+  <connection class='federated'><metadata-records>${opts.top ?? `${rec('State', '[Orders]')}${rec('Category', '[Orders]')}`}</metadata-records></connection>
+  ${opts.extract === undefined ? '' : `<extract enabled='${opts.enabled ?? 'true'}'><connection class='hyper'><metadata-records>${opts.extract}</metadata-records></connection></extract>`}
+</datasource></datasources></workbook>`;
+
+    it('reads counts from the extract connection without changing table or columns', () => {
+      const withExtract = listAvailableFields(
+        build({
+          extract: `${rec('State', '[Extract].[Extract]', 56)}${rec('Category', '[Extract].[Extract]', 3)}`,
+        }),
+      );
+      const without = listAvailableFields(build({}));
+      expect(withExtract.find((f) => f.columnName === '[State]')?.approxCount).toBe(56);
+      expect(withExtract.find((f) => f.columnName === '[Category]')?.approxCount).toBe(3);
+      expect(withExtract.map((f) => [f.columnName, f.table])).toEqual(
+        without.map((f) => [f.columnName, f.table]),
+      );
+      expect(withExtract.find((f) => f.columnName === '[State]')?.table).toBe('[Orders]');
+    });
+
+    it('ignores counts from a disabled extract', () => {
+      const fields = listAvailableFields(
+        build({ enabled: 'false', extract: rec('State', '[Extract].[Extract]', 56) }),
+      );
+      expect(fields.find((f) => f.columnName === '[State]')?.approxCount).toBeUndefined();
+    });
+
+    it('prefers a top-level count over an extract count', () => {
+      const fields = listAvailableFields(
+        build({
+          top: rec('State', '[Orders]', 10),
+          extract: `${rec('State', '[Extract].[Extract]', 56)}${rec('Category', '[Extract].[Extract]', 3)}`,
+        }),
+      );
+      expect(fields.find((f) => f.columnName === '[State]')?.approxCount).toBe(10);
+      expect(fields.find((f) => f.columnName === '[Category]')?.approxCount).toBe(3);
+    });
+
+    it('attaches counts for fields of a two-table extract', () => {
+      const fields = listAvailableFields(
+        build({
+          extract: `${rec('State', '[Orders_abc123]', 56)}${rec('Category', '[Returns_def456]', 3)}`,
+        }),
+      );
+      expect(fields.find((f) => f.columnName === '[State]')?.approxCount).toBe(56);
+      expect(fields.find((f) => f.columnName === '[Category]')?.approxCount).toBe(3);
+    });
+  });
+
   it('projects metadata-record parent-name onto top-level columns', () => {
     const xml = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>

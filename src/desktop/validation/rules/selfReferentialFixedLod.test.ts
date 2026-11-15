@@ -58,7 +58,7 @@ describe('self-referential-fixed-lod rule', () => {
 
   it.each([
     [
-      'RFM quintile against a global percentile (knowledge calc-fields.md)',
+      'RFM quintile against a global percentile (expertise calc-fields.md)',
       'IF [Monetary (Sales)] &gt;= { FIXED : PERCENTILE({ FIXED [Customer ID] : SUM([Sales]) }, 0.8) } THEN 5 ELSE 1 END',
     ],
     [

@@ -20,6 +20,7 @@ import {
   summarizeSchema,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../../desktop/binder/binder.js';
+import { PIE_SLICE_WORKABLE_MAX } from '../../../../desktop/binder/cardinality.js';
 import {
   type ExactFilterIntent,
   type ExactFilterValueConstraint,
@@ -27,6 +28,12 @@ import {
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
+import {
+  onlyPieSliceGate,
+  PIE_TEMPLATE_NAME,
+  pieSliceGateDatasource,
+  pieSliceGateDetail,
+} from '../../../../desktop/binder/validate.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import {
@@ -147,6 +154,7 @@ const paramsSchema = {
   auto_apply: z.boolean().optional().describe('Apply now'),
   requireCompleteRequest: z.boolean().optional().describe('Prove full ask or decline, no writes'),
   skip_validation: z.boolean().optional(),
+  keep_large_pie: z.boolean().optional().describe('User-confirmed big pie'),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
@@ -194,6 +202,7 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   call_2_contract?: Call2Contract;
   authored_calcs?: string[];
   warnings?: string[];
+  advisories?: string[];
   applied?: boolean;
   sheet_name?: string;
   phase_ms?: AuthoringPhaseMs;
@@ -243,6 +252,7 @@ type AppliedFastPathResult = {
   applied: true;
   authored_calcs?: string[];
   warnings?: string[];
+  advisories?: string[];
   /** Desktop's own apply warnings; present only when Desktop returned any. */
   desktop_warnings?: ExecuteCommandWarning[];
   sheet_name: string;
@@ -257,6 +267,7 @@ type AppliedFastPathResult = {
   summary_rows_scope?: SummaryDataReadScope;
   summary_rows_error?: string;
   truncated?: true;
+  pie_slice_warning?: PieSliceWarning;
   /**
    * What the ask asked for vs what this bind built. Present ONLY when something the ask
    * asked for is missing from the sheet — a complete bind still returns the trimmed shape.
@@ -289,6 +300,7 @@ type BlockedBindTemplateResult = {
     | 'ambiguous_filter_intent'
     | 'proposal_contract_mismatch'
     | 'proposal_filter_resolution_failed'
+    | 'pie_slice_limit'
     | 'request_not_covered';
   applied?: false;
   may_have_applied?: false;
@@ -348,7 +360,7 @@ const WATERFALL_SORT_HINT =
 // verbatim, so this directly contradicts the bundled skill's "adapt fields/formatting".
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
-const POST_APPLY_UNCERTAINTY_GUIDANCE =
+export const POST_APPLY_UNCERTAINTY_GUIDANCE =
   'Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
 // agent must NOT hand-author another one. These clauses are appended only for splices the
@@ -449,6 +461,13 @@ function currencyHeterogeneityCaveat(
   };
 }
 
+type PieSliceWarning = {
+  field: string;
+  rows: number;
+  max: number;
+  rows_exceed_preview: boolean;
+};
+
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
   'summary_rows' | 'summary_rows_order' | 'summary_rows_scope' | 'summary_rows_error' | 'truncated'
@@ -520,6 +539,121 @@ function capSummaryRows(
   };
 }
 
+async function pieSliceWarningFor({
+  rows,
+  args,
+  templateSnapshot,
+  schemaSummary,
+  sheetName,
+  uncertain,
+  unfilledEncodings,
+  dryBindOffer,
+}: {
+  rows: number;
+  /** Binds the exact offered ask the way the follow-up call will; undefined if it cannot. */
+  dryBindOffer?: (ask: string) => Promise<BinderResult>;
+  uncertain: boolean;
+  unfilledEncodings: boolean;
+  args: BoundResult['args'];
+  templateSnapshot: TemplateRuntimeSnapshot;
+  schemaSummary: SchemaSummary;
+  sheetName: string;
+}): Promise<{ flag: PieSliceWarning; guidance: string }> {
+  type Slot = TemplateRuntimeSnapshot['descriptor']['slots'][number];
+  const resolveSlot = (
+    slot: Slot,
+  ): { ref: CanonicalColumnRef; field?: SchemaField } | undefined => {
+    const key = slot.qualified_key_required
+      ? `${slot.template_field}@${slot.derivation}`
+      : slot.template_field;
+    const mapped = args.field_mapping[key];
+    const ref = mapped === undefined ? null : parseCanonicalColumnRef(decodeXmlEntities(mapped));
+    if (!ref) return undefined;
+    return { ref, field: schemaSummary.fields.find((f) => refMatchesSchemaField(ref, f)) };
+  };
+  const captionFor = (pick: (slot: Slot) => boolean): string | undefined => {
+    const slot = templateSnapshot.descriptor.slots.find((s) => s.bindable && pick(s));
+    const field = slot ? resolveSlot(slot)?.field : undefined;
+    return field ? (field.caption ?? field.name) : undefined;
+  };
+  const sliceCaption = captionFor((s) => s.kind === 'categorical' && s.role.includes('color'));
+  const measureCaption = captionFor((s) => s.kind === 'quantitative');
+  // The offered bar ask re-binds from words alone, so it would silently drop filters and top_n.
+  const offerWouldDropSemantics = (args.filters?.length ?? 0) > 0 || args.top_n !== undefined;
+  const offeredAsk =
+    sliceCaption !== undefined && measureCaption !== undefined
+      ? `sorted bar chart of ${measureCaption} by ${sliceCaption}`
+      : undefined;
+  // Words are not proof: only name the ask when a dry bind of it lands on the pie's exact fields.
+  const pieRefKeys = (): string[] | undefined => {
+    const keys: string[] = [];
+    for (const slot of templateSnapshot.descriptor.slots) {
+      if (!slot.bindable) continue;
+      if (
+        slot.kind !== 'quantitative' &&
+        !(slot.kind === 'categorical' && slot.role.includes('color'))
+      ) {
+        continue;
+      }
+      const ref = resolveSlot(slot)?.ref;
+      if (!ref) return undefined;
+      keys.push(refKey(ref));
+    }
+    return keys.sort();
+  };
+  const refKey = (ref: CanonicalColumnRef): string =>
+    `${ref.datasource.toLowerCase()}|${ref.localFieldName}|${ref.derivation}`;
+  let offerVerified = false;
+  if (
+    offeredAsk !== undefined &&
+    dryBindOffer !== undefined &&
+    !uncertain &&
+    !unfilledEncodings &&
+    !offerWouldDropSemantics
+  ) {
+    try {
+      const dry = await dryBindOffer(offeredAsk);
+      const want = pieRefKeys();
+      // attachAskModifiers parses caption words ("Top 5 Sales") into top_n/filters; the pie had none.
+      const addsModifiers =
+        dry?.status === 'bound' &&
+        (dry.args.top_n !== undefined || (dry.args.filters?.length ?? 0) > 0);
+      if (
+        dry?.status === 'bound' &&
+        !addsModifiers &&
+        dry.args.template_name === 'ranking-ordered-bar' &&
+        want
+      ) {
+        const got = Object.values(dry.args.field_mapping)
+          .map((v) => parseCanonicalColumnRef(decodeXmlEntities(v)))
+          .map((r) => (r ? refKey(r) : '?'))
+          .sort();
+        offerVerified = want.length === 2 && JSON.stringify(got) === JSON.stringify(want);
+      }
+    } catch {
+      /* fail-open to the plain offer */
+    }
+  }
+  const sliceField = sliceCaption ?? 'the slice field';
+  const exceedsPreview = rows > SUMMARY_ROWS_MAX_ROWS;
+  const count = exceedsPreview ? `more than ${SUMMARY_ROWS_MAX_ROWS}` : String(rows);
+  const offer = !offerVerified
+    ? 'A sorted bar would read better; offer it to the user.'
+    : `A sorted bar of ${measureCaption} by ${sliceCaption} would read better. Offer to build it; only if the user says yes, call bind-template with ask "${offeredAsk}" and target_worksheet "${sheetName}".`;
+  return {
+    flag: {
+      field: sliceField,
+      rows,
+      max: PIE_SLICE_WORKABLE_MAX,
+      rows_exceed_preview: exceedsPreview,
+    },
+    guidance: uncertain
+      ? `The pie has ${count} slices of ${sliceField}, above the workable maximum of ${PIE_SLICE_WORKABLE_MAX}. Tell the user this. ${offer}`
+      : `The pie is already on the sheet and has ${count} slices of ${sliceField}, above the workable maximum of ${PIE_SLICE_WORKABLE_MAX}. ` +
+        `Tell the user this. ${offer}`,
+  };
+}
+
 function boundedSummaryRowsError(reason: string): string {
   return reason.length <= SUMMARY_ROWS_ERROR_MAX_CHARS
     ? reason
@@ -534,7 +668,7 @@ async function readAppliedSummaryRows({
   executor: ExternalApiToolExecutor;
   signal: AbortSignal;
   worksheetName: string;
-}): Promise<SummaryRowsEnrichment> {
+}): Promise<{ enrichment: SummaryRowsEnrichment; rawRowCount?: number }> {
   const timeoutController = new AbortController();
   const onAbort = (): void => timeoutController.abort(signal.reason);
   if (signal.aborted) {
@@ -572,21 +706,28 @@ async function readAppliedSummaryRows({
     if (result.isErr()) {
       throwIfSessionFatalError(result.error.error);
       return {
-        summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
+        enrichment: {
+          summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
+        },
       };
     }
-    return capSummaryRows(
-      result.value.columns,
-      result.value.rows,
-      result.value.rowOrder,
-      result.value.readScope,
-    );
+    return {
+      enrichment: capSummaryRows(
+        result.value.columns,
+        result.value.rows,
+        result.value.rowOrder,
+        result.value.readScope,
+      ),
+      rawRowCount: result.value.rows.length,
+    };
   } catch (error) {
     throwIfSessionFatalError(error);
     return {
-      summary_rows_error: boundedSummaryRowsError(
-        deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
-      ),
+      enrichment: {
+        summary_rows_error: boundedSummaryRowsError(
+          deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
+        ),
+      },
     };
   } finally {
     if (timeout !== undefined) {
@@ -644,11 +785,43 @@ function bareResubmitFallbackResult(
   );
 }
 
-function correctionFallbackResult(): StructuredBindTemplateToolResult {
+function correctionFallbackResult(pieDetail?: string): StructuredBindTemplateToolResult {
+  if (pieDetail) {
+    return blockedResult(
+      'fallback_required',
+      `Blocked: the single structured bind correction did not bind and apply. ${pieDetail}. If the user picks the sorted bar, bind it as a new ask.`,
+      'Offer the sorted bar to the user',
+    );
+  }
   return blockedResult(
     'fallback_required',
     'Blocked: the single structured bind correction did not bind and apply. Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
     'Use template artifact fallback',
+  );
+}
+
+// Warn and offer, never order a rebuild: agents refuse to drop a chart type the user named.
+function pieSliceLimitResult(detail: string): StructuredBindTemplateToolResult {
+  return blockedResult(
+    'pie_slice_limit',
+    `Not applied: ${detail}. If the user picks the sorted bar, bind it as a new ask. ` +
+      'Only if the user explicitly says they want the pie anyway, resubmit this same ask and the same pie proposal with keep_large_pie:true, keeping the same datasource and target_worksheet. ' +
+      'Never set keep_large_pie without that confirmation.',
+    'Offer sorted bar; keep pie only if asked',
+  );
+}
+
+/** The blocker set a user's explicit keep-the-pie confirmation may lift. */
+function largePieConfirmable(
+  res: BinderResult,
+  proposal: BindingProposal | undefined,
+  keepLargePie: boolean | undefined,
+): boolean {
+  return (
+    res.status === 'escalate' &&
+    keepLargePie !== true &&
+    proposal?.template === PIE_TEMPLATE_NAME &&
+    onlyPieSliceGate(res.blockers)
   );
 }
 
@@ -1225,15 +1398,61 @@ function isProposalFilterResolutionFailure(
   );
 }
 
+/** keep_large_pie counts only on the exact proposal the server already blocked for its slice count. */
+function largePieConfirmedBy(
+  record: ReturnType<typeof sessionRouteState.getBindRecovery>,
+  currentProposalSignature: string | undefined,
+  keepLargePie: boolean | undefined,
+  targetWorksheet: string | undefined,
+  // Resolved internal name; omit before the workbook read, when a caption cannot be compared yet.
+  resolvedDatasource?: string,
+): boolean {
+  const grant = record?.largePieConfirmation;
+  return (
+    keepLargePie === true &&
+    currentProposalSignature !== undefined &&
+    record !== undefined &&
+    record.phase !== 'terminal' &&
+    grant !== undefined &&
+    // A tagged grant is borrowed by an in-flight confirmed call; a duplicate must not reuse it.
+    grant.reservationId === undefined &&
+    grant.proposalSignature === currentProposalSignature &&
+    grant.targetWorksheet === targetWorksheet &&
+    (resolvedDatasource === undefined || grant.datasource === resolvedDatasource)
+  );
+}
+
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
   session: string,
   askKey: string,
   targetWorksheet: string | undefined,
+  keepLargePie?: boolean,
+  resolvedDatasource?: string,
 ): StructuredBindTemplateToolResult | undefined {
   if (!record) {
     return undefined;
+  }
+
+  if (
+    record.phase !== 'terminal' &&
+    record.largePieConfirmation !== undefined &&
+    record.largePieConfirmation.reservationId === undefined
+  ) {
+    if (
+      largePieConfirmedBy(
+        record,
+        currentProposalSignature,
+        keepLargePie,
+        targetWorksheet,
+        resolvedDatasource,
+      )
+    ) {
+      return undefined;
+    }
+    // Any other follow-up keeps the pie choice open; the artifact path would re-block the pie.
+    return pieSliceLimitResult(record.largePieConfirmation.detail);
   }
 
   if (record.phase === 'terminal') {
@@ -2463,8 +2682,11 @@ async function performAutoApply({
   trustedDeterministicApply,
   idempotencyKey,
   deterministicBindingFields,
+  keepLargePie,
+  dryBindOffer,
   reportProgress,
 }: {
+  dryBindOffer?: (ask: string) => Promise<BinderResult>;
   res: BoundResult;
   base: BindTemplateToolResultBase;
   ask: string;
@@ -2483,6 +2705,8 @@ async function performAutoApply({
   trustedDeterministicApply?: boolean;
   idempotencyKey?: string;
   deterministicBindingFields?: string[];
+  /** The user explicitly chose a pie above the slice limit; do not warn about it again. */
+  keepLargePie?: boolean;
   reportProgress: (progress: 1 | 2 | 3, message: string) => Promise<void>;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
@@ -2807,13 +3031,14 @@ async function performAutoApply({
   // authored calculations and worksheet. Avoid a second summary-data round trip;
   // the live worksheet remains the source of truth after datasource refreshes.
   // Ordinary binds keep their existing summary-read behavior unchanged.
-  const summaryRows: Awaited<ReturnType<typeof readAppliedSummaryRows>> = !trustedDeterministicApply
+  const summaryRead: Awaited<ReturnType<typeof readAppliedSummaryRows>> = !trustedDeterministicApply
     ? await readAppliedSummaryRows({
         executor,
         signal,
         worksheetName: literalTitle,
       })
-    : {};
+    : { enrichment: {} };
+  const summaryRows = summaryRead.enrichment;
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
@@ -2836,8 +3061,25 @@ async function performAutoApply({
       usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const coreNeedsFollowUp =
+  const pieSliceWarning =
+    keepLargePie !== true &&
+    args.template_name === 'part-to-whole-pie-chart' &&
+    summaryRead.rawRowCount !== undefined &&
+    summaryRead.rawRowCount > PIE_SLICE_WORKABLE_MAX
+      ? await pieSliceWarningFor({
+          dryBindOffer,
+          rows: summaryRead.rawRowCount,
+          args,
+          templateSnapshot,
+          schemaSummary,
+          sheetName: literalTitle,
+          uncertain: promiseOutcome === 'failed' || postApplyUncertain,
+          unfilledEncodings: unfilledEncodings !== undefined,
+        })
+      : undefined;
+  const followUpBesidesPie =
     incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+  const coreNeedsFollowUp = followUpBesidesPie || pieSliceWarning !== undefined;
   const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
@@ -2884,11 +3126,11 @@ async function performAutoApply({
     verificationReport.ok === true &&
     verificationReport.status === 'passed' &&
     nativeFindings.length === 0;
-  const completionEligible =
+  const completionEligibleBesidesPie =
     res.requestCoverage !== undefined &&
     !trustedDeterministicApply &&
     args.sheet_type === 'worksheet' &&
-    !coreNeedsFollowUp &&
+    !followUpBesidesPie &&
     documentWarnings.length === 0 &&
     !emptySummaryReadback &&
     !summaryReadbackTimedOut &&
@@ -2910,16 +3152,17 @@ async function performAutoApply({
     res.encodings.unfilled.length === 0 &&
     (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
     readbackEvidence === '';
+  const completionEligible = completionEligibleBesidesPie && pieSliceWarning === undefined;
   const caveats: CompletionCaveat[] = [];
   if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
   if (nativeFieldUnverified) caveats.push('field_validation_unverified');
   caveats.push('query_render_unverified');
   if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
-  const operationEligible =
+  const operationEligibleBesidesPie =
     !trustedDeterministicApply &&
     res.requestCoverage === undefined &&
     args.sheet_type === 'worksheet' &&
-    !coreNeedsFollowUp &&
+    !followUpBesidesPie &&
     documentWarnings.length === 0 &&
     !emptySummaryReadback &&
     !summaryReadbackTimedOut &&
@@ -2933,20 +3176,38 @@ async function performAutoApply({
     verification.status === 'passed' &&
     verification.findings.length === 0 &&
     (nativeFieldVerified || nativeFieldUnverified);
+  const operationEligible = operationEligibleBesidesPie && pieSliceWarning === undefined;
   const evidenceEligible = completionEligible || operationEligible;
   const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;
-  const settledGuidance =
+  // "Nothing more is needed" is only true when the pie is the sole reason this apply is not done.
+  const pieIsSoleFollowUp =
+    (completionEligibleBesidesPie || operationEligibleBesidesPie) &&
+    !appliedDefault &&
+    currencyGuidance === '' &&
+    readbackEvidence === '';
+  const pieGuidance = pieSliceWarning
+    ? ` ${pieSliceWarning.guidance}${pieIsSoleFollowUp ? ' If the user wants the pie, nothing more is needed.' : ''}`
+    : '';
+  const settledGuidance = `${
     documentWarnings.length > 0
       ? guidance
       : completionEvidenceWithheld
-        ? `${receiptText} Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+        ? `${receiptText} ${
+            pieSliceWarning && completionEligibleBesidesPie
+              ? 'Completion evidence was withheld only because of the pie slice count below.'
+              : 'Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.'
+          }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
         : evidenceEligible && summaryPreviewUnavailable
           ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
-          : guidance;
+          : guidance
+  }${pieGuidance}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
+    ...('advisories' in base && base.advisories && base.advisories.length > 0
+      ? { advisories: base.advisories }
+      : {}),
     ...(documentWarnings.length > 0 ? { desktop_warnings: documentWarnings } : {}),
     guidance: settledGuidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
@@ -2964,6 +3225,7 @@ async function performAutoApply({
       : { bind: bindMs, inject: injectMs, apply: applyMs },
     verification: receiptInput.readback,
     ...summaryRows,
+    ...(pieSliceWarning ? { pie_slice_warning: pieSliceWarning.flag } : {}),
     ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
     ...(evidenceEligible
       ? {
@@ -3294,6 +3556,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         datasource,
         calcs,
         skip_validation,
+        keep_large_pie,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -3310,705 +3573,850 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           datasource,
           calcs,
           skip_validation,
+          keep_large_pie,
         },
         callback: async () => {
-          const reportProgress = async (progress: 1 | 2 | 3, message: string): Promise<void> =>
-            await reportBindTemplateProgress(extra, progress, message);
-          await reportProgress(1, 'Preparing template');
-
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
-          if (
-            requireCompleteRequest === true &&
-            (auto_apply !== true ||
-              proposal !== undefined ||
-              calcs !== undefined ||
-              skip_validation !== undefined ||
-              target_worksheet !== undefined ||
-              datasource !== undefined)
-          ) {
-            return new Ok(completeRequestDecline(ask));
-          }
-          const trustedDeterministicApply =
-            extra.config.allowSkipValidation === true &&
-            skip_validation === true &&
-            auto_apply === true &&
-            proposal !== undefined;
-          const idempotencyKey = trustedDeterministicApply
-            ? proposal.template_parameters?.[IDEMPOTENCY_TEMPLATE_PARAMETER]
-            : undefined;
-          const atomicCalcApply =
-            trustedDeterministicApply && calcs !== undefined && calcs.length > 0;
-          const askKey = normalizeAskForMatch(ask);
-          const currentProposalSignature =
-            proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
-          const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
-          if (requireCompleteRequest === true && priorRecovery !== undefined) {
-            // An open recovery record would read this as a bare resubmit; decline and leave it alone.
-            return new Ok(completeRequestDecline(ask));
-          }
-          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
-          const retainedDatasource = retainedCall2Contract?.arguments.datasource;
-          const requestedDatasource = datasource ?? retainedDatasource;
-          const isStructuredCorrectionCall =
-            currentProposalSignature !== undefined &&
-            priorRecovery?.attempts.some(
-              (attempt) => attempt.outcome === 'propose' && attempt.proposalSignature === undefined,
-            ) === true;
-          const priorProposalEscalation =
-            priorRecovery?.phase === PROPOSAL_ATTEMPTED_PHASE &&
-            priorRecovery.attempts.some(
-              (attempt) =>
-                attempt.proposalSignature !== undefined && attempt.outcome === 'escalate',
-            );
-          let bindRecoveryReservationId: number | undefined;
-
-          if (
-            proposal !== undefined &&
-            priorRecovery?.correctionInvariant !== undefined &&
-            priorRecovery.proposalContext !== undefined &&
-            !correctionMatchesInvariant(
-              proposal as BindingProposal,
-              priorRecovery.correctionInvariant,
-            )
-          ) {
-            recordBindRecoveryAttemptFailOpen({
-              session: resolvedSession,
-              askKey,
-              outcome: 'escalate',
-              currentProposalSignature,
-              terminalFallback: true,
-            });
-            return new IncompleteOperationError(
-              correctionInvariantViolationResult({
-                contract: priorRecovery.proposalContext,
-                proposal: proposal as BindingProposal,
-                source: priorRecovery.correctionInvariant.source,
-              }),
-            ).toErr();
-          }
-
+          const admission: {
+            session?: string;
+            askKey?: string;
+            reservationId?: number;
+            binderReturned?: boolean;
+            keepReservation?: boolean;
+          } = {};
           try {
-            const blocked = recoveryGateBlock(
-              priorRecovery,
-              currentProposalSignature,
-              resolvedSession,
-              askKey,
-              target_worksheet,
-            );
-            if (blocked) {
-              return new IncompleteOperationError(blocked).toErr();
-            }
-            if (requestedDatasource === undefined) {
-              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
-                resolvedSession,
-                askKey,
-                {
-                  ...(currentProposalSignature !== undefined
-                    ? { proposalSignature: currentProposalSignature }
-                    : {}),
-                },
-              );
-            }
-          } catch {
-            /* fail-open */
-          }
+            return await (async () => {
+              const reportProgress = async (progress: 1 | 2 | 3, message: string): Promise<void> =>
+                await reportBindTemplateProgress(extra, progress, message);
+              await reportProgress(1, 'Preparing template');
 
-          if (proposal !== undefined && retainedCall2Contract !== undefined) {
-            const mismatches = proposalContractMismatches(
-              proposal as BindingProposal,
-              retainedCall2Contract,
-            );
-            if (mismatches.length > 0) {
-              const nextCorrectionInvariant = contractCorrectionInvariant(
-                proposal as BindingProposal,
-                mismatches,
-              );
-              const correctionAvailable =
-                !priorProposalEscalation && nextCorrectionInvariant !== undefined;
-              recordBindRecoveryAttemptFailOpen({
-                session: resolvedSession,
-                askKey,
-                outcome: 'escalate',
-                currentProposalSignature,
-                reservationId: bindRecoveryReservationId,
-                correctionInvariant: nextCorrectionInvariant,
-                terminalFallback: !correctionAvailable,
-              });
-              return new IncompleteOperationError(
-                proposalContractMismatchResult({
-                  contract: retainedCall2Contract,
-                  proposal: proposal as BindingProposal,
-                  mismatches,
-                  correctionAvailable,
-                }),
-              ).toErr();
-            }
-          }
+              const sessionResult = resolveSession(session);
+              if (sessionResult.isErr()) {
+                return sessionResult.error.toErr();
+              }
+              const resolvedSession = sessionResult.value;
+              if (
+                requireCompleteRequest === true &&
+                (auto_apply !== true ||
+                  proposal !== undefined ||
+                  calcs !== undefined ||
+                  skip_validation !== undefined ||
+                  keep_large_pie !== undefined ||
+                  target_worksheet !== undefined ||
+                  datasource !== undefined)
+              ) {
+                return new Ok(completeRequestDecline(ask));
+              }
+              const trustedDeterministicApply =
+                extra.config.allowSkipValidation === true &&
+                skip_validation === true &&
+                auto_apply === true &&
+                proposal !== undefined;
+              const idempotencyKey = trustedDeterministicApply
+                ? proposal.template_parameters?.[IDEMPOTENCY_TEMPLATE_PARAMETER]
+                : undefined;
+              const atomicCalcApply =
+                trustedDeterministicApply && calcs !== undefined && calcs.length > 0;
+              const askKey = normalizeAskForMatch(ask);
+              admission.session = resolvedSession;
+              admission.askKey = askKey;
+              const currentProposalSignature =
+                proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
+              const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+              if (requireCompleteRequest === true && priorRecovery !== undefined) {
+                // An open recovery record would read this as a bare resubmit; decline and leave it alone.
+                return new Ok(completeRequestDecline(ask));
+              }
+              const retainedCall2Contract = priorRecovery?.proposalContext as
+                | Call2Contract
+                | undefined;
+              const retainedDatasource =
+                retainedCall2Contract?.arguments.datasource ??
+                priorRecovery?.largePieConfirmation?.datasource;
+              const requestedDatasource = datasource ?? retainedDatasource;
+              const isStructuredCorrectionCall =
+                currentProposalSignature !== undefined &&
+                priorRecovery?.attempts.some(
+                  (attempt) =>
+                    attempt.outcome === 'propose' && attempt.proposalSignature === undefined,
+                ) === true;
+              const priorProposalEscalation =
+                priorRecovery?.phase === PROPOSAL_ATTEMPTED_PHASE &&
+                priorRecovery.attempts.some(
+                  (attempt) =>
+                    attempt.proposalSignature !== undefined && attempt.outcome === 'escalate',
+                );
 
-          const executor = await extra.getExecutor(resolvedSession);
-          // Phase timing (only reported when auto_apply performs). The bind phase
-          // subsumes the live workbook read since server-side they are one step.
-          const bindStart = Date.now();
+              if (
+                proposal !== undefined &&
+                priorRecovery?.correctionInvariant !== undefined &&
+                priorRecovery.proposalContext !== undefined &&
+                !correctionMatchesInvariant(
+                  proposal as BindingProposal,
+                  priorRecovery.correctionInvariant,
+                )
+              ) {
+                recordBindRecoveryAttemptFailOpen({
+                  session: resolvedSession,
+                  askKey,
+                  outcome: 'escalate',
+                  currentProposalSignature,
+                  terminalFallback: true,
+                });
+                return new IncompleteOperationError(
+                  correctionInvariantViolationResult({
+                    contract: priorRecovery.proposalContext,
+                    proposal: proposal as BindingProposal,
+                    source: priorRecovery.correctionInvariant.source,
+                  }),
+                ).toErr();
+              }
 
-          const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
-          if (xmlResult.isErr()) {
-            return new DesktopCommandExecutionError(xmlResult.error).toErr();
-          }
-          let workbookXml = xmlResult.value;
-          const hostBaselineWorkbookXml = workbookXml;
-          const effectiveDatasource =
-            requestedDatasource === undefined
-              ? undefined
-              : resolveUniqueDatasourceName(workbookXml, requestedDatasource);
-          if (effectiveDatasource === null) {
-            return new ArgsValidationError(
-              `datasource "${requestedDatasource}" not found or ambiguous in the workbook; use an internal datasource name or unique caption`,
-            ).toErr();
-          }
-          if (retainedDatasource !== undefined && effectiveDatasource !== retainedDatasource) {
-            return new ArgsValidationError(
-              `datasource must match the retained bind-template datasource "${retainedDatasource}"`,
-            ).toErr();
-          }
-          if (requestedDatasource !== undefined) {
-            try {
-              // The workbook read can overlap another call; reject its reservation before mutation.
-              const currentRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
-              if (currentRecovery !== priorRecovery) {
+              let largePieConfirmed = false;
+              try {
                 const blocked = recoveryGateBlock(
-                  currentRecovery,
+                  priorRecovery,
                   currentProposalSignature,
                   resolvedSession,
                   askKey,
                   target_worksheet,
+                  keep_large_pie,
                 );
                 if (blocked) {
                   return new IncompleteOperationError(blocked).toErr();
                 }
+                // Read before the reservation, which drops the grant.
+                largePieConfirmed = largePieConfirmedBy(
+                  priorRecovery,
+                  currentProposalSignature,
+                  keep_large_pie,
+                  target_worksheet,
+                );
+                if (requestedDatasource === undefined) {
+                  admission.reservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                    resolvedSession,
+                    askKey,
+                    {
+                      ...(currentProposalSignature !== undefined
+                        ? { proposalSignature: currentProposalSignature }
+                        : {}),
+                      borrowsLargePie: largePieConfirmed,
+                    },
+                  );
+                }
+              } catch {
+                /* fail-open */
               }
-              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
-                resolvedSession,
-                askKey,
-                {
-                  ...(currentProposalSignature !== undefined
-                    ? { proposalSignature: currentProposalSignature }
-                    : {}),
-                },
-              );
-            } catch {
-              /* fail-open */
-            }
-          }
-          let baselineSchemaSummary: SchemaSummary | undefined;
-          let baselineFilterIntent: ExactFilterIntent | undefined;
-          if (priorRecovery === undefined) {
-            baselineSchemaSummary = summarizeSchema(workbookXml, effectiveDatasource);
-            baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
-            if (baselineFilterIntent.kind === 'ambiguous') {
-              clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
-              if (requireCompleteRequest === true) return new Ok(completeRequestDecline(ask));
-              return new IncompleteOperationError(
-                ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
-              ).toErr();
-            }
-            if (proposal !== undefined && baselineFilterIntent.kind === 'exact') {
-              const mismatch = requiredFilterFieldsMismatch(
-                proposal as BindingProposal,
-                baselineFilterIntent.fieldNames,
-                baselineFilterIntent.valueConstraints,
-              );
-              if (mismatch !== undefined) {
-                clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
-                return new IncompleteOperationError(
-                  directProposalFilterMismatchResult(proposal as BindingProposal, mismatch),
+
+              if (proposal !== undefined && retainedCall2Contract !== undefined) {
+                const mismatches = proposalContractMismatches(
+                  proposal as BindingProposal,
+                  retainedCall2Contract,
+                );
+                if (mismatches.length > 0) {
+                  const nextCorrectionInvariant = contractCorrectionInvariant(
+                    proposal as BindingProposal,
+                    mismatches,
+                  );
+                  const correctionAvailable =
+                    !priorProposalEscalation && nextCorrectionInvariant !== undefined;
+                  recordBindRecoveryAttemptFailOpen({
+                    session: resolvedSession,
+                    askKey,
+                    outcome: 'escalate',
+                    currentProposalSignature,
+                    reservationId: admission.reservationId,
+                    correctionInvariant: nextCorrectionInvariant,
+                    terminalFallback: !correctionAvailable,
+                  });
+                  return new IncompleteOperationError(
+                    proposalContractMismatchResult({
+                      contract: retainedCall2Contract,
+                      proposal: proposal as BindingProposal,
+                      mismatches,
+                      correctionAvailable,
+                    }),
+                  ).toErr();
+                }
+              }
+
+              let executor: Awaited<ReturnType<typeof extra.getExecutor>>;
+              try {
+                executor = await extra.getExecutor(resolvedSession);
+              } catch (e) {
+                // Existing contract: an ordinary admitted Call 2 stays fail-closed after a thrown
+                // getExecutor; only a borrowed pie confirmation is returned for the retry.
+                if (!largePieConfirmed) admission.keepReservation = true;
+                throw e;
+              }
+              // Phase timing (only reported when auto_apply performs). The bind phase
+              // subsumes the live workbook read since server-side they are one step.
+              const bindStart = Date.now();
+
+              const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
+              if (xmlResult.isErr()) {
+                return new DesktopCommandExecutionError(xmlResult.error).toErr();
+              }
+              let workbookXml = xmlResult.value;
+              const hostBaselineWorkbookXml = workbookXml;
+              const effectiveDatasource =
+                requestedDatasource === undefined
+                  ? undefined
+                  : resolveUniqueDatasourceName(workbookXml, requestedDatasource);
+              if (effectiveDatasource === null) {
+                return new ArgsValidationError(
+                  `datasource "${requestedDatasource}" not found or ambiguous in the workbook; use an internal datasource name or unique caption`,
                 ).toErr();
               }
-            }
-          }
-          let authoredCalcCaptions: string[] = [];
-          let atomicCalcs: AuthoredCalc[] = [];
-          if (calcs && calcs.length > 0) {
-            const percentAsk = asksForPercent(ask);
-            const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
-              percentAsk && hasDivisionOperator(calc.formula) && hasPercentCaption(calc.caption)
-                ? { ...calc, defaultFormat: 'p0%' as const }
-                : calc,
-            );
-            if (atomicCalcApply) {
-              const prepared = prepareCalculationsInWorkbook({
-                workbookXml,
-                calcs: authoredCalcInputs,
-                datasource: effectiveDatasource,
-                resolveLooseReferences: true,
-              });
-              if (prepared.isErr()) {
-                return prepared.error.toErr();
+              if (retainedDatasource !== undefined && effectiveDatasource !== retainedDatasource) {
+                return new ArgsValidationError(
+                  `datasource must match the retained bind-template datasource "${retainedDatasource}"`,
+                ).toErr();
               }
-              workbookXml = prepared.value.workbookXml;
-              atomicCalcs = prepared.value.authoredCalcs;
-            } else {
-              const authored = await authorCalculationsInWorkbook({
-                workbookXml,
-                calcs: authoredCalcInputs,
-                datasource: effectiveDatasource,
-                executor,
-                signal: extra.signal,
-                resolveLooseReferences: true,
-              });
-              if (authored.isErr()) {
-                return authored.error.toErr();
+              if (requestedDatasource !== undefined) {
+                try {
+                  // The workbook read can overlap another call; reject its reservation before mutation.
+                  const currentRecovery = sessionRouteState.getBindRecovery(
+                    resolvedSession,
+                    askKey,
+                  );
+                  const grantedDatasource = currentRecovery?.largePieConfirmation?.datasource;
+                  if (
+                    grantedDatasource !== undefined &&
+                    effectiveDatasource !== grantedDatasource
+                  ) {
+                    return new ArgsValidationError(
+                      `datasource must match the retained bind-template datasource "${grantedDatasource}"`,
+                    ).toErr();
+                  }
+                  if (currentRecovery !== priorRecovery) {
+                    const blocked = recoveryGateBlock(
+                      currentRecovery,
+                      currentProposalSignature,
+                      resolvedSession,
+                      askKey,
+                      target_worksheet,
+                      keep_large_pie,
+                      effectiveDatasource,
+                    );
+                    if (blocked) {
+                      return new IncompleteOperationError(blocked).toErr();
+                    }
+                  }
+                  largePieConfirmed = largePieConfirmedBy(
+                    currentRecovery,
+                    currentProposalSignature,
+                    keep_large_pie,
+                    target_worksheet,
+                    effectiveDatasource,
+                  );
+                  admission.reservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                    resolvedSession,
+                    askKey,
+                    {
+                      ...(currentProposalSignature !== undefined
+                        ? { proposalSignature: currentProposalSignature }
+                        : {}),
+                      borrowsLargePie: largePieConfirmed,
+                    },
+                  );
+                } catch {
+                  /* fail-open */
+                }
               }
-              workbookXml = authored.value.workbookXml;
-              authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
-            }
-          }
+              let baselineSchemaSummary: SchemaSummary | undefined;
+              let baselineFilterIntent: ExactFilterIntent | undefined;
+              if (priorRecovery === undefined) {
+                baselineSchemaSummary = summarizeSchema(workbookXml, effectiveDatasource);
+                baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
+                if (baselineFilterIntent.kind === 'ambiguous') {
+                  clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+                  if (requireCompleteRequest === true) return new Ok(completeRequestDecline(ask));
+                  return new IncompleteOperationError(
+                    ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
+                  ).toErr();
+                }
+                if (proposal !== undefined && baselineFilterIntent.kind === 'exact') {
+                  const mismatch = requiredFilterFieldsMismatch(
+                    proposal as BindingProposal,
+                    baselineFilterIntent.fieldNames,
+                    baselineFilterIntent.valueConstraints,
+                  );
+                  if (mismatch !== undefined) {
+                    clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+                    return new IncompleteOperationError(
+                      directProposalFilterMismatchResult(proposal as BindingProposal, mismatch),
+                    ).toErr();
+                  }
+                }
+              }
+              let authoredCalcCaptions: string[] = [];
+              let atomicCalcs: AuthoredCalc[] = [];
+              if (calcs && calcs.length > 0) {
+                const percentAsk = asksForPercent(ask);
+                const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
+                  percentAsk && hasDivisionOperator(calc.formula) && hasPercentCaption(calc.caption)
+                    ? { ...calc, defaultFormat: 'p0%' as const }
+                    : calc,
+                );
+                if (atomicCalcApply) {
+                  const prepared = prepareCalculationsInWorkbook({
+                    workbookXml,
+                    calcs: authoredCalcInputs,
+                    datasource: effectiveDatasource,
+                    resolveLooseReferences: true,
+                  });
+                  if (prepared.isErr()) {
+                    return prepared.error.toErr();
+                  }
+                  workbookXml = prepared.value.workbookXml;
+                  atomicCalcs = prepared.value.authoredCalcs;
+                } else {
+                  const authored = await authorCalculationsInWorkbook({
+                    workbookXml,
+                    calcs: authoredCalcInputs,
+                    datasource: effectiveDatasource,
+                    executor,
+                    signal: extra.signal,
+                    resolveLooseReferences: true,
+                  });
+                  if (authored.isErr()) {
+                    return authored.error.toErr();
+                  }
+                  workbookXml = authored.value.workbookXml;
+                  authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
+                }
+              }
 
-          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
-            ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
-            automaticOnly: true,
-            ...(requireCompleteRequest === true ? { completeRequestLineColorOptional: true } : {}),
-          });
-          const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
-          const manifests =
-            proposal === undefined
-              ? puppetCompatibility.descriptors
-              : puppetCompatibility.allDescriptors;
-          // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
-          // bind (fail-open, the gate's own discipline): a swallowed classification simply
-          // leaves the ask unrecorded and the gate later fail-opens on absent state.
-          try {
-            const routeDecision = classifyAskRoute(ask, [...manifests.values()]);
-            sessionRouteState.recordAskClassification(resolvedSession, {
-              ask: askKey,
-              route: routeDecision.route,
-              shape: routeDecision.shape,
-              template: routeDecision.template,
-            });
-          } catch {
-            // A classification fault on a NEW ask also invalidates whatever ask was
-            // pending — leaving it would hand the gate a stale "no bind attempt yet"
-            // record for a different ask (cross-ask leak).
-            try {
-              sessionRouteState.clearCurrentAsk(resolvedSession);
-            } catch {
-              /* fail-open */
-            }
-          }
-          // ── Target-worksheet gate (stray-sheet class) ──────────
-          // Validated BEFORE the bind and for BOTH modes (auto-apply and the manual
-          // chain): an explicit target must be provably replaceable — a missing name
-          // or a dashboard-member sheet would make removeSameNamedWorksheet defer and
-          // Desktop dedup the inject into a stray "Name (1)" copy, the exact failure
-          // this parameter exists to prevent.
-          let resolvedTarget: { id?: string; name: string } | undefined;
-          let canonicalTargetWorksheet = target_worksheet;
-          if (target_worksheet !== undefined) {
-            resolvedTarget = resolveWorksheetRef(workbookXml, target_worksheet) ?? undefined;
-            canonicalTargetWorksheet = resolvedTarget?.name ?? target_worksheet;
-            const target = classifyWorksheetReplaceTarget(workbookXml, canonicalTargetWorksheet);
-            if (target === 'not-found') {
-              return new ArgsValidationError(
-                `target_worksheet "${canonicalTargetWorksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
-              ).toErr();
-            }
-            if (target === 'in-dashboard') {
-              return new ArgsValidationError(
-                `target_worksheet "${canonicalTargetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
-              ).toErr();
-            }
-          }
-
-          let res: BinderResult;
-          let appliedDefault: AppliedDefault | undefined;
-          let schemaSummary: SchemaSummary | undefined =
-            calcs && calcs.length > 0 ? undefined : baselineSchemaSummary;
-          const requiredFilterFields =
-            baselineFilterIntent?.kind === 'exact' ? baselineFilterIntent.fieldNames : undefined;
-          const requiredFilterValues =
-            baselineFilterIntent?.kind === 'exact'
-              ? baselineFilterIntent.valueConstraints
-              : undefined;
-          try {
-            res = await bindTemplate({
-              ask,
-              workbookXml,
-              manifests,
-              datasource: effectiveDatasource,
-              ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
-              ...(proposal ? { proposal: proposal as BindingProposal } : {}),
-              ...(minConfidence !== undefined ? { minConfidence } : {}),
-            });
-            if (
-              proposal === undefined &&
-              auto_apply === true &&
-              requireCompleteRequest !== true &&
-              res.status === 'propose' &&
-              res.llm_input.recommended &&
-              requiredFilterFields === undefined
-            ) {
-              const recommended = res.llm_input.recommended;
-              res = await bindTemplate({
-                ask,
-                workbookXml,
-                manifests,
-                datasource: effectiveDatasource,
-                proposal: proposalFromRecommendation(ask, recommended),
-                ...(minConfidence !== undefined ? { minConfidence } : {}),
+              const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
+                ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
+                automaticOnly: true,
+                ...(requireCompleteRequest === true
+                  ? { completeRequestLineColorOptional: true }
+                  : {}),
               });
-              if (res.status === 'bound') {
-                appliedDefault = appliedDefaultFrom(recommended);
-              }
-            } else if (
-              proposal !== undefined &&
-              auto_apply === true &&
-              res.status === 'bound' &&
-              appliedDefault === undefined
-            ) {
-              // A Call-2 proposal that lands on the recommended measure must carry the
-              // same context-measure garnish as the internal auto-default: the agent's
-              // route (auto vs explicit confirm) is variance, not a decision to drop
-              // the profit/margin context the receipt quotes from. Best-effort — a dry
-              // re-classify failure must never disturb the working bind.
+              const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
+              const manifests =
+                proposal === undefined
+                  ? puppetCompatibility.descriptors
+                  : puppetCompatibility.allDescriptors;
+              // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
+              // bind (fail-open, the gate's own discipline): a swallowed classification simply
+              // leaves the ask unrecorded and the gate later fail-opens on absent state.
               try {
-                const dry = await bindTemplate({
+                const routeDecision = classifyAskRoute(ask, [...manifests.values()]);
+                sessionRouteState.recordAskClassification(resolvedSession, {
+                  ask: askKey,
+                  route: routeDecision.route,
+                  shape: routeDecision.shape,
+                  template: routeDecision.template,
+                });
+              } catch {
+                // A classification fault on a NEW ask also invalidates whatever ask was
+                // pending — leaving it would hand the gate a stale "no bind attempt yet"
+                // record for a different ask (cross-ask leak).
+                try {
+                  sessionRouteState.clearCurrentAsk(resolvedSession);
+                } catch {
+                  /* fail-open */
+                }
+              }
+              // ── Target-worksheet gate (stray-sheet class) ──────────
+              // Validated BEFORE the bind and for BOTH modes (auto-apply and the manual
+              // chain): an explicit target must be provably replaceable — a missing name
+              // or a dashboard-member sheet would make removeSameNamedWorksheet defer and
+              // Desktop dedup the inject into a stray "Name (1)" copy, the exact failure
+              // this parameter exists to prevent.
+              let resolvedTarget: { id?: string; name: string } | undefined;
+              let canonicalTargetWorksheet = target_worksheet;
+              if (target_worksheet !== undefined) {
+                resolvedTarget = resolveWorksheetRef(workbookXml, target_worksheet) ?? undefined;
+                canonicalTargetWorksheet = resolvedTarget?.name ?? target_worksheet;
+                const target = classifyWorksheetReplaceTarget(
+                  workbookXml,
+                  canonicalTargetWorksheet,
+                );
+                if (target === 'not-found') {
+                  return new ArgsValidationError(
+                    `target_worksheet "${canonicalTargetWorksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+                  ).toErr();
+                }
+                if (target === 'in-dashboard') {
+                  return new ArgsValidationError(
+                    `target_worksheet "${canonicalTargetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
+                  ).toErr();
+                }
+              }
+
+              let res: BinderResult;
+              let appliedDefault: AppliedDefault | undefined;
+              let schemaSummary: SchemaSummary | undefined =
+                calcs && calcs.length > 0 ? undefined : baselineSchemaSummary;
+              const requiredFilterFields =
+                baselineFilterIntent?.kind === 'exact'
+                  ? baselineFilterIntent.fieldNames
+                  : undefined;
+              const requiredFilterValues =
+                baselineFilterIntent?.kind === 'exact'
+                  ? baselineFilterIntent.valueConstraints
+                  : undefined;
+              try {
+                res = await bindTemplate({
                   ask,
                   workbookXml,
                   manifests,
                   datasource: effectiveDatasource,
+                  ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
+                  ...(proposal ? { proposal: proposal as BindingProposal } : {}),
+                  ...(proposal && largePieConfirmed ? { keepLargePie: true } : {}),
                   ...(minConfidence !== undefined ? { minConfidence } : {}),
                 });
-                const recommended =
-                  dry.status === 'propose' ? dry.llm_input.recommended : undefined;
                 if (
-                  recommended &&
-                  (proposal as BindingProposal).bindings?.some(
-                    (b) => b.field === recommended.measure,
-                  )
+                  proposal === undefined &&
+                  auto_apply === true &&
+                  requireCompleteRequest !== true &&
+                  res.status === 'propose' &&
+                  res.llm_input.recommended &&
+                  requiredFilterFields === undefined
                 ) {
-                  appliedDefault = appliedDefaultFrom(recommended);
+                  const recommended = res.llm_input.recommended;
+                  res = await bindTemplate({
+                    ask,
+                    workbookXml,
+                    manifests,
+                    datasource: effectiveDatasource,
+                    proposal: proposalFromRecommendation(ask, recommended),
+                    ...(minConfidence !== undefined ? { minConfidence } : {}),
+                  });
+                  if (res.status === 'bound') {
+                    appliedDefault = appliedDefaultFrom(recommended);
+                  }
+                } else if (
+                  proposal !== undefined &&
+                  auto_apply === true &&
+                  res.status === 'bound' &&
+                  appliedDefault === undefined
+                ) {
+                  // A Call-2 proposal that lands on the recommended measure must carry the
+                  // same context-measure garnish as the internal auto-default: the agent's
+                  // route (auto vs explicit confirm) is variance, not a decision to drop
+                  // the profit/margin context the receipt quotes from. Best-effort — a dry
+                  // re-classify failure must never disturb the working bind.
+                  try {
+                    const dry = await bindTemplate({
+                      ask,
+                      workbookXml,
+                      manifests,
+                      datasource: effectiveDatasource,
+                      ...(minConfidence !== undefined ? { minConfidence } : {}),
+                    });
+                    const recommended =
+                      dry.status === 'propose' ? dry.llm_input.recommended : undefined;
+                    if (
+                      recommended &&
+                      (proposal as BindingProposal).bindings?.some(
+                        (b) => b.field === recommended.measure,
+                      )
+                    ) {
+                      appliedDefault = appliedDefaultFrom(recommended);
+                    }
+                  } catch {
+                    /* fail-open: bind stands, garnish skipped */
+                  }
                 }
-              } catch {
-                /* fail-open: bind stands, garnish skipped */
+              } catch (e) {
+                // A THROWN bind has no recordable outcome; clear the pending record (only if
+                // it is still this ask's) so the gate can never read "no bind attempt yet"
+                // for an ask whose bind WAS attempted. The error path itself is unchanged.
+                try {
+                  sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+                } catch {
+                  /* fail-open */
+                }
+                throw e;
               }
-            }
-          } catch (e) {
-            // A THROWN bind has no recordable outcome; clear the pending record (only if
-            // it is still this ask's) so the gate can never read "no bind attempt yet"
-            // for an ask whose bind WAS attempted. The error path itself is unchanged.
-            try {
-              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
-            } catch {
-              /* fail-open */
-            }
-            throw e;
-          }
-          if (canonicalTargetWorksheet !== undefined && res.status === 'bound') {
-            res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
-          }
-          const bindMs = Date.now() - bindStart;
-          schemaSummary ??= summarizeSchema(workbookXml, effectiveDatasource);
-          res = puppetCompatibility.expandBinderResult(res, schemaSummary);
-          if (
-            requireCompleteRequest === true &&
-            (res.status !== 'bound' ||
-              res.requestCoverage === undefined ||
-              res.used_llm ||
-              (res.warnings?.length ?? 0) > 0 ||
-              res.encodings === undefined ||
-              res.encodings.unfilled.length > 0 ||
-              appliedDefault !== undefined)
-          ) {
-            // The decline wrote nothing and returned no proposal, so release this call's admission.
-            try {
-              sessionRouteState.releaseBindRecoveryReservation(
-                resolvedSession,
-                askKey,
-                bindRecoveryReservationId,
-              );
-              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
-            } catch {
-              /* fail-open */
-            }
-            return new Ok(completeRequestDecline(ask));
-          }
+              admission.binderReturned = true;
+              if (canonicalTargetWorksheet !== undefined && res.status === 'bound') {
+                res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
+              }
+              const bindMs = Date.now() - bindStart;
+              schemaSummary ??= summarizeSchema(workbookXml, effectiveDatasource);
+              res = puppetCompatibility.expandBinderResult(res, schemaSummary);
+              if (
+                requireCompleteRequest === true &&
+                (res.status !== 'bound' ||
+                  res.requestCoverage === undefined ||
+                  res.used_llm ||
+                  (res.warnings?.length ?? 0) > 0 ||
+                  res.encodings === undefined ||
+                  res.encodings.unfilled.length > 0 ||
+                  appliedDefault !== undefined)
+              ) {
+                // The decline wrote nothing and returned no proposal, so release this call's admission.
+                try {
+                  sessionRouteState.releaseBindRecoveryReservation(
+                    resolvedSession,
+                    askKey,
+                    admission.reservationId,
+                  );
+                  sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+                } catch {
+                  /* fail-open */
+                }
+                return new Ok(completeRequestDecline(ask));
+              }
 
-          // ── One structured correction boundary ─────────────────────────
-          // Only `propose` earns a structured Call 2. Every escalation closes the fast path.
-          const call2Contract =
-            res.status === 'propose'
-              ? buildCall2Contract({
-                  llmInput: res.llm_input,
-                  session: resolvedSession,
-                  ask,
-                  targetWorksheet: resolvedTarget?.id ?? target_worksheet,
-                  datasource: effectiveDatasource,
-                  requiredFilterFields,
-                  requiredFilterValues,
-                })
-              : undefined;
-          if (isStructuredCorrectionCall && res.status !== 'bound') {
-            const filterResolutionFailure =
-              res.status === 'escalate' &&
-              proposal !== undefined &&
-              retainedCall2Contract !== undefined &&
-              isProposalFilterResolutionFailure(res, proposal as BindingProposal);
-            const nextCorrectionInvariant =
-              filterResolutionFailure && res.status === 'escalate' && proposal !== undefined
-                ? filterCorrectionInvariant(proposal as BindingProposal, res.blockers)
-                : undefined;
-            const correctionAvailable =
-              filterResolutionFailure &&
-              !priorProposalEscalation &&
-              nextCorrectionInvariant !== undefined;
-            try {
-              sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
-              recordBindRecoveryAttemptFailOpen({
-                session: resolvedSession,
-                askKey,
-                outcome: res.status,
-                currentProposalSignature,
-                reservationId: bindRecoveryReservationId,
-                correctionInvariant: nextCorrectionInvariant,
-                terminalFallback: !correctionAvailable,
-              });
-            } catch {
-              /* fail-open */
-            }
-            if (filterResolutionFailure && res.status === 'escalate' && proposal !== undefined) {
-              return new IncompleteOperationError(
-                proposalFilterResolutionFailedResult({
-                  contract: retainedCall2Contract!,
-                  proposal: proposal as BindingProposal,
-                  blockers: res.blockers,
-                  correctionAvailable,
-                }),
-              ).toErr();
-            }
-            return new IncompleteOperationError(correctionFallbackResult()).toErr();
-          }
-          try {
-            sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
-            if (res.status === 'propose') {
-              recordBindRecoveryAttemptFailOpen({
-                session: resolvedSession,
-                askKey,
-                outcome: res.status,
-                currentProposalSignature,
-                proposalContext: call2Contract,
-                reservationId: bindRecoveryReservationId,
-              });
-            } else if (res.status === 'escalate') {
-              recordBindRecoveryAttemptFailOpen({
-                session: resolvedSession,
-                askKey,
-                outcome: res.status,
-                currentProposalSignature,
-                reservationId: bindRecoveryReservationId,
-                terminalFallback: true,
-              });
-            }
-          } catch {
-            /* fail-open */
-          }
-
-          const publicResult = withoutLegacyApplyInstructions(res);
-          const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
-            res.status === 'escalate'
-              ? withNextAction(
-                  {
-                    ...publicResult,
-                    guidance: buildGuidance(res, schemaSummary, proposal),
-                  },
-                  prefillNextAction('Use template artifact fallback'),
-                )
-              : res.status === 'propose'
-                ? withNextAction(
-                    {
-                      ...publicResult,
-                      guidance: buildGuidance(res, schemaSummary, proposal),
-                      call_2_contract: call2Contract,
-                    },
-                    prefillNextAction('Supply proposal from call_2_contract to bind-template'),
-                  )
-                : { ...publicResult, guidance: buildGuidance(res, schemaSummary, proposal) },
-            authoredCalcCaptions,
-          );
-
-          // ── Auto-apply gate (defense in depth) ───────────────────────────
-          // Auto-apply only for a bound result whose manifest remains fast-path eligible.
-          // A Call-2 proposal bind is validated by the binder against the live workbook and
-          // the apply runs under the SAME events-anchor user-change guard; on the slim
-          // surface the manual apply tools do not exist, so the alternative is the model
-          // freehand-building the same chart with FEWER guards. Applying a validated bind is
-          // the safer branch. The defense-in-depth guard is now binder validation plus the
-          // events anchor, not Call-1/Call-2 parity.
-          const selectedTemplate =
-            res.status === 'bound' ? runtimeCatalog.get(res.args.template_name) : undefined;
-          const canAutoApply =
-            auto_apply === true &&
-            res.status === 'bound' &&
-            selectedTemplate?.descriptor.fast_path_eligible === true;
-
-          if (res.status !== 'bound') {
-            return new Ok(base);
-          }
-
-          if (!canAutoApply || selectedTemplate === undefined) {
-            if (isStructuredCorrectionCall) {
-              recordBindRecoveryAttemptFailOpen({
-                session: resolvedSession,
-                askKey,
-                outcome: res.status,
-                currentProposalSignature,
-                reservationId: bindRecoveryReservationId,
-                terminalFallback: true,
-              });
-              return new IncompleteOperationError(correctionFallbackResult()).toErr();
-            }
-            recordBindRecoveryAttemptFailOpen({
-              session: resolvedSession,
-              askKey,
-              outcome: res.status,
-              currentProposalSignature,
-              reservationId: bindRecoveryReservationId,
-              terminal: true,
-            });
-            return new Ok(base);
-          }
-
-          // ── Duplicate-sheet reuse (the re-bind loop) ─────────────────────
-          // The binder titles a Call-1 sheet with the ask text itself, so a reworded ask
-          // for the SAME chart binds identical args under a new title and today builds a
-          // duplicate sheet. Signature is title-free, so the paraphrase collapses onto the
-          // sheet already applied. Only when the caller did NOT name a target: an explicit
-          // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
-          // hand edits is legitimate) and always applies.
-          const sheetSignature = appliedSheetSignature(res.args);
-          if (target_worksheet === undefined && atomicCalcs.length === 0) {
-            const remembered = rememberedSheetStillPresent({
-              session: resolvedSession,
-              signature: sheetSignature,
-              workbookXml,
-            });
-            if (remembered !== undefined) {
-              return new Ok(reusedSheetResult(remembered, authoredCalcCaptions));
-            }
-          }
-
-          if (target_worksheet === undefined && trustedDeterministicApply && idempotencyKey) {
-            const existingTitle = existingDeterministicWorksheetTitle(
-              workbookXml,
-              decodeXmlEntities(res.args.title),
-              idempotencyKey,
-              proposal?.bindings.map((binding) => binding.field) ?? [],
-            );
-            if (existingTitle !== undefined) {
-              if (atomicCalcs.length === 0) {
-                return new Ok(
-                  reusedSheetResult(
-                    {
-                      sheetName: existingTitle,
-                      template: res.args.template_name,
-                      ts: new Date().toISOString(),
-                    },
-                    authoredCalcCaptions,
+              // ── One structured correction boundary ─────────────────────────
+              // Only `propose` earns a structured Call 2. Every escalation closes the fast path.
+              const call2Contract =
+                res.status === 'propose'
+                  ? buildCall2Contract({
+                      llmInput: res.llm_input,
+                      session: resolvedSession,
+                      ask,
+                      targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                      datasource: effectiveDatasource,
+                      requiredFilterFields,
+                      requiredFilterValues,
+                    })
+                  : undefined;
+              if (
+                largePieConfirmable(res, proposal as BindingProposal | undefined, largePieConfirmed)
+              ) {
+                // The pie gate alone is a user decision, not a dead end: keep recovery open so the
+                // same proposal can return once with the user's explicit keep-the-pie confirmation.
+                const pieDetail =
+                  (res.status === 'escalate' ? pieSliceGateDetail(res.blockers) : undefined) ??
+                  'the pie has too many slices';
+                try {
+                  sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+                  recordBindRecoveryAttemptFailOpen({
+                    session: resolvedSession,
+                    askKey,
+                    outcome: res.status,
+                    currentProposalSignature,
+                    reservationId: admission.reservationId,
+                  });
+                  const pieDatasource =
+                    res.status === 'escalate' ? pieSliceGateDatasource(res.blockers) : undefined;
+                  if (currentProposalSignature !== undefined && pieDatasource !== undefined) {
+                    sessionRouteState.grantLargePieConfirmation(
+                      resolvedSession,
+                      askKey,
+                      currentProposalSignature,
+                      pieDetail,
+                      {
+                        datasource: pieDatasource,
+                        targetWorksheet: target_worksheet,
+                      },
+                    );
+                  }
+                } catch {
+                  /* fail-open */
+                }
+                return new IncompleteOperationError(pieSliceLimitResult(pieDetail)).toErr();
+              }
+              if (isStructuredCorrectionCall && res.status !== 'bound') {
+                const filterResolutionFailure =
+                  res.status === 'escalate' &&
+                  proposal !== undefined &&
+                  retainedCall2Contract !== undefined &&
+                  isProposalFilterResolutionFailure(res, proposal as BindingProposal);
+                const nextCorrectionInvariant =
+                  filterResolutionFailure && res.status === 'escalate' && proposal !== undefined
+                    ? filterCorrectionInvariant(proposal as BindingProposal, res.blockers)
+                    : undefined;
+                const correctionAvailable =
+                  filterResolutionFailure &&
+                  !priorProposalEscalation &&
+                  nextCorrectionInvariant !== undefined;
+                try {
+                  sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+                  recordBindRecoveryAttemptFailOpen({
+                    session: resolvedSession,
+                    askKey,
+                    outcome: res.status,
+                    currentProposalSignature,
+                    reservationId: admission.reservationId,
+                    correctionInvariant: nextCorrectionInvariant,
+                    terminalFallback: !correctionAvailable,
+                  });
+                } catch {
+                  /* fail-open */
+                }
+                if (
+                  filterResolutionFailure &&
+                  res.status === 'escalate' &&
+                  proposal !== undefined
+                ) {
+                  return new IncompleteOperationError(
+                    proposalFilterResolutionFailedResult({
+                      contract: retainedCall2Contract!,
+                      proposal: proposal as BindingProposal,
+                      blockers: res.blockers,
+                      correctionAvailable,
+                    }),
+                  ).toErr();
+                }
+                return new IncompleteOperationError(
+                  correctionFallbackResult(
+                    res.status === 'escalate' ? pieSliceGateDetail(res.blockers) : undefined,
                   ),
-                );
-              }
-              if (classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'in-dashboard') {
-                return new ArgsValidationError(
-                  `deterministic worksheet "${existingTitle}" is a dashboard member sheet with pending calculations — missing calculations prevent safe reuse, and the dashboard member cannot be rebuilt in place`,
                 ).toErr();
               }
-            }
-          }
+              try {
+                sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+                if (res.status === 'propose') {
+                  recordBindRecoveryAttemptFailOpen({
+                    session: resolvedSession,
+                    askKey,
+                    outcome: res.status,
+                    currentProposalSignature,
+                    proposalContext: call2Contract,
+                    reservationId: admission.reservationId,
+                  });
+                } else if (res.status === 'escalate') {
+                  recordBindRecoveryAttemptFailOpen({
+                    session: resolvedSession,
+                    askKey,
+                    outcome: res.status,
+                    currentProposalSignature,
+                    reservationId: admission.reservationId,
+                    terminalFallback: true,
+                  });
+                }
+              } catch {
+                /* fail-open */
+              }
 
-          const autoApplyResult = await performAutoApply({
-            res,
-            base,
-            ask,
-            workbookXml,
-            session: resolvedSession,
-            config: extra.config,
-            executor,
-            signal: extra.signal,
-            bindMs,
-            schemaSummary,
-            templateSnapshot: selectedTemplate.snapshot,
-            appliedDefault,
-            hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
-            atomicCalcs,
-            trustedDeterministicApply,
-            idempotencyKey,
-            deterministicBindingFields: trustedDeterministicApply
-              ? proposal?.bindings.map((binding) => binding.field)
-              : undefined,
-            reportProgress,
-            // Honor skip_validation only for a server-trusted caller (config gate set by the
-            // deterministic spawner). An untrusted LLM turn that passes the flag gets full
-            // validation, not a bypass — the param alone cannot skip the preflight.
-            skipValidation: skip_validation === true && extra.config.allowSkipValidation,
-          });
-          const appliedResult = autoApplyResult.result;
-          // Only a bind the binder called FINISHED may be replayed as "already built" on
-          // the next reworded ask. An incomplete bind still reports applied:true with a
-          // sheet_name, so remembering it would answer a later re-bind with a terminal
-          // "no further tool calls needed" for a chart missing a requested encoding.
-          if (
-            !autoApplyResult.incomplete &&
-            'applied' in appliedResult &&
-            appliedResult.applied === true &&
-            typeof appliedResult.sheet_name === 'string'
-          ) {
-            sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
-              sheetName: appliedResult.sheet_name,
-              template: res.args.template_name,
-            });
-          }
-          const correctionDidNotFinish =
-            isStructuredCorrectionCall &&
-            appliedResult.structuredContent?.nextAction.kind !== 'done';
-          if (correctionDidNotFinish) {
-            recordBindRecoveryAttemptFailOpen({
-              session: resolvedSession,
-              askKey,
-              outcome: 'bound',
-              currentProposalSignature,
-              reservationId: bindRecoveryReservationId,
-              terminalFallback: true,
-            });
-          } else {
-            recordBoundRecoveryAfterFinalResult({
-              session: resolvedSession,
-              askKey,
-              currentProposalSignature,
-              reservationId: bindRecoveryReservationId,
-              result: appliedResult,
-            });
-          }
-          if (
-            !isStructuredCorrectionCall &&
-            autoApplyResult.failureDisposition === 'pre-dispatch' &&
-            currentProposalSignature !== undefined
-          ) {
-            try {
-              sessionRouteState.grantPreDispatchRetryAllowance(
-                resolvedSession,
-                askKey,
-                currentProposalSignature,
+              const publicResult = withoutLegacyApplyInstructions(res);
+              const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
+                res.status === 'escalate'
+                  ? withNextAction(
+                      {
+                        ...publicResult,
+                        guidance: buildGuidance(res, schemaSummary, proposal),
+                      },
+                      prefillNextAction('Use template artifact fallback'),
+                    )
+                  : res.status === 'propose'
+                    ? withNextAction(
+                        {
+                          ...publicResult,
+                          guidance: buildGuidance(res, schemaSummary, proposal),
+                          call_2_contract: call2Contract,
+                        },
+                        prefillNextAction('Supply proposal from call_2_contract to bind-template'),
+                      )
+                    : { ...publicResult, guidance: buildGuidance(res, schemaSummary, proposal) },
+                authoredCalcCaptions,
               );
+
+              // ── Auto-apply gate (defense in depth) ───────────────────────────
+              // Auto-apply only for a bound result whose manifest remains fast-path eligible.
+              // A Call-2 proposal bind is validated by the binder against the live workbook and
+              // the apply runs under the SAME events-anchor user-change guard; on the slim
+              // surface the manual apply tools do not exist, so the alternative is the model
+              // freehand-building the same chart with FEWER guards. Applying a validated bind is
+              // the safer branch. The defense-in-depth guard is now binder validation plus the
+              // events anchor, not Call-1/Call-2 parity.
+              const selectedTemplate =
+                res.status === 'bound' ? runtimeCatalog.get(res.args.template_name) : undefined;
+              const canAutoApply =
+                auto_apply === true &&
+                res.status === 'bound' &&
+                selectedTemplate?.descriptor.fast_path_eligible === true;
+
+              if (res.status !== 'bound') {
+                return new Ok(base);
+              }
+
+              if (!canAutoApply || selectedTemplate === undefined) {
+                if (isStructuredCorrectionCall) {
+                  recordBindRecoveryAttemptFailOpen({
+                    session: resolvedSession,
+                    askKey,
+                    outcome: res.status,
+                    currentProposalSignature,
+                    reservationId: admission.reservationId,
+                    terminalFallback: true,
+                  });
+                  return new IncompleteOperationError(correctionFallbackResult()).toErr();
+                }
+                recordBindRecoveryAttemptFailOpen({
+                  session: resolvedSession,
+                  askKey,
+                  outcome: res.status,
+                  currentProposalSignature,
+                  reservationId: admission.reservationId,
+                  terminal: true,
+                });
+                return new Ok(base);
+              }
+
+              // ── Duplicate-sheet reuse (the re-bind loop) ─────────────────────
+              // The binder titles a Call-1 sheet with the ask text itself, so a reworded ask
+              // for the SAME chart binds identical args under a new title and today builds a
+              // duplicate sheet. Signature is title-free, so the paraphrase collapses onto the
+              // sheet already applied. Only when the caller did NOT name a target: an explicit
+              // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
+              // hand edits is legitimate) and always applies.
+              const sheetSignature = appliedSheetSignature(res.args);
+              if (target_worksheet === undefined && atomicCalcs.length === 0) {
+                const remembered = rememberedSheetStillPresent({
+                  session: resolvedSession,
+                  signature: sheetSignature,
+                  workbookXml,
+                });
+                if (remembered !== undefined) {
+                  return new Ok(reusedSheetResult(remembered, authoredCalcCaptions));
+                }
+              }
+
+              if (target_worksheet === undefined && trustedDeterministicApply && idempotencyKey) {
+                const existingTitle = existingDeterministicWorksheetTitle(
+                  workbookXml,
+                  decodeXmlEntities(res.args.title),
+                  idempotencyKey,
+                  proposal?.bindings.map((binding) => binding.field) ?? [],
+                );
+                if (existingTitle !== undefined) {
+                  if (atomicCalcs.length === 0) {
+                    return new Ok(
+                      reusedSheetResult(
+                        {
+                          sheetName: existingTitle,
+                          template: res.args.template_name,
+                          ts: new Date().toISOString(),
+                        },
+                        authoredCalcCaptions,
+                      ),
+                    );
+                  }
+                  if (
+                    classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'in-dashboard'
+                  ) {
+                    return new ArgsValidationError(
+                      `deterministic worksheet "${existingTitle}" is a dashboard member sheet with pending calculations — missing calculations prevent safe reuse, and the dashboard member cannot be rebuilt in place`,
+                    ).toErr();
+                  }
+                }
+              }
+
+              const autoApplyResult = await performAutoApply({
+                res,
+                base,
+                ask,
+                workbookXml,
+                session: resolvedSession,
+                config: extra.config,
+                executor,
+                signal: extra.signal,
+                bindMs,
+                schemaSummary,
+                templateSnapshot: selectedTemplate.snapshot,
+                appliedDefault,
+                hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
+                atomicCalcs,
+                trustedDeterministicApply,
+                idempotencyKey,
+                deterministicBindingFields: trustedDeterministicApply
+                  ? proposal?.bindings.map((binding) => binding.field)
+                  : undefined,
+                keepLargePie: largePieConfirmed,
+                dryBindOffer: async (offeredAsk) => {
+                  // The follow-up call has no proposal and no complete-request flag, so use its catalog.
+                  const followUp = createPuppetCompatibilityProjection(
+                    loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true }),
+                  );
+                  const dry = await bindTemplate({
+                    ask: offeredAsk,
+                    workbookXml,
+                    manifests: followUp.descriptors,
+                  });
+                  return followUp.expandBinderResult(dry, schemaSummary);
+                },
+                reportProgress,
+                // Honor skip_validation only for a server-trusted caller (config gate set by the
+                // deterministic spawner). An untrusted LLM turn that passes the flag gets full
+                // validation, not a bypass — the param alone cannot skip the preflight.
+                skipValidation: skip_validation === true && extra.config.allowSkipValidation,
+              });
+              const appliedResult = autoApplyResult.result;
+              // Only a bind the binder called FINISHED may be replayed as "already built" on
+              // the next reworded ask. An incomplete bind still reports applied:true with a
+              // sheet_name, so remembering it would answer a later re-bind with a terminal
+              // "no further tool calls needed" for a chart missing a requested encoding.
+              if (
+                !autoApplyResult.incomplete &&
+                'applied' in appliedResult &&
+                appliedResult.applied === true &&
+                typeof appliedResult.sheet_name === 'string'
+              ) {
+                sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
+                  sheetName: appliedResult.sheet_name,
+                  template: res.args.template_name,
+                });
+              }
+              const correctionDidNotFinish =
+                isStructuredCorrectionCall &&
+                appliedResult.structuredContent?.nextAction.kind !== 'done';
+              if (correctionDidNotFinish) {
+                recordBindRecoveryAttemptFailOpen({
+                  session: resolvedSession,
+                  askKey,
+                  outcome: 'bound',
+                  currentProposalSignature,
+                  reservationId: admission.reservationId,
+                  terminalFallback: true,
+                });
+              } else {
+                recordBoundRecoveryAfterFinalResult({
+                  session: resolvedSession,
+                  askKey,
+                  currentProposalSignature,
+                  reservationId: admission.reservationId,
+                  result: appliedResult,
+                });
+              }
+              if (
+                !isStructuredCorrectionCall &&
+                autoApplyResult.failureDisposition === 'pre-dispatch' &&
+                currentProposalSignature !== undefined
+              ) {
+                try {
+                  sessionRouteState.grantPreDispatchRetryAllowance(
+                    resolvedSession,
+                    askKey,
+                    currentProposalSignature,
+                  );
+                } catch {
+                  /* fail-open */
+                }
+              }
+              if ('applied' in appliedResult && appliedResult.applied === false) {
+                return new IncompleteOperationError(appliedResult).toErr();
+              }
+              return new Ok(appliedResult);
+            })();
+          } finally {
+            // An exit before the binder returns (or a throwing bind) must leave no trace (idempotent).
+            try {
+              if (
+                !admission.binderReturned &&
+                !admission.keepReservation &&
+                admission.session !== undefined &&
+                admission.askKey !== undefined
+              ) {
+                sessionRouteState.releaseBindRecoveryReservation(
+                  admission.session,
+                  admission.askKey,
+                  admission.reservationId,
+                );
+              }
             } catch {
               /* fail-open */
             }
           }
-          if ('applied' in appliedResult && appliedResult.applied === false) {
-            return new IncompleteOperationError(appliedResult).toErr();
-          }
-          return new Ok(appliedResult);
         },
         // Keep the standard MCP content-block envelope while lifting nextAction metadata
         // out of the JSON body so the bind/propose/bound body contract stays unchanged.

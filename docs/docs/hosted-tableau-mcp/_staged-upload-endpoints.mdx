@@ -12,8 +12,9 @@ allowlist), you must allow the S3 host for your Tableau pod. This is a **client 
 step**: nothing on the Tableau side can change it.
 
 If the host is blocked, the download or upload fails with a network or `403` error. Allow the host
-and retry. Don't work around the failure with a custom script against the Tableau REST API, because
-that bypasses the checks and consent step in the MCP publish flow.
+and retry. A `403` on the upload `PUT` can also mean the body size differs from `fileSizeBytes`
+(S3 `SignatureDoesNotMatch`). Don't work around the failure with a custom script against the
+Tableau REST API, because that bypasses the checks and consent step in the MCP publish flow.
 
 Find your pod in your site URL (for `https://10ax.online.tableau.com`, the pod is `10ax`), then
 allow its host.

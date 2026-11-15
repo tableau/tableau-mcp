@@ -92,7 +92,7 @@ const argsSchema = {
 // Field captions verified against live TS Events VDS schema (2026-07-19).
 // `Actor User Name` is a STRING matching the user's Tableau username (== email on Tableau Cloud).
 // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
-const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
+export const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
 
 // Scope TS Events to the Step-1 candidates via a SET filter on `Actor User Name`.
 // `Actor User Name` matches the candidate's Tableau username (== email on Tableau Cloud),
@@ -112,7 +112,7 @@ const TS_EVENTS_ACTOR_PLACEHOLDER =
 // (separate `... (Local)` variants exist — use the UTC captions here). These are one-row-per-user
 // last-access timestamps, so no date filter is applied — the model compares them to the cutoff
 // client-side (null = no signal, NOT activity).
-const TS_USERS_FIELDS = [
+export const TS_USERS_FIELDS = [
   'User Email',
   'User Name',
   'Tableau Desktop - Last Access Date',
@@ -121,7 +121,12 @@ const TS_USERS_FIELDS = [
 
 // Site Content verified captions — `Owner LUID` does NOT exist on this datasource;
 // join on `Owner Email` against the user email from Step 1.
-const SITE_CONTENT_FIELDS = ['Item Type', 'Item Name', 'Owner Email', 'Item Parent Project Name'];
+export const SITE_CONTENT_FIELDS = [
+  'Item Type',
+  'Item Name',
+  'Owner Email',
+  'Item Parent Project Name',
+];
 
 const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
   kind: 'ts-events',

@@ -153,6 +153,8 @@ const NON_TOOL_VOCABULARY = [
   'order-dependent',
   'packaged-workbook',
   'param-domain-type',
+  // Template id compared in code, not emitted guidance.
+  'part-to-whole-pie-chart',
   // Field resolver transformation marker, not a callable tool.
   'part-to-whole-waterfall',
   'percent-encoded',
@@ -163,8 +165,12 @@ const NON_TOOL_VOCABULARY = [
   'pre-dispatch-validation',
   'pre-dispatch-workbook-drift',
   'preflight-invariant',
+  // Native dialog completion effect, not a callable tool.
+  'print-prepared',
   'prior-version',
   'quantitative-or-categorical',
+  // Template id compared in code, not emitted guidance.
+  'ranking-ordered-bar',
   're-call',
   're-enables',
   're-read',
@@ -320,7 +326,7 @@ const PREFIXED_ALLOWED_TOKENS = new Set([
 ]);
 const PREFIXED_ALLOWED_FILES = new Set([
   // QUERY_TOOL_JARGON is a search stop-word list, never rendered.
-  'src/desktop/knowledge/index.ts',
+  'src/desktop/expertise/index.ts',
 ]);
 
 const scannedCandidates = sourceFiles().flatMap((fullPath) => {
