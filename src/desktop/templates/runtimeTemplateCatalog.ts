@@ -119,7 +119,6 @@ export function runtimeTemplateDescriptorFromSnapshot(
 export interface RuntimeTemplateCatalogOptions extends TemplateCatalogOptions {
   additionalTemplates?: readonly string[];
   automaticOnly?: boolean;
-  completeRequestLineColorOptional?: boolean;
 }
 
 export function loadRuntimeTemplateDescriptors(
@@ -141,12 +140,9 @@ export interface RuntimeTemplateCatalogSnapshot {
 function createSupportedRuntimeSnapshot(
   template: string,
   bookmark: string,
-  completeRequestLineColorOptional = false,
 ): TemplateRuntimeSnapshot | null {
   try {
-    return createTemplateRuntimeSnapshot(template, bookmark, {
-      plainTemporalLineColorOptional: completeRequestLineColorOptional,
-    });
+    return createTemplateRuntimeSnapshot(template, bookmark);
   } catch {
     return null;
   }
@@ -168,11 +164,7 @@ export function loadRuntimeTemplateCatalogSnapshots(
     if (entry.discoveryIssue) continue;
     const bookmark = readBookmarkFromCatalogEntry(entry, options.operations);
     if (bookmark === null) continue;
-    const snapshot = createSupportedRuntimeSnapshot(
-      entry.template,
-      bookmark,
-      options.completeRequestLineColorOptional === true,
-    );
+    const snapshot = createSupportedRuntimeSnapshot(entry.template, bookmark);
     if (snapshot === null) continue;
     snapshots.set(entry.template, {
       snapshot,

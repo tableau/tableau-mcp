@@ -903,18 +903,16 @@ describe('inferFromBookmark — plain temporal line series optionality', () => {
     '</table></bookmark>';
 
   const categoryRequired = (raw: string): boolean | undefined =>
-    inferFromBookmark(raw, { plainTemporalLineColorOptional: true }).slots.find(
-      (slot) => slot.sourceField === 'Category',
-    )?.required;
+    inferFromBookmark(raw).slots.find((slot) => slot.sourceField === 'Category')?.required;
 
-  it('keeps the ordinary color partitioner required', () => {
+  it('makes the ordinary color partitioner optional with no option', () => {
     expect(
       inferFromBookmark(bookmark()).slots.find((slot) => slot.sourceField === 'Category')?.required,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('makes the sole color partitioner optional on a structurally plain temporal line', () => {
-    const inference = inferFromBookmark(bookmark(), { plainTemporalLineColorOptional: true });
+    const inference = inferFromBookmark(bookmark());
     const category = inference.slots.find((slot) => slot.sourceField === 'Category');
 
     expect(category).toMatchObject({

@@ -95,6 +95,7 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['grouped bar chart of Sales by Category and Region', 'magnitude-paired-bar'],
   ['paired bar chart of Sales by Category and Region', 'magnitude-paired-bar'],
   ['line chart of Sales over Order Date by Category', 'trend-line-chart'],
+  ['line chart of Sales over Order Date', 'trend-line-chart'],
   ['scatter plot of Sales vs Profit by Product Name', 'correlation-scatter-plot-chart'],
   [
     'scatter plot of Sales vs Profit by Product Name with trend line',
@@ -150,6 +151,10 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
     'a neutral geo slot must not accept one exact match while ignoring two other requested geo concepts',
   ],
   ['bullet chart of Sales by Region', 'a bullet chart requires an explicit target measure'],
+  [
+    'line chart of Sales over Order Date by Category and Region',
+    'two named series would be silently cut to one',
+  ],
   [
     'box plot of Sales by Category',
     'a box plot requires an explicit distinct record-grain detail field',

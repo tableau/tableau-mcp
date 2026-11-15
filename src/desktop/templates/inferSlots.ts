@@ -197,10 +197,7 @@ function communicativeRole(
  * rows/cols/mark encodings for placement, and decomposes placed calcs to their base
  * inputs. `kind: 'unknown'` fields are SKIPPED (counted, never guessed).
  */
-export function inferFromBookmark(
-  rawXml: string,
-  options: { plainTemporalLineColorOptional?: boolean } = {},
-): Inference {
+export function inferFromBookmark(rawXml: string): Inference {
   const { all, attr } = parseBookmarkDom(rawXml);
   const rootLayoutOptions = all('layout-options').filter(
     (layout) => layout.parentNode?.nodeName === 'bookmark',
@@ -632,8 +629,7 @@ export function inferFromBookmark(
     // required/role are unchanged — placement already governs them).
     const tcRole = addressingRole.get(e.base);
     const tableCalc = tableCalcByBase.get(e.base);
-    const plainTemporalLineSeriesColor =
-      options.plainTemporalLineColorOptional === true && key === plainTemporalLineSeriesColorKey;
+    const plainTemporalLineSeriesColor = key === plainTemporalLineSeriesColorKey;
     const required = (affectsLod && !plainTemporalLineSeriesColor) || definesDisplay || !!tcRole;
     slots.push({
       slot_id: multiDeriv ? `${baseId}_${e.derivation}` : baseId,

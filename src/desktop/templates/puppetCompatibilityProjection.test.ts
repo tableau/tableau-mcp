@@ -273,7 +273,13 @@ describe('createPuppetCompatibilityProjection', () => {
       slots: [
         { slot_id: 'field_base_1', kind: 'quantitative', derivation: 'sum', role: ['rows'] },
         { slot_id: 'field_base_2', kind: 'temporal', derivation: 'tmn', role: ['cols'] },
-        { slot_id: 'field_base_3', kind: 'categorical', derivation: 'none', role: ['color'] },
+        {
+          slot_id: 'field_base_3',
+          kind: 'categorical',
+          derivation: 'none',
+          role: ['color'],
+          required: false,
+        },
       ],
       assertions: (xml: string) => {
         expect(xml).toContain('<mark class="Line"');
@@ -491,6 +497,42 @@ describe('createPuppetCompatibilityProjection', () => {
       testCase.assertions(worksheetXml!);
     },
   );
+
+  it('injects a colorless plain line with no color encoding', async () => {
+    const template = 'trend-line-chart';
+    const catalogValue = realRuntimeCatalog.get(template);
+    expect(catalogValue).toBeDefined();
+    if (!catalogValue) return;
+    const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
+    const result = await bindTemplate({
+      ask: 'line chart of Sales over Order Date',
+      workbookXml: superstoreWorkbook,
+      manifests: projection.descriptors,
+    });
+    expect(result.status, JSON.stringify(result)).toBe('bound');
+    if (result.status !== 'bound') return;
+    const injected = buildInjectedWorkbookXml({
+      workbookXml: superstoreWorkbook,
+      templateXml: catalogValue.snapshot.xml,
+      title: result.args.title,
+      sheetType: result.args.sheet_type,
+      templateParameters: result.args.template_parameters,
+      fieldMapping: result.args.field_mapping,
+      templateSlots: catalogValue.snapshot.descriptor.slots,
+      optionalFieldPrunes: result.args.optional_field_prunes,
+      dateparseAxis: result.args.dateparse_axis,
+      applyNonce: 'trend-line-chart-colorless',
+    });
+    expect(injected.ok).toBe(true);
+    if (!injected.ok) return;
+    const worksheetXml = injected.xml.match(
+      new RegExp(`<worksheet name="${result.args.title}">([\\s\\S]*?)</worksheet>`),
+    )?.[0];
+    expect(worksheetXml).toBeDefined();
+    expect(worksheetXml).toContain('<mark class="Line"');
+    expect(worksheetXml).not.toContain('<color column=');
+    expect(worksheetXml).not.toMatch(/\{\{field_base_[1-9]\d*\}\}/);
+  });
 
   it('injects a bullet with an actual bar and explicit target reference marker', async () => {
     const template = 'quota-attainment-bullet';
@@ -928,7 +970,7 @@ describe('createPuppetCompatibilityProjection', () => {
   it.each([
     ['bar chart of Sales by Sub-Category', 'bound', 'ranking-ordered-bar'],
     ['waterfall of Profit by Sub-Category', 'propose', undefined],
-    ['line chart of Sales by Order Date', 'propose', undefined],
+    ['line chart of Sales by Order Date', 'bound', 'trend-line-chart'],
     ['scatter plot of Profit and Sales by Sub-Category', 'bound', 'correlation-scatter-plot-chart'],
     ['filled map of Profit by State/Province', 'bound', 'spatial-choropleth-map'],
     ['symbol map of Sales by Country/Region, State/Province, and City', 'propose', undefined],

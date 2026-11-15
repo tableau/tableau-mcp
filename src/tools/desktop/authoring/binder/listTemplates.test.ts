@@ -487,6 +487,22 @@ describe('list-templates', () => {
     ]);
   });
 
+  it('lists the plain line color series as optional, not required', async () => {
+    vi.stubEnv('TEMPLATES_DIR', undefined);
+
+    const body = await getBody({ query: 'trend-line-chart', limit: 1 });
+    const signature = body.templates[0].slot_signature;
+
+    expect(body.templates[0].template).toBe('trend-line-chart');
+    expect(signature.optional_slots).toEqual([
+      expect.objectContaining({ slot_id: 'field_base_3', kind: 'categorical', role: ['color'] }),
+    ]);
+    expect(signature.required_slots.map((slot: { slot_id: string }) => slot.slot_id)).toEqual([
+      'field_base_1',
+      'field_base_2',
+    ]);
+  });
+
   it('filters on eligibility computed from the TBM instead of catalog policy', async () => {
     const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-eligibility-'));
     temporaryRoots.push(root);

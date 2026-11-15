@@ -3890,9 +3890,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
                 ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
                 automaticOnly: true,
-                ...(requireCompleteRequest === true
-                  ? { completeRequestLineColorOptional: true }
-                  : {}),
               });
               const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
               const manifests =
