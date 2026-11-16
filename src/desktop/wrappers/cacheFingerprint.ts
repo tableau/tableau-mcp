@@ -62,7 +62,7 @@ const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
   workbook: 'get-xml (no kind)',
   dashboard: 'get-xml (kind=dashboard)',
   storyboard: 'get-xml (kind=storyboard)',
-  datasource: 'get-datasource-xml',
+  datasource: 'get-xml (kind=datasource)',
 };
 
 export function sidecarPath(cacheFile: string): string {

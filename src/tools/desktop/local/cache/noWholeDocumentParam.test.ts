@@ -112,7 +112,13 @@ describe('the served profile still has a working edit path with no document para
     const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: SHEET }));
     const getCb = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
     const getResult = await getCb(
-      { session: 's1', kind: 'worksheet', sheetId: '{WS-SALES}', mode: 'file' },
+      {
+        session: 's1',
+        kind: 'worksheet',
+        sheetId: '{WS-SALES}',
+        datasourceId: undefined,
+        mode: 'file',
+      },
       { ...extra(), getExecutor: vi.fn().mockResolvedValue({ getWorksheetDocument }) },
     );
     invariant(getResult.content[0].type === 'text');

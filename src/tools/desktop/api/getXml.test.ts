@@ -53,14 +53,14 @@ describe('getXmlTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('get-xml');
-    expect(tool.description).toContain('EXISTING worksheet, dashboard, or storyboard');
-    expect(tool.description).toContain('resets its active edit buffer');
+    expect(tool.description).toContain('EXISTING sheet or datasource');
+    expect(tool.description).toContain('resets its edit buffer');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       idempotentHint: false,
       openWorldHint: false,
     });
-    expect(paramsSchema.kind.safeParse('datasource').success).toBe(false);
+    expect(paramsSchema.kind.safeParse('datasource').success).toBe(true);
     expect(paramsSchema.kind.safeParse('workbook').success).toBe(false);
   });
 

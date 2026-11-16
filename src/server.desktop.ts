@@ -158,7 +158,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-workbook-inventory',
     'get-datasources',
     'list-workbook-datasources',
-    'get-datasource-xml',
     'apply-datasource',
     'refresh-datasource',
     'author-calc',

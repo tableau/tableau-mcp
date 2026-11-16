@@ -18,7 +18,6 @@ import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
 import { getDatasourcesTool, getListWorkbookDatasourcesTool } from './api/getDatasources.js';
 import { getDatasourceUnderlyingDataTool } from './api/getDatasourceUnderlyingData.js';
-import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getOperationsTool } from './api/getOperations.js';
@@ -135,7 +134,6 @@ export const desktopToolFactories = [
   getApplyDashboardTool,
   getDatasourcesTool,
   getListWorkbookDatasourcesTool,
-  getGetDatasourceXmlTool,
   getApplyDatasourceTool,
   getListAvailableFieldsTool,
   getAddFieldTool,

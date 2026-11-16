@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   endpointNotInThisBuild,
@@ -33,20 +34,23 @@ import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffe
 import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
+import { isNotADatasourceId } from './getDatasources.js';
+import { resolveDatasource } from './resolveDatasourceRef.js';
 import { isSheetNotFound } from './resolveSheetRef.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
   kind: z
-    .enum(['worksheet', 'dashboard', 'storyboard'])
+    .enum(['worksheet', 'dashboard', 'storyboard', 'datasource'])
     .optional()
-    .describe('Kind of sheet to read; omit for the whole workbook.'),
-  sheetId: z
+    .describe('Omit for the whole workbook.'),
+  sheetId: z.string().min(1).optional().describe('Sheet id or name, for sheet kinds.'),
+  datasourceId: z
     .string()
     .min(1)
     .optional()
-    .describe('Id (or unique name) of the sheet; required with kind.'),
+    .describe('Datasource id or name, for kind datasource.'),
   mode: xmlModeParam(),
 };
 
@@ -57,8 +61,11 @@ type GetXmlToolResult =
       worksheetXml?: string;
       dashboardXml?: string;
       storyboardXml?: string;
+      datasourceXml?: string;
     }
   | XmlReadFileResult;
+
+const DATASOURCE_DOCUMENT_MIN_API_VERSION: ApiVersionFloor = '0.2.10';
 
 const XML_READ_ANNOTATIONS = {
   readOnlyHint: false, // Writes to a cache file
@@ -73,15 +80,18 @@ export const getXmlTool = (server: DesktopMcpServer): DesktopTool<typeof paramsS
     name: 'get-xml',
     title: 'Get Structure',
     description:
-      'Get the live structure of the workbook or one EXISTING worksheet, dashboard, or storyboard. ' +
-      'Reading a worksheet resets its active edit buffer; for pending drafts, read the cached file instead.',
+      'Get the live structure of the workbook or one EXISTING sheet or datasource. ' +
+      'A worksheet read resets its edit buffer; for drafts, read the cached file.',
     paramsSchema,
     annotations: XML_READ_ANNOTATIONS,
-    callback: async ({ session, kind, sheetId, mode }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, kind, sheetId, datasourceId, mode },
+      extra,
+    ): Promise<CallToolResult> => {
       return await getXml.logAndExecute<GetXmlToolResult>({
         extra,
-        args: { session, kind, sheetId, mode },
-        callback: async () => await readXml({ session, kind, sheetId, mode, extra }),
+        args: { session, kind, sheetId, datasourceId, mode },
+        callback: async () => await readXml({ session, kind, sheetId, datasourceId, mode, extra }),
       });
     },
   });
@@ -93,15 +103,29 @@ async function readXml({
   session,
   kind,
   sheetId,
+  datasourceId,
   mode,
   extra,
 }: {
   session: string | undefined;
-  kind?: SheetKind;
+  kind?: SheetKind | 'datasource';
   sheetId?: string;
+  datasourceId?: string;
   mode: 'file' | 'inline';
   extra: TableauDesktopRequestHandlerExtra;
 }): Promise<Result<GetXmlToolResult, McpToolError>> {
+  if (kind === 'datasource') {
+    if (sheetId !== undefined) {
+      return new ArgsValidationError('sheetId does not apply to kind datasource.').toErr();
+    }
+    if (datasourceId === undefined) {
+      return new ArgsValidationError('datasourceId is required with kind datasource.').toErr();
+    }
+    return await readDatasourceXml({ session, datasourceId, mode, extra });
+  }
+  if (datasourceId !== undefined) {
+    return new ArgsValidationError('datasourceId requires kind datasource.').toErr();
+  }
   if (kind === undefined) {
     if (sheetId !== undefined) {
       return new ArgsValidationError('sheetId requires kind.').toErr();
@@ -382,7 +406,74 @@ async function readStoryboardXml({
   });
 }
 
-function fragmentName(xml: string, element: 'worksheet' | 'dashboard'): string | undefined {
+async function readDatasourceXml({
+  session,
+  datasourceId,
+  mode,
+  extra,
+}: ReadArgs & { datasourceId: string }): Promise<Result<GetXmlToolResult, McpToolError>> {
+  return await runExternalApiReadTool({
+    session,
+    extra,
+    callback: async (executor, signal, read, resolvedSession) => {
+      const apiVersion = executor.desktopApiVersion;
+      if (
+        apiVersion !== undefined &&
+        !apiVersionAtLeast(apiVersion, DATASOURCE_DOCUMENT_MIN_API_VERSION)
+      ) {
+        return endpointNotInThisBuild('datasource document').toErr();
+      }
+
+      let documentResult = await executor.getDatasourceDocument(datasourceId, signal);
+      let name: string | undefined;
+      if (documentResult.isErr() && isNotADatasourceId(documentResult.error)) {
+        const list = await read(
+          'workbook datasources',
+          async (executor, signal) => await executor.listWorkbookDatasources(signal),
+        );
+        if (list.isErr()) {
+          return list;
+        }
+        const resolved = resolveDatasource(datasourceId, list.value.datasources ?? []);
+        if (resolved.isErr()) {
+          return resolved.error.toErr();
+        }
+        name = resolved.value.name;
+        if (resolved.value.id !== datasourceId) {
+          documentResult = await executor.getDatasourceDocument(resolved.value.id, signal);
+        }
+      }
+      const document = await read(
+        'datasource document',
+        async () => await Promise.resolve(documentResult),
+      );
+      if (document.isErr()) {
+        return document;
+      }
+      name ??= fragmentName(document.value.xml, 'datasource') ?? datasourceId;
+
+      return finishXmlRead({
+        kind: 'datasource',
+        artifactKind: 'datasource',
+        label: `Datasource "${name}"`,
+        inlineKey: 'datasourceXml',
+        toolName: 'get-xml',
+        applyTool: 'apply-datasource',
+        pathParam: 'datasourceFile',
+        cacheName: name,
+        xml: redactDatasourceCredentials(document.value.xml),
+        mode,
+        capBytes: extra.config.inlineXmlMaxBytes,
+        resolvedSession,
+      });
+    },
+  });
+}
+
+function fragmentName(
+  xml: string,
+  element: 'worksheet' | 'dashboard' | 'datasource',
+): string | undefined {
   const fragment = normalizeArray(parseXML(xml)[element] as { '@_name'?: string } | undefined)[0];
   return fragment?.['@_name']?.trim() || undefined;
 }

@@ -183,7 +183,13 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
     const callback = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
 
     const result = await callback(
-      { session: '999', kind: undefined, sheetId: undefined, mode: 'inline' },
+      {
+        session: '999',
+        kind: undefined,
+        sheetId: undefined,
+        datasourceId: undefined,
+        mode: 'inline',
+      },
       {
         ...getMockRequestHandlerExtra(),
         getExecutor: vi.fn().mockResolvedValue(executor),

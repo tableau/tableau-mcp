@@ -15,7 +15,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getGetDatasourceXmlTool } from './getDatasourceXml.js';
+import { getXmlTool } from './getXml.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -28,7 +28,12 @@ const routeMissing: ExecuteCommandError = {
   },
 };
 
-describe('getGetDatasourceXmlTool', () => {
+const datasourceNotFound: ExecuteCommandError = {
+  type: 'command-failed',
+  error: { code: 'datasource-not-found', message: 'No such datasource.', recoverable: false },
+};
+
+describe('getXmlTool kind=datasource', () => {
   const writtenFiles: string[] = [];
 
   beforeEach(() => {
@@ -52,38 +57,23 @@ describe('getGetDatasourceXmlTool', () => {
     }
   });
 
-  it('has the expected schema, annotations, and API floor', () => {
-    const tool = getGetDatasourceXmlTool(new DesktopMcpServer());
+  it('reads a datasource by id in one request', async () => {
+    const { result, order, executor } = await invoke({
+      datasourceId: 'Sales%20Extract',
+      mode: 'inline',
+      xml: '<datasource name="Sales"/>',
+    });
 
-    expect(tool.name).toBe('get-datasource-xml');
-    expect(tool.minApiVersion).toBe('0.2.10');
-    expect(tool.paramsSchema).toMatchObject({
-      session: expect.any(Object),
-      datasourceName: expect.any(Object),
-      mode: expect.any(Object),
-    });
-    expect(tool.annotations).toMatchObject({
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
+    expect(result.isError).toBe(false);
+    expect(order).toEqual(['document:Sales%20Extract']);
+    expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(resultBody(result).datasourceXml).toContain('<datasource name="Sales"');
   });
 
   it.each([
     {
-      label: 'exact inventory id with priority over a matching name',
-      datasourceName: 'shared',
-      datasources: [
-        { id: 'shared', name: 'Resolved by id' },
-        { id: 'other', name: 'shared' },
-      ],
-      expectedId: 'shared',
-      expectedName: 'Resolved by id',
-    },
-    {
       label: 'unique name',
-      datasourceName: 'Profit',
+      datasourceId: 'Profit',
       datasources: [
         { id: 'Sales%20Extract', name: 'Sales' },
         { id: 'Profit%2FExtract', name: 'Profit' },
@@ -93,33 +83,75 @@ describe('getGetDatasourceXmlTool', () => {
     },
     {
       label: 'one entity-decoded name',
-      datasourceName: 'Sales &amp; Profit',
+      datasourceId: 'Sales &amp; Profit',
       datasources: [{ id: 'Sales%20%26%20Profit', name: 'Sales & Profit' }],
       expectedId: 'Sales%20%26%20Profit',
       expectedName: 'Sales & Profit',
     },
   ])(
-    'resolves $label before the granular document GET',
-    async ({ datasourceName, datasources, expectedId, expectedName }) => {
+    'falls back to a $label after the id misses',
+    async ({ datasourceId, datasources, expectedId, expectedName }) => {
       const { result, order, executor } = await invoke({
-        datasourceName,
+        datasourceId,
         datasources,
         mode: 'inline',
         xml: `<datasource name="${expectedName}"/>`,
+        missingIds: [datasourceId],
       });
 
       expect(result.isError).toBe(false);
-      expect(order).toEqual(['list', `document:${expectedId}`]);
-      expect(executor.getDatasourceDocument).toHaveBeenCalledWith(expectedId, expect.any(Object));
+      expect(order).toEqual([`document:${datasourceId}`, 'list', `document:${expectedId}`]);
       expect(executor.getWorkbookDocument).not.toHaveBeenCalled();
-      const body = resultBody(result);
-      expect(body.datasourceXml).toContain(`<datasource name="${expectedName}"`);
+      expect(resultBody(result).datasourceXml).toContain(`<datasource name="${expectedName}"`);
     },
   );
 
+  it('rejects a Desktop below 0.2.10 without a request', async () => {
+    const { result, order } = await invoke({
+      datasourceId: 'Sales%20Extract',
+      mode: 'inline',
+      apiVersion: '0.2.9',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain('datasource document endpoint');
+    expect(order).toEqual([]);
+  });
+
+  it.each([
+    { args: { kind: 'datasource' }, message: 'datasourceId is required with kind datasource.' },
+    {
+      args: { kind: 'datasource', datasourceId: 'Sales', sheetId: 'sheet-1' },
+      message: 'sheetId does not apply to kind datasource.',
+    },
+    { args: { datasourceId: 'Sales' }, message: 'datasourceId requires kind datasource.' },
+    {
+      args: { kind: 'worksheet', sheetId: 'sheet-1', datasourceId: 'Sales' },
+      message: 'datasourceId requires kind datasource.',
+    },
+  ])('rejects $args without a request', async ({ args, message }) => {
+    const executor = makeExecutorMock();
+    const callback = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi
+        .fn()
+        .mockResolvedValue(executor) as unknown as TableauDesktopToolContext['getExecutor'],
+    };
+
+    const result = await callback(
+      { session: 'requested', mode: 'inline', ...args } as never,
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain(message);
+    expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
-      datasourceName: 'Duplicate',
+      datasourceId: 'Duplicate',
       datasources: [
         { id: 'first', name: 'Duplicate' },
         { id: 'second', name: 'Duplicate' },
@@ -127,23 +159,23 @@ describe('getGetDatasourceXmlTool', () => {
       expected: 'matched multiple datasources',
     },
     {
-      datasourceName: 'Missing',
+      datasourceId: 'Missing',
       datasources: [{ id: 'sales', name: 'Sales' }],
       expected: 'was not found',
     },
   ])(
-    'stops after inventory resolution fails for $datasourceName',
-    async ({ datasourceName, datasources, expected }) => {
-      const { result, order, executor } = await invoke({
-        datasourceName,
+    'stops after the id misses and name resolution fails for $datasourceId',
+    async ({ datasourceId, datasources, expected }) => {
+      const { result, order } = await invoke({
+        datasourceId,
         datasources,
         mode: 'inline',
+        missingIds: [datasourceId],
       });
 
       expect(result.isError).toBe(true);
       expect(resultText(result)).toContain(expected);
-      expect(order).toEqual(['list']);
-      expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+      expect(order).toEqual([`document:${datasourceId}`, 'list']);
     },
   );
 
@@ -154,7 +186,7 @@ describe('getGetDatasourceXmlTool', () => {
       'connection-string="Server=example.invalid; Password = whitespace-inline-secret" ' +
       'odbc-connect-string="UID=user;PWD=pwd-inline-secret"/>' +
       '<column name="[Sales]"/></datasource>';
-    const { result } = await invoke({ datasourceName: 'Sales', mode: 'inline', xml });
+    const { result } = await invoke({ datasourceId: 'Sales%20Extract', mode: 'inline', xml });
 
     expect(result.isError).toBe(false);
     const body = resultBody(result);
@@ -174,7 +206,7 @@ describe('getGetDatasourceXmlTool', () => {
     const xml =
       "<datasource name='Sales'><column caption='pwd=1' name='[Token]'>" +
       "<calculation class='tableau' formula='[Token]=1'/></column></datasource>";
-    const { result } = await invoke({ datasourceName: 'Sales', mode: 'inline', xml });
+    const { result } = await invoke({ datasourceId: 'Sales%20Extract', mode: 'inline', xml });
 
     expect(resultBody(result).datasourceXml).toBe(xml);
   });
@@ -193,7 +225,7 @@ describe('getGetDatasourceXmlTool', () => {
       `connection-string="${REDACTED_CREDENTIAL_SENTINEL}" odbc-connect-string="${REDACTED_CREDENTIAL_SENTINEL}"/>` +
       '<column/><relation/>' +
       '</datasource>';
-    const { result } = await invoke({ datasourceName: 'Sales', mode: 'file', xml });
+    const { result } = await invoke({ datasourceId: 'Sales%20Extract', mode: 'file', xml });
     const body = resultBody(result);
     invariant(typeof body.file === 'string');
 
@@ -220,7 +252,7 @@ describe('getGetDatasourceXmlTool', () => {
   it('forces oversized inline content to a datasource-specific cache workflow', async () => {
     const xml = `<datasource name="Sales">${'x'.repeat(64)}</datasource>`;
     const { result } = await invoke({
-      datasourceName: 'Sales',
+      datasourceId: 'Sales%20Extract',
       mode: 'inline',
       xml,
       capBytes: 8,
@@ -235,64 +267,65 @@ describe('getGetDatasourceXmlTool', () => {
     expect(body.instructions).toContain('datasourceFile');
   });
 
-  it.each([
-    ['inventory', { listError: routeMissing }],
-    ['granular document', { documentError: routeMissing }],
-  ] as const)(
-    'maps a missing %s route through the standard read harness',
-    async (_label, errors) => {
-      const { result } = await invoke({ datasourceName: 'Sales', mode: 'inline', ...errors });
-
-      expect(result.isError).toBe(true);
-      expect(resultText(result)).toContain('endpoint yet');
-      expect(resultText(result)).toContain('Do not retry');
-    },
-  );
-
-  it('keeps a real granular datasource-not-found separate from route absence', async () => {
+  it('maps a missing document route through the standard read harness', async () => {
     const { result } = await invoke({
-      datasourceName: 'Sales',
+      datasourceId: 'Sales%20Extract',
+      mode: 'inline',
+      documentError: routeMissing,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain('endpoint yet');
+    expect(resultText(result)).toContain('Do not retry');
+  });
+
+  it('returns a non-lookup document error without a name fallback', async () => {
+    const { result, order } = await invoke({
+      datasourceId: 'Sales%20Extract',
       mode: 'inline',
       documentError: {
         type: 'command-failed',
-        error: {
-          code: 'datasource-not-found',
-          message: 'The datasource no longer exists.',
-          recoverable: false,
-        },
+        error: { code: 'internal-error', message: 'Desktop failed.', recoverable: false },
       },
     });
 
     expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain('The datasource no longer exists.');
-    expect(resultText(result)).not.toContain('Desktop build is too old');
+    expect(resultText(result)).toContain('Desktop failed.');
+    expect(order).toEqual(['document:Sales%20Extract']);
   });
 
-  it('passes the request abort signal to the inventory and granular reads', async () => {
+  it('passes the request abort signal to the list and document reads', async () => {
     const signal = new AbortController().signal;
-    const { executor } = await invoke({ datasourceName: 'Sales', mode: 'inline', signal });
+    const { executor } = await invoke({
+      datasourceId: 'Sales',
+      mode: 'inline',
+      signal,
+      missingIds: ['Sales'],
+    });
 
     expect(executor.listWorkbookDatasources).toHaveBeenCalledWith(signal);
     expect(executor.getDatasourceDocument).toHaveBeenCalledWith('Sales%20Extract', signal);
   });
 
   async function invoke({
-    datasourceName,
+    datasourceId,
     mode,
     datasources = [{ id: 'Sales%20Extract', name: 'Sales' }],
     xml,
     capBytes,
-    listError,
     documentError,
+    missingIds = [],
+    apiVersion,
     signal,
   }: {
-    datasourceName: string;
+    datasourceId: string;
     mode: 'file' | 'inline';
     datasources?: Array<Record<string, unknown>>;
     xml?: string;
     capBytes?: number;
-    listError?: ExecuteCommandError;
     documentError?: ExecuteCommandError;
+    missingIds?: string[];
+    apiVersion?: string;
     signal?: AbortSignal;
   }): Promise<{
     result: CallToolResult;
@@ -302,10 +335,13 @@ describe('getGetDatasourceXmlTool', () => {
     const order: string[] = [];
     const listWorkbookDatasources = vi.fn(async () => {
       order.push('list');
-      return listError ? Err(listError) : Ok({ datasources });
+      return Ok({ datasources });
     });
     const getDatasourceDocument = vi.fn(async (id: string) => {
       order.push(`document:${id}`);
+      if (missingIds.includes(id)) {
+        return Err(datasourceNotFound);
+      }
       return documentError
         ? Err(documentError)
         : Ok({
@@ -315,7 +351,10 @@ describe('getGetDatasourceXmlTool', () => {
           });
     });
     const executor = makeExecutorMock({ listWorkbookDatasources, getDatasourceDocument });
-    const tool = getGetDatasourceXmlTool(new DesktopMcpServer());
+    if (apiVersion !== undefined) {
+      Object.assign(executor, { desktopApiVersion: apiVersion });
+    }
+    const tool = getXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const base = getMockRequestHandlerExtra();
     const extra = {
@@ -328,7 +367,10 @@ describe('getGetDatasourceXmlTool', () => {
         : { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
       ...(signal === undefined ? {} : { signal }),
     };
-    const result = await callback({ session: 'requested', datasourceName, mode }, extra);
+    const result = await callback(
+      { session: 'requested', kind: 'datasource', sheetId: undefined, datasourceId, mode },
+      extra,
+    );
     const body = result.isError ? undefined : resultBody(result);
     if (typeof body?.file === 'string') writtenFiles.push(body.file);
     return { result, order, executor };

@@ -457,11 +457,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 82-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 81-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(82);
+      expect(selected).toHaveLength(81);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -491,7 +491,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'get-workbook-inventory',
         'get-datasources',
         'list-workbook-datasources',
-        'get-datasource-xml',
         'apply-datasource',
         'activate-sheet',
         'delete-sheet',
@@ -784,7 +783,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
     expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasources')).toBeUndefined();
-    expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
@@ -810,31 +808,29 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     );
   });
 
-  it('gates the datasource XML tools at 0.2.10, not get-datasources, and fails open for an unknown version', () => {
+  it('gates apply-datasource at 0.2.10, not get-datasources or get-xml, and fails open for an unknown version', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
     );
-    const featureNames = ['get-datasource-xml', 'apply-datasource'] as const;
     const at209 = filterToolsByApiVersion(profileTools, '0.2.9').map((tool) => tool.name);
     const at210 = filterToolsByApiVersion(profileTools, '0.2.10').map((tool) => tool.name);
     const unknown = filterToolsByApiVersion(profileTools, undefined);
 
-    for (const name of featureNames) {
-      expect(at209).not.toContain(name);
-      expect(at210).toContain(name);
-    }
+    expect(at209).not.toContain('apply-datasource');
+    expect(at210).toContain('apply-datasource');
     expect(at209).toContain('get-datasources');
+    expect(at209).toContain('get-xml');
     expect(unknown).toBe(profileTools);
   });
 
   it('registers each individual datasource factory exactly once', () => {
-    const featureNames = new Set(['get-datasources', 'get-datasource-xml', 'apply-datasource']);
+    const featureNames = new Set(['get-datasources', 'apply-datasource']);
     const names = desktopToolFactories
       .map((factory) => factory(new DesktopMcpServer()).name)
       .filter((name) => featureNames.has(name));
 
-    expect(names).toHaveLength(3);
+    expect(names).toHaveLength(2);
     expect(new Set(names)).toEqual(featureNames);
   });
 

@@ -77,7 +77,13 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
     //    NOT the 20KB workbook.
     const getCb = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
     const getResult = await getCb(
-      { session: 's1', kind: undefined, sheetId: undefined, mode: 'inline' },
+      {
+        session: 's1',
+        kind: undefined,
+        sheetId: undefined,
+        datasourceId: undefined,
+        mode: 'inline',
+      },
       extra(),
     );
     invariant(getResult.content[0].type === 'text');

@@ -115,7 +115,7 @@ describe('cache fingerprint sidecars', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.message).toContain('get-datasource-xml');
+    expect(result.message).toContain('get-xml (kind=datasource)');
   });
 
   it.each([{ type: 'missing' } as const, { type: 'unreadable' } as const])(

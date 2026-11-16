@@ -105,7 +105,7 @@ async function listDatasources(
   return list.map((value) => ({ datasources: (value.datasources ?? []).map(projectDatasource) }));
 }
 
-function isNotADatasourceId(error: ExecuteCommandError): boolean {
+export function isNotADatasourceId(error: ExecuteCommandError): boolean {
   return (
     (error.type === 'command-failed' && error.error?.code === 'datasource-not-found') ||
     (error.type === 'invalid-response' && error.error instanceof ExternalApiRouteError)
