@@ -12,6 +12,7 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
+import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
@@ -207,11 +208,15 @@ export async function startExpressServer({
         data: error,
       });
       if (!res.headersSent) {
-        res.status(500).json({
+        // A site settings failure carries a curated message and the upstream status, so a Tableau 4xx stays a 4xx.
+        const siteSettingsError =
+          error instanceof McpSiteSettingsUnavailableError ? error : undefined;
+        const status = siteSettingsError?.statusCode ?? 500;
+        res.status(status).json({
           jsonrpc: '2.0',
           error: {
-            code: -32603,
-            message: 'Internal server error',
+            code: status < 500 ? -32000 : -32603,
+            message: siteSettingsError?.message ?? 'Internal server error',
           },
           id: null,
         });

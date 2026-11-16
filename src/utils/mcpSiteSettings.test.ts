@@ -1,6 +1,7 @@
 import { AxiosError } from 'axios';
 
-import * as logger from '../logging/logger.js';
+import { McpToolError } from '../errors/mcpToolError.js';
+import { TableauRestError } from '../sdks/tableau/tableauRestError.js';
 import { WebMcpServer } from '../server.web';
 import { stubDefaultEnvVars } from '../testShared';
 import { getConfigWithOverrides } from './mcpSiteSettings';
@@ -8,6 +9,8 @@ import { getConfigWithOverrides } from './mcpSiteSettings';
 const mocks = vi.hoisted(() => ({
   mockGetMcpSiteSettings: vi.fn(),
 }));
+
+vi.mock('../logging/logger.js');
 
 vi.mock('../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
@@ -191,20 +194,13 @@ describe('mcpSiteSettings', () => {
       expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(2);
     });
 
-    it.each([
-      ['a 403', axiosError(403)],
-      ['a plain Error', new Error('boom')],
-    ])(
-      'a forged site part with %s does not plant an entry for the victim site',
-      async (name, err) => {
-        const victim = `victim-${name.replace(/ /g, '-')}`;
-        mocks.mockGetMcpSiteSettings.mockRejectedValueOnce(err).mockResolvedValue(views);
+    it('a forged site part with a 403 does not plant an entry for the victim site', async () => {
+      mocks.mockGetMcpSiteSettings.mockRejectedValueOnce(axiosError(403)).mockResolvedValue(views);
 
-        await getFor(victim, 'attacker-session');
-        expect((await getFor(victim)).includeTools).toEqual(['list-views']);
-        expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(2);
-      },
-    );
+      await getFor('victim-403', 'attacker-session');
+      expect((await getFor('victim-403')).includeTools).toEqual(['list-views']);
+      expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(2);
+    });
 
     it('matches the token site part and session site case-insensitively', async () => {
       mocks.mockGetMcpSiteSettings.mockResolvedValue(views);
@@ -222,33 +218,6 @@ describe('mcpSiteSettings', () => {
       expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(2);
     });
 
-    it('logs the retryable fetch failure once per site, not on every request', async () => {
-      const spy = vi.spyOn(logger, 'log').mockImplementation(() => {});
-      mocks.mockGetMcpSiteSettings.mockRejectedValue(new Error('boom'));
-
-      await getFor('warn-once');
-      await getFor('warn-once');
-      await getFor('warn-once');
-
-      expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(3);
-      expect(spy.mock.calls.filter(([e]) => e.level === 'warning')).toHaveLength(1);
-      spy.mockRestore();
-    });
-
-    it('logs one warning for 50 uncacheable requests with forged unique site parts', async () => {
-      const spy = vi.spyOn(logger, 'log').mockImplementation(() => {});
-      mocks.mockGetMcpSiteSettings.mockRejectedValue(new Error('boom'));
-
-      for (let i = 0; i < 50; i++) {
-        await getFor(`forged-${i}`, 'attacker-session');
-      }
-
-      expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(50);
-      // The shared 'uncacheable' key may already have warned in an earlier test, so allow 0 or 1.
-      expect(spy.mock.calls.filter(([e]) => e.level === 'warning').length).toBeLessThanOrEqual(1);
-      spy.mockRestore();
-    });
-
     it('caches empty settings once for an honest token when the feature is disabled (403)', async () => {
       mocks.mockGetMcpSiteSettings.mockRejectedValue(axiosError(403));
 
@@ -257,13 +226,41 @@ describe('mcpSiteSettings', () => {
       expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(1);
     });
 
-    it('does not cache a non-axios error, so the next request retries', async () => {
-      mocks.mockGetMcpSiteSettings
-        .mockRejectedValueOnce(new Error('boom'))
-        .mockResolvedValue(views);
+    it.each([400, 401, 404, 429, 500, 502, 503])(
+      'rejects with status %i when Tableau answers with it',
+      async (status) => {
+        mocks.mockGetMcpSiteSettings.mockRejectedValue(axiosError(status));
 
-      expect((await getFor('honest-err')).includeTools).toEqual([]);
-      expect((await getFor('honest-err')).includeTools).toEqual(['list-views']);
+        const result = getFor(`status-${status}`);
+
+        await expect(result).rejects.toBeInstanceOf(McpToolError);
+        await expect(result).rejects.toMatchObject({ statusCode: status });
+      },
+    );
+
+    it.each([
+      ['a plain Error', new Error('boom')],
+      ['a network error with no response', new AxiosError('connect ECONNREFUSED')],
+      ['a thrown non-Error', 'boom'],
+    ])('rejects with status 500 for %s', async (_name, err) => {
+      mocks.mockGetMcpSiteSettings.mockRejectedValue(err);
+
+      await expect(getFor('no-status')).rejects.toMatchObject({ statusCode: 500 });
+    });
+
+    it('rejects with the status of a Tableau error returned in a 2xx response', async () => {
+      mocks.mockGetMcpSiteSettings.mockRejectedValue(
+        new TableauRestError({ code: '404000', summary: 'Not Found' }),
+      );
+
+      await expect(getFor('tableau-rest-error')).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('does not cache a failed fetch, so the next request retries', async () => {
+      mocks.mockGetMcpSiteSettings.mockRejectedValueOnce(axiosError(503)).mockResolvedValue(views);
+
+      await expect(getFor('retry-after-failure')).rejects.toMatchObject({ statusCode: 503 });
+      expect((await getFor('retry-after-failure')).includeTools).toEqual(['list-views']);
       expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(2);
     });
 

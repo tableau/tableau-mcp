@@ -52,6 +52,7 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
   });
 
   afterEach(() => {
