@@ -302,7 +302,7 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
  * RegistryEvidence — server-generated single-use confirmation nonce, for mutations whose target has
  * no durable taggable state (e.g. extract refresh tasks).
  *
- * `establish` generates a fresh nonce via crypto.randomUUID() and records its hash in the session
+ * `establish` generates a fresh nonce via crypto.randomUUID() and records its hash in the key-value
  * store under a key scoped to site + user + tool + target + binding, replacing any earlier preview;
  * the preview text echoes the nonce so the caller can supply it on confirm. `verify` atomically
  * consumes that entry, then checks the nonce, so a token works once, only for the latest preview of

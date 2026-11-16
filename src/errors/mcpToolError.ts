@@ -81,7 +81,7 @@ export class PreviewNotRunError extends McpToolError {
   }
 }
 
-// The session store holding preview proof failed. Fails closed with a fixed message so backend
+// The key-value store holding preview proof failed. Fails closed with a fixed message so backend
 // details never reach the client.
 export class EvidenceStoreUnavailableError extends McpToolError {
   constructor() {
