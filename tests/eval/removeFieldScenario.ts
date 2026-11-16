@@ -198,8 +198,11 @@ export class RemoveFieldScenario {
       'Unknown fixture worksheet',
     );
     switch (name) {
-      case 'get_worksheet_xml': {
-        invariant(args.worksheetName === worksheetName, 'worksheetName is required');
+      case 'get_xml': {
+        invariant(
+          args.kind === 'worksheet' && args.sheetId === worksheetName,
+          'kind=worksheet and sheetId are required',
+        );
         const mode = args.mode ?? 'file';
         invariant(mode === 'file' || mode === 'inline', 'mode must be file or inline');
         if (!this.testCase.fresh) this.violations.push('Live refresh resets the working draft');
@@ -284,7 +287,7 @@ export class RemoveFieldScenario {
 
   grade(): string[] {
     const failures = [...this.violations];
-    if (this.testCase.fresh && !this.calls.some((call) => call.name === 'get_worksheet_xml')) {
+    if (this.testCase.fresh && !this.calls.some((call) => call.name === 'get_xml')) {
       failures.push('Fresh edits must inspect the live worksheet');
     }
     const removals = this.calls.filter((call) => call.name === 'remove_field').length;
@@ -300,7 +303,7 @@ export class RemoveFieldScenario {
   }
 }
 
-const toolNames = ['get_worksheet_xml', 'read_cached_xml', 'remove_field'];
+const toolNames = ['get_xml', 'read_cached_xml', 'remove_field'];
 
 export async function getRemoveFieldEvalAgent(
   mcpServer: MCPServerStdio,

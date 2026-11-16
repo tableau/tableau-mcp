@@ -26,7 +26,7 @@ export const getAddWorksheetTool = (server: DesktopMcpServer): DesktopTool<typeo
     minApiVersion: '0.2.6',
     title,
     description:
-      'Add a blank worksheet to the open workbook. It becomes the active sheet; get its id from get-workbook-inventory.',
+      'Add a blank worksheet to the open workbook. It becomes the active sheet; get its id from get-sheets.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
