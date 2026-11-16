@@ -36,41 +36,47 @@ export async function resolveSheetRef({
       if (worksheets.isErr()) {
         return worksheets;
       }
-      const dashboards = await read(
-        'dashboard list',
-        async (executor, signal) => await executor.listDashboards(signal),
-      );
-      if (dashboards.isErr()) {
-        return dashboards;
-      }
-      const storyboards = await read(
-        'storyboard list',
-        async (executor, signal) => await executor.listStoryboards(signal),
-      );
-      if (storyboards.isErr()) {
-        return storyboards;
-      }
-
       const worksheetItems = worksheets.value.worksheets ?? [];
-      const tagged: Array<{ id: string; name: string; kind: SheetKind }> = [
-        ...worksheetItems.map((w) => ({ id: w.id, name: w.name, kind: 'worksheet' as const })),
-        ...(dashboards.value.dashboards ?? []).map((d) => ({
-          id: d.id,
-          name: d.name,
-          kind: 'dashboard' as const,
-        })),
-        ...(storyboards.value.storyboards ?? []).map((s) => ({
-          id: s.id,
-          name: s.name,
-          kind: 'storyboard' as const,
-        })),
-      ];
+      const tagged: Array<{ id: string; name: string; kind: SheetKind }> =
+        kind === undefined || kind === 'worksheet'
+          ? worksheetItems.map((w) => ({ id: w.id, name: w.name, kind: 'worksheet' as const }))
+          : [];
 
-      const resolved = resolveItemByNameOrId(
-        'Sheet',
-        sheet,
-        kind ? tagged.filter((item) => item.kind === kind) : tagged,
-      );
+      if (kind === undefined || kind === 'dashboard') {
+        const dashboards = await read(
+          'dashboard list',
+          async (executor, signal) => await executor.listDashboards(signal),
+        );
+        if (dashboards.isErr()) {
+          return dashboards;
+        }
+        tagged.push(
+          ...(dashboards.value.dashboards ?? []).map((d) => ({
+            id: d.id,
+            name: d.name,
+            kind: 'dashboard' as const,
+          })),
+        );
+      }
+
+      if (kind === undefined || kind === 'storyboard') {
+        const storyboards = await read(
+          'storyboard list',
+          async (executor, signal) => await executor.listStoryboards(signal),
+        );
+        if (storyboards.isErr()) {
+          return storyboards;
+        }
+        tagged.push(
+          ...(storyboards.value.storyboards ?? []).map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: 'storyboard' as const,
+          })),
+        );
+      }
+
+      const resolved = resolveItemByNameOrId(kind ? SHEET_LABEL[kind] : 'Sheet', sheet, tagged);
       if (resolved.isErr()) {
         return resolved.error.toErr();
       }
@@ -82,3 +88,9 @@ export async function resolveSheetRef({
     },
   });
 }
+
+const SHEET_LABEL: Record<SheetKind, string> = {
+  worksheet: 'Worksheet',
+  dashboard: 'Dashboard',
+  storyboard: 'Storyboard',
+};

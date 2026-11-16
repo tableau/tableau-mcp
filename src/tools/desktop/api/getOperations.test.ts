@@ -9,7 +9,11 @@ import {
   MockExternalApiServer,
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
-import { ExternalApiInstance, OperationEnvelope } from '../../../desktop/externalApi/types.js';
+import {
+  ExternalApiInstance,
+  OperationEnvelope,
+  OperationList,
+} from '../../../desktop/externalApi/types.js';
 import { REDACTED_CREDENTIAL_SENTINEL } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { sidecarPath, sourceSha256 } from '../../../desktop/wrappers/cacheFingerprint.js';
@@ -17,7 +21,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getOperationTool } from './getOperation.js';
+import { getOperationsTool } from './getOperations.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -35,7 +39,19 @@ const succeededOperation = {
   state: 'SUCCEEDED',
 };
 
-describe('get-operation tool', () => {
+const operationList: OperationList = {
+  operations: [
+    { id: 'op-1', kind: 'openFile', state: 'running' },
+    {
+      id: 'op-2',
+      kind: 'saveWorkbook',
+      state: 'failed',
+      error: { code: 'save-failed', tableauErrorCode: 'TAB-42' },
+    },
+  ],
+};
+
+describe('get-operations tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
@@ -46,9 +62,9 @@ describe('get-operation tool', () => {
   });
 
   it('declares the contract', () => {
-    const tool = getOperationTool(new DesktopMcpServer());
+    const tool = getOperationsTool(new DesktopMcpServer());
 
-    expect(tool.name).toBe('get-operation');
+    expect(tool.name).toBe('get-operations');
     expect(tool.minApiVersion).toBe('0.2.0');
     expect(tool.description).toContain('progressWindows');
     expect(tool.paramsSchema).toMatchObject({
@@ -63,12 +79,63 @@ describe('get-operation tool', () => {
     });
   });
 
-  it('requires a non-empty operation id', () => {
-    const schema = z.object(getOperationTool(new DesktopMcpServer()).paramsSchema as z.ZodRawShape);
+  it('accepts an omitted operation id but not an empty one', () => {
+    const schema = z.object(
+      getOperationsTool(new DesktopMcpServer()).paramsSchema as z.ZodRawShape,
+    );
 
-    expect(schema.safeParse({}).success).toBe(false);
+    expect(schema.safeParse({}).success).toBe(true);
     expect(schema.safeParse({ operationId: '' }).success).toBe(false);
     expect(schema.safeParse({ operationId: 'op-1' }).success).toBe(true);
+  });
+
+  it('lists the operations with state and error details when no id is given', async () => {
+    const harness = await startHarness();
+    harness.server.setOverride('GET /v0/operations', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(operationList),
+    });
+
+    try {
+      const result = await harness.callTool({ session: undefined, operationId: undefined });
+
+      expect(result.isError).toBe(false);
+      expect(parseResult(result)).toEqual(operationList);
+      expect(
+        harness.server.requests.filter(
+          (request) => request.method === 'GET' && request.path.startsWith('/v0/operations'),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('returns an error when the list request fails', async () => {
+    const harness = await startHarness();
+    harness.server.setOverride('GET /v0/operations', {
+      status: 500,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        type: 'problem',
+        title: 'Internal error',
+        status: 500,
+        instance: '/v0/operations',
+        code: 'internal-error',
+        detail: 'Operation store unavailable',
+      }),
+    });
+
+    try {
+      const result = await harness.callTool({ session: undefined, operationId: undefined });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Operation store unavailable');
+    } finally {
+      await harness.close();
+    }
   });
 
   it('returns the operation envelope for the requested id', async () => {
@@ -146,7 +213,7 @@ describe('get-operation tool', () => {
         expect(JSON.parse(readFileSync(sidecarPath(documentFile), 'utf-8'))).toMatchObject({
           session_id: '999',
           pid: 999,
-          instanceId: 'inst-get-operation',
+          instanceId: 'inst-get-operations',
           source_sha256: sourceSha256(cached),
         });
       } finally {
@@ -178,13 +245,16 @@ function parseResult(result: CallToolResult): OperationEnvelope {
 
 async function startHarness({ capBytes }: { capBytes?: number } = {}): Promise<{
   server: MockExternalApiServer;
-  callTool: (args: { session: string | undefined; operationId: string }) => Promise<CallToolResult>;
+  callTool: (args: {
+    session: string | undefined;
+    operationId: string | undefined;
+  }) => Promise<CallToolResult>;
   close: () => Promise<void>;
 }> {
   const server = await startMockExternalApiServer();
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const tool = getOperationTool(new DesktopMcpServer());
+  const tool = getOperationsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   const base = getMockRequestHandlerExtra();
   const extra = {
@@ -208,7 +278,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
-    instanceId: 'inst-get-operation',
+    instanceId: 'inst-get-operations',
     apiVersion: '0.2.25',
   };
 }
