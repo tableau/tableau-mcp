@@ -753,7 +753,7 @@ async function runExtractRefreshTaskBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: withAppApproval(registryEvidence, appRenderable && !confirm),
+    evidence: withAppApproval(registryEvidence, appRenderable && !confirm, { approvalLast: true }),
     resolveTarget,
     ...(confirm ? { confirmationToken } : {}),
     fallbackTargetKind: 'extract-refresh-task',
@@ -802,14 +802,19 @@ async function runExtractRefreshTaskBranch({
   );
 }
 
-// The approval is established first, so a store outage fails the preview before the tag is written.
+// By default the approval is established first, so a store outage fails the preview before the tag
+// is written. The extract-refresh confirm checks only the approval, so there it goes last: a failed
+// nonce write must not leave an approval behind.
 function withAppApproval(
   evidence: EvidenceStrategy<MutationTarget>,
   recordApproval: boolean,
+  { approvalLast = false }: { approvalLast?: boolean } = {},
 ): EvidenceStrategy<MutationTarget> {
-  return recordApproval
-    ? new AllEvidence([new AppApprovalEvidence('delete-content'), evidence])
-    : evidence;
+  if (!recordApproval) {
+    return evidence;
+  }
+  const approval = new AppApprovalEvidence('delete-content');
+  return new AllEvidence(approvalLast ? [evidence, approval] : [approval, evidence]);
 }
 
 /**

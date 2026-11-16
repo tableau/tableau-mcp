@@ -234,11 +234,12 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                 mode: 'preview-confirm',
                 phase: args.confirm ? 'confirm' : 'preview',
                 // Flag ON: also record the schedule-bound approval the confirm panel's tool verifies.
+                // The approval goes last so a failed nonce write leaves no approval behind.
                 evidence:
                   mcpAppsEnabled && !args.confirm
                     ? new AllEvidence([
-                        new AppApprovalEvidence('update-cloud-extract-refresh-task'),
                         evidence,
+                        new AppApprovalEvidence('update-cloud-extract-refresh-task'),
                       ])
                     : evidence,
                 resolveTarget,

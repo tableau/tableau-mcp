@@ -15,7 +15,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from '../workbooks/mockWorkbook.js';
 import { auditRecordSchema } from './auditRecord.js';
 import { getDeleteContentTool } from './deleteContent.js';
-import { AppApprovalEvidence } from './evidence.js';
+import { AppApprovalEvidence, RegistryEvidence } from './evidence.js';
 import { checkContentStillStale } from './stalenessCheck.js';
 
 // Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
@@ -1107,6 +1107,26 @@ describe('deleteContentTool', () => {
           }
         },
       );
+    });
+
+    it('leaves no app approval behind when the extract-refresh nonce write fails', async () => {
+      vi.spyOn(RegistryEvidence.prototype, 'establish').mockRejectedValue(
+        new EvidenceStoreUnavailableError(),
+      );
+      const approvalSpy = vi.spyOn(AppApprovalEvidence.prototype, 'establish');
+      try {
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          mcpAppToolsRenderable: true,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(approvalSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.mocked(RegistryEvidence.prototype.establish).mockRestore();
+        approvalSpy.mockRestore();
+      }
     });
 
     it('rejects model-driven confirm:true with a PreviewNotRun error (no self-confirm)', async () => {
