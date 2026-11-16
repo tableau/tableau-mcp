@@ -490,7 +490,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         await waitUntil(() =>
           requests.some(({ method, url }) => method === 'POST' && url === '/v0/workbook:save'),
         );
-        const listed = await requireClient().callTool('list-operations', {
+        const listed = await requireClient().callTool('get-operations', {
           schema: operationListSchema,
           toolArgs: { session: SESSION },
         });
@@ -499,7 +499,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         expect(operationId).toBe(origin.operation.id);
         expect(listed.operations[0].kind).toBe('save-workbook');
         const readOperation = async (): Promise<OperationEnvelope> =>
-          await requireClient().callTool('get-operation', {
+          await requireClient().callTool('get-operations', {
             schema: operationEnvelopeSchema,
             toolArgs: { session: SESSION, operationId },
           });
