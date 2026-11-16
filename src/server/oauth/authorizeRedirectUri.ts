@@ -1,4 +1,4 @@
-import type { SessionStore } from '../../sessionStore/sessionStore.js';
+import type { KeyValueStore } from '../../storage/keyValueStore.js';
 import { isNativeRedirectUri } from './isNativeRedirectUri.js';
 import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
 import { ClientRegistration } from './types.js';
@@ -20,7 +20,7 @@ import { ClientRegistration } from './types.js';
 export async function checkRedirectUriAllowed(args: {
   clientId: string;
   redirectUri: string;
-  clientRegistrations: SessionStore<ClientRegistration>;
+  clientRegistrations: KeyValueStore<ClientRegistration>;
 }): Promise<{ error: string; error_description: string } | null> {
   const { clientId, redirectUri, clientRegistrations } = args;
 

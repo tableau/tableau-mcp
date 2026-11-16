@@ -4,8 +4,8 @@ import { readFileSync } from 'fs';
 
 import { Config, getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
-import { createNamespacedStore } from '../../sessionStore/init.js';
-import type { SessionStore } from '../../sessionStore/sessionStore.js';
+import type { KeyValueStore } from '../../storage/keyValueStore.js';
+import { createNamespacedKeyValueStore } from '../../storage/storageProvider.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
@@ -57,27 +57,28 @@ export abstract class OAuthProvider {
  *
  */
 export class EmbeddedOAuthProvider extends OAuthProvider {
-  private readonly pendingAuthorizations: SessionStore<PendingAuthorization> =
-    createNamespacedStore('pendingAuthorization', {
+  private readonly pendingAuthorizations: KeyValueStore<PendingAuthorization> =
+    createNamespacedKeyValueStore('pendingAuthorization', {
       ttlMs: getConfig().oauth.authzCodeTimeoutMs,
     });
-  private readonly authorizationCodes: SessionStore<AuthorizationCode> = createNamespacedStore(
-    'authorizationCode',
-    { ttlMs: getConfig().oauth.authzCodeTimeoutMs },
-  );
-  private readonly refreshTokens: SessionStore<RefreshTokenData> = createNamespacedStore(
+  private readonly authorizationCodes: KeyValueStore<AuthorizationCode> =
+    createNamespacedKeyValueStore('authorizationCode', {
+      ttlMs: getConfig().oauth.authzCodeTimeoutMs,
+    });
+  private readonly refreshTokens: KeyValueStore<RefreshTokenData> = createNamespacedKeyValueStore(
     'refreshToken',
     { ttlMs: getConfig().oauth.refreshTokenTimeoutMs },
   );
   // Secondary index for O(1) revocation: Tableau access token -> MCP refresh token ID.
-  private readonly refreshTokenIndex: SessionStore<string> = createNamespacedStore(
+  private readonly refreshTokenIndex: KeyValueStore<string> = createNamespacedKeyValueStore(
     'refreshTokenIndex',
     { ttlMs: getConfig().oauth.refreshTokenTimeoutMs },
   );
-  private readonly clientRegistrations: SessionStore<ClientRegistration> = createNamespacedStore(
-    'clientRegistration',
-    { ttlMs: milliseconds.fromDays(24), maxSize: 10_000 },
-  );
+  private readonly clientRegistrations: KeyValueStore<ClientRegistration> =
+    createNamespacedKeyValueStore('clientRegistration', {
+      ttlMs: milliseconds.fromDays(24),
+      maxSize: 10_000,
+    });
 
   private readonly privateKey: KeyObject;
   private readonly publicKey: KeyObject;

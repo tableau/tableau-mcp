@@ -8,7 +8,7 @@ import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
-import { SessionStore } from '../../sessionStore/sessionStore.js';
+import type { KeyValueStore } from '../../storage/keyValueStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
 import { siteBindingRequired, siteMatchesConfig } from './siteBinding.js';
@@ -23,8 +23,8 @@ import { AuthorizationCode, PendingAuthorization } from './types.js';
  */
 export function callback(
   app: express.Application,
-  pendingAuthorizations: SessionStore<PendingAuthorization>,
-  authorizationCodes: SessionStore<AuthorizationCode>,
+  pendingAuthorizations: KeyValueStore<PendingAuthorization>,
+  authorizationCodes: KeyValueStore<AuthorizationCode>,
 ): void {
   const config = getConfig();
 
