@@ -504,7 +504,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
             toolArgs: { session: SESSION, operationId },
           });
         const readInventory = async (): Promise<WorkbookInventory> =>
-          await requireClient().callTool('get-workbook-inventory', {
+          await requireClient().callTool('get-sheets', {
             schema: workbookInventorySchema,
             toolArgs: { session: SESSION },
           });

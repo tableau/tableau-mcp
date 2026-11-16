@@ -191,7 +191,7 @@ describe('runApplyPreamble secure contained cache read', () => {
 
     expect(result.isErr()).toBe(true);
     expect(result.unwrapErr().type).toBe('cache-session-mismatch');
-    expect(result.unwrapErr().message).toContain('get-datasource-xml');
+    expect(result.unwrapErr().message).toContain('get-xml (kind=datasource)');
   });
 
   it.each(['workbook', 'worksheet', 'dashboard', 'storyboard', 'datasource'] as const)(

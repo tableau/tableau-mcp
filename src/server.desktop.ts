@@ -51,7 +51,7 @@ const serverVersion = pkg.version;
 /**
  * Small tool set for demos, selected by TOOL_PROFILE=demo. Registering fewer tools keeps the
  * serialized schemas small, which cuts per-turn latency and token cost. It holds the fast-path
- * and coordination tools plus the fallback chain (get-workbook-xml, apply-worksheet) the model
+ * and coordination tools plus the fallback chain (get-xml, apply-worksheet) the model
  * needs when the fast path cannot finish. Experimental: it may change or be removed in a minor
  * release.
  */
@@ -59,11 +59,10 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
   'bind-template',
   'run-dashboard-batch',
   'list-instances',
-  'list-worksheets',
+  'get-sheets',
   'list-available-fields',
-  'get-worksheet-xml',
+  'get-xml',
   'apply-workbook',
-  'get-workbook-xml',
   'apply-worksheet',
 ]);
 
@@ -88,10 +87,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'resolve-field',
     // The manual field-edit path's read leg: mints the worksheetFile cache path that
     // add-field/remove-field/apply-worksheet consume. Without it the manual path cannot start.
-    'get-worksheet-xml',
-    'get-dashboard-xml',
-    'get-storyboard-xml',
-    'get-workbook-xml',
+    'get-xml',
     'export-worksheet-image',
     'export-dashboard-image',
     'export-storyboard-image',
@@ -143,21 +139,15 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'invoke-dialog-action',
     'list-available-fields',
     'search-workbook-fields',
-    'list-worksheets',
+    'get-sheets',
     'get-show-me-options',
-    'list-dashboards',
-    'list-storyboards',
-    'get-sheet-info',
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
     'list-datasource-logical-tables',
     'get-datasource-underlying-data',
     'capture-window-screenshot',
-    'get-workbook-inventory',
     'get-datasources',
-    'list-workbook-datasources',
-    'get-datasource-xml',
     'apply-datasource',
     'refresh-datasource',
     'author-calc',
@@ -177,7 +167,7 @@ export const ALWAYS_LOAD_TOOL_NAMES: ReadonlySet<DesktopToolName> = new Set<Desk
   'rename-sheet',
   'read-expertise-resource',
   'run-dashboard-batch',
-  'get-dashboard-xml',
+  'get-xml',
   'invoke-dialog-action',
   'search-expertise',
 ]);
