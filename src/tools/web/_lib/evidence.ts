@@ -266,25 +266,21 @@ const APPROVAL_NAMESPACE = 'mutation-app-approvals-v1';
  * DELETEs, which carry no payload beyond the target id) pass no `binding`, so their key is unchanged.
  */
 export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
-  // The preview-tool name that namespaces the approval key. The preview tool and its model-invisible
-  // confirm tool run as separate WebTool instances under DIFFERENT tool names, so the key must NOT be
-  // `ctx.tool` (that would never match across the pair). Instead both sides pass the SAME fixed
-  // namespace — the preview tool's name (e.g. 'delete-workbook', 'delete-datasource',
-  // 'delete-extract-refresh-task', 'update-cloud-extract-refresh-task') — so each tool's approval is
-  // isolated from every other tool's and the preview/confirm pair resolves the same entry.
-  private readonly namespace: string;
+  // The preview-tool name that scopes the approval key (not the KV namespace). The preview tool and
+  // its model-invisible confirm tool run under DIFFERENT tool names, so the key must NOT be
+  // `ctx.tool` (that would never match across the pair). Both sides pass the SAME name (e.g.
+  // 'delete-content', 'update-cloud-extract-refresh-task') so the pair resolves one entry and each
+  // tool's approval stays isolated from every other tool's.
+  private readonly previewTool: string;
 
-  // Defaults to 'delete-workbook' to preserve the original (pre-generalization) behavior for the
-  // first tool to adopt this strategy. Every NEW tool MUST pass its own preview-tool name so the
-  // approvals don't collide on the 'delete-workbook' namespace.
-  constructor(namespace: string = 'delete-workbook') {
-    this.namespace = namespace;
+  constructor(previewTool: string) {
+    this.previewTool = previewTool;
   }
 
   private approvalKey(ctx: EvidenceContext): string {
     // The binding keeps an approval minted for parameter set A from satisfying a confirm carrying
     // parameter set B. An empty binding keeps keys stable for payload-free targets like the deletes.
-    return sha256([ctx.siteId, ctx.userLuid, this.namespace, ctx.target.id, ctx.binding ?? '']);
+    return sha256([ctx.siteId, ctx.userLuid, this.previewTool, ctx.target.id, ctx.binding ?? '']);
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
