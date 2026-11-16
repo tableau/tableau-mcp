@@ -13,7 +13,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
-import { AppApprovalEvidence } from '../_lib/evidence.js';
+import { AppApprovalEvidence, RegistryEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
   getUpdateCloudExtractRefreshTaskTool,
@@ -774,6 +774,27 @@ describe('updateCloudExtractRefreshTaskTool', () => {
         });
       } finally {
         establish.mockRestore();
+      }
+    });
+
+    it('records no approval when the nonce write fails (approval is written last)', async () => {
+      const nonce = vi
+        .spyOn(RegistryEvidence.prototype, 'establish')
+        .mockRejectedValue(new EvidenceStoreUnavailableError());
+      const approval = vi.spyOn(AppApprovalEvidence.prototype, 'establish');
+      try {
+        const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(result.isError).toBe(true);
+        expect(approval).not.toHaveBeenCalled();
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+      } finally {
+        nonce.mockRestore();
+        approval.mockRestore();
       }
     });
 
