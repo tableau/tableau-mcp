@@ -49,7 +49,7 @@ describe('getWorkbookInventoryTool', () => {
       'an empty list does not mean the workbook has no connected datasource',
     );
     expect(tool.description).toContain(
-      'Use list-workbook-datasources only when connection inventory matters',
+      'Use get-datasources only when connection inventory matters',
     );
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
