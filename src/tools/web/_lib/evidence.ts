@@ -154,7 +154,9 @@ export function getMutationPreviewTtlMs(): number {
 //
 // Each scope holds one entry, so a new preview replaces the last one and only the latest token works.
 // The entry is a string carrying its own expiry, which survives any provider's serialization and
-// keeps a provider that ignores the namespace TTL from stretching the approval window.
+// keeps a provider that ignores the namespace TTL from stretching the approval window. The
+// namespace `ttlMs` is only a cleanup backstop; the embedded expiry is the authoritative check, so a
+// provider may add slack to it (e.g. ttl = write + ttlMs + 60s) without extending the window.
 const proofStores = new Map<string, KeyValueStore<string>>();
 
 function getProofStore(namespace: string): KeyValueStore<string> {
