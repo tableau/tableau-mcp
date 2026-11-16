@@ -460,7 +460,7 @@ export function resolveCanonicalWorksheetName(
         `worksheetName "${worksheetName}" does not match <worksheet name="${xmlName}"> in the file, and apply-worksheet cannot rename a worksheet. ` +
         `FIX: check the worksheet's name in Desktop with get-sheets. If it is "${xmlName}", pass "${xmlName}" as worksheetName. ` +
         `If it is "${worksheetName}", set the name in the file to "${worksheetName}" and apply; to rename the worksheet, call rename-sheet afterwards. ` +
-        'If it is neither, re-read the worksheet with get-xml and redo your edit in that file. No changes were sent to Tableau.',
+        'If it is neither, re-read the worksheet with get-xml (kind=worksheet) and redo your edit in that file. No changes were sent to Tableau.',
     });
   }
 
@@ -708,7 +708,7 @@ export async function loadWorksheetXml({
             message:
               `The file names this worksheet "${applyOutcome.submittedName}", but in Desktop it is "${applyOutcome.liveName}", and apply-worksheet cannot rename a worksheet. ` +
               `FIX: if you edited the name to rename it, set it to "${applyOutcome.liveName}" in the file, apply, then call rename-sheet. ` +
-              'If the file is older than the worksheet in Desktop, re-read it with get-xml and redo your edit. No changes were sent to Tableau.',
+              'If the file is older than the worksheet in Desktop, re-read it with get-xml (kind=worksheet) and redo your edit. No changes were sent to Tableau.',
           },
         });
       }
@@ -724,7 +724,7 @@ export async function loadWorksheetXml({
           error: {
             type: 'source-drift',
             message:
-              'The worksheet changed since this cache was read. Re-read it with get-xml, reapply your edit to the new cache file, then retry apply-worksheet. No changes were sent to Tableau.',
+              'The worksheet changed since this cache was read. Re-read it with get-xml (kind=worksheet), reapply your edit to the new cache file, then retry apply-worksheet. No changes were sent to Tableau.',
           },
         });
       }

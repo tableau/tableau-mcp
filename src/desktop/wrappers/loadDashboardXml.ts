@@ -137,7 +137,7 @@ function resolveCanonicalDashboardName(
         `${param} "${dashboardName}" does not match <${kind} name="${xmlName}"> in the file, and apply-${kind} cannot rename a ${kind}. ` +
         `FIX: check the ${kind}'s name in Desktop with get-sheets. If it is "${xmlName}", pass "${xmlName}" as ${param}. ` +
         `If it is "${dashboardName}", set the name in the file to "${dashboardName}" and apply; to rename the ${kind}, call rename-sheet afterwards. ` +
-        `If it is neither, re-read the ${kind} with get-xml and redo your edit in that file. No changes were sent to Tableau.`,
+        `If it is neither, re-read the ${kind} with get-xml (kind=${kind}) and redo your edit in that file. No changes were sent to Tableau.`,
     });
   }
 

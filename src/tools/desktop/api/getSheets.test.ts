@@ -148,21 +148,13 @@ describe('getSheetsTool', () => {
         id: 'dash-exec',
         containedSheets: ['sheet-sales', 'sheet-profit'],
       },
-      paths: [
-        '/v0/workbook/worksheets',
-        '/v0/workbook/dashboards',
-        '/v0/workbook/dashboards/dash-exec',
-      ],
+      paths: ['/v0/workbook/dashboards', '/v0/workbook/dashboards/dash-exec'],
     },
     {
       kind: 'storyboard',
       sheetId: 'story-qbr',
       expected: { kind: 'storyboard', id: 'story-qbr', storyPointCount: 4 },
-      paths: [
-        '/v0/workbook/worksheets',
-        '/v0/workbook/storyboards',
-        '/v0/workbook/storyboards/story-qbr',
-      ],
+      paths: ['/v0/workbook/storyboards', '/v0/workbook/storyboards/story-qbr'],
     },
   ])('reads one $kind by id after resolving it', async ({ kind, sheetId, expected, paths }) => {
     const harness = await startHarness(getSheetsTool);

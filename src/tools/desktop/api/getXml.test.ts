@@ -201,6 +201,114 @@ describe('getXmlTool', () => {
     },
   );
 
+  it.each([
+    {
+      kind: 'worksheet',
+      list: WORKSHEET_LIST,
+      body: {
+        worksheets: [
+          {
+            id: 'sheet-a',
+            name: 'Sales',
+            type: 'WORKSHEET',
+            hidden: false,
+            isActiveSheet: false,
+            index: 0,
+          },
+          {
+            id: 'sheet-b',
+            name: 'Sales',
+            type: 'WORKSHEET',
+            hidden: false,
+            isActiveSheet: false,
+            index: 1,
+          },
+        ],
+      },
+      error: 'multiple-worksheets-found',
+    },
+    {
+      kind: 'dashboard',
+      list: DASHBOARD_LIST,
+      body: {
+        dashboards: [
+          {
+            id: 'dash-a',
+            name: 'Sales',
+            type: 'DASHBOARD',
+            hidden: false,
+            isActiveSheet: false,
+            index: 0,
+          },
+          {
+            id: 'dash-b',
+            name: 'Sales',
+            type: 'DASHBOARD',
+            hidden: false,
+            isActiveSheet: false,
+            index: 1,
+          },
+        ],
+      },
+      error: 'multiple-dashboards-found',
+    },
+  ])(
+    'reports $error when the $kind name matches more than one sheet',
+    async ({ kind, list, body, error }) => {
+      const harness = await startHarness(getXmlTool, (server) =>
+        server.setOverride(`GET ${list}`, {
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(body),
+        }),
+      );
+      try {
+        const result = await harness.callTool({ kind, sheetId: 'Sales', mode: 'inline' });
+
+        expect(result.isError).toBe(true);
+        expect(errorText(result)).toContain(error);
+        expect(requestPaths(harness.server)).toEqual([list]);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it.each([
+    {
+      kind: 'worksheet',
+      sheetId: 'Sales by Region',
+      calls: ['listWorksheets', 'getWorksheetDocument'],
+    },
+    {
+      kind: 'dashboard',
+      sheetId: 'Executive Dashboard',
+      calls: ['listDashboards', 'getDashboardDocument'],
+    },
+    {
+      kind: 'storyboard',
+      sheetId: 'QBR Story',
+      calls: ['listStoryboards', 'getStoryboardDocument'],
+    },
+  ] as const)(
+    'passes the request abort signal to the $kind list and document reads',
+    async ({ kind, sheetId, calls }) => {
+      const spies = calls.map((method) => vi.spyOn(ExternalApiToolExecutor.prototype, method));
+      const harness = await startHarness(getXmlTool);
+      try {
+        const result = await harness.callTool({ kind, sheetId, mode: 'inline' });
+
+        expect(result.isError).toBe(false);
+        for (const spy of spies) {
+          expect(spy.mock.calls[0]).toContain(harness.signal);
+        }
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+        await harness.close();
+      }
+    },
+  );
+
   it('reports a sheet that matches neither an id nor a name', async () => {
     const harness = await startHarness(getXmlTool);
     try {
@@ -441,6 +549,7 @@ async function startHarness(
   capBytes?: number,
 ): Promise<{
   server: MockExternalApiServer;
+  signal: AbortSignal;
   callTool: (args: Record<string, unknown>) => Promise<CallToolResult>;
   close: () => Promise<void>;
 }> {
@@ -462,6 +571,7 @@ async function startHarness(
 
   return {
     server,
+    signal: extra.signal,
     callTool: async (args) => await callback({ mode: 'file', ...args }, extra),
     close: async () => {
       executor.stop();

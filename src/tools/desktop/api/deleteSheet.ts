@@ -57,7 +57,7 @@ export const getDeleteSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
             }
             const { ref, previousName, worksheetCount } = refResult.value;
 
-            if (ref.kind === 'worksheet' && worksheetCount <= 1) {
+            if (ref.kind === 'worksheet' && worksheetCount === 1) {
               const refused: DeleteSheetResult = {
                 deleted: false,
                 sheet: { id: ref.id, kind: ref.kind, name: previousName },
