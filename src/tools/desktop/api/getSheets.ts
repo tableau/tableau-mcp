@@ -18,7 +18,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
-import { isSheetNotFound, resolveSheetRef } from './resolveSheetRef.js';
+import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -98,27 +98,17 @@ async function getSheets({
   return await runExternalApiReadTool({
     session,
     extra,
-    callback: async (executor, signal, read) => {
-      const byId = await getSheetItem(executor, kind, sheetId, signal);
-      const readItem = async (
-        item: Result<SheetItem, ExecuteCommandError>,
-      ): Promise<Result<object, McpToolError>> =>
-        (await read(kind, async () => await Promise.resolve(item))).map((value) => ({
-          kind,
-          ...value,
-        }));
-      if (byId.isOk() || !isSheetNotFound(byId.error)) {
-        return await readItem(byId);
-      }
+    callback: async (_executor, _signal, read) => {
       const resolved = await resolveSheetRef({ session, sheet: sheetId, kind, extra });
       if (resolved.isErr()) {
         return resolved;
       }
       const { id } = resolved.value.ref;
-      if (id === sheetId) {
-        return await readItem(byId);
-      }
-      return await readItem(await getSheetItem(executor, kind, id, signal));
+      const item = await read(
+        kind,
+        async (executor, signal) => await getSheetItem(executor, kind, id, signal),
+      );
+      return item.map((value) => ({ kind, ...value }));
     },
   });
 }

@@ -33,6 +33,9 @@ vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
   writeCacheTextFile: vi.fn(),
 }));
 
+const WORKSHEET_LIST = '/v0/workbook/worksheets';
+const DASHBOARD_LIST = '/v0/workbook/dashboards';
+const STORYBOARD_LIST = '/v0/workbook/storyboards';
 const WORKSHEET_DOCUMENT = '/v0/workbook/worksheets/sheet-sales/document';
 const DASHBOARD_DOCUMENT = '/v0/workbook/dashboards/dash-exec/document';
 const STORYBOARD_DOCUMENT = '/v0/workbook/storyboards/story-qbr/document';
@@ -65,23 +68,23 @@ describe('getXmlTool', () => {
       sheetId: 'sheet-sales',
       key: 'worksheetXml',
       fragment: '<worksheet name="Sales by Region"',
-      path: WORKSHEET_DOCUMENT,
+      paths: [WORKSHEET_LIST, WORKSHEET_DOCUMENT],
     },
     {
       kind: 'dashboard',
       sheetId: 'dash-exec',
       key: 'dashboardXml',
       fragment: '<dashboard name="Executive Dashboard"',
-      path: DASHBOARD_DOCUMENT,
+      paths: [DASHBOARD_LIST, DASHBOARD_DOCUMENT],
     },
     {
       kind: 'storyboard',
       sheetId: 'story-qbr',
       key: 'storyboardXml',
       fragment: '<dashboard name="QBR Story" type="storyboard"',
-      path: STORYBOARD_DOCUMENT,
+      paths: [STORYBOARD_LIST, STORYBOARD_DOCUMENT],
     },
-  ])('reads a $kind by id in one request', async ({ kind, sheetId, key, fragment, path }) => {
+  ])('reads a $kind by id after resolving it', async ({ kind, sheetId, key, fragment, paths }) => {
     const harness = await startHarness(getXmlTool);
     try {
       const result = await harness.callTool({ kind, sheetId, mode: 'inline' });
@@ -90,7 +93,7 @@ describe('getXmlTool', () => {
       const body = parseResult(result);
       expect(body[key]).toContain(fragment);
       expect(body.message).toContain('inline');
-      expect(requestPaths(harness.server)).toEqual([path]);
+      expect(requestPaths(harness.server)).toEqual(paths);
     } finally {
       await harness.close();
     }
@@ -100,49 +103,52 @@ describe('getXmlTool', () => {
     {
       kind: 'worksheet',
       sheetId: 'Sales by Region',
-      paths: [
-        '/v0/workbook/worksheets/Sales%20by%20Region/document',
-        '/v0/workbook/worksheets',
-        WORKSHEET_DOCUMENT,
-      ],
+      paths: [WORKSHEET_LIST, WORKSHEET_DOCUMENT],
     },
     {
       kind: 'dashboard',
       sheetId: 'Executive Dashboard',
-      paths: [
-        '/v0/workbook/dashboards/Executive%20Dashboard/document',
-        '/v0/workbook/dashboards',
-        DASHBOARD_DOCUMENT,
-      ],
+      paths: [DASHBOARD_LIST, DASHBOARD_DOCUMENT],
     },
     {
       kind: 'storyboard',
       sheetId: 'QBR Story',
-      paths: [
-        '/v0/workbook/storyboards/QBR%20Story/document',
-        '/v0/workbook/storyboards',
-        STORYBOARD_DOCUMENT,
-      ],
+      paths: [STORYBOARD_LIST, STORYBOARD_DOCUMENT],
     },
-  ])('falls back to a unique $kind name after the id misses', async ({ kind, sheetId, paths }) => {
-    const harness = await startHarness(getXmlTool);
-    try {
-      const result = await harness.callTool({ kind, sheetId, mode: 'file' });
+  ])(
+    'resolves a unique $kind name to its id before reading the document',
+    async ({ kind, sheetId, paths }) => {
+      const harness = await startHarness(getXmlTool);
+      try {
+        const result = await harness.callTool({ kind, sheetId, mode: 'file' });
 
-      expect(result.isError).toBe(false);
-      expect(parseResult(result).message).toContain(sheetId);
-      expect(requestPaths(harness.server)).toEqual(paths);
-    } finally {
-      await harness.close();
-    }
-  });
+        expect(result.isError).toBe(false);
+        expect(parseResult(result).message).toContain(sheetId);
+        expect(requestPaths(harness.server)).toEqual(paths);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
 
   it.each([
-    { kind: 'worksheet', sheetId: 'sheet-sales', key: 'worksheetXml', path: WORKSHEET_DOCUMENT },
-    { kind: 'dashboard', sheetId: 'dash-exec', key: 'dashboardXml', path: DASHBOARD_DOCUMENT },
+    {
+      kind: 'worksheet',
+      sheetId: 'sheet-sales',
+      key: 'worksheetXml',
+      list: WORKSHEET_LIST,
+      path: WORKSHEET_DOCUMENT,
+    },
+    {
+      kind: 'dashboard',
+      sheetId: 'dash-exec',
+      key: 'dashboardXml',
+      list: DASHBOARD_LIST,
+      path: DASHBOARD_DOCUMENT,
+    },
   ])(
     'falls back to the whole workbook document when the $kind document route is missing',
-    async ({ kind, sheetId, key, path }) => {
+    async ({ kind, sheetId, key, list, path }) => {
       const harness = await startHarness(
         getXmlTool,
         (server) => setRouteMissing(server, `GET ${path}`),
@@ -157,7 +163,7 @@ describe('getXmlTool', () => {
 
         expect(result.isError).toBe(false);
         expect(parseResult(result)[key]).toBeDefined();
-        expect(requestPaths(harness.server)).toEqual([path, '/v0/workbook/document']);
+        expect(requestPaths(harness.server)).toEqual([list, path, '/v0/workbook/document']);
       } finally {
         await harness.close();
       }
@@ -165,11 +171,11 @@ describe('getXmlTool', () => {
   );
 
   it.each([
-    { kind: 'worksheet', sheetId: 'sheet-sales', path: WORKSHEET_DOCUMENT },
-    { kind: 'dashboard', sheetId: 'dash-exec', path: DASHBOARD_DOCUMENT },
+    { kind: 'worksheet', sheetId: 'sheet-sales', list: WORKSHEET_LIST, path: WORKSHEET_DOCUMENT },
+    { kind: 'dashboard', sheetId: 'dash-exec', list: DASHBOARD_LIST, path: DASHBOARD_DOCUMENT },
   ])(
-    'returns the executor error without a name fallback when the $kind document read fails',
-    async ({ kind, sheetId, path }) => {
+    'returns the executor error when the $kind document read fails',
+    async ({ kind, sheetId, list, path }) => {
       const harness = await startHarness(getXmlTool, (server) =>
         server.setOverride(`GET ${path}`, {
           status: 500,
@@ -188,7 +194,7 @@ describe('getXmlTool', () => {
         const result = await harness.callTool({ kind, sheetId, mode: 'inline' });
 
         expect(result.isError).toBe(true);
-        expect(requestPaths(harness.server)).toEqual([path]);
+        expect(requestPaths(harness.server)).toEqual([list, path]);
       } finally {
         await harness.close();
       }

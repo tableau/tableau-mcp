@@ -109,6 +109,9 @@ describe('the served profile still has a working edit path with no document para
       .spyOn(loadWorksheetXmlCmd, 'loadWorksheetXml')
       .mockResolvedValue(Ok({ validationWarnings: [], readbackWarnings: [] }));
 
+    const listWorksheets = vi
+      .fn()
+      .mockResolvedValue(Ok({ worksheets: [{ id: '{WS-SALES}', name: 'Sales' }] }));
     const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: SHEET }));
     const getCb = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
     const getResult = await getCb(
@@ -119,7 +122,10 @@ describe('the served profile still has a working edit path with no document para
         datasourceId: undefined,
         mode: 'file',
       },
-      { ...extra(), getExecutor: vi.fn().mockResolvedValue({ getWorksheetDocument }) },
+      {
+        ...extra(),
+        getExecutor: vi.fn().mockResolvedValue({ listWorksheets, getWorksheetDocument }),
+      },
     );
     invariant(getResult.content[0].type === 'text');
     const file = [...store.keys()].find((key) => !key.endsWith('.session'));

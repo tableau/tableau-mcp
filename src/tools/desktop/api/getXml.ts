@@ -1,9 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   endpointNotInThisBuild,
   isRouteMissing,
@@ -11,18 +10,13 @@ import {
 } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind } from '../../../desktop/externalApi/types.js';
 import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
-import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
+import { parseXML } from '../../../desktop/metadata/parser.js';
 import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { getDashboardXml } from '../../../desktop/wrappers/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/wrappers/getWorkbookXml.js';
 import { getWorksheetXml } from '../../../desktop/wrappers/getWorksheetXml.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
-import {
-  GetDashboardXmlResult,
-  GetWorksheetXmlResult,
-  WorkbookReadGateway,
-} from '../../../desktop/wrappers/workbookReadGateway.js';
 import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
@@ -34,9 +28,7 @@ import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffe
 import { sessionParam, xmlModeParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
-import { isNotADatasourceId } from './getDatasources.js';
 import { resolveDatasource } from './resolveDatasourceRef.js';
-import { isSheetNotFound } from './resolveSheetRef.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 
 const paramsSchema = {
@@ -196,7 +188,7 @@ async function readWorksheetXml({
   }
   const resolvedSession = sessionResult.value;
   const executor = await extra.getExecutor(resolvedSession);
-  const result = await fetchWorksheetXml(executor, sheetId, extra.signal);
+  const result = await getWorksheetXml({ worksheetName: sheetId, executor, signal: extra.signal });
 
   if (result.isErr()) {
     const { type, error } = result.error;
@@ -248,26 +240,6 @@ async function readWorksheetXml({
   });
 }
 
-async function fetchWorksheetXml(
-  executor: ExternalApiToolExecutor,
-  sheetId: string,
-  signal: AbortSignal,
-): Promise<GetWorksheetXmlResult> {
-  const byId = await executor.getWorksheetDocument(sheetId, signal);
-  if (byId.isOk()) {
-    return Ok({ xml: byId.value.xml, name: fragmentName(byId.value.xml, 'worksheet') ?? sheetId });
-  }
-  if (isRouteMissing(byId.error)) {
-    return await new WorkbookReadGateway({ executor, signal }).getWorksheetXmlViaWorkbookDocument(
-      sheetId,
-    );
-  }
-  if (isSheetNotFound(byId.error)) {
-    return await getWorksheetXml({ worksheetName: sheetId, executor, signal });
-  }
-  return Err({ type: 'execute-command-error', error: byId.error });
-}
-
 async function readDashboardXml({
   session,
   sheetId,
@@ -280,7 +252,7 @@ async function readDashboardXml({
   }
   const resolvedSession = sessionResult.value;
   const executor = await extra.getExecutor(resolvedSession);
-  const result = await fetchDashboardXml(executor, sheetId, extra.signal);
+  const result = await getDashboardXml({ dashboardName: sheetId, executor, signal: extra.signal });
 
   if (result.isErr()) {
     const { type, error } = result.error;
@@ -315,26 +287,6 @@ async function readDashboardXml({
   });
 }
 
-async function fetchDashboardXml(
-  executor: ExternalApiToolExecutor,
-  sheetId: string,
-  signal: AbortSignal,
-): Promise<GetDashboardXmlResult> {
-  const byId = await executor.getDashboardDocument(sheetId, signal);
-  if (byId.isOk()) {
-    return Ok({ xml: byId.value.xml, name: fragmentName(byId.value.xml, 'dashboard') ?? sheetId });
-  }
-  if (isRouteMissing(byId.error)) {
-    return await new WorkbookReadGateway({ executor, signal }).getDashboardXmlViaWorkbookDocument(
-      sheetId,
-    );
-  }
-  if (isSheetNotFound(byId.error)) {
-    return await getDashboardXml({ dashboardName: sheetId, executor, signal });
-  }
-  return Err({ type: 'execute-command-error', error: byId.error });
-}
-
 async function readStoryboardXml({
   session,
   sheetId,
@@ -344,35 +296,26 @@ async function readStoryboardXml({
   return await runExternalApiReadTool({
     session,
     extra,
-    callback: async (executor, signal, read, resolvedSession) => {
-      const byId = await executor.getStoryboardDocument(sheetId, signal);
-      let name = sheetId;
-      let documentResult = byId;
-      if (byId.isErr() && isSheetNotFound(byId.error)) {
-        const listResult = await read(
-          'storyboard list',
-          async (executor, signal) => await executor.listStoryboards(signal),
-        );
-        if (listResult.isErr()) {
-          return listResult;
-        }
-        const storyboardResult = resolveItemByNameOrId(
-          'Storyboard',
-          sheetId,
-          listResult.value.storyboards ?? [],
-        );
-        if (storyboardResult.isErr()) {
-          return storyboardResult.error.toErr();
-        }
-        const resolved = storyboardResult.value;
-        name = resolved.name;
-        if (resolved.id !== sheetId) {
-          documentResult = await executor.getStoryboardDocument(resolved.id, signal);
-        }
+    callback: async (_executor, _signal, read, resolvedSession) => {
+      const listResult = await read(
+        'storyboard list',
+        async (executor, signal) => await executor.listStoryboards(signal),
+      );
+      if (listResult.isErr()) {
+        return listResult;
       }
+      const storyboardResult = resolveItemByNameOrId(
+        'Storyboard',
+        sheetId,
+        listResult.value.storyboards ?? [],
+      );
+      if (storyboardResult.isErr()) {
+        return storyboardResult.error.toErr();
+      }
+      const { id, name } = storyboardResult.value;
       const document = await read(
         'storyboard document',
-        async () => await Promise.resolve(documentResult),
+        async (executor, signal) => await executor.getStoryboardDocument(id, signal),
       );
       if (document.isErr()) {
         return document;
@@ -381,10 +324,7 @@ async function readStoryboardXml({
       // A storyboard serializes as a bare `<dashboard type='storyboard'>` fragment.
       const storyboardXml = document.value.xml;
       if (!parseXML(storyboardXml).dashboard) {
-        return new UnknownError(`No storyboard document subtree found for "${sheetId}".`).toErr();
-      }
-      if (byId.isOk()) {
-        name = fragmentName(storyboardXml, 'dashboard') ?? sheetId;
+        return new UnknownError(`No storyboard document subtree found for "${name}".`).toErr();
       }
 
       return finishXmlRead({
@@ -415,7 +355,7 @@ async function readDatasourceXml({
   return await runExternalApiReadTool({
     session,
     extra,
-    callback: async (executor, signal, read, resolvedSession) => {
+    callback: async (executor, _signal, read, resolvedSession) => {
       const apiVersion = executor.desktopApiVersion;
       if (
         apiVersion !== undefined &&
@@ -424,33 +364,25 @@ async function readDatasourceXml({
         return endpointNotInThisBuild('datasource document').toErr();
       }
 
-      let documentResult = await executor.getDatasourceDocument(datasourceId, signal);
-      let name: string | undefined;
-      if (documentResult.isErr() && isNotADatasourceId(documentResult.error)) {
-        const list = await read(
-          'workbook datasources',
-          async (executor, signal) => await executor.listWorkbookDatasources(signal),
-        );
-        if (list.isErr()) {
-          return list;
-        }
-        const resolved = resolveDatasource(datasourceId, list.value.datasources ?? []);
-        if (resolved.isErr()) {
-          return resolved.error.toErr();
-        }
-        name = resolved.value.name;
-        if (resolved.value.id !== datasourceId) {
-          documentResult = await executor.getDatasourceDocument(resolved.value.id, signal);
-        }
+      const list = await read(
+        'workbook datasources',
+        async (executor, signal) => await executor.listWorkbookDatasources(signal),
+      );
+      if (list.isErr()) {
+        return list;
       }
+      const resolved = resolveDatasource(datasourceId, list.value.datasources ?? []);
+      if (resolved.isErr()) {
+        return resolved.error.toErr();
+      }
+      const { id, name } = resolved.value;
       const document = await read(
         'datasource document',
-        async () => await Promise.resolve(documentResult),
+        async (executor, signal) => await executor.getDatasourceDocument(id, signal),
       );
       if (document.isErr()) {
         return document;
       }
-      name ??= fragmentName(document.value.xml, 'datasource') ?? datasourceId;
 
       return finishXmlRead({
         kind: 'datasource',
@@ -468,12 +400,4 @@ async function readDatasourceXml({
       });
     },
   });
-}
-
-function fragmentName(
-  xml: string,
-  element: 'worksheet' | 'dashboard' | 'datasource',
-): string | undefined {
-  const fragment = normalizeArray(parseXML(xml)[element] as { '@_name'?: string } | undefined)[0];
-  return fragment?.['@_name']?.trim() || undefined;
 }

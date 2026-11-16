@@ -138,7 +138,7 @@ describe('getSheetsTool', () => {
       kind: 'worksheet',
       sheetId: 'sheet-sales',
       expected: { kind: 'worksheet', id: 'sheet-sales', datasources: ['Sample - Superstore'] },
-      path: '/v0/workbook/worksheets/sheet-sales',
+      paths: ['/v0/workbook/worksheets', '/v0/workbook/worksheets/sheet-sales'],
     },
     {
       kind: 'dashboard',
@@ -148,28 +148,36 @@ describe('getSheetsTool', () => {
         id: 'dash-exec',
         containedSheets: ['sheet-sales', 'sheet-profit'],
       },
-      path: '/v0/workbook/dashboards/dash-exec',
+      paths: [
+        '/v0/workbook/worksheets',
+        '/v0/workbook/dashboards',
+        '/v0/workbook/dashboards/dash-exec',
+      ],
     },
     {
       kind: 'storyboard',
       sheetId: 'story-qbr',
       expected: { kind: 'storyboard', id: 'story-qbr', storyPointCount: 4 },
-      path: '/v0/workbook/storyboards/story-qbr',
+      paths: [
+        '/v0/workbook/worksheets',
+        '/v0/workbook/storyboards',
+        '/v0/workbook/storyboards/story-qbr',
+      ],
     },
-  ])('reads one $kind by id in one request', async ({ kind, sheetId, expected, path }) => {
+  ])('reads one $kind by id after resolving it', async ({ kind, sheetId, expected, paths }) => {
     const harness = await startHarness(getSheetsTool);
     try {
       const result = await harness.callTool({ kind, sheetId });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject(expected);
-      expect(requestPaths(harness.server)).toEqual([path]);
+      expect(requestPaths(harness.server)).toEqual(paths);
     } finally {
       await harness.close();
     }
   });
 
-  it('falls back to a unique name after the id misses', async () => {
+  it('resolves a unique name to its id before reading the sheet', async () => {
     const harness = await startHarness(getSheetsTool);
     try {
       const result = await harness.callTool({ kind: 'worksheet', sheetId: 'Sales by Region' });
@@ -177,7 +185,6 @@ describe('getSheetsTool', () => {
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject({ kind: 'worksheet', id: 'sheet-sales' });
       expect(requestPaths(harness.server)).toEqual([
-        '/v0/workbook/worksheets/Sales%20by%20Region',
         '/v0/workbook/worksheets',
         '/v0/workbook/worksheets/sheet-sales',
       ]);
@@ -217,7 +224,10 @@ describe('getSheetsTool', () => {
       const result = await harness.callTool({ kind: 'worksheet', sheetId: 'sheet-sales' });
 
       expect(result.isError).toBe(true);
-      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/worksheets/sheet-sales']);
+      expect(requestPaths(harness.server)).toEqual([
+        '/v0/workbook/worksheets',
+        '/v0/workbook/worksheets/sheet-sales',
+      ]);
     } finally {
       await harness.close();
     }

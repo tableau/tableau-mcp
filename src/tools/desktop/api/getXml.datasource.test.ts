@@ -28,11 +28,6 @@ const routeMissing: ExecuteCommandError = {
   },
 };
 
-const datasourceNotFound: ExecuteCommandError = {
-  type: 'command-failed',
-  error: { code: 'datasource-not-found', message: 'No such datasource.', recoverable: false },
-};
-
 describe('getXmlTool kind=datasource', () => {
   const writtenFiles: string[] = [];
 
@@ -57,16 +52,15 @@ describe('getXmlTool kind=datasource', () => {
     }
   });
 
-  it('reads a datasource by id in one request', async () => {
-    const { result, order, executor } = await invoke({
+  it('reads a datasource by id after resolving it', async () => {
+    const { result, order } = await invoke({
       datasourceId: 'Sales%20Extract',
       mode: 'inline',
       xml: '<datasource name="Sales"/>',
     });
 
     expect(result.isError).toBe(false);
-    expect(order).toEqual(['document:Sales%20Extract']);
-    expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(order).toEqual(['list', 'document:Sales%20Extract']);
     expect(resultBody(result).datasourceXml).toContain('<datasource name="Sales"');
   });
 
@@ -89,18 +83,17 @@ describe('getXmlTool kind=datasource', () => {
       expectedName: 'Sales & Profit',
     },
   ])(
-    'falls back to a $label after the id misses',
+    'resolves a $label to its id before reading the document',
     async ({ datasourceId, datasources, expectedId, expectedName }) => {
       const { result, order, executor } = await invoke({
         datasourceId,
         datasources,
         mode: 'inline',
         xml: `<datasource name="${expectedName}"/>`,
-        missingIds: [datasourceId],
       });
 
       expect(result.isError).toBe(false);
-      expect(order).toEqual([`document:${datasourceId}`, 'list', `document:${expectedId}`]);
+      expect(order).toEqual(['list', `document:${expectedId}`]);
       expect(executor.getWorkbookDocument).not.toHaveBeenCalled();
       expect(resultBody(result).datasourceXml).toContain(`<datasource name="${expectedName}"`);
     },
@@ -164,18 +157,17 @@ describe('getXmlTool kind=datasource', () => {
       expected: 'was not found',
     },
   ])(
-    'stops after the id misses and name resolution fails for $datasourceId',
+    'stops without a document read when resolution fails for $datasourceId',
     async ({ datasourceId, datasources, expected }) => {
       const { result, order } = await invoke({
         datasourceId,
         datasources,
         mode: 'inline',
-        missingIds: [datasourceId],
       });
 
       expect(result.isError).toBe(true);
       expect(resultText(result)).toContain(expected);
-      expect(order).toEqual([`document:${datasourceId}`, 'list']);
+      expect(order).toEqual(['list']);
     },
   );
 
@@ -279,7 +271,7 @@ describe('getXmlTool kind=datasource', () => {
     expect(resultText(result)).toContain('Do not retry');
   });
 
-  it('returns a non-lookup document error without a name fallback', async () => {
+  it('returns the document error after resolving the datasource', async () => {
     const { result, order } = await invoke({
       datasourceId: 'Sales%20Extract',
       mode: 'inline',
@@ -291,7 +283,7 @@ describe('getXmlTool kind=datasource', () => {
 
     expect(result.isError).toBe(true);
     expect(resultText(result)).toContain('Desktop failed.');
-    expect(order).toEqual(['document:Sales%20Extract']);
+    expect(order).toEqual(['list', 'document:Sales%20Extract']);
   });
 
   it('passes the request abort signal to the list and document reads', async () => {
@@ -300,7 +292,6 @@ describe('getXmlTool kind=datasource', () => {
       datasourceId: 'Sales',
       mode: 'inline',
       signal,
-      missingIds: ['Sales'],
     });
 
     expect(executor.listWorkbookDatasources).toHaveBeenCalledWith(signal);
@@ -314,7 +305,6 @@ describe('getXmlTool kind=datasource', () => {
     xml,
     capBytes,
     documentError,
-    missingIds = [],
     apiVersion,
     signal,
   }: {
@@ -324,7 +314,6 @@ describe('getXmlTool kind=datasource', () => {
     xml?: string;
     capBytes?: number;
     documentError?: ExecuteCommandError;
-    missingIds?: string[];
     apiVersion?: string;
     signal?: AbortSignal;
   }): Promise<{
@@ -339,9 +328,6 @@ describe('getXmlTool kind=datasource', () => {
     });
     const getDatasourceDocument = vi.fn(async (id: string) => {
       order.push(`document:${id}`);
-      if (missingIds.includes(id)) {
-        return Err(datasourceNotFound);
-      }
       return documentError
         ? Err(documentError)
         : Ok({
