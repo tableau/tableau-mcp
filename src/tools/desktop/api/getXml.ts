@@ -8,6 +8,7 @@ import {
   isRouteMissing,
   resolveItemByNameOrId,
 } from '../../../desktop/externalApi/toolUtils.js';
+import { SheetKind } from '../../../desktop/externalApi/types.js';
 import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
@@ -35,18 +36,17 @@ import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 import { isSheetNotFound } from './resolveSheetRef.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 
-type XmlKind = 'workbook' | 'worksheet' | 'dashboard' | 'storyboard';
-
 const paramsSchema = {
   session: sessionParam(),
   kind: z
-    .enum(['workbook', 'worksheet', 'dashboard', 'storyboard'])
-    .describe('The whole workbook or one sheet kind.'),
+    .enum(['worksheet', 'dashboard', 'storyboard'])
+    .optional()
+    .describe('Kind of sheet to read; omit for the whole workbook.'),
   sheetId: z
     .string()
     .min(1)
     .optional()
-    .describe('Id (or unique name) of the sheet; required unless kind is workbook.'),
+    .describe('Id (or unique name) of the sheet; required with kind.'),
   mode: xmlModeParam(),
 };
 
@@ -97,14 +97,14 @@ async function readXml({
   extra,
 }: {
   session: string | undefined;
-  kind: XmlKind;
+  kind?: SheetKind;
   sheetId?: string;
   mode: 'file' | 'inline';
   extra: TableauDesktopRequestHandlerExtra;
 }): Promise<Result<GetXmlToolResult, McpToolError>> {
-  if (kind === 'workbook') {
+  if (kind === undefined) {
     if (sheetId !== undefined) {
-      return new ArgsValidationError('sheetId is not accepted with kind workbook.').toErr();
+      return new ArgsValidationError('sheetId requires kind.').toErr();
     }
     return await readWorkbookXml({ session, mode, extra });
   }
@@ -455,14 +455,14 @@ export const getGetWorkbookXmlTool = (
     server,
     name: 'get-workbook-xml',
     title: 'Reading workbook',
-    description: 'Deprecated: use get-xml with kind=workbook instead.',
+    description: 'Deprecated: use get-xml without kind instead.',
     paramsSchema: workbookAliasParamsSchema,
     annotations: XML_READ_ANNOTATIONS,
     callback: async ({ session, mode }, extra): Promise<CallToolResult> => {
       return await getWorkbookXmlTool.logAndExecute<GetXmlToolResult>({
         extra,
         args: { session, mode },
-        callback: async () => await readXml({ session, kind: 'workbook', mode, extra }),
+        callback: async () => await readXml({ session, mode, extra }),
       });
     },
   });

@@ -59,7 +59,7 @@ export type FingerprintResolver = (sessionId: string) => InstanceFingerprint | u
 
 const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
   worksheet: 'get-xml (kind=worksheet)',
-  workbook: 'get-xml (kind=workbook)',
+  workbook: 'get-xml (no kind)',
   dashboard: 'get-xml (kind=dashboard)',
   storyboard: 'get-xml (kind=storyboard)',
   datasource: 'get-datasource-xml',

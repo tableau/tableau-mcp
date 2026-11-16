@@ -226,7 +226,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'whole-workbook-fallback',
     trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
     action:
-      'use get-xml(kind:workbook) -> read-cached-xml -> write-cached-xml -> apply-workbook; use only for datasource definitions or cross-artifact changes, and prefer a scoped apply whenever possible.',
+      'use get-xml (no kind) -> read-cached-xml -> write-cached-xml -> apply-workbook; use only for datasource definitions or cross-artifact changes, and prefer a scoped apply whenever possible.',
     toolSequence: ['get-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
     stopConditions: [
       'use only for datasource definitions or cross-artifact changes',

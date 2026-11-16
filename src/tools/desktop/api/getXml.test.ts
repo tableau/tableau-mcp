@@ -61,7 +61,7 @@ describe('getXmlTool', () => {
       openWorldHint: false,
     });
     expect(paramsSchema.kind.safeParse('datasource').success).toBe(false);
-    expect(paramsSchema.kind.safeParse(undefined).success).toBe(false);
+    expect(paramsSchema.kind.safeParse('workbook').success).toBe(false);
   });
 
   it.each([
@@ -311,7 +311,7 @@ describe('getXmlTool', () => {
         "<workbook><connection password='hunter2'/><calculation formula='[Token]=1'/></workbook>",
     });
     try {
-      const result = await harness.callTool({ kind: 'workbook', mode: 'inline' });
+      const result = await harness.callTool({ mode: 'inline' });
 
       expect(result.isError).toBe(false);
       const workbookXml = parseResult(result).workbookXml;
@@ -329,7 +329,7 @@ describe('getXmlTool', () => {
       workbookXml: '<?xml version="1.0"?><workbook><worksheets></worksheets></workbook>',
     });
     try {
-      const result = await harness.callTool({ kind: 'workbook', mode: 'file' });
+      const result = await harness.callTool({ mode: 'file' });
 
       expect(result.isError).toBe(false);
       const body = parseResult(result);
@@ -351,7 +351,7 @@ describe('getXmlTool', () => {
       workbookXml: "<workbook><connection password='hunter2'/></workbook>",
     });
     try {
-      await harness.callTool({ kind: 'workbook', mode: 'file' });
+      await harness.callTool({ mode: 'file' });
 
       const written = vi.mocked(cachePathModule.writeCacheTextFile).mock.calls[0][1];
       expect(written).not.toContain('hunter2');
@@ -415,8 +415,8 @@ describe('getXmlTool', () => {
 
   it.each([
     {
-      args: { kind: 'workbook', sheetId: 'sheet-sales' },
-      message: 'sheetId is not accepted with kind workbook.',
+      args: { sheetId: 'sheet-sales' },
+      message: 'sheetId requires kind.',
     },
     { args: { kind: 'worksheet' }, message: 'sheetId is required with kind worksheet.' },
   ])('rejects $args without a request', async ({ args, message }) => {
@@ -454,7 +454,7 @@ describe('getXmlTool', () => {
   ])('keeps $name as a deprecated alias of get-xml', async ({ factory, name, args, path }) => {
     const tool = factory(new DesktopMcpServer());
     expect(tool.name).toBe(name);
-    expect(tool.description).toMatch(/^Deprecated: use get-xml with kind=/);
+    expect(tool.description).toMatch(/^Deprecated: use get-xml /);
 
     const harness = await startHarness(factory);
     try {
