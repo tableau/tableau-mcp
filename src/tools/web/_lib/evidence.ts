@@ -398,7 +398,13 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
 
   describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string } {
     const descriptors = this.strategies.map((s) => s.describeEvidence());
-    return descriptors.find((d) => d.kind === 'registry-nonce') ?? descriptors[0];
+    const primary = descriptors.find((d) => d.kind === 'registry-nonce') ?? descriptors[0];
+    // Join every member's detail so the audit still names the tag the preview wrote.
+    const detail = descriptors
+      .map((d) => d.detail)
+      .filter(Boolean)
+      .join('; ');
+    return { kind: primary.kind, ...(detail ? { detail } : {}) };
   }
 }
 

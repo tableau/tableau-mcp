@@ -71,6 +71,23 @@ describe('preview evidence across replicas sharing a custom session store', () =
     );
   });
 
+  it('AllEvidence audits every member detail, not just the approval', async () => {
+    const a = await startReplica();
+    const tag = {
+      establish: async () => {},
+      verify: async () => true,
+      describeEvidence: () => ({ kind: 'tag' as const, detail: 'pending-deletion tag' }),
+    };
+    const descriptor = new a.AllEvidence([
+      new a.AppApprovalEvidence('delete-content'),
+      tag,
+    ]).describeEvidence();
+
+    expect(descriptor.kind).toBe('registry-nonce');
+    expect(descriptor.detail).toContain('app-approval');
+    expect(descriptor.detail).toContain('pending-deletion tag');
+  });
+
   it('rejects a token that is not a nonce it could have minted', async () => {
     const a = await startReplica();
     await new a.RegistryEvidence().establish(makeCtx());
