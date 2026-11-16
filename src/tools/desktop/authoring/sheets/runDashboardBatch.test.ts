@@ -169,7 +169,7 @@ describe('runDashboardBatchTool', () => {
         session: {
           type: 'string',
           maxLength: 64,
-          description: 'Session ID; optional if pinned or unique.',
+          description: 'PID; omit if pinned/one.',
         },
         artifactIds: { type: 'array', items: { type: 'string' } },
         dashboardName: { type: 'string' },
@@ -197,7 +197,7 @@ describe('runDashboardBatchTool', () => {
     expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
     expect(entry._meta).toEqual({ 'anthropic/alwaysLoad': true });
-    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_302);
+    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_285);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {

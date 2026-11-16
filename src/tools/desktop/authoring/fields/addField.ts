@@ -26,6 +26,7 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { sessionParam } from '../../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
@@ -94,10 +95,7 @@ function columnRefRejection(columnRef: string, workbookXml: string | undefined):
 // session='pinned' / session omitted / session='x' against a contract no value satisfied:
 // 69 failed add-field calls, 591 seconds, one killed conversation.
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
+  session: sessionParam(),
   worksheetName: z
     .string()
     .optional()

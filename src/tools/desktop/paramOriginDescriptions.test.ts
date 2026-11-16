@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { DesktopMcpServer, DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
+import { sessionParam } from './params.js';
 import { type DesktopToolName, desktopToolNames } from './toolName.js';
 import { desktopToolFactories } from './tools.js';
 
@@ -160,6 +161,20 @@ describe('tool input schemas say what to send', () => {
       }
     }
 
+    expect(offenders).toEqual([]);
+  });
+
+  it('serves one shared session description on every tool except the live-refresh read', async () => {
+    const shared = sessionParam().description;
+    const offenders: string[] = [];
+
+    for (const [toolName, schema] of await schemasByToolName()) {
+      const description = schema['session']?.description;
+      if (description === undefined || toolName === 'list-available-fields') continue;
+      if (description !== shared) offenders.push(`${toolName}.session: "${description}"`);
+    }
+
+    expect(shared).toBe('PID; omit if pinned/one.');
     expect(offenders).toEqual([]);
   });
 

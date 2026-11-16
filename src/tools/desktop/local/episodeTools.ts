@@ -6,15 +6,16 @@ import { beginEpisode, endEpisode } from '../../../desktop/episode-events.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const beginParamsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: sessionParam(),
   intent: z.string().optional().describe('Optional episode intent label.'),
 };
 
 const endParamsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: sessionParam(),
   status: z.enum(['succeeded', 'failed', 'abandoned']).describe('Episode terminal status.'),
   notes: z.string().optional().describe('Optional terminal notes.'),
 };

@@ -14,6 +14,7 @@ import {
 import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
@@ -30,10 +31,7 @@ const paramsSchema = {
     .string()
     .optional()
     .describe('Existing datasource name used when multiple datasources share a field name.'),
-  session: z
-    .string()
-    .optional()
-    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
+  session: sessionParam(),
 };
 
 interface ResolveFieldResult {

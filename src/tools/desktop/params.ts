@@ -20,7 +20,7 @@ export type ArtifactParamKind =
 
 export function sessionParam(options: { max?: number } = {}): z.ZodOptional<z.ZodString> {
   const base = options.max === undefined ? z.string() : z.string().max(options.max);
-  return base.optional().describe('Session ID; optional if pinned or unique.');
+  return base.optional().describe('PID; omit if pinned/one.');
 }
 
 export function xmlModeParam(): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'inline']>>> {

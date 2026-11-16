@@ -15,6 +15,7 @@ import {
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { sessionParam } from '../../params.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 
@@ -33,9 +34,9 @@ export const worksheetAggregationSchema = z.enum([
 ]);
 
 export const buildWorksheetsFromTemplatesParamsSchema = {
-  session: z.string().optional().describe('Desktop PID.'),
+  session: sessionParam(),
   templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
-  title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
+  title: z.string().trim().min(1).max(255).describe('Sheet name.'),
   datasource: z.string().trim().min(1).max(255).describe('Live datasource.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
@@ -62,8 +63,8 @@ export const getBuildWorksheetsFromTemplatesTool = (
   const tool = new DesktopTool({
     server,
     name: 'build-worksheets-from-templates',
-    title: 'Building worksheet',
-    description: 'Build worksheet.',
+    title: 'Building sheet',
+    description: 'Build sheet.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

@@ -2,12 +2,6 @@ export const queryDatasourceToolDescription20263 = `# Query Tableau Data Source 
 
 Executes VizQL queries against a Tableau data source (identified by \`datasourceLuid\`) to answer business questions, retrieving aggregated and filtered data with proper sorting and grouping. The \`datasourceLuid\` may be a published or an embedded (workbook) data source — including embedded LUIDs from \`get-workbook\`'s \`upstreamDatasources\` (\`datasourceType: 'embedded'\`); prefer the embedded copy when both exist, as it carries the workbook's local field semantics and calculations. Embedded querying must be enabled on the site — when a LUID comes from \`get-workbook\`, its \`queryability.isQueryable\` flag tells you up front whether you can query it (\`false\` → skip, and \`queryability.reason\` explains why); otherwise, querying a data source that isn't enabled returns a clear "not enabled" error. When querying an embedded data source, also pass \`workbookLuid\`: the LUID of the workbook it belongs to (the workbook LUID you passed to \`get-workbook\`). The server configuration may restrict access to embedded data sources based on their workbook.
 
-## Prerequisites
-Before using this tool, you should:
-1. Understand available fields and their types
-2. Understand what parameters are available and their types
-3. Understand the data structure and field relationships
-
 ## Best Practices
 
 ### Data Volume Management
@@ -84,49 +78,13 @@ This creates bins of $1,000 intervals (0-1000, 1000-2000, etc.)
 
 ## Data Profiling Strategy
 
-When a query might return large amounts of data, follow this profiling approach:
-
-**Step 1: Count total records**
-\`\`\`json
-{
-  "fields": [
-    {
-      "fieldCaption": "Primary_Key_Field",
-      "function": "COUNT",
-      "fieldAlias": "Total Records"
-    }
-  ]
-}
-\`\`\`
-
-**Step 2: Count by key dimensions**
-\`\`\`json
-{
-  "fields": [
-    {
-      "fieldCaption": "Category",
-      "fieldAlias": "Category"
-    },
-    {
-      "fieldCaption": "Order ID",
-      "function": "COUNT",
-      "fieldAlias": "Record Count"
-    }
-  ]
-}
-\`\`\`
-
-**Step 3: Apply appropriate aggregation or filtering based on counts**
+For a query that may return many rows: 1) COUNT a primary key, 2) COUNT by key dimensions (e.g. Category), 3) aggregate or filter based on the counts.
 
 ## Parameters
 
 Parameters are dynamic values defined in the Tableau datasource that can be used to control calculations, filters, and query behavior. They allow for interactive, user-controlled queries without modifying the query structure.
 
-### When to Use Parameters
-- **Dynamic filtering** - Let users control date ranges, regions, or categories
-- **What-if analysis** - Adjust values like growth rates, targets, or thresholds
-- **Calculation control** - Switch between different metrics or calculation methods
-- **User preferences** - Currency selection, display units, or other settings
+Use parameters for user-controlled values: date ranges, regions, what-if rates or targets, metric switches, currency or units.
 
 ### Parameter Types
 - **LIST** - Predefined values (e.g., regions, categories)
@@ -186,12 +144,6 @@ To create a bin field in a query, you **must** include:
 \`\`\`
 
 This creates bins of $1,000 intervals (0-1000, 1000-2000, etc.)
-
-### When to Use Bins
-- Analyzing distribution patterns (age groups, price ranges, score brackets)
-- Creating histograms or frequency distributions
-- Grouping continuous numerical data into meaningful categories
-- User asks questions like "How many customers in each age range?" or "What's the distribution of order sizes?"
 
 ### Bin Restrictions
 - **Cannot override existing bin fields** - If a bin field already exists in the datasource, query it without binSize
@@ -315,99 +267,7 @@ Filter relative date periods:
 
 ## Example Queries
 
-### Example 1: Data Profiling Before Large Query
-**Question:** "Show me all customer orders this year"
-
-**Step 1 - Profile the data volume:**
-\`\`\`json
-{
-  "datasourceLuid": "abc123",
-  "query": {
-    "fields": [
-      {
-        "fieldCaption": "Order ID",
-        "function": "COUNT",
-        "fieldAlias": "Total Orders This Year"
-      }
-    ],
-    "filters": [
-      {
-        "field": {"fieldCaption": "Order Date"},
-        "filterType": "DATE",
-        "periodType": "YEARS",
-        "dateRangeType": "CURRENT"
-      }
-    ]
-  }
-}
-\`\`\`
-
-**If count is manageable (< 10,000), proceed with detail query. If large, suggest aggregation:**
-\`\`\`json
-{
-  "datasourceLuid": "abc123",
-  "query": {
-    "fields": [
-      {
-        "fieldCaption": "Customer Name"
-      },
-      {
-        "fieldCaption": "Order Date",
-        "function": "TRUNC_MONTH",
-        "sortDirection": "DESC",
-        "sortPriority": 1
-      },
-      {
-        "fieldCaption": "Sales",
-        "function": "SUM",
-        "fieldAlias": "Monthly Sales"
-      }
-    ],
-    "filters": [
-      {
-        "field": {"fieldCaption": "Order Date"},
-        "filterType": "DATE",
-        "periodType": "YEARS",
-        "dateRangeType": "CURRENT"
-      }
-    ]
-  }
-}
-\`\`\`
-
-### Example 2: Top Customers Query (Using TOP Filter)
-**Question:** "Who are our top 10 customers by revenue?"
-
-\`\`\`json
-{
-  "datasourceLuid": "abc123",
-  "query": {
-    "fields": [
-      {
-        "fieldCaption": "Customer Name"
-      },
-      {
-        "fieldCaption": "Sales",
-        "function": "SUM",
-        "fieldAlias": "Total Revenue",
-        "sortDirection": "DESC",
-        "sortPriority": 1
-      }
-    ],
-    "filters": [
-      {
-        "field": {"fieldCaption": "Customer Name"},
-        "filterType": "TOP",
-        "howMany": 10,
-        "direction": "TOP",
-        "fieldToMeasure": {"fieldCaption": "Sales", "function": "SUM"}
-      }
-    ]
-  }
-}
-\`\`\`
-
-### Example 3: Top N Dimension Query (Using TOP Filter and context property)
+### Example 1: Top N Dimension Query (Using TOP Filter and context property)
 **Question:** "What is the top selling product in California?"
 \`\`\`json
 {
@@ -445,7 +305,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 4: Time Series with Aggregation
+### Example 2: Time Series with Aggregation
 **Question:** "What are our monthly sales trends?"
 
 \`\`\`json
@@ -475,47 +335,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 5: Filtered Category Analysis
-**Question:** "What's the performance by product category for high-value orders?"
-
-\`\`\`json
-{
-  "datasourceLuid": "abc123",
-  "query": {
-    "fields": [
-      {
-        "fieldCaption": "Category"
-      },
-      {
-        "fieldCaption": "Sales",
-        "function": "SUM",
-        "fieldAlias": "Total Sales"
-      },
-      {
-        "fieldCaption": "Sales",
-        "function": "AVG",
-        "fieldAlias": "Average Order Value",
-        "maxDecimalPlaces": 2
-      },
-      {
-        "fieldCaption": "Order ID",
-        "function": "COUNT",
-        "fieldAlias": "Order Count"
-      }
-    ],
-    "filters": [
-      {
-        "field": {"fieldCaption": "Sales"},
-        "filterType": "QUANTITATIVE_NUMERICAL",
-        "quantitativeFilterType": "MIN",
-        "min": 500
-      }
-    ]
-  }
-}
-\`\`\`
-
-### Example 6: Distribution Analysis Using Bins
+### Example 3: Distribution Analysis Using Bins
 **Question:** "How are our sales distributed across different price ranges?"
 
 \`\`\`json
@@ -545,7 +365,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 7: Using Parameters for Dynamic Analysis
+### Example 4: Using Parameters for Dynamic Analysis
 **Question:** "Show me sales for the selected region and year"
 
 \`\`\`json
@@ -596,24 +416,7 @@ Filter relative date periods:
 
 Note: Calculated Fields created as part of a query cannot be referenced in other calculations or filters.
 
-## Error Prevention and Data Management
-
-**When to profile data first:**
-- User asks for "all records" or similar broad requests
-- Query involves high-cardinality fields without filters
-- Request could potentially return row-level data for large tables
-
-**Suggest aggregation when:**
-- Profile queries return very high counts (> 10,000 records)
-- User asks questions that can be answered with summaries
-- Performance or response size might be an issue
-
-**Don't call this tool if:**
-- The requested fields are not available in the data source
-- The question requires data not present in the current data source
-- Field validation shows incompatible field types for the requested operation
-
-**Instead:**
-- Use metadata tools to understand available fields
-- Suggest alternative questions that can be answered with available data
-- Recommend appropriate aggregation levels for the business question`;
+## Error Prevention
+- **Profile first** (COUNT) for "all records" asks, high-cardinality fields without filters, or likely row-level results on large tables
+- **Suggest aggregation** when a profile returns more than 10,000 records or a summary answers the question
+- **Don't call this tool** when the needed fields or data are not in this data source, or field types don't fit the operation. Use metadata tools instead, and suggest a question the available data can answer`;

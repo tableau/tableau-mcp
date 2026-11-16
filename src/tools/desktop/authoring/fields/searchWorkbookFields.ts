@@ -7,10 +7,11 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: sessionParam(),
   query: z.string().trim().min(1).describe('Case-insensitive text to find in workbook fields.'),
   limit: z.number().int().min(1).max(100).optional().describe('Maximum matches; defaults to 20.'),
 };
