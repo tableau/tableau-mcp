@@ -62,6 +62,7 @@ import {
 } from '../../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError, UnknownError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 type RefineOperation =
@@ -151,7 +152,7 @@ function appliedButUnconfirmed(
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session; omit if one.'),
+  session: sessionParam(),
   worksheetName: z.string().min(1).describe('Sheet.'),
   operation: z
     .enum([
@@ -183,7 +184,7 @@ const paramsSchema = {
   preset: z.enum(['subtle']).optional().describe('round_bar|round_stacked_bar'),
 };
 
-const title = 'Refining worksheet';
+const title = 'Refining sheet';
 
 export const REFINE_WORKSHEET_DESCRIPTION =
   'Refine sheet: top-N, sort, mark type, or rounded bars.';

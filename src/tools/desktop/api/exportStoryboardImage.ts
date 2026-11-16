@@ -9,6 +9,7 @@ import {
   artifactNameParam,
   deprecatedArtifactAliasParam,
   resolveArtifactNameArg,
+  sessionParam,
 } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import {
@@ -18,7 +19,7 @@ import {
 } from './exportSheetImageResult.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: sessionParam(),
   storyboardName: artifactNameParam('storyboard').optional(),
   storyboard: deprecatedArtifactAliasParam('storyboard'),
   filePath: z

@@ -877,7 +877,7 @@ describe('bindTemplateTool', () => {
       datasource: expect.any(Object),
       calcs: expect.any(Object),
     });
-    expect(paramsSchema['session']!.description).toBe('Desktop PID; omit if pinned or sole.');
+    expect(paramsSchema['session']!.description).toBe('PID; omit if pinned/one.');
     expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
     expect(paramsSchema['auto_apply']!.description).toBe('Apply now');
     expect(paramsSchema['requireCompleteRequest']!.description).toBe(

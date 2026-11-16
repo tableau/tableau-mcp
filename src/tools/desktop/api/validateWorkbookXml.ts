@@ -8,10 +8,11 @@ import { ValidationIssue } from '../../../desktop/validation/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: sessionParam(),
   xml: z.string().describe(''),
 };
 

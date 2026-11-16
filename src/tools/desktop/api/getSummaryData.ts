@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
+import { deprecatedArtifactAliasParam, resolveArtifactNameArg, sessionParam } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import {
@@ -17,7 +17,7 @@ const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: sessionParam(),
   worksheetName: z.string().optional().describe('Worksheet name/id; omit if unique.'),
   worksheet: deprecatedArtifactAliasParam('worksheet'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),

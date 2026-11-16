@@ -119,6 +119,7 @@ import {
   type SummaryDataReadScope,
   type SummaryRowOrder,
 } from '../../api/summaryDataCore.js';
+import { sessionParam } from '../../params.js';
 import {
   doneNextAction,
   jsonToolResult,
@@ -147,7 +148,7 @@ import { proposalSchema } from './proposalSchema.js';
 import { IDEMPOTENCY_TEMPLATE_PARAMETER, proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
+  session: sessionParam(),
   ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
