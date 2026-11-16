@@ -16,28 +16,18 @@ import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
 import { getActiveDialogsTool } from './api/getActiveDialogs.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
-import { getDatasourcesTool, getListWorkbookDatasourcesTool } from './api/getDatasources.js';
+import { getDatasourcesTool } from './api/getDatasources.js';
 import { getDatasourceUnderlyingDataTool } from './api/getDatasourceUnderlyingData.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getOperationsTool } from './api/getOperations.js';
-import {
-  getListDashboardsTool,
-  getListWorksheetsTool,
-  getSheetsTool,
-  getWorkbookInventoryTool,
-} from './api/getSheets.js';
+import { getSheetsTool } from './api/getSheets.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
 import { getSummaryDataTool } from './api/getSummaryData.js';
 import { getWorkbookExtensionsTool } from './api/getWorkbookExtensions.js';
 import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
 import { getWorkspaceExtensionsTool } from './api/getWorkspaceExtensions.js';
-import {
-  getGetDashboardXmlTool,
-  getGetWorkbookXmlTool,
-  getGetWorksheetXmlTool,
-  getXmlTool,
-} from './api/getXml.js';
+import { getXmlTool } from './api/getXml.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
 import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
@@ -95,7 +85,6 @@ export const desktopToolFactories = [
   getDiagnosticsTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,
-  getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,
   getUndoRedoWorkbookTool,
@@ -112,15 +101,12 @@ export const desktopToolFactories = [
   getComposeStoryTool,
   getRefreshDatasourceTool,
   getSheetsTool,
-  getListWorksheetsTool,
   getWorkbookExtensionsTool,
   getWorkspaceExtensionsTool,
   getReloadWorkspaceExtensionTool,
   getScaffoldDataAppTool,
   getShowMeOptionsTool,
-  getListDashboardsTool,
   getXmlTool,
-  getGetWorksheetXmlTool,
   getApplyWorksheetTool,
   getDeleteSheetTool,
   getRenameSheetTool,
@@ -130,10 +116,8 @@ export const desktopToolFactories = [
   getRefreshAutoUpdatesTool,
   getReloadExtensionsTool,
   getRefineWorksheetTool,
-  getGetDashboardXmlTool,
   getApplyDashboardTool,
   getDatasourcesTool,
-  getListWorkbookDatasourcesTool,
   getApplyDatasourceTool,
   getListAvailableFieldsTool,
   getAddFieldTool,
@@ -162,7 +146,6 @@ export const desktopToolFactories = [
   exportWorksheetImageTool,
   exportDashboardImageTool,
   exportStoryboardImageTool,
-  getWorkbookInventoryTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getValidateCalculatedFieldTool,

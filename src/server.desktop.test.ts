@@ -457,11 +457,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 81-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 74-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(81);
+      expect(selected).toHaveLength(74);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -488,9 +488,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'search-expertise',
         'get-summary-data',
         'get-sheets',
-        'get-workbook-inventory',
         'get-datasources',
-        'list-workbook-datasources',
         'apply-datasource',
         'activate-sheet',
         'delete-sheet',
@@ -508,9 +506,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'invoke-dialog-action',
         'list-available-fields',
         'search-workbook-fields',
-        'list-worksheets',
         'get-show-me-options',
-        'list-dashboards',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
         'list-datasource-logical-tables',
@@ -531,22 +527,16 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'reload-workspace-extension',
         'refresh-datasource',
         'get-xml',
-        'get-workbook-xml',
         'apply-workbook',
-        'get-dashboard-xml',
         'apply-dashboard',
         'apply-storyboard',
         'export-worksheet-image',
         'export-dashboard-image',
         'export-storyboard-image',
-        // The manual field-edit path's read leg — mints the worksheetFile add-field/
-        // remove-field/apply-worksheet consume.
-        'get-worksheet-xml',
       ]) {
         expect(selected.map((t) => t.name)).toContain(verb);
       }
-      // Keep unrelated validation tools out. The six scoped and
-      // whole-workbook fallbacks above are the complete XML surface added to this profile.
+      // Keep unrelated validation tools out.
       for (const banished of [
         'validate-workbook-xml',
         'validate-worksheet-xml',

@@ -31,7 +31,7 @@ import {
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
-import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
+import { sessionParam, xmlModeParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 import { isNotADatasourceId } from './getDatasources.js';
@@ -477,85 +477,3 @@ function fragmentName(
   const fragment = normalizeArray(parseXML(xml)[element] as { '@_name'?: string } | undefined)[0];
   return fragment?.['@_name']?.trim() || undefined;
 }
-
-const worksheetAliasParamsSchema = {
-  session: sessionParam(),
-  worksheetName: artifactNameParam('worksheet'),
-  mode: xmlModeParam(),
-};
-
-export const getGetWorksheetXmlTool = (
-  server: DesktopMcpServer,
-): DesktopTool<typeof worksheetAliasParamsSchema> => {
-  const getWorksheetXmlTool = new DesktopTool({
-    server,
-    name: 'get-worksheet-xml',
-    title: 'Reading worksheet',
-    description: 'Deprecated: use get-xml with kind=worksheet instead.',
-    paramsSchema: worksheetAliasParamsSchema,
-    annotations: XML_READ_ANNOTATIONS,
-    callback: async ({ session, worksheetName, mode }, extra): Promise<CallToolResult> => {
-      return await getWorksheetXmlTool.logAndExecute<GetXmlToolResult>({
-        extra,
-        args: { session, worksheetName, mode },
-        callback: async () =>
-          await readXml({ session, kind: 'worksheet', sheetId: worksheetName, mode, extra }),
-      });
-    },
-  });
-  return getWorksheetXmlTool;
-};
-
-const dashboardAliasParamsSchema = {
-  session: sessionParam(),
-  dashboardName: artifactNameParam('dashboard'),
-  mode: xmlModeParam(),
-};
-
-export const getGetDashboardXmlTool = (
-  server: DesktopMcpServer,
-): DesktopTool<typeof dashboardAliasParamsSchema> => {
-  const getDashboardXmlTool = new DesktopTool({
-    server,
-    name: 'get-dashboard-xml',
-    title: 'Reading dashboard',
-    description: 'Deprecated: use get-xml with kind=dashboard instead.',
-    paramsSchema: dashboardAliasParamsSchema,
-    annotations: XML_READ_ANNOTATIONS,
-    callback: async ({ session, dashboardName, mode }, extra): Promise<CallToolResult> => {
-      return await getDashboardXmlTool.logAndExecute<GetXmlToolResult>({
-        extra,
-        args: { session, dashboardName, mode },
-        callback: async () =>
-          await readXml({ session, kind: 'dashboard', sheetId: dashboardName, mode, extra }),
-      });
-    },
-  });
-  return getDashboardXmlTool;
-};
-
-const workbookAliasParamsSchema = {
-  session: sessionParam(),
-  mode: xmlModeParam(),
-};
-
-export const getGetWorkbookXmlTool = (
-  server: DesktopMcpServer,
-): DesktopTool<typeof workbookAliasParamsSchema> => {
-  const getWorkbookXmlTool = new DesktopTool({
-    server,
-    name: 'get-workbook-xml',
-    title: 'Reading workbook',
-    description: 'Deprecated: use get-xml without kind instead.',
-    paramsSchema: workbookAliasParamsSchema,
-    annotations: XML_READ_ANNOTATIONS,
-    callback: async ({ session, mode }, extra): Promise<CallToolResult> => {
-      return await getWorkbookXmlTool.logAndExecute<GetXmlToolResult>({
-        extra,
-        args: { session, mode },
-        callback: async () => await readXml({ session, mode, extra }),
-      });
-    },
-  });
-  return getWorkbookXmlTool;
-};

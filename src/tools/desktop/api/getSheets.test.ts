@@ -13,12 +13,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import {
-  getListDashboardsTool,
-  getListWorksheetsTool,
-  getSheetsTool,
-  getWorkbookInventoryTool,
-} from './getSheets.js';
+import { getSheetsTool } from './getSheets.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -236,26 +231,6 @@ describe('getSheetsTool', () => {
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('kind is required with sheetId.');
       expect(harness.server.requests).toEqual([]);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it.each([
-    { factory: getWorkbookInventoryTool, name: 'get-workbook-inventory', path: '/v0/workbook' },
-    { factory: getListWorksheetsTool, name: 'list-worksheets', path: '/v0/workbook/worksheets' },
-    { factory: getListDashboardsTool, name: 'list-dashboards', path: '/v0/workbook/dashboards' },
-  ])('keeps $name as a deprecated alias of get-sheets', async ({ factory, name, path }) => {
-    const tool = factory(new DesktopMcpServer());
-    expect(tool.name).toBe(name);
-    expect(tool.description).toMatch(/^Deprecated: use get-sheets/);
-
-    const harness = await startHarness(factory);
-    try {
-      const result = await harness.callTool({});
-
-      expect(result.isError).toBe(false);
-      expect(requestPaths(harness.server)).toEqual([path]);
     } finally {
       await harness.close();
     }

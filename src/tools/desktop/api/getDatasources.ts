@@ -111,34 +111,3 @@ export function isNotADatasourceId(error: ExecuteCommandError): boolean {
     (error.type === 'invalid-response' && error.error instanceof ExternalApiRouteError)
   );
 }
-
-const listParamsSchema = {
-  session: sessionParam(),
-};
-
-export const getListWorkbookDatasourcesTool = (
-  server: DesktopMcpServer,
-): DesktopTool<typeof listParamsSchema> => {
-  const listWorkbookDatasources = new DesktopTool({
-    server,
-    name: 'list-workbook-datasources',
-    title: 'List Workbook Datasources',
-    description:
-      'Deprecated: use get-datasources instead. Same as get-datasources without datasourceId.',
-    paramsSchema: listParamsSchema,
-    annotations: DATASOURCES_ANNOTATIONS,
-    callback: async ({ session }, extra): Promise<CallToolResult> => {
-      return await listWorkbookDatasources.logAndExecute({
-        extra,
-        args: { session },
-        callback: async () =>
-          await runExternalApiReadTool({
-            session,
-            extra,
-            callback: async (_executor, _signal, read) => await listDatasources(read),
-          }),
-      });
-    },
-  });
-  return listWorkbookDatasources;
-};

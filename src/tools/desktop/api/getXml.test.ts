@@ -18,12 +18,7 @@ import { Provider } from '../../../utils/provider.js';
 import * as worksheetEditBufferModule from '../authoring/fields/worksheetEditBuffer.js';
 import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import {
-  getGetDashboardXmlTool,
-  getGetWorkbookXmlTool,
-  getGetWorksheetXmlTool,
-  getXmlTool,
-} from './getXml.js';
+import { getXmlTool } from './getXml.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 vi.mock('../authoring/fields/worksheetEditBuffer.js');
@@ -427,41 +422,6 @@ describe('getXmlTool', () => {
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain(message);
       expect(harness.server.requests).toEqual([]);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it.each([
-    {
-      factory: getGetWorksheetXmlTool,
-      name: 'get-worksheet-xml',
-      args: { worksheetName: 'Sales by Region' },
-      path: WORKSHEET_DOCUMENT,
-    },
-    {
-      factory: getGetDashboardXmlTool,
-      name: 'get-dashboard-xml',
-      args: { dashboardName: 'dash-exec' },
-      path: DASHBOARD_DOCUMENT,
-    },
-    {
-      factory: getGetWorkbookXmlTool,
-      name: 'get-workbook-xml',
-      args: {},
-      path: '/v0/workbook/document',
-    },
-  ])('keeps $name as a deprecated alias of get-xml', async ({ factory, name, args, path }) => {
-    const tool = factory(new DesktopMcpServer());
-    expect(tool.name).toBe(name);
-    expect(tool.description).toMatch(/^Deprecated: use get-xml /);
-
-    const harness = await startHarness(factory);
-    try {
-      const result = await harness.callTool({ ...args, mode: 'file' });
-
-      expect(result.isError).toBe(false);
-      expect(requestPaths(harness.server).at(-1)).toBe(path);
     } finally {
       await harness.close();
     }
