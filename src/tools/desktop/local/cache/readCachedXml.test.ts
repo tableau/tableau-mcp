@@ -154,8 +154,8 @@ describe('readCachedXmlTool', () => {
     });
 
     it.each([
-      ['worksheet', { worksheet: 'Nope &amp; Co' }, 'list-worksheets'],
-      ['dashboard', { dashboard: 'Nope &amp; Co' }, 'list-dashboards'],
+      ['worksheet', { worksheet: 'Nope &amp; Co' }, 'get-sheets'],
+      ['dashboard', { dashboard: 'Nope &amp; Co' }, 'get-sheets'],
     ])('not-found %s selector says to use the plain name', async (kind, selectors, listTool) => {
       const result = await getResult(CACHED_FILE, selectors);
 

@@ -13,7 +13,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getDatasourcesTool, getListWorkbookDatasourcesTool } from './getDatasources.js';
+import { getDatasourcesTool } from './getDatasources.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -57,14 +57,6 @@ describe('get-datasources tool', () => {
       readOnlyHint: true,
       openWorldHint: false,
     });
-  });
-
-  it('keeps list-workbook-datasources as a deprecated alias with only a session arg', () => {
-    const tool = getListWorkbookDatasourcesTool(new DesktopMcpServer());
-
-    expect(tool.name).toBe('list-workbook-datasources');
-    expect(tool.description).toMatch(/^Deprecated: use get-datasources/);
-    expect(Object.keys(tool.paramsSchema ?? {})).toEqual(['session']);
   });
 
   it('lists the datasources in the open workbook when no id is given', async () => {

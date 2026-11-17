@@ -90,7 +90,7 @@ type LoadDashboardXmlResult = Result<
  * raw XML — for target resolution and readback.
  *
  * Only a single top-level `<dashboard>` fragment is a legal payload here (the same fragment
- * get-dashboard-xml returns). A `<workbook>`-wrapped document
+ * get-xml returns). A `<workbook>`-wrapped document
  * has no top-level identity to gate on, so it is rejected before apply with a recovery hint rather
  * than failing as a misleading mismatch against an empty XML name.
  */
@@ -135,9 +135,9 @@ function resolveCanonicalDashboardName(
       type: 'name-mismatch',
       message:
         `${param} "${dashboardName}" does not match <${kind} name="${xmlName}"> in the file, and apply-${kind} cannot rename a ${kind}. ` +
-        `FIX: check the ${kind}'s name in Desktop${kind === 'dashboard' ? ' with list-dashboards' : ''}. If it is "${xmlName}", pass "${xmlName}" as ${param}. ` +
+        `FIX: check the ${kind}'s name in Desktop with get-sheets. If it is "${xmlName}", pass "${xmlName}" as ${param}. ` +
         `If it is "${dashboardName}", set the name in the file to "${dashboardName}" and apply; to rename the ${kind}, call rename-sheet afterwards. ` +
-        `If it is neither, re-read the ${kind} with get-${kind}-xml and redo your edit in that file. No changes were sent to Tableau.`,
+        `If it is neither, re-read the ${kind} with get-xml (kind=${kind}) and redo your edit in that file. No changes were sent to Tableau.`,
     });
   }
 
@@ -522,7 +522,7 @@ export async function loadDashboardXml({
         message:
           `The file names this ${kind} "${outcome.submittedName}", but in Desktop it is "${outcome.liveName}", and apply-${kind} cannot rename a ${kind}. ` +
           `FIX: if you edited the name to rename it, set it to "${outcome.liveName}" in the file, apply, then call rename-sheet. ` +
-          `If the file is older than the ${kind} in Desktop, re-read it with get-${kind}-xml and redo your edit. No changes were sent to Tableau.`,
+          `If the file is older than the ${kind} in Desktop, re-read it with get-xml (kind=${kind}) and redo your edit. No changes were sent to Tableau.`,
       },
     });
   }
@@ -532,7 +532,7 @@ export async function loadDashboardXml({
       error: {
         type: 'source-drift',
         message:
-          `The ${kind} changed since this cache was read. Re-read it with get-${kind}-xml, ` +
+          `The ${kind} changed since this cache was read. Re-read it with get-xml (kind=${kind}), ` +
           `reapply your edit to the new cache file, then retry apply-${kind}. No changes were sent to Tableau.`,
       },
     });
