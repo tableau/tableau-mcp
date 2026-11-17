@@ -13,6 +13,7 @@ type NamespaceOptions = { ttlMs: number; maxSize?: number };
 // Existing SessionStore providers already use these hooks and remain compatible.
 type StoreProvider<V = unknown> = KeyValueStore<V> & {
   configureNamespace?(namespace: string, options: NamespaceOptions): void;
+  /** @deprecated Legacy SessionStore hook. Still awaited for backward compatibility. */
   init?(): Promise<void>;
   close?(): Promise<void>;
 };
@@ -31,21 +32,18 @@ function validateProvider(provider: unknown): asserts provider is StoreProvider 
   }
 }
 
-/** Select memory or an operator-supplied module. Explicit custom-provider failures are fatal. */
-function initializeKeyValueStore(): void {
+/** Select and initialize the configured provider before the server reports healthy. */
+export async function initializeKeyValueStore(): Promise<void> {
+  if (state !== null) return;
   const config = getConfig();
   // sessionStore supports existing integrations supplying the legacy configuration property.
   const storeConfig = config.keyValueStore ?? config.sessionStore;
-  state =
+  const selected: StoreState =
     storeConfig.provider === 'custom'
       ? { kind: 'custom', store: loadCustomProvider(storeConfig.providerConfig) }
       : { kind: 'memory' };
-}
-
-/** Check optional backend readiness before the server reports healthy. Never fall back to memory. */
-export async function connectKeyValueStore(): Promise<void> {
-  if (state === null) initializeKeyValueStore();
-  if (state!.kind === 'custom') await state!.store.init?.();
+  if (selected.kind === 'custom') await selected.store.init?.();
+  state = selected;
   log({
     message: 'Key-value store ready',
     level: 'info',
@@ -112,10 +110,12 @@ export function createNamespacedKeyValueStore<V>(
   if (!Number.isFinite(options?.ttlMs)) {
     throw new Error('ttlMs must be a finite number.');
   }
-  if (state === null) initializeKeyValueStore();
-  if (state!.kind === 'memory') return new InMemoryKeyValueStore<V>(options);
+  if (state === null) {
+    throw new Error('Key-value store is not initialized.');
+  }
+  if (state.kind === 'memory') return new InMemoryKeyValueStore<V>(options);
 
-  const shared = state!.store as StoreProvider<V>;
+  const shared = state.store as StoreProvider<V>;
   shared.configureNamespace?.(namespace, options);
   const prefix = `${namespace}:`;
   return {
@@ -131,5 +131,5 @@ export function resetKeyValueStore(): void {
   state = null;
 }
 
-/** @deprecated Retained for session-store compatibility. New code should await connectKeyValueStore. */
+/** @deprecated Await initializeKeyValueStore from storage/init instead. */
 export const initializeSessionStore = initializeKeyValueStore;

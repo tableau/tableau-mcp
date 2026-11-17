@@ -24,8 +24,10 @@ need separate provider systems.
 
 The legacy `SessionStore` type and session-store lifecycle/factory function names are deprecated
 in favor of the generic storage API. Existing aliases remain available. Server startup calls
-`await connectKeyValueStore()`, which selects and constructs the configured provider when
-needed, then awaits its optional `init()` hook.
+`await initializeKeyValueStore()`, which selects and constructs the configured provider, then
+awaits its optional `init()` hook. Store access requires initialization to have completed.
+The legacy `initializeSessionStore()` and `connectSessionStore()` aliases use this same async
+initializer and must be awaited.
 
 Invalid KV provider settings, module-loading errors, and missing required methods fail startup.
 An explicitly configured custom provider is never silently replaced with memory.

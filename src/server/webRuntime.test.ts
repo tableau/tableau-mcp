@@ -4,7 +4,7 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import { connectKeyValueStore, disconnectKeyValueStore } from '../storage/init.js';
+import { disconnectKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
 
 const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
@@ -51,7 +51,7 @@ vi.mock('../sdks/tableau/restApi.js', () => ({
 }));
 
 vi.mock('../storage/init.js', () => ({
-  connectKeyValueStore: vi.fn(() => {
+  initializeKeyValueStore: vi.fn(() => {
     runtimeState.events.push('key-value store connect');
     return runtimeState.connectPromise;
   }),
@@ -117,7 +117,7 @@ describe('initializeWebRuntime', () => {
     runtimeState.serverInfoPromise = serverInfo.promise;
 
     const runtimePromise = initializeWebRuntime(config);
-    await vi.waitFor(() => expect(connectKeyValueStore).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(initializeKeyValueStore).toHaveBeenCalledOnce());
 
     expect(RestApi.host).toBe(config.server);
     expect(runtimeState.events).toEqual([
@@ -160,7 +160,7 @@ describe('initializeWebRuntime', () => {
     await vi.waitFor(() => expect(initializeActivityLog).toHaveBeenCalledOnce());
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
 
-    expect(connectKeyValueStore).not.toHaveBeenCalled();
+    expect(initializeKeyValueStore).not.toHaveBeenCalled();
     expect(runtimeState.events).toEqual(['feature gate']);
 
     activityLogInit.resolve();
@@ -179,7 +179,7 @@ describe('initializeWebRuntime', () => {
 
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
     expect(initializeActivityLog).toHaveBeenCalledOnce();
-    expect(connectKeyValueStore).toHaveBeenCalledOnce();
+    expect(initializeKeyValueStore).toHaveBeenCalledOnce();
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
   });

@@ -43,6 +43,7 @@ describe('SessionStore init', () => {
 
   describe('provider selection', () => {
     it('defaults to the memory provider when unconfigured', async () => {
+      await initializeSessionStore();
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
@@ -56,7 +57,7 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      initializeSessionStore();
+      await initializeSessionStore();
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
 
       await store.set('key', 'value');
@@ -68,17 +69,17 @@ describe('SessionStore init', () => {
       await expect(second.get('key')).resolves.toBe('value');
     });
 
-    it('throws when the custom module is missing "module"', () => {
+    it('rejects when the custom module is missing "module"', async () => {
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: { provider: 'custom', providerConfig: {} },
       } as any);
 
       // Fail closed: an explicitly-configured custom store that cannot load must be fatal at
       // boot, not silently downgraded to isolated in-memory state on every replica.
-      expect(() => initializeSessionStore()).toThrow(/"module"/);
+      await expect(initializeSessionStore()).rejects.toThrow(/"module"/);
     });
 
-    it('throws when the custom module fails to load', () => {
+    it('rejects when the custom module fails to load', async () => {
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: {
           provider: 'custom',
@@ -86,24 +87,25 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      expect(() => initializeSessionStore()).toThrow(
+      await expect(initializeSessionStore()).rejects.toThrow(
         /Failed to load custom key-value store provider/,
       );
     });
 
-    it('propagates the original error when getConfig throws', () => {
+    it('propagates the original error when getConfig throws', async () => {
       vi.mocked(getConfig).mockImplementation(() => {
         throw new Error('Config error');
       });
 
       // The raw error must propagate uncaught (not wrapped or swallowed), so the existing
       // top-level fatal-boot handler in index.ts logs it and exits.
-      expect(() => initializeSessionStore()).toThrow('Config error');
+      await expect(initializeSessionStore()).rejects.toThrow('Config error');
     });
   });
 
   describe('createNamespacedStore', () => {
     it('returns independent stores for the same namespace on the memory path', async () => {
+      await initializeSessionStore();
       const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
 
@@ -112,11 +114,11 @@ describe('SessionStore init', () => {
       await expect(b.get('key')).resolves.toBeUndefined();
     });
 
-    it('lazily initializes when initializeSessionStore was not called', async () => {
-      // No initializeSessionStore() call; createNamespacedStore initializes on demand.
-      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-      await store.set('key', 'value');
-      await expect(store.get('key')).resolves.toBe('value');
+    it('requires initialization before creating a store', () => {
+      expect(() => createNamespacedStore('ns', { ttlMs: 10000 })).toThrow(
+        'Key-value store is not initialized.',
+      );
+      expect(getConfig).not.toHaveBeenCalled();
     });
 
     it('isolates identical raw keys across namespaces sharing one custom backend', async () => {
@@ -127,7 +129,7 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      initializeSessionStore();
+      await initializeSessionStore();
 
       const nsA = createNamespacedStore<string>('alpha', { ttlMs: 10000 });
       const nsB = createNamespacedStore<string>('beta', { ttlMs: 10000 });
@@ -147,7 +149,7 @@ describe('SessionStore init', () => {
       await expect(nsB.get('shared')).resolves.toBe('b-value');
     });
 
-    it('forwards each namespace its own TTL/bound via configureNamespace on the custom path', () => {
+    it('forwards each namespace its own TTL/bound via configureNamespace on the custom path', async () => {
       globalThis.__configureNamespaceCalls = [];
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: {
@@ -156,7 +158,7 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      initializeSessionStore();
+      await initializeSessionStore();
 
       createNamespacedStore<string>('alpha', { ttlMs: 1000, maxSize: 500 });
       createNamespacedStore<string>('beta', { ttlMs: 2000 });
@@ -176,7 +178,7 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      initializeSessionStore();
+      await initializeSessionStore();
 
       // The optional `?.()` call is a no-op when absent: wrapping and normal ops still work.
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
@@ -186,14 +188,15 @@ describe('SessionStore init', () => {
   });
 
   describe('generic storage compatibility', () => {
-    function useCustomStore(module: string): void {
+    function useCustomStore(module: string, options: Record<string, unknown> = {}): void {
       vi.mocked(getConfig).mockReturnValue({
-        sessionStore: { provider: 'custom', providerConfig: { module } },
+        sessionStore: { provider: 'custom', providerConfig: { module, ...options } },
       } as any);
     }
 
     it('uses an unchanged legacy provider through the generic contract', async () => {
       useCustomStore(FAKE_STORE_MODULE);
+      await initializeSessionStore();
 
       const sessions: KeyValueStore<{ userId: string }> = createNamespacedStore('sessions', {
         ttlMs: 10000,
@@ -211,9 +214,9 @@ describe('SessionStore init', () => {
   });
 
   describe('lifecycle hooks', () => {
-    function useCustomStore(module: string): void {
+    function useCustomStore(module: string, options: Record<string, unknown> = {}): void {
       vi.mocked(getConfig).mockReturnValue({
-        sessionStore: { provider: 'custom', providerConfig: { module } },
+        sessionStore: { provider: 'custom', providerConfig: { module, ...options } },
       } as any);
     }
 
@@ -223,9 +226,9 @@ describe('SessionStore init', () => {
       expect(globalThis.__initCalls).toBe(1);
     });
 
-    it('connectSessionStore lazily initializes then calls init() when not initialized', async () => {
+    it('legacy lifecycle aliases share the same initializer and only initialize once', async () => {
       useCustomStore(LIFECYCLE_STORE_MODULE);
-      // No initializeSessionStore() call first: connect must initialize on demand, then init().
+      await initializeSessionStore();
       await connectSessionStore();
       expect(globalThis.__initCalls).toBe(1);
     });
@@ -247,27 +250,27 @@ describe('SessionStore init', () => {
 
     it('disconnectSessionStore calls a custom provider that implements close()', async () => {
       useCustomStore(LIFECYCLE_STORE_MODULE);
-      initializeSessionStore();
+      await initializeSessionStore();
       await disconnectSessionStore();
       expect(globalThis.__closeCalls).toBe(1);
     });
 
     it('disconnectSessionStore propagates a rejecting close()', async () => {
-      useCustomStore(REJECTING_LIFECYCLE_STORE_MODULE);
-      initializeSessionStore();
+      useCustomStore(REJECTING_LIFECYCLE_STORE_MODULE, { rejectInit: false });
+      await initializeSessionStore();
       await expect(disconnectSessionStore()).rejects.toThrow(/close failed/);
     });
 
     it('disconnectSessionStore resolves cleanly when the custom provider has no close()', async () => {
       useCustomStore(FAKE_STORE_MODULE);
-      initializeSessionStore();
+      await initializeSessionStore();
       await expect(disconnectSessionStore()).resolves.toBeUndefined();
     });
 
     it('disconnectSessionStore is a no-op on the memory path (including uninitialized)', async () => {
       // state === null (never initialized) and the memory path both resolve without touching a store.
       await expect(disconnectSessionStore()).resolves.toBeUndefined();
-      initializeSessionStore();
+      await initializeSessionStore();
       await expect(disconnectSessionStore()).resolves.toBeUndefined();
       expect(globalThis.__closeCalls).toBe(0);
     });

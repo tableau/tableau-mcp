@@ -7,6 +7,7 @@ class KeyValueStore {
     this.map = new Map();
     globalThis.__keyValueProviderConfig = config;
     if (config.omitConsume) this.consume = undefined;
+    if (config.initPromise) this.init = () => config.initPromise;
   }
 
   get(key) {

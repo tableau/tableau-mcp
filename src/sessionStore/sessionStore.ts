@@ -13,6 +13,7 @@ import type { KeyValueStore } from '../storage/keyValueStore.js';
  */
 export interface SessionStore<V> extends KeyValueStore<V> {
   configureNamespace?(namespace: string, options: { ttlMs: number; maxSize?: number }): void;
+  /** @deprecated Legacy SessionStore hook. Still awaited for backward compatibility. */
   init?(): Promise<void>;
   close?(): Promise<void>;
 }

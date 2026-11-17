@@ -108,7 +108,7 @@ vi.mock('./server/express.js', () => ({
 }));
 
 vi.mock('./storage/init.js', () => ({
-  connectKeyValueStore: vi.fn(async () => {
+  initializeKeyValueStore: vi.fn(async () => {
     await startupState.connectPromise;
     startupState.sessionStoreConnected = true;
   }),
@@ -127,7 +127,7 @@ import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger } from './logging/fileLogger.js';
 import { startExpressServer } from './server/express.js';
-import { connectKeyValueStore } from './storage/init.js';
+import { initializeKeyValueStore } from './storage/init.js';
 
 function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void } {
   let reject!: (reason?: unknown) => void;
@@ -173,7 +173,7 @@ describe('desktop binary startup', () => {
 
     expect(startupState.connectedAtExpressStart).toBe(true);
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
-    expect(connectKeyValueStore).toHaveBeenCalledOnce();
+    expect(initializeKeyValueStore).toHaveBeenCalledOnce();
     expect(getTableauServerInfo).toHaveBeenCalledOnce();
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
     expect(startupState.shutdownHandlers.size).toBe(2);
@@ -200,7 +200,7 @@ describe('desktop binary startup', () => {
     startupState.connectPromise = connect.promise;
 
     await import('./index.desktop.js');
-    await vi.waitFor(() => expect(connectKeyValueStore).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(initializeKeyValueStore).toHaveBeenCalledOnce());
     connect.reject(new Error('key-value store init failed'));
     await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalledWith(1));
 
@@ -218,7 +218,7 @@ describe('desktop binary startup', () => {
     expect(getDesktopConfig).toHaveBeenCalledOnce();
     expect(getConfig).not.toHaveBeenCalled();
     expect(initializeFeatureGate).not.toHaveBeenCalled();
-    expect(connectKeyValueStore).not.toHaveBeenCalled();
+    expect(initializeKeyValueStore).not.toHaveBeenCalled();
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(startExpressServer).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();

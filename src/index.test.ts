@@ -102,7 +102,7 @@ vi.mock('./server/express.js', () => ({
 }));
 
 vi.mock('./storage/init.js', () => ({
-  connectKeyValueStore: vi.fn(() => {
+  initializeKeyValueStore: vi.fn(() => {
     startupState.events.push('key-value store connected');
     return startupState.connectPromise;
   }),

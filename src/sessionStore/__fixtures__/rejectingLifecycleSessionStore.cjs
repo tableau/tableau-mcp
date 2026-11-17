@@ -1,11 +1,13 @@
 // Test fixture: a custom provider whose init()/close() reject, so tests can assert the rejection
 // propagates out of connectSessionStore/disconnectSessionStore (fail-closed at boot/shutdown).
 class RejectingLifecycleSessionStore {
-  constructor() {
+  constructor(config = {}) {
     this.map = new Map();
+    this.rejectInit = config.rejectInit !== false;
   }
 
   init() {
+    if (!this.rejectInit) return Promise.resolve();
     return Promise.reject(new Error('init failed: backend unreachable'));
   }
 
