@@ -59,6 +59,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const runFlowTool = new WebTool({
     server,
     name: 'run-flow',
+    registrationConditions: ['RequiresFlows'],
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     disabled: new Provider(async () => !(await isFlowWriteToolsEnabled(config))),
     description: `

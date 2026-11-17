@@ -54,6 +54,7 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
   const listFlowTasksTool = new WebTool({
     server,
     name: 'list-flow-tasks',
+    registrationConditions: ['RequiresFlows'],
     minRequiredRole: SiteRole.VIEWER,
     disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `

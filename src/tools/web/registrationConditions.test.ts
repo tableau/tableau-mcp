@@ -1,5 +1,5 @@
 import { AxiosError, AxiosResponse } from 'axios';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import {
   PulseDisabledError,
@@ -8,6 +8,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { RestApiArgs } from '../../restApiInstance.js';
 import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pulse.js';
+import { ADMIN_SITE_ROLES, SiteRole } from '../../sdks/tableau/types/user.js';
 import {
   checkRegistrationConditions,
   getUnmetConditionInstructions,
@@ -24,8 +25,8 @@ vi.mock('../../restApiInstance.js', () => ({
   useRestApi: mocks.useRestApi,
 }));
 
-// The Pulse probe is reached through the mocked useRestApi, so a minimal stub is sufficient here.
-const restApiArgs = {} as unknown as RestApiArgs;
+// Probes are reached through the mocked useRestApi; only cancellation needs a real value.
+const restApiArgs = { signal: new AbortController().signal } as RestApiArgs;
 
 /** A successful `listAllPulseMetricDefinitions` page. An empty site still means Pulse is enabled. */
 function pulseDefinitionsPage(definitionCount = 0): Ok<unknown> {
@@ -154,6 +155,166 @@ describe('checkRegistrationConditions', () => {
         registrationConditionsMet: false,
         failingCondition: 'MissingConditionCheck',
       });
+    });
+  });
+
+  describe('RequiresFlows', () => {
+    const queryFlowsForUser = vi.fn();
+    const getCurrentServerSession = vi.fn();
+    let userId: string;
+
+    beforeEach(() => {
+      userId = 'user-id';
+      queryFlowsForUser.mockReset().mockResolvedValue({ flows: [] });
+      getCurrentServerSession
+        .mockReset()
+        .mockResolvedValue(new Ok({ user: { siteRole: SiteRole.CREATOR } }));
+      mocks.useRestApi.mockImplementation(async ({ callback }) =>
+        callback({
+          siteId: 'site-id',
+          userId,
+          flowsMethods: { queryFlowsForUser },
+          authenticatedServerMethods: { getCurrentServerSession },
+        }),
+      );
+    });
+
+    it.each([true, false])('caches ownership=$0 across Flow tools', async (ownsFlows) => {
+      queryFlowsForUser.mockResolvedValue({ flows: ownsFlows ? [{ id: 'flow-id' }] : [] });
+      const context: RegistrationContext = {};
+      const expected = ownsFlows
+        ? { registrationConditionsMet: true }
+        : { registrationConditionsMet: false, failingCondition: 'RequiresFlows' };
+
+      await expect(
+        checkRegistrationConditions(['RequiresFlows'], context, restApiArgs),
+      ).resolves.toEqual(expected);
+      await expect(
+        checkRegistrationConditions(['RequiresFlows'], context, restApiArgs),
+      ).resolves.toEqual(expected);
+
+      expect(queryFlowsForUser).toHaveBeenCalledExactlyOnceWith({
+        siteId: 'site-id',
+        userId: 'user-id',
+        ownedBy: true,
+        pageSize: 1,
+      });
+      expect(getCurrentServerSession).toHaveBeenCalledTimes(ownsFlows ? 0 : 1);
+      expect(mocks.useRestApi).toHaveBeenCalledWith(
+        expect.objectContaining({ jwtScopes: ['tableau:flows:read'] }),
+      );
+    });
+
+    it('uses the resolved authenticated identity when a bearer token omits the user ID', async () => {
+      userId = '';
+      queryFlowsForUser.mockResolvedValue({ flows: [{ id: 'flow-id' }] });
+      await expect(
+        checkRegistrationConditions(
+          ['RequiresFlows'],
+          {},
+          {
+            ...restApiArgs,
+            tableauAuthInfo: {
+              type: 'Bearer',
+              raw: 'token',
+              userId: 'resolved-user-id',
+              server: 'https://test',
+              username: 'user',
+              siteId: 'site-id',
+              siteName: 'site',
+            },
+          },
+        ),
+      ).resolves.toEqual({ registrationConditionsMet: true });
+      expect(queryFlowsForUser).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'resolved-user-id' }),
+      );
+    });
+
+    it('omits Flow tools without making an ownership request when identity is unavailable', async () => {
+      userId = '';
+      await expect(
+        checkRegistrationConditions(['RequiresFlows'], {}, restApiArgs),
+      ).resolves.toEqual({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresFlows',
+      });
+      expect(queryFlowsForUser).not.toHaveBeenCalled();
+    });
+
+    it.each(ADMIN_SITE_ROLES)('allows %s without owning a flow', async (siteRole) => {
+      getCurrentServerSession.mockResolvedValue(new Ok({ user: { siteRole } }));
+      await expect(
+        checkRegistrationConditions(['RequiresFlows'], {}, restApiArgs),
+      ).resolves.toEqual({ registrationConditionsMet: true });
+    });
+
+    it.each([SiteRole.CREATOR, SiteRole.SITE_ADMINISTRATOR_CREATOR])(
+      'reuses a previously fetched %s role',
+      async (siteRole) => {
+        const context: RegistrationContext = { siteRole };
+        const result = await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        expect(result.registrationConditionsMet).toBe(
+          siteRole === SiteRole.SITE_ADMINISTRATOR_CREATOR,
+        );
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([401, 403, 404, 500, undefined])(
+      'fails closed without retries on HTTP %s',
+      async (status) => {
+        queryFlowsForUser.mockRejectedValue(
+          new AxiosError(
+            'probe failed',
+            undefined,
+            undefined,
+            undefined,
+            status === undefined ? undefined : ({ status } as AxiosResponse),
+          ),
+        );
+        const context: RegistrationContext = { siteRole: SiteRole.SITE_ADMINISTRATOR_CREATOR };
+        const result = await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        expect(result).toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'RequiresFlows',
+          ...((status === undefined || status >= 500) && { indeterminate: true }),
+        });
+        await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        expect(queryFlowsForUser).toHaveBeenCalledTimes(1);
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['unauthorized', 'unknown'] as const)(
+      'fails closed if the admin check is %s',
+      async (type) => {
+        getCurrentServerSession.mockResolvedValue(new Err({ type, message: 'unavailable' }));
+        const context: RegistrationContext = {};
+        const result = await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        expect(result.registrationConditionsMet).toBe(false);
+        await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        expect(getCurrentServerSession).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('bounds the probe to five seconds and preserves caller cancellation', async () => {
+      const timeout = vi.spyOn(AbortSignal, 'timeout');
+      const caller = new AbortController();
+      try {
+        await checkRegistrationConditions(
+          ['RequiresFlows'],
+          {},
+          { ...restApiArgs, signal: caller.signal },
+        );
+        expect(timeout).toHaveBeenCalledWith(5_000);
+        const signal = mocks.useRestApi.mock.calls[0][0].signal as AbortSignal;
+        expect(signal.aborted).toBe(false);
+        caller.abort();
+        expect(signal.aborted).toBe(true);
+      } finally {
+        timeout.mockRestore();
+      }
     });
   });
 

@@ -1,8 +1,66 @@
+import type { AxiosAdapter } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import FlowsMethods from './flowsMethods.js';
 
 describe('FlowsMethods', () => {
+  describe('queryFlowsForUser', () => {
+    it('uses the guarded user-flows route with ownership and a single-item page', async () => {
+      const adapter = vi.fn<AxiosAdapter>(async (config) => ({
+        data: { pagination: { pageNumber: 1, pageSize: 1, totalAvailable: 0 }, flows: {} },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }));
+      const methods = new FlowsMethods(
+        'http://test/api/3.30',
+        { type: 'Bearer', token: 'test' },
+        { adapter },
+      );
+
+      await expect(
+        methods.queryFlowsForUser({
+          siteId: 'site-id',
+          userId: 'b3f32483-70df-4c9f-a5c1-3a3224a36c5d',
+          ownedBy: true,
+          pageSize: 1,
+        }),
+      ).resolves.toMatchObject({ flows: [] });
+      expect(adapter.mock.calls[0][0]).toMatchObject({
+        method: 'get',
+        url: '/sites/site-id/users/b3f32483-70df-4c9f-a5c1-3a3224a36c5d/flows',
+        params: { ownedBy: true, pageSize: 1 },
+      });
+    });
+
+    it.each([{ flows: [] }, { flows: [{ id: 'flow-id', name: 'My Flow' }] }])(
+      'queries one page of owned flows and normalizes the response: $flows',
+      async ({ flows }) => {
+        const queryFlowsForUser = vi.fn().mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 1, totalAvailable: flows.length },
+          flows: flows.length ? { flow: flows } : {},
+        });
+        const methods = new FlowsMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+        Object.assign(methods, { _apiClient: { queryFlowsForUser } });
+
+        const result = await methods.queryFlowsForUser({
+          siteId: 'site-id',
+          userId: 'user-id',
+          ownedBy: true,
+          pageSize: 1,
+        });
+
+        expect(result.flows).toEqual(flows);
+        expect(queryFlowsForUser).toHaveBeenCalledWith({
+          params: { siteId: 'site-id', userId: 'user-id' },
+          queries: { ownedBy: true, pageSize: 1, pageNumber: undefined },
+          headers: { Authorization: 'Bearer test' },
+        });
+      },
+    );
+  });
+
   describe('runFlowNow', () => {
     function makeMethods(apiClient: unknown): FlowsMethods {
       const flowsMethods = new FlowsMethods('http://test', { type: 'Bearer', token: 'test' }, {});

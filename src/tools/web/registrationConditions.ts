@@ -7,6 +7,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { RestApiArgs, useRestApi } from '../../restApiInstance.js';
 import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pulse.js';
+import { isAdminSiteRole } from '../../sdks/tableau/types/user.js';
 // Type-only: erased at compile time, so scopes.ts can import the value map below without a
 // runtime import cycle.
 import type { TableauApiScope } from '../../server/oauth/scopes.js';
@@ -19,6 +20,7 @@ import { retry } from '../../utils/retry.js';
  * then add or update the `registrationConditions` property for all the tools the condition should apply to.
  */
 export type RegistrationCondition =
+  | 'RequiresFlows'
   | 'RequiresKnowledge'
   | 'RequiresPulse'
   | 'RequiresPulsePremium'
@@ -34,6 +36,7 @@ export const REGISTRATION_CONDITION_API_SCOPES: Record<
   RegistrationCondition,
   ReadonlyArray<TableauApiScope>
 > = {
+  RequiresFlows: ['tableau:flows:read'],
   RequiresKnowledge: ['tableau:knowledge:read'],
   RequiresPulse: ['tableau:insight_definitions_metrics:read'],
   RequiresPulsePremium: ['tableau:entitlements:read'],
@@ -46,6 +49,7 @@ export const REGISTRATION_CONDITION_API_SCOPES: Record<
  */
 export type RegistrationContext = {
   siteRole?: string;
+  hasFlows?: boolean;
   isKnowledgeAvailable?: boolean;
   isPulseEnabled?: boolean;
   hasPulsePremium?: boolean;
@@ -82,6 +86,19 @@ export async function checkRegistrationConditions(
 ): Promise<ConditionsCheckResult> {
   for (const condition of conditions) {
     switch (condition) {
+      case 'RequiresFlows': {
+        if (context.hasFlows === undefined) {
+          context.hasFlows = recordProbe(
+            context,
+            'RequiresFlows',
+            await checkFlowsAvailable(restApiArgs, context),
+          );
+        }
+        if (!context.hasFlows) {
+          return unmet(context, 'RequiresFlows');
+        }
+        continue;
+      }
       case 'RequiresKnowledge': {
         if (context.isKnowledgeAvailable === undefined) {
           context.isKnowledgeAvailable = recordProbe(
@@ -176,6 +193,10 @@ function unmet(
  * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
+  RequiresFlows:
+    'NOTE: Tableau Flow tools were omitted because flow ownership or administrator access ' +
+    'could not be confirmed. Publish a flow or ask your Tableau administrator about access, ' +
+    'then reconnect to check again.',
   // Kept generic: the probe cannot tell a site without Knowledge from a denied check.
   RequiresKnowledge:
     'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as ' +
@@ -205,6 +226,7 @@ const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
 };
 
 const CONDITION_TOOL_LABELS: Record<RegistrationCondition, string> = {
+  RequiresFlows: 'Flow',
   RequiresKnowledge: 'Knowledge',
   RequiresPulse: 'Pulse',
   RequiresPulsePremium: 'AI-powered Pulse insight',
@@ -229,6 +251,43 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 
 /** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
 export const MAX_API_RETRY_ATTEMPTS = 2;
+
+/** One single-item ownership query, with no retries or pagination. Admins need not own flows. */
+async function checkFlowsAvailable(
+  restApiArgs: RestApiArgs,
+  context: RegistrationContext,
+): Promise<boolean | undefined> {
+  try {
+    return await useRestApi({
+      ...restApiArgs,
+      signal: AbortSignal.any([restApiArgs.signal, AbortSignal.timeout(5_000)]),
+      jwtScopes: REGISTRATION_CONDITION_API_SCOPES.RequiresFlows,
+      callback: async (restApi) => {
+        // Bearer tokens without MFA omit the userId claim; auth resolves it from the session.
+        const userId = restApi.userId || restApiArgs.tableauAuthInfo?.userId;
+        if (!userId) return false;
+        const { flows } = await restApi.flowsMethods.queryFlowsForUser({
+          siteId: restApi.siteId,
+          userId,
+          ownedBy: true,
+          pageSize: 1,
+        });
+        if (flows.length > 0) return true;
+
+        if (!Object.hasOwn(context, 'siteRole')) {
+          const session = await restApi.authenticatedServerMethods.getCurrentServerSession();
+          if (session.isErr()) {
+            return session.error.type === 'unauthorized' ? false : undefined;
+          }
+          context.siteRole = session.value.user.siteRole;
+        }
+        return isAdminSiteRole(context.siteRole);
+      },
+    });
+  } catch (error) {
+    return isRetryableProbeError(error) ? undefined : false;
+  }
+}
 
 /** `listGraphs` is available to every Knowledge read role and succeeds for an entitled empty site. */
 async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolean | undefined> {
