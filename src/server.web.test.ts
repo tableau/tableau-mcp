@@ -266,8 +266,7 @@ describe('server', () => {
     vi.mocked(McpServer).mockClear();
     const server = getServer();
     const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
-      | { instructions?: string }
-      | undefined;
+      { instructions?: string } | undefined;
     const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
     sdkServer._instructions = constructorOptions?.instructions;
     await server.registerTools();
@@ -582,8 +581,7 @@ describe('server', () => {
       vi.mocked(McpServer).mockClear();
       const server = getServer();
       const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
-        | { instructions?: string }
-        | undefined;
+        { instructions?: string } | undefined;
       const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
       sdkServer._instructions = constructorOptions?.instructions;
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
