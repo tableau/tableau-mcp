@@ -162,7 +162,7 @@ export function setStickyWorksheetFile({
  * Close the open edit buffer for this sheet+session — called after a successful
  * apply-worksheet (the edits landed; a later name-only call should start from a fresh
  * live read, not silently re-touch an already-applied file) and after an explicit
- * get-worksheet-xml re-read by name (the agent asked for live truth; treat that as the
+ * get-xml worksheet re-read (the agent asked for live truth; treat that as the
  * new starting point rather than resuming the old buffer underneath it).
  */
 export function clearStickyWorksheetFile({

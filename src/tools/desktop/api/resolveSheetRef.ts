@@ -7,7 +7,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 export type ResolvedSheetRef = {
   ref: SheetRef;
   previousName: string;
-  worksheetCount: number;
+  worksheetCount: number | undefined;
 };
 
 /**
@@ -29,18 +29,23 @@ export async function resolveSheetRef({
     session,
     extra,
     callback: async (_executor, _signal, read) => {
-      const worksheets = await read(
-        'worksheet list',
-        async (executor, signal) => await executor.listWorksheets(signal),
-      );
-      if (worksheets.isErr()) {
-        return worksheets;
+      const tagged: Array<{ id: string; name: string; kind: SheetKind }> = [];
+      let worksheetCount: number | undefined;
+
+      if (kind === undefined || kind === 'worksheet') {
+        const worksheets = await read(
+          'worksheet list',
+          async (executor, signal) => await executor.listWorksheets(signal),
+        );
+        if (worksheets.isErr()) {
+          return worksheets;
+        }
+        const worksheetItems = worksheets.value.worksheets ?? [];
+        worksheetCount = worksheetItems.length;
+        tagged.push(
+          ...worksheetItems.map((w) => ({ id: w.id, name: w.name, kind: 'worksheet' as const })),
+        );
       }
-      const worksheetItems = worksheets.value.worksheets ?? [];
-      const tagged: Array<{ id: string; name: string; kind: SheetKind }> =
-        kind === undefined || kind === 'worksheet'
-          ? worksheetItems.map((w) => ({ id: w.id, name: w.name, kind: 'worksheet' as const }))
-          : [];
 
       if (kind === undefined || kind === 'dashboard') {
         const dashboards = await read(
@@ -83,7 +88,7 @@ export async function resolveSheetRef({
       return new Ok({
         ref: { kind: resolved.value.kind, id: resolved.value.id },
         previousName: resolved.value.name,
-        worksheetCount: worksheetItems.length,
+        worksheetCount,
       });
     },
   });

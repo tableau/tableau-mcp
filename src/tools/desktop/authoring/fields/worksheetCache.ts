@@ -88,7 +88,7 @@ export async function resolveWorksheetBufferId({
     return Err(
       new WorksheetNotFoundError(
         `Could not resolve a stable id for worksheet "${worksheetRef}". ` +
-          'Confirm the sheet exists with list-worksheets, then retry.',
+          'Confirm the sheet exists with get-sheets, then retry.',
       ),
     );
   }
@@ -126,7 +126,7 @@ export async function fetchAndCacheWorksheet({
               type: 'endpoint-not-in-this-build',
               message:
                 'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
-                'Use list-worksheets to confirm the target sheet is visible, then retry on a Desktop build that serves worksheet documents.',
+                'Use get-sheets to confirm the target sheet is visible, then retry on a Desktop build that serves worksheet documents.',
               statusCode: 404,
             }),
           );

@@ -16,31 +16,23 @@ import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
 import { getActiveDialogsTool } from './api/getActiveDialogs.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
-import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
-import { getDatasourcesTool, getListWorkbookDatasourcesTool } from './api/getDatasources.js';
+import { getDatasourcesTool } from './api/getDatasources.js';
 import { getDatasourceUnderlyingDataTool } from './api/getDatasourceUnderlyingData.js';
-import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getOperationsTool } from './api/getOperations.js';
-import { getGetSheetInfoTool } from './api/getSheetInfo.js';
+import { getSheetsTool } from './api/getSheets.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
-import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
 import { getSummaryDataTool } from './api/getSummaryData.js';
 import { getWorkbookExtensionsTool } from './api/getWorkbookExtensions.js';
-import { getWorkbookInventoryTool } from './api/getWorkbookInventory.js';
-import { getGetWorkbookXmlTool } from './api/getWorkbookXml.js';
 import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
-import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
 import { getWorkspaceExtensionsTool } from './api/getWorkspaceExtensions.js';
+import { getXmlTool } from './api/getXml.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
-import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListSavedDatasourcesTool } from './api/listSavedDatasources.js';
-import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
-import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
 import { getRefreshDatasourceTool } from './api/refreshDatasource.js';
@@ -93,7 +85,6 @@ export const desktopToolFactories = [
   getDiagnosticsTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,
-  getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,
   getUndoRedoWorkbookTool,
@@ -109,16 +100,13 @@ export const desktopToolFactories = [
   getAddStoryboardTool,
   getComposeStoryTool,
   getRefreshDatasourceTool,
-  getListWorksheetsTool,
+  getSheetsTool,
   getWorkbookExtensionsTool,
   getWorkspaceExtensionsTool,
   getReloadWorkspaceExtensionTool,
   getScaffoldDataAppTool,
   getShowMeOptionsTool,
-  getListDashboardsTool,
-  getListStoryboardsTool,
-  getGetSheetInfoTool,
-  getGetWorksheetXmlTool,
+  getXmlTool,
   getApplyWorksheetTool,
   getDeleteSheetTool,
   getRenameSheetTool,
@@ -128,11 +116,8 @@ export const desktopToolFactories = [
   getRefreshAutoUpdatesTool,
   getReloadExtensionsTool,
   getRefineWorksheetTool,
-  getGetDashboardXmlTool,
   getApplyDashboardTool,
   getDatasourcesTool,
-  getListWorkbookDatasourcesTool,
-  getGetDatasourceXmlTool,
   getApplyDatasourceTool,
   getListAvailableFieldsTool,
   getAddFieldTool,
@@ -151,7 +136,6 @@ export const desktopToolFactories = [
   getFormatDashboardZonesTool,
   getSetMemberColorsTool,
   getAuthorParameterTool,
-  getStoryboardXmlTool,
   getApplyStoryboardTool,
   getSummaryDataTool,
   getListWorksheetLogicalTablesTool,
@@ -162,7 +146,6 @@ export const desktopToolFactories = [
   exportWorksheetImageTool,
   exportDashboardImageTool,
   exportStoryboardImageTool,
-  getWorkbookInventoryTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getValidateCalculatedFieldTool,

@@ -20,6 +20,8 @@ import {
   worksheetName,
 } from './removeFieldScenario.js';
 
+const liveRead = { kind: 'worksheet', sheetId: worksheetName };
+
 function inspect(scenario: RemoveFieldScenario, file = draftFile): void {
   scenario.invoke('read_cached_xml', { filePath: file });
 }
@@ -45,7 +47,7 @@ describe('remove-field eval grading (offline)', () => {
   it.each(removeFieldCases)('accepts a correct sequence: $name', (testCase) => {
     const scenario = new RemoveFieldScenario(testCase);
     const file = testCase.fresh ? liveFile : draftFile;
-    if (testCase.fresh) scenario.invoke('get_worksheet_xml', { worksheetName, mode: 'file' });
+    if (testCase.fresh) scenario.invoke('get_xml', { ...liveRead, mode: 'file' });
     inspect(scenario, file);
     if (testCase.removals) {
       const target = testCase.current.encodings.lod
@@ -60,7 +62,7 @@ describe('remove-field eval grading (offline)', () => {
 
   it('accepts inline live inspection followed by a name-only removal', () => {
     const scenario = new RemoveFieldScenario(removeFieldCases[0]);
-    scenario.invoke('get_worksheet_xml', { worksheetName, mode: 'inline' });
+    scenario.invoke('get_xml', { ...liveRead, mode: 'inline' });
     remove(scenario);
     expect(scenario.grade()).toEqual([]);
   });
@@ -81,14 +83,14 @@ describe('remove-field eval grading (offline)', () => {
 
   it('accepts the default file-mode summary as inspection of a short axis shelf', () => {
     const scenario = new RemoveFieldScenario(removeFieldCases[0]);
-    scenario.invoke('get_worksheet_xml', { worksheetName });
+    scenario.invoke('get_xml', liveRead);
     remove(scenario, { worksheetFile: liveFile });
     expect(scenario.grade()).toEqual([]);
   });
 
   it('does not treat encoding counts or an incomplete byte slice as encoding inspection', () => {
     const scenario = new RemoveFieldScenario({ ...removeFieldCases[7], fresh: true });
-    scenario.invoke('get_worksheet_xml', { worksheetName, mode: 'file' });
+    scenario.invoke('get_xml', { ...liveRead, mode: 'file' });
     scenario.invoke('read_cached_xml', { filePath: liveFile, endByte: 10 });
     remove(scenario, { target: 'encoding', encodingType: 'lod' });
     expect(scenario.grade()).toContain(
@@ -157,7 +159,7 @@ describe('remove-field eval grading (offline)', () => {
 
   it('rejects a live refresh that loses the pending Profit edit', () => {
     const scenario = new RemoveFieldScenario(removeFieldCases[6]);
-    scenario.invoke('get_worksheet_xml', { worksheetName, mode: 'inline' });
+    scenario.invoke('get_xml', { ...liveRead, mode: 'inline' });
     remove(scenario);
     expect(scenario.grade()).toContain('Live refresh resets the working draft');
     expect(
@@ -244,7 +246,7 @@ describe('remove-field eval isolation (offline)', () => {
       required: [],
       additionalProperties: true,
     };
-    const names = ['get-worksheet-xml', 'read-cached-xml', 'remove-field', 'apply-worksheet'];
+    const names = ['get-xml', 'read-cached-xml', 'remove-field', 'apply-worksheet'];
     vi.spyOn(server, 'listTools').mockResolvedValue(
       names.map((name) => ({ name, description: `Actual schema for ${name}`, inputSchema })),
     );
@@ -253,12 +255,12 @@ describe('remove-field eval isolation (offline)', () => {
     const agent = await getRemoveFieldEvalAgent(server, 'test-model', scenario);
     expect(agent.mcpServers).toEqual([]);
     expect(agent.tools.map((tool) => tool.name)).toEqual([
-      'get_worksheet_xml',
+      'get_xml',
       'read_cached_xml',
       'remove_field',
     ]);
     const args = [
-      { worksheetName, mode: 'file' },
+      { ...liveRead, mode: 'file' },
       { filePath: liveFile },
       { worksheetFile: liveFile, target: 'rows', columnRef: sales },
     ];

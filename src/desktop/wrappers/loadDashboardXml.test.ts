@@ -1421,7 +1421,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
         'The file names this storyboard "Renamed Story", but in Desktop it is "Story 1"',
       );
       expect(message).toContain('apply-storyboard cannot rename a storyboard');
-      expect(message).toContain('get-storyboard-xml');
+      expect(message).toContain('get-xml');
       expect(message).not.toContain('back to');
       expectNoApply(e);
     });
@@ -1471,9 +1471,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(gateMessage).toContain(
         'dashboardName "Renamed" does not match <dashboard name="Old Name"> in the file',
       );
-      expect(gateMessage).toContain('with list-dashboards');
+      expect(gateMessage).toContain('with get-sheets');
       expect(gateMessage).toContain('pass "Old Name" as dashboardName');
-      expect(gateMessage).toContain('get-dashboard-xml');
+      expect(gateMessage).toContain('get-xml');
       expect(gateMessage).not.toContain('Retry with');
 
       const drift = await loadDashboardXml({
@@ -1525,7 +1525,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(message).toContain(
         'storyboardName "Renamed" does not match <storyboard name="Old Name">',
       );
-      expect(message).toContain('get-storyboard-xml');
+      expect(message).toContain('get-xml');
       expect(message).toContain('pass "Old Name" as storyboardName');
       expect(message).not.toContain('list-');
       expect(message).not.toContain('Retry with');
