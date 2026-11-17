@@ -582,6 +582,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     expect(captureTool).toBeDefined();
     expect(captureTool?.paramsSchema).toEqual({
       session: expect.any(Object),
+      mode: expect.any(Object),
       filePath: expect.any(Object),
     });
     expect(captureTool?.annotations).toEqual({

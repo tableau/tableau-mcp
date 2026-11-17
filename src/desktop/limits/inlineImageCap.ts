@@ -54,8 +54,7 @@ export function buildInlineImageCapFileMessage(params: {
     nextStep ??
       'Open the file to view the image. This local cache file remains until manually removed. ' +
         'To get a smaller inline image next time, request a worksheet instead of a whole ' +
-        'dashboard, or pass a filePath to have Tableau write the image directly to a location ' +
-        'of your choosing.',
+        'dashboard.',
   ].join('\n');
 }
 

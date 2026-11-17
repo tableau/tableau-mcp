@@ -25,7 +25,7 @@ import {
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
-import { sessionParam, xmlModeParam } from '../params.js';
+import { outputModeParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 import { resolveDatasource } from './resolveDatasourceRef.js';
@@ -43,7 +43,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe('Datasource id or name, for kind datasource.'),
-  mode: xmlModeParam(),
+  mode: outputModeParam(),
 };
 
 type GetXmlToolResult =

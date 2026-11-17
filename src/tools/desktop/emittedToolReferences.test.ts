@@ -74,6 +74,7 @@ const NON_TOOL_VOCABULARY = [
   'data-source-order',
   'datasource-dependencies',
   'datasource-not-found',
+  'datasource-rows',
   'datatype-customized',
   'date-time',
   'dates-and-times',
@@ -244,6 +245,7 @@ const NON_TOOL_VOCABULARY = [
   'workbook-drift',
   'workbook-read',
   'worksheet-edit-buffer',
+  'worksheet-rows',
   'zone-style',
 ] as const;
 

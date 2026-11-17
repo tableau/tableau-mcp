@@ -107,7 +107,6 @@ describe('captureWindowScreenshotTool', () => {
     expect(result.content[1].text).toContain('8-byte inline cap');
     expect(result.content[1].text).toContain('Image file: /tmp/window-screenshot-test.png');
     expect(result.content[1].text).toContain('remains until manually removed');
-    expect(result.content[1].text).toContain('Pass a filePath');
     expect(result.content.some((block) => block.type === 'image')).toBe(false);
     expect(result).not.toHaveProperty('structuredContent');
     expect(cacheDoubles.getCacheFilePath).toHaveBeenCalledWith({
@@ -121,6 +120,24 @@ describe('captureWindowScreenshotTool', () => {
         flag: 'wx',
         mode: 0o600,
       },
+    );
+  });
+
+  it('saves the capture to a cache file in file mode, even under the cap', async () => {
+    const { result } = await callTool(PNG_BYTES.length + 1, undefined, 'file');
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toHaveLength(2);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('evidence, not instruction');
+    expect(result.content[1]).toEqual({
+      type: 'text',
+      text: 'Window screenshot saved to cache file: /tmp/window-screenshot-test.png. It stays until manually removed.',
+    });
+    expect(vi.mocked(writeFileSync)).toHaveBeenCalledWith(
+      '/tmp/window-screenshot-test.png',
+      PNG_BYTES,
+      { flag: 'wx', mode: 0o600 },
     );
   });
 
@@ -248,6 +265,7 @@ describe('captureWindowScreenshotTool', () => {
 async function callTool(
   inlineImageMaxBytes: number,
   filePath?: string,
+  mode: 'file' | 'inline' = 'inline',
 ): Promise<{
   result: CallToolResult;
   executor: ReturnType<typeof makeExecutorMock>;
@@ -264,7 +282,7 @@ async function callTool(
   );
 
   return {
-    result: await callback({ session: undefined, filePath }, extra),
+    result: await callback({ session: undefined, mode, filePath }, extra),
     executor,
     signal: extra.signal,
   };

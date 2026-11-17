@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync, rmSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -22,14 +23,14 @@ describe('get-datasource-underlying-data', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('is a read-only 0.2.31 tool', () => {
+  it('is a 0.2.31 tool that writes cache files in file mode', () => {
     const tool = getDatasourceUnderlyingDataTool(new DesktopMcpServer());
 
     expect(tool.minApiVersion).toBe('0.2.31');
     expect(tool.annotations).toMatchObject({
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
@@ -108,6 +109,39 @@ describe('get-datasource-underlying-data', () => {
   });
 
   describe('with logicalTableId', () => {
+    it('saves the rows to a JSON cache file by default and returns no rows inline', async () => {
+      const harness = await startHarness();
+      try {
+        const result = await harness.callTool({
+          datasourceId: 'wb-ds-superstore',
+          logicalTableId: 'lt-orders',
+          mode: undefined,
+        });
+
+        expect(result.isError).toBe(false);
+        expect(result.content).toHaveLength(1);
+        invariant(result.content[0].type === 'text');
+        const match =
+          /^Saved 2 rows x \d+ columns to cache file: (.*datasource-rows-.*\.json)$/.exec(
+            result.content[0].text,
+          );
+        invariant(match);
+        const cacheFile = match[1];
+        try {
+          expect(JSON.parse(readFileSync(cacheFile, 'utf-8'))).toMatchObject({
+            rows: [
+              ['West', 1200, 240],
+              ['East', 900, 120],
+            ],
+          });
+        } finally {
+          rmSync(cacheFile, { force: true });
+        }
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('reads rows by id with the default row cap', async () => {
       const harness = await startHarness();
       try {
@@ -237,7 +271,7 @@ async function startHarness(): Promise<{
 
   return {
     server,
-    callTool: async (args) => await callback(args, extra),
+    callTool: async (args) => await callback({ mode: 'inline', ...args }, extra),
     close: async () => {
       executor.stop();
       await server.close();

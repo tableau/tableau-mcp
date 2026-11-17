@@ -30,6 +30,48 @@ describe('export-sheet-image', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
+  it('saves the image to a cache file by default and returns no inline image', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
+        mode: undefined,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toMatch(/^Worksheet image saved to cache file: .*\.png/);
+      expect(vi.mocked(writeFileSync)).toHaveBeenCalledWith(
+        expect.stringMatching(/worksheet-image-.*\.png$/),
+        expect.any(Buffer),
+        { flag: 'wx', mode: 0o600 },
+      );
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('lets filePath override file mode so Desktop writes the image', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
+        mode: 'file',
+        filePath: '/tmp/sales.png',
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('written to /tmp/sales.png');
+      expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('returns a worksheet image inline as a base64 PNG block from one call by id', async () => {
     const harness = await startHarness();
     try {
@@ -639,7 +681,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async (args) => await callback(args, extra),
+    callTool: async (args) => await callback({ mode: 'inline', ...args }, extra),
     close: async () => {
       executor.stop();
       await server.close();
