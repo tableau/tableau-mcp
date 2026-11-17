@@ -43,22 +43,11 @@ const statementsSchema = z
     'The statement text to store, one to 100 entries. Required for "create". For "update" it ' +
       "replaces the context's current statements; omit it to change only name or scope.",
   );
-const targetNodeIdSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(512)
-  .optional()
-  .describe(
-    'Attach the context to this exact node id (a field, data source, workbook, ...) so it is ' +
-      'returned whenever that node is grounded. Mutually exclusive with isGlobal.',
-  );
 const isGlobalSchema = z
   .boolean()
   .optional()
   .describe(
-    'true: a company-wide rule that applies to the whole graph rather than one node. Mutually ' +
-      'exclusive with targetNodeId; "create" needs exactly one of the two.',
+    'true: a company-wide rule that applies to the whole graph. "create" requires isGlobal: true.',
   );
 const nameSchema = z
   .string()
@@ -80,24 +69,23 @@ const actionSchema = z
       'contextId. "delete": remove an existing context by contextId.',
   );
 
-const paramsSchema = {
+const paramsShape = {
   action: actionSchema,
   graphId: optionalGraphIdSchema,
   contextId: contextIdSchema,
   statements: statementsSchema,
-  targetNodeId: targetNodeIdSchema,
   isGlobal: isGlobalSchema,
   name: nameSchema,
 };
 
-// Type-only helper: gives validateArgs a precise parameter type. This object schema is never
-// registered with the MCP server or used to parse anything — `paramsSchema` above (the flat raw
-// shape) is what the SDK advertises and parses against.
-type ManageArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
+// `.strict()` makes an unknown key a parse error. Otherwise the SDK silently drops it and the call
+// runs without whatever the caller meant that key to do.
+const paramsSchema = z.object(paramsShape).strict();
+type ManageArgs = z.infer<typeof paramsSchema>;
 
 const FIELDS_BY_ACTION: Record<ManageArgs['action'], ReadonlyArray<keyof ManageArgs>> = {
-  create: ['statements', 'targetNodeId', 'isGlobal', 'name'],
-  update: ['contextId', 'statements', 'targetNodeId', 'isGlobal', 'name'],
+  create: ['statements', 'isGlobal', 'name'],
+  update: ['contextId', 'statements', 'isGlobal', 'name'],
   delete: ['contextId'],
 };
 const REQUIRED_BY_ACTION: Record<ManageArgs['action'], ReadonlyArray<keyof ManageArgs>> = {
@@ -165,10 +153,8 @@ happened.
                     const duplicate = findDuplicate(
                       await methods.listSemanticStatements({
                         graphId: args.graphId,
-                        nodeId: args.targetNodeId,
                       }),
                       args.statements!,
-                      args.targetNodeId,
                     );
                     if (duplicate) {
                       return {
@@ -184,7 +170,6 @@ happened.
                     const context = await methods.createSemanticStatements({
                       graphId: args.graphId,
                       statements: args.statements!,
-                      targetNodeId: args.targetNodeId,
                       isGlobal: args.isGlobal,
                       name: args.name,
                     });
@@ -195,7 +180,6 @@ happened.
                       graphId: args.graphId,
                       contextId: args.contextId!,
                       statements: args.statements,
-                      targetNodeId: args.targetNodeId,
                       isGlobal: args.isGlobal,
                       name: args.name,
                     });
@@ -248,18 +232,17 @@ function normalizeStatement(text: string): string {
 }
 
 /**
- * An existing customer-managed context in the same scope (same node, or graph-wide) that already
+ * An existing customer-managed context in the same scope (graph-wide) that already
  * holds every new statement. Read-only external contexts can't be updated, so they never count.
  */
 function findDuplicate(
   existing: SemanticContextNode[],
   statements: Array<{ statement: string }>,
-  targetNodeId: string | undefined,
 ): SemanticContextNode | undefined {
   const wanted = statements.map(({ statement }) => normalizeStatement(statement));
   return existing.find((context) => {
     if (context.type !== 'SEMANTIC_CONTEXT') return false;
-    if ((context.target_node_id ?? undefined) !== targetNodeId) return false;
+    if (context.target_node_id != null) return false;
     const stored = new Set(
       context.properties.statements.map((s) => normalizeStatement(s.statement)),
     );
@@ -269,8 +252,8 @@ function findDuplicate(
 
 /**
  * Pure per-action validation that the flat schema can no longer express structurally: which
- * params are allowed for the chosen action, which are required, and the targetNodeId/isGlobal
- * exclusivity + "at least one changed field" business rules. Returns a clear, actionable message
+ * params are allowed for the chosen action, which are required, and the isGlobal
+ * requirement on create and the "at least one changed field" rule. Returns a clear, actionable message
  * on failure, or null when args are valid.
  */
 export function validateArgs(args: ManageArgs): string | null {
@@ -291,25 +274,12 @@ export function validateArgs(args: ManageArgs): string | null {
     return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required when action is "${args.action}".`;
   }
 
-  if (args.action === 'create') {
-    if (!args.targetNodeId && args.isGlobal !== true) {
-      return 'create requires targetNodeId or isGlobal: true.';
-    }
-    if (args.targetNodeId && args.isGlobal === true) {
-      return 'create accepts targetNodeId or isGlobal: true, not both.';
-    }
+  if (args.action === 'create' && args.isGlobal !== true) {
+    return 'create requires isGlobal: true.';
   }
 
   if (args.action === 'update') {
-    if (args.targetNodeId && args.isGlobal === true) {
-      return 'update accepts targetNodeId or isGlobal: true, not both.';
-    }
-    if (
-      !args.statements &&
-      args.targetNodeId === undefined &&
-      args.isGlobal === undefined &&
-      args.name === undefined
-    ) {
+    if (!args.statements && args.isGlobal === undefined && args.name === undefined) {
       return 'update requires at least one changed field.';
     }
   }
