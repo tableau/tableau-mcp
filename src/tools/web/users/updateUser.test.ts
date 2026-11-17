@@ -52,12 +52,14 @@ vi.mock('../_lib/evidence.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../_lib/evidence.js')>();
   return {
     ...actual,
-    RegistryEvidence: vi.fn().mockImplementation(() => ({
-      establish: vi.fn(),
-      verify: vi.fn().mockResolvedValue(true),
-      describeEvidence: () => ({ kind: 'registry-nonce' }),
-      getEstablishedNonce: () => 'mock-nonce-123',
-    })),
+    RegistryEvidence: vi.fn().mockImplementation(function () {
+      return {
+        establish: vi.fn(),
+        verify: vi.fn().mockResolvedValue(true),
+        describeEvidence: () => ({ kind: 'registry-nonce' }),
+        getEstablishedNonce: () => 'mock-nonce-123',
+      };
+    }),
   };
 });
 

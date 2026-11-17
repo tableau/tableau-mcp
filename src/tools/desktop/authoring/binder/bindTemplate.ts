@@ -3627,8 +3627,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 return new Ok(completeRequestDecline(ask));
               }
               const retainedCall2Contract = priorRecovery?.proposalContext as
-                | Call2Contract
-                | undefined;
+                Call2Contract | undefined;
               const retainedDatasource =
                 retainedCall2Contract?.arguments.datasource ??
                 priorRecovery?.largePieConfirmation?.datasource;

@@ -21,11 +21,7 @@ export const MAX_EXTERNAL_TEMPLATE_BYTES = 512 * 1024;
 export const MAX_TEMPLATES_PER_ROOT = 512;
 
 export type TemplateProvenance =
-  | 'protected'
-  | 'overridable'
-  | 'bookmark'
-  | 'custom'
-  | 'dev-override';
+  'protected' | 'overridable' | 'bookmark' | 'custom' | 'dev-override';
 export type TemplateDiscoveryIssue = 'invalid-name' | 'invalid-or-unreadable' | 'file-too-large';
 
 export interface TemplateCatalogEntry {
@@ -77,8 +73,7 @@ const DEFAULT_CONTAINED_FILE_READ_OPERATIONS: ContainedFileReadOperations = {
 };
 
 type ContainedFileReadResult =
-  | { ok: true; text: string }
-  | { ok: false; issue: TemplateDiscoveryIssue };
+  { ok: true; text: string } | { ok: false; issue: TemplateDiscoveryIssue };
 
 export function getTemplatesDir(): string {
   return process.env['TEMPLATES_DIR'] ?? join(DATA_ROOT, 'templates');

@@ -51,8 +51,7 @@ export type GetWorksheetXmlResult = Result<
 >;
 
 export type GetDashboardXmlError = (
-  | { type: 'no-dashboard-found' }
-  | { type: 'multiple-dashboards-found' }
+  { type: 'no-dashboard-found' } | { type: 'multiple-dashboards-found' }
 ) & { message: string };
 
 export type GetDashboardXmlResult = Result<

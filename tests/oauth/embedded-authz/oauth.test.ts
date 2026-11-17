@@ -347,20 +347,19 @@ describe('OAuth', () => {
     const sessionId = initResponse.headers['mcp-session-id'];
 
     // The authorization callback builds one RestApi to read the signed-in user; make it user B.
-    vi.mocked(RestApi).mockImplementationOnce(
-      () =>
-        ({
-          setCredentials: vi.fn(),
-          authenticatedServerMethods: {
-            getCurrentServerSession: vi.fn().mockResolvedValue(
-              Ok({
-                site: { id: 'site_id', name: 'mcp-test', contentUrl: 'mcp-test' },
-                user: { id: 'other_user_id', name: 'other-user' },
-              }),
-            ),
-          },
-        }) as unknown as RestApi,
-    );
+    vi.mocked(RestApi).mockImplementationOnce(function () {
+      return {
+        setCredentials: vi.fn(),
+        authenticatedServerMethods: {
+          getCurrentServerSession: vi.fn().mockResolvedValue(
+            Ok({
+              site: { id: 'site_id', name: 'mcp-test', contentUrl: 'mcp-test' },
+              user: { id: 'other_user_id', name: 'other-user' },
+            }),
+          ),
+        },
+      } as unknown as RestApi;
+    });
     const userB = await exchangeAuthzCodeForAccessToken(app);
 
     const response = await request(app)

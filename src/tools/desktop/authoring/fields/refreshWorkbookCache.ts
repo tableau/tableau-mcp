@@ -13,8 +13,7 @@ import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
  * fail hard).
  */
 export type RefreshResult =
-  | { ok: true; xml: string }
-  | { ok: false; reason: string; error: McpToolError };
+  { ok: true; xml: string } | { ok: false; reason: string; error: McpToolError };
 
 /**
  * W-23447478 (P2a concurrency): the retry's "exactly once" is per-invocation, so
