@@ -580,10 +580,13 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     const captureTool = tools.find((tool) => tool.name === 'capture-window-screenshot');
 
     expect(captureTool).toBeDefined();
-    expect(captureTool?.paramsSchema).toEqual({ session: expect.any(Object) });
+    expect(captureTool?.paramsSchema).toEqual({
+      session: expect.any(Object),
+      filePath: expect.any(Object),
+    });
     expect(captureTool?.annotations).toEqual({
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: false,
     });

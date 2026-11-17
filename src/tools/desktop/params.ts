@@ -34,6 +34,15 @@ export function xmlModeParam(): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'i
     );
 }
 
+export function imageFilePathParam(): z.ZodOptional<z.ZodString> {
+  return z
+    .string()
+    .optional()
+    .describe(
+      'Preferred: absolute path to write the image to (nothing inline). Omit only to get it inline.',
+    );
+}
+
 export function artifactNameParam(
   kind: ArtifactParamKind,
   options: { min?: number; max?: number; plainName?: boolean } = {},

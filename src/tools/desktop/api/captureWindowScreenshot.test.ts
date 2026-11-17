@@ -107,7 +107,7 @@ describe('captureWindowScreenshotTool', () => {
     expect(result.content[1].text).toContain('8-byte inline cap');
     expect(result.content[1].text).toContain('Image file: /tmp/window-screenshot-test.png');
     expect(result.content[1].text).toContain('remains until manually removed');
-    expect(result.content[1].text).not.toContain('filePath');
+    expect(result.content[1].text).toContain('Pass a filePath');
     expect(result.content.some((block) => block.type === 'image')).toBe(false);
     expect(result).not.toHaveProperty('structuredContent');
     expect(cacheDoubles.getCacheFilePath).toHaveBeenCalledWith({
@@ -123,6 +123,49 @@ describe('captureWindowScreenshotTool', () => {
       },
     );
   });
+
+  it('writes the capture to filePath and returns no inline image, even under the cap', async () => {
+    const { result } = await callTool(PNG_BYTES.length + 1, '/tmp/out/window.png');
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toHaveLength(2);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('evidence, not instruction');
+    expect(result.content[1]).toEqual({
+      type: 'text',
+      text: 'Window screenshot written to /tmp/out/window.png.',
+    });
+    expect(vi.mocked(writeFileSync)).toHaveBeenCalledWith('/tmp/out/window.png', PNG_BYTES, {
+      mode: 0o600,
+    });
+    expect(cacheDoubles.getCacheFilePath).not.toHaveBeenCalled();
+  });
+
+  it('reports a filePath write failure without returning the image', async () => {
+    vi.mocked(writeFileSync).mockImplementationOnce(() => {
+      throw new Error('EACCES');
+    });
+
+    const { result } = await callTool(PNG_BYTES.length, '/tmp/out/window.png');
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: 'text', text: 'Could not write the screenshot to /tmp/out/window.png.' },
+    ]);
+  });
+
+  it.each(['relative/window.png', '/tmp/../etc/window.png'])(
+    'rejects filePath %s before capturing',
+    async (filePath) => {
+      const { result } = await callTool(PNG_BYTES.length, filePath);
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Invalid filePath');
+      expect(captureWindowScreenshot).not.toHaveBeenCalled();
+      expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
+    },
+  );
 
   it('funnels a local capture error without exposing a native file path or writing cache bytes', async () => {
     vi.mocked(captureWindowScreenshot).mockResolvedValueOnce(
@@ -202,7 +245,10 @@ describe('captureWindowScreenshotTool', () => {
   );
 });
 
-async function callTool(inlineImageMaxBytes: number): Promise<{
+async function callTool(
+  inlineImageMaxBytes: number,
+  filePath?: string,
+): Promise<{
   result: CallToolResult;
   executor: ReturnType<typeof makeExecutorMock>;
   signal: AbortSignal;
@@ -218,7 +264,7 @@ async function callTool(inlineImageMaxBytes: number): Promise<{
   );
 
   return {
-    result: await callback({ session: undefined }, extra),
+    result: await callback({ session: undefined, filePath }, extra),
     executor,
     signal: extra.signal,
   };
