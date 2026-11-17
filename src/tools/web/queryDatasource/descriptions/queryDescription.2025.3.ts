@@ -330,7 +330,7 @@ Filter by specific values:
   "exclude": false
 }
 \`\`\`
-Values can mix types and include \`null\` to match null values.
+Values must match the field's data type. Include \`null\` to match null values.
 
 ### MATCH Filters
 Filter strings using patterns:
