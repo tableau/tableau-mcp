@@ -326,12 +326,12 @@ const toolScopeMap: Record<
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'list-flows': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flows:read', 'tableau:mcp_site_settings:read']),
   },
   'get-flow': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:read'],
     // Maximum scope surface for the MCP-layer OAuth gate, composed from the same
     // constants get-flow uses to build its per-call minimum set (single source
@@ -343,7 +343,7 @@ const toolScopeMap: Record<
     ]),
   },
   'list-flow-runs': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:read'],
     // `flows:read` is needed in addition to `flow_runs:read` because, when the
     // returned window contains a Failed run, the tool resolves one flow's
@@ -351,33 +351,33 @@ const toolScopeMap: Record<
     api: new Set([...LIST_FLOW_RUNS_PRIMARY_API_SCOPES, LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE]),
   },
   'list-flow-tasks': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
   'describe-flow': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(DESCRIBE_FLOW_API_SCOPES),
   },
   'get-flow-task': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
   'run-flow': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     // Needed for resourceAccessChecker.isFlowAllowed under bounded contexts.
     mcp: ['tableau:mcp:flow:run'],
     api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
   },
   'run-flow-task': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:run'],
     api: new Set(['tableau:flow_tasks:run', 'tableau:mcp_site_settings:read']),
   },
   'cancel-flow-run': {
-    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresFlows),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows),
     mcp: ['tableau:mcp:flow:cancel'],
     api: new Set(['tableau:flow_runs:update', 'tableau:mcp_site_settings:read']),
   },

@@ -266,7 +266,8 @@ describe('server', () => {
     vi.mocked(McpServer).mockClear();
     const server = getServer();
     const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
-      { instructions?: string } | undefined;
+      | { instructions?: string }
+      | undefined;
     const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
     sdkServer._instructions = constructorOptions?.instructions;
     await server.registerTools();
@@ -581,7 +582,8 @@ describe('server', () => {
       vi.mocked(McpServer).mockClear();
       const server = getServer();
       const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
-        { instructions?: string } | undefined;
+        | { instructions?: string }
+        | undefined;
       const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
       sdkServer._instructions = constructorOptions?.instructions;
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
@@ -696,7 +698,7 @@ describe('server', () => {
   const writeFlowToolNames = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
   it.each([true, false])(
-    'registers Flow tools only when RequiresFlows is met: %s',
+    'registers Flow tools only when UserCanViewFlows is met: %s',
     async (available) => {
       vi.stubEnv('FLOW_READ_TOOLS_ENABLED', 'true');
       vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
@@ -704,8 +706,8 @@ describe('server', () => {
         (featureName: string) => featureName === 'enforce-registration-conditions',
       );
       mocks.mockCheckRegistrationConditions.mockImplementation(async (conditions) =>
-        conditions.includes('RequiresFlows') && !available
-          ? { registrationConditionsMet: false, failingCondition: 'RequiresFlows' }
+        conditions.includes('UserCanViewFlows') && !available
+          ? { registrationConditionsMet: false, failingCondition: 'UserCanViewFlows' }
           : { registrationConditionsMet: true },
       );
       const server = getServer();
@@ -719,7 +721,7 @@ describe('server', () => {
       expect(names).toContain('list-datasources');
       expect(
         mocks.mockCheckRegistrationConditions.mock.calls.filter(([conditions]) =>
-          conditions.includes('RequiresFlows'),
+          conditions.includes('UserCanViewFlows'),
         ),
       ).toHaveLength(9);
       if (!available) expect(getInstructions(server)).toContain('access to flows');

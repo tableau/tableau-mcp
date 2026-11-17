@@ -130,7 +130,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   const listFlowRunsTool = new WebTool({
     server,
     name: 'list-flow-runs',
-    registrationConditions: ['RequiresFlows'],
+    registrationConditions: ['UserCanViewFlows'],
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `

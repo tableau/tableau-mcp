@@ -37,7 +37,7 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
   const cancelFlowRunTool = new WebTool({
     server,
     name: 'cancel-flow-run',
-    registrationConditions: ['RequiresFlows'],
+    registrationConditions: ['UserCanViewFlows'],
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     disabled: new Provider(async () => !(await isFlowWriteToolsEnabled(config))),
     description: `

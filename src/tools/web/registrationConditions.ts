@@ -20,7 +20,7 @@ import { retry } from '../../utils/retry.js';
  * then add or update the `registrationConditions` property for all the tools the condition should apply to.
  */
 export type RegistrationCondition =
-  | 'RequiresFlows'
+  | 'UserCanViewFlows'
   | 'RequiresKnowledge'
   | 'RequiresPulse'
   | 'RequiresPulsePremium'
@@ -36,7 +36,7 @@ export const REGISTRATION_CONDITION_API_SCOPES: Record<
   RegistrationCondition,
   ReadonlyArray<TableauApiScope>
 > = {
-  RequiresFlows: ['tableau:flows:read'],
+  UserCanViewFlows: ['tableau:flows:read'],
   RequiresKnowledge: ['tableau:knowledge:read'],
   RequiresPulse: ['tableau:insight_definitions_metrics:read'],
   RequiresPulsePremium: ['tableau:entitlements:read'],
@@ -49,7 +49,7 @@ export const REGISTRATION_CONDITION_API_SCOPES: Record<
  */
 export type RegistrationContext = {
   siteRole?: string;
-  hasFlows?: boolean;
+  userCanViewFlows?: boolean;
   isKnowledgeAvailable?: boolean;
   isPulseEnabled?: boolean;
   hasPulsePremium?: boolean;
@@ -86,16 +86,16 @@ export async function checkRegistrationConditions(
 ): Promise<ConditionsCheckResult> {
   for (const condition of conditions) {
     switch (condition) {
-      case 'RequiresFlows': {
-        if (context.hasFlows === undefined) {
-          context.hasFlows = recordProbe(
+      case 'UserCanViewFlows': {
+        if (context.userCanViewFlows === undefined) {
+          context.userCanViewFlows = recordProbe(
             context,
-            'RequiresFlows',
+            'UserCanViewFlows',
             await checkFlowsAvailable(restApiArgs, context),
           );
         }
-        if (!context.hasFlows) {
-          return unmet(context, 'RequiresFlows');
+        if (!context.userCanViewFlows) {
+          return unmet(context, 'UserCanViewFlows');
         }
         continue;
       }
@@ -193,7 +193,7 @@ function unmet(
  * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
-  RequiresFlows:
+  UserCanViewFlows:
     'NOTE: Tableau Flow tools were omitted because access to a visible flow or administrator access ' +
     'could not be confirmed. Ask your Tableau administrator about access to flows, ' +
     'then reconnect to check again.',
@@ -226,7 +226,7 @@ const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
 };
 
 const CONDITION_TOOL_LABELS: Record<RegistrationCondition, string> = {
-  RequiresFlows: 'Flow',
+  UserCanViewFlows: 'Flow',
   RequiresKnowledge: 'Knowledge',
   RequiresPulse: 'Pulse',
   RequiresPulsePremium: 'AI-powered Pulse insight',
@@ -261,7 +261,7 @@ async function checkFlowsAvailable(
     return await useRestApi({
       ...restApiArgs,
       signal: AbortSignal.any([restApiArgs.signal, AbortSignal.timeout(5_000)]),
-      jwtScopes: REGISTRATION_CONDITION_API_SCOPES.RequiresFlows,
+      jwtScopes: REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows,
       callback: async (restApi) => {
         const { flows } = await restApi.flowsMethods.queryFlowsForSite({
           siteId: restApi.siteId,

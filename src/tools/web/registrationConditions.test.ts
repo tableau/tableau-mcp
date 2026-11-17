@@ -158,7 +158,7 @@ describe('checkRegistrationConditions', () => {
     });
   });
 
-  describe('RequiresFlows', () => {
+  describe('UserCanViewFlows', () => {
     const queryFlowsForSite = vi.fn();
     const getCurrentServerSession = vi.fn();
 
@@ -181,13 +181,13 @@ describe('checkRegistrationConditions', () => {
       const context: RegistrationContext = {};
       const expected = hasVisibleFlows
         ? { registrationConditionsMet: true }
-        : { registrationConditionsMet: false, failingCondition: 'RequiresFlows' };
+        : { registrationConditionsMet: false, failingCondition: 'UserCanViewFlows' };
 
       await expect(
-        checkRegistrationConditions(['RequiresFlows'], context, restApiArgs),
+        checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs),
       ).resolves.toEqual(expected);
       await expect(
-        checkRegistrationConditions(['RequiresFlows'], context, restApiArgs),
+        checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs),
       ).resolves.toEqual(expected);
 
       expect(queryFlowsForSite).toHaveBeenCalledExactlyOnceWith({
@@ -207,7 +207,7 @@ describe('checkRegistrationConditions', () => {
           flows: [{ id: 'shared-flow-id', owner: { id: 'another-user-id' } }],
         });
         await expect(
-          checkRegistrationConditions(['RequiresFlows'], { siteRole }, restApiArgs),
+          checkRegistrationConditions(['UserCanViewFlows'], { siteRole }, restApiArgs),
         ).resolves.toEqual({ registrationConditionsMet: true });
         expect(queryFlowsForSite).toHaveBeenCalledExactlyOnceWith({
           siteId: 'site-id',
@@ -220,7 +220,7 @@ describe('checkRegistrationConditions', () => {
     it.each(ADMIN_SITE_ROLES)('allows %s without a visible flow', async (siteRole) => {
       getCurrentServerSession.mockResolvedValue(new Ok({ user: { siteRole } }));
       await expect(
-        checkRegistrationConditions(['RequiresFlows'], {}, restApiArgs),
+        checkRegistrationConditions(['UserCanViewFlows'], {}, restApiArgs),
       ).resolves.toEqual({ registrationConditionsMet: true });
     });
 
@@ -228,7 +228,11 @@ describe('checkRegistrationConditions', () => {
       'reuses a previously fetched %s role',
       async (siteRole) => {
         const context: RegistrationContext = { siteRole };
-        const result = await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        const result = await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          context,
+          restApiArgs,
+        );
         expect(result.registrationConditionsMet).toBe(
           siteRole === SiteRole.SITE_ADMINISTRATOR_CREATOR,
         );
@@ -249,13 +253,17 @@ describe('checkRegistrationConditions', () => {
           ),
         );
         const context: RegistrationContext = { siteRole: SiteRole.SITE_ADMINISTRATOR_CREATOR };
-        const result = await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        const result = await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          context,
+          restApiArgs,
+        );
         expect(result).toEqual({
           registrationConditionsMet: false,
-          failingCondition: 'RequiresFlows',
+          failingCondition: 'UserCanViewFlows',
           ...((status === undefined || status >= 500) && { indeterminate: true }),
         });
-        await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        await checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs);
         expect(queryFlowsForSite).toHaveBeenCalledTimes(1);
         expect(getCurrentServerSession).not.toHaveBeenCalled();
       },
@@ -266,9 +274,13 @@ describe('checkRegistrationConditions', () => {
       async (type) => {
         getCurrentServerSession.mockResolvedValue(new Err({ type, message: 'unavailable' }));
         const context: RegistrationContext = {};
-        const result = await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        const result = await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          context,
+          restApiArgs,
+        );
         expect(result.registrationConditionsMet).toBe(false);
-        await checkRegistrationConditions(['RequiresFlows'], context, restApiArgs);
+        await checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs);
         expect(getCurrentServerSession).toHaveBeenCalledTimes(1);
       },
     );
@@ -278,7 +290,7 @@ describe('checkRegistrationConditions', () => {
       const caller = new AbortController();
       try {
         await checkRegistrationConditions(
-          ['RequiresFlows'],
+          ['UserCanViewFlows'],
           {},
           { ...restApiArgs, signal: caller.signal },
         );

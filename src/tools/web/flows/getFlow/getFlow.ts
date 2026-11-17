@@ -87,7 +87,7 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const getFlowTool = new WebTool({
     server,
     name: 'get-flow',
-    registrationConditions: ['RequiresFlows'],
+    registrationConditions: ['UserCanViewFlows'],
     minRequiredRole: SiteRole.VIEWER,
     disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
