@@ -4,8 +4,8 @@ import { readFileSync } from 'fs';
 
 import { Config, getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import { createNamespacedKeyValueStore } from '../../storage/init.js';
 import type { KeyValueStore } from '../../storage/keyValueStore.js';
-import { createNamespacedKeyValueStore } from '../../storage/storageProvider.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
