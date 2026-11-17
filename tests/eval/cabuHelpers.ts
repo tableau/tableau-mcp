@@ -91,18 +91,48 @@ export function getUsage(result: StreamedRunResult<any, any>): TokenUsage {
 }
 
 /**
- * The prompt for one turn of a case. Turn 1 names the data source by LUID; later turns are the
- * bare question. With `optIn`, only turn 1 asks for Tableau Agent: follow-ups must stay in the
- * conversation on their own.
+ * The prompt for one turn of a case. Turn 1 names the data source (and its project and view, when
+ * the case has them) the way a user would, by name; later turns are the bare question. With
+ * `optIn`, only turn 1 asks for Tableau Agent: follow-ups must stay in the conversation on their
+ * own.
  */
 export function buildCasePrompt(abCase: AbCase, turnIndex: number, optIn: boolean): string {
   const { question } = abCase.turns[turnIndex];
   if (turnIndex > 0) {
     return question;
   }
-  const workbook = abCase.workbookLuid ? ` and the workbook with LUID ${abCase.workbookLuid}` : '';
-  const withSource = `Using the "${abCase.datasourceName}" data source (LUID ${abCase.datasourceLuid})${workbook}: ${question}`;
+  const project = abCase.projectName ? ` in the "${abCase.projectName}" project` : '';
+  const view = abCase.viewName ? ` and the "${abCase.viewName}" view` : '';
+  const withSource = `Using the "${abCase.datasourceName}" data source${project}${view}: ${question}`;
   return optIn ? `${TABLEAU_AGENT_PREFIX}${withSource}` : withSource;
+}
+
+/**
+ * Problems with which data source and workbook the model queried; empty when it found the case's.
+ * Prompts name content only by name, so finding the right LUIDs is part of the task.
+ */
+export function checkSourceChoice(abCase: AbCase, executions: Array<ToolExecution>): Array<string> {
+  const problems: Array<string> = [];
+  for (const toolName of ['query_datasource', 'cabu_start_conversation']) {
+    for (const call of findCalls(executions, toolName)) {
+      if (call.arguments.datasourceLuid !== abCase.datasourceLuid) {
+        problems.push(
+          `${toolName} used data source ${String(call.arguments.datasourceLuid)}, expected ${abCase.datasourceLuid}`,
+        );
+      }
+    }
+  }
+  // Only Tableau Agent uses the workbook: it loads sample values and business preferences from it.
+  if (abCase.workbookLuid) {
+    for (const call of findCalls(executions, 'cabu_start_conversation')) {
+      if (call.arguments.workbookLuid !== abCase.workbookLuid) {
+        problems.push(
+          `cabu_start_conversation used workbook ${String(call.arguments.workbookLuid ?? 'none')}, expected ${abCase.workbookLuid}`,
+        );
+      }
+    }
+  }
+  return problems;
 }
 
 export type ConversationTurn = {

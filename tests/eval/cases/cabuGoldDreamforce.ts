@@ -21,6 +21,8 @@ import type { AbCase } from './dataQuestions.js';
 const GOLD = {
   datasourceName: 'gold_run_the_business_enhanced (local copy) (local copy)',
   datasourceLuid: '7611e6c5-c0f9-4a6d-afc2-f6647923c2e9',
+  // The suite's view; prompts name it so the model can find the workbook with the preferences.
+  viewName: 'Sales by Account - Dreamforce',
   workbookLuid: '5eafe9c6-89cc-410f-ac30-f0f6a6a0f23a',
 };
 

@@ -10,7 +10,8 @@
  * Rules for adding cases:
  * - Every expected number must come from the turn's `oracle`. Use `EVAL_WRITE_EXPECTED=true` with
  *   the oracle test to print the values.
- * - Name the data source by LUID. The site has many copies named "Sample - Superstore".
+ * - Prompts name content the way a user would: the data source and project by name, never by
+ *   LUID. The site has 8 data sources named "Sample - Superstore", so the project tells them apart.
  * - Avoid relative dates ("last year"); the data spans fixed years.
  * - Avoid top-N questions over fields with a null bucket (Medicare Speciality, Gender, Patient
  *   State), and the "Kaiser" / "Kaiser Permanente" payer pair, unless the question makes the
@@ -62,10 +63,15 @@ export type CaseTag =
 
 export type AbCase = {
   id: string;
+  /** Named in the first turn's prompt. */
   datasourceName: string;
-  /** Named in the first turn's prompt so every run queries the same data source. */
+  /** The data source's project, named in the first turn's prompt to tell same-named copies apart. */
+  projectName?: string;
+  /** Not in the prompt: the model must find it, and the eval checks it picked this one. */
   datasourceLuid: string;
-  /** A workbook built on the data source, named in the first turn's prompt. */
+  /** A view of a workbook built on the data source, named in the first turn's prompt. */
+  viewName?: string;
+  /** The workbook containing `viewName`. Not in the prompt; the eval checks the model found it. */
   workbookLuid?: string;
   tags: Array<CaseTag>;
   /** Smoke cases run by default in `dataQuestions.test.ts`; the rest need EVAL_DATA_CASES. */
@@ -75,12 +81,14 @@ export type AbCase = {
 
 const SUPERSTORE = {
   datasourceName: 'Sample - Superstore',
-  // The copy in "ACE AI Applications"; it has Region and answers through Tableau Agent.
+  // This copy has Region and answers through Tableau Agent.
+  projectName: 'ACE AI Applications',
   datasourceLuid: '434405df-0708-4505-9eac-a678f87a893c',
 };
 
 const MEDICARE = {
   datasourceName: 'Medicare-Claims',
+  projectName: 'Datasets',
   datasourceLuid: '799ac010-28d7-4436-b36f-8ecdef9a7312',
 };
 

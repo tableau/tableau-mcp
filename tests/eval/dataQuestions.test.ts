@@ -6,6 +6,7 @@ import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { getAgent, getMcpServer, getModel, log } from './base.js';
 import {
   CABU_TOOLS,
+  checkSourceChoice,
   ConversationTurn,
   findCalls,
   gradeAnswer,
@@ -22,6 +23,9 @@ dotenv.config({ path: 'tests/eval/.env' });
 /**
  * Pass/fail evals: data questions with known answers, on the real tool set with the Tableau Agent
  * tools on.
+ *
+ * Turn 1 names the data source and its project (and a view, for the gold suite) by name, never by
+ * LUID. Both modes must find and use the case's data source, and in Tableau Agent mode its workbook.
  *
  * - plain: the question as written. The model must not use Tableau Agent, must call
  *   query-datasource, and must get the numbers right.
@@ -170,6 +174,10 @@ describe('data questions (eval)', () => {
       } else {
         problems.push(
           ...(mode === 'plain' ? checkPlainTools(turns) : checkTableauAgentTools(turns)),
+          ...checkSourceChoice(
+            abCase,
+            turns.flatMap((turn) => turn.executions),
+          ),
         );
         for (const [index, turn] of turns.entries()) {
           const grade = await gradeAnswer(

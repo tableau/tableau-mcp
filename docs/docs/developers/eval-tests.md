@@ -154,6 +154,10 @@ These evals cover the `cabu-start-conversation` and `cabu-ask` tools. They run a
 | `cabuSelection.test.ts`       | Tool choice only: ordinary prompts avoid Tableau Agent, explicit requests use it, and a follow-up threads through the same conversation.                                                                                                               | Yes          |
 | `cabuAb.test.ts`              | A measurement, not a gate: answer accuracy, latency, and client token use with Tableau Agent off, on and opted in, and on with plain prompts. Writes a report to `tests/eval/results/`.                                                                | Yes          |
 
+Prompts name content the way a user would: the data source and its project by name, never by LUID.
+Finding the right data source (and, for Tableau Agent, the workbook) is part of the task, and the
+evals check that the model used the case's LUIDs.
+
 Answers are graded numerically first. When that fails, an LLM judge compares the answer to the
 case's reference answer.
 
@@ -193,10 +197,11 @@ instead. It lives on a different site, so point `tests/.env` at `SITE_NAME=tabag
 a PAT for that site. The oracle test doesn't apply: the gold cases have reference answers, not
 queries.
 
-Each gold prompt names the workbook as well as the data source. With the workbook, Tableau Agent
-samples field values and applies the workbook's business preferences, such as a fiscal year that
-starts in February. The plain path doesn't get those preferences, so expect it to miss fiscal and
-vocabulary questions.
+Each gold prompt names the suite's view, "Sales by Account - Dreamforce", as well as the data
+source. The model must find the view's workbook and pass it to Tableau Agent. With the workbook,
+Tableau Agent samples field values and applies the workbook's business preferences, such as a fiscal
+year that starts in February. The plain path doesn't get those preferences, so expect it to miss
+fiscal and vocabulary questions.
 
 ## Environment Variables
 

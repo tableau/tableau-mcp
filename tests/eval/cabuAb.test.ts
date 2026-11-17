@@ -6,6 +6,7 @@ import { addUsage, ArmId, emptyUsage, RunRecord, TurnRecord, writeResults } from
 import { getAgent, getMcpServer, getModel } from './base.js';
 import {
   CABU_TOOLS,
+  checkSourceChoice,
   getUsage,
   gradeAnswer,
   normalizeToolName,
@@ -49,7 +50,8 @@ const ARM_ENV: Record<ArmId, Record<string, string>> = {
   A: { TABLEAU_AGENT_TOOLS_ENABLED: 'false' },
   B: {
     TABLEAU_AGENT_TOOLS_ENABLED: 'true',
-    INCLUDE_TOOLS: 'search-content,list-datasources,tableau-agent',
+    // Prompts name content, not LUIDs, so the arm needs tools to look up the data source and workbook.
+    INCLUDE_TOOLS: 'search-content,list-datasources,list-workbooks,list-views,tableau-agent',
   },
   C: { TABLEAU_AGENT_TOOLS_ENABLED: 'true' },
 };
@@ -117,6 +119,10 @@ async function runCase(
     correct: turns.length === abCase.turns.length && turns.every((turn) => turn.correct),
     errored: turns.some((turn) => turn.error !== undefined),
     timedOut: turns.some((turn) => turn.timedOut === true),
+    sourceProblems: checkSourceChoice(
+      abCase,
+      conversation.flatMap((turn) => turn.executions),
+    ),
     turns,
   };
 }

@@ -48,6 +48,8 @@ export type RunRecord = {
   correct: boolean;
   errored: boolean;
   timedOut: boolean;
+  /** The model queried another data source or workbook than the case's; see `checkSourceChoice`. */
+  sourceProblems: Array<string>;
   turns: Array<TurnRecord>;
 };
 
@@ -120,6 +122,7 @@ export type ArmSummary = {
   meanUsage: TokenUsage;
   cabuUsageRate: number;
   errors: number;
+  wrongSource: number;
   timeouts: number;
 };
 
@@ -144,6 +147,7 @@ export function summarize(arm: ArmId, runs: Array<RunRecord>): ArmSummary {
     },
     cabuUsageRate: mean(runs.map((run) => (run.usedCabu ? 1 : 0))),
     errors: runs.filter((run) => run.errored).length,
+    wrongSource: runs.filter((run) => run.sourceProblems.length > 0).length,
     timeouts: runs.filter((run) => run.timedOut).length,
   };
 }
@@ -166,11 +170,11 @@ export function toMarkdown(
     '> Token counts are client-side only. They exclude the LLM tokens Tableau Agent spends server-side',
     '> (CES / LLM gateway) when `cabu-ask` runs, so arms that use CABU under-report total cost.',
     '',
-    '| Arm | Runs | Case accuracy | Turn accuracy | Latency p50 | Latency p95 | Latency mean | Mean input tok | Mean output tok | Mean total tok | Mean requests | CABU usage | Errors | Timeouts |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| Arm | Runs | Case accuracy | Turn accuracy | Latency p50 | Latency p95 | Latency mean | Mean input tok | Mean output tok | Mean total tok | Mean requests | CABU usage | Wrong source | Errors | Timeouts |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ...summaries.map(
       (s) =>
-        `| ${s.arm} | ${s.runs} | ${pct(s.caseAccuracy)} | ${pct(s.turnAccuracy)} | ${secs(s.latencyMs.p50)} | ${secs(s.latencyMs.p95)} | ${secs(s.latencyMs.mean)} | ${num(s.meanUsage.inputTokens)} | ${num(s.meanUsage.outputTokens)} | ${num(s.meanUsage.totalTokens)} | ${s.meanUsage.requests.toFixed(1)} | ${pct(s.cabuUsageRate)} | ${s.errors} | ${s.timeouts} |`,
+        `| ${s.arm} | ${s.runs} | ${pct(s.caseAccuracy)} | ${pct(s.turnAccuracy)} | ${secs(s.latencyMs.p50)} | ${secs(s.latencyMs.p95)} | ${secs(s.latencyMs.mean)} | ${num(s.meanUsage.inputTokens)} | ${num(s.meanUsage.outputTokens)} | ${num(s.meanUsage.totalTokens)} | ${s.meanUsage.requests.toFixed(1)} | ${pct(s.cabuUsageRate)} | ${s.wrongSource} | ${s.errors} | ${s.timeouts} |`,
     ),
     '',
     '## Runs',
@@ -179,8 +183,10 @@ export function toMarkdown(
     '|---|---|---|---|---|---|---|---|---|',
     ...runs.map((run) => {
       const tools = run.turns.map((turn) => turn.toolCalls.join(', ') || '-').join(' / ');
-      const notes = run.turns
-        .map((turn) => turn.error ?? (turn.correct ? '' : turn.gradeDetail))
+      const notes = [
+        ...run.sourceProblems,
+        ...run.turns.map((turn) => turn.error ?? (turn.correct ? '' : turn.gradeDetail)),
+      ]
         .filter(Boolean)
         .join(' / ')
         .replace(/\|/g, '\\|')
