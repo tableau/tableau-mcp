@@ -64,7 +64,6 @@ const NON_TOOL_VOCABULARY = [
   'corner-radius',
   'count-d',
   'cross-datasource-binding',
-  'dashboard-image',
   'dashboard-only',
   'dashboard-refresh-now-failed',
   'data-app-template',
@@ -75,6 +74,7 @@ const NON_TOOL_VOCABULARY = [
   'data-source-order',
   'datasource-dependencies',
   'datasource-not-found',
+  'datasource-rows',
   'datatype-customized',
   'date-time',
   'dates-and-times',
@@ -178,7 +178,6 @@ const NON_TOOL_VOCABULARY = [
   'readback-verification',
   // Health-check repair-primitive codes, not tools the model can call.
   'required-slot-missing',
-  'row-level',
   'save-file',
   'selected-fields',
   'selection-clear-set-option',
@@ -203,7 +202,6 @@ const NON_TOOL_VOCABULARY = [
   'std-dev-p',
   'story-point',
   'story-points',
-  'storyboard-image',
   'storyboard-refresh-now-failed',
   'structural-readback-unavailable',
   'style-rule',
@@ -247,7 +245,7 @@ const NON_TOOL_VOCABULARY = [
   'workbook-drift',
   'workbook-read',
   'worksheet-edit-buffer',
-  'worksheet-image',
+  'worksheet-rows',
   'zone-style',
 ] as const;
 

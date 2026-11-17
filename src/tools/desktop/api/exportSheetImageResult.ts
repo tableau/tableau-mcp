@@ -4,8 +4,6 @@ import { Result } from 'ts-results-es';
 
 import { Config } from '../../../config.desktop.js';
 import { DesktopCache } from '../../../desktop/cache.js';
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { ImageResult } from '../../../desktop/externalApi/types.js';
 import {
   buildInlineImageCapFileMessage,
@@ -14,7 +12,6 @@ import {
   isOverInlineImageCap,
   logInlineImageCapHit,
 } from '../../../desktop/limits/inlineImageCap.js';
-import { ExternalApiRead } from '../../../desktop/wrappers/readHarness.js';
 import { ImageExportTimeoutError } from '../../../errors/mcpToolError.desktop.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 
@@ -23,10 +20,11 @@ type BuildSheetImageToolResultArgs = {
   tool: string;
   /** Human label for messages, e.g. `Worksheet` / `Dashboard`. */
   label: string;
-  /** Cache-file prefix used when the cap forces a file, e.g. `worksheet-image`. */
+  /** Cache-file prefix for file-mode and over-cap exports, e.g. `worksheet-image`. */
   cachePrefix: string;
   /** The Desktop image export envelope. */
   image: ImageResult;
+  mode: 'file' | 'inline';
   config: Config;
 };
 
@@ -41,6 +39,27 @@ type BuildCachedImageToolResultArgs = {
   nextStep?: string;
 };
 
+export function writeImageCacheFile({
+  cachePrefix,
+  bytes,
+  mimeType,
+}: {
+  cachePrefix: string;
+  bytes: Buffer;
+  mimeType: string;
+}): string {
+  try {
+    const cacheFile = new DesktopCache().getCacheFilePath({
+      prefix: cachePrefix,
+      extension: imageExtensionForMimeType(mimeType),
+    });
+    writeFileSync(cacheFile, bytes, { flag: 'wx', mode: 0o600 });
+    return cacheFile;
+  } catch {
+    throw new Error('Could not write the image to the local cache.');
+  }
+}
+
 export function buildCachedImageToolResult({
   tool,
   label,
@@ -53,17 +72,7 @@ export function buildCachedImageToolResult({
 }: BuildCachedImageToolResultArgs): CallToolResult | undefined {
   if (!isOverInlineImageCap(inlineBytes, capBytes)) return undefined;
 
-  let cacheFile: string;
-  try {
-    cacheFile = new DesktopCache().getCacheFilePath({
-      prefix: cachePrefix,
-      extension: imageExtensionForMimeType(mimeType),
-    });
-    writeFileSync(cacheFile, bytes, { flag: 'wx', mode: 0o600 });
-  } catch {
-    throw new Error('Could not write the image to the local cache.');
-  }
-
+  const cacheFile = writeImageCacheFile({ cachePrefix, bytes, mimeType });
   logInlineImageCapHit({ tool, bytes: inlineBytes, capBytes, file: cacheFile });
   return {
     isError: false,
@@ -97,10 +106,11 @@ function describeImageSize({ width, height }: ImageResult): string {
  * One branch per envelope shape Desktop emits:
  *   1. `filePath` present → Desktop persisted the image (caller passed a filePath); project
  *      the path (bytes are intentionally absent).
- *   2. `imageBase64` present, under the inline cap → inline MCP image block. Real SVG also
+ *   2. `imageBase64` present, file mode → write the bytes to a cache file and return its path.
+ *   3. `imageBase64` present, inline mode, under the inline cap → inline MCP image block. Real SVG also
  *      rides as a text block so clients that don't render an SVG image block still get the
  *      markup (mirrors the web image builder).
- *   3. `imageBase64` present, over the cap → write the bytes to a cache file and return its
+ *   4. `imageBase64` present, inline mode, over the cap → write the bytes to a cache file and return its
  *      path, keeping multi-megabyte images out of the conversation.
  *
  * The block is labelled SOLELY from `image.effectiveMimeType` — the server-declared ACTUAL
@@ -113,6 +123,7 @@ export function buildSheetImageToolResult({
   label,
   cachePrefix,
   image,
+  mode,
   config,
 }: BuildSheetImageToolResultArgs): CallToolResult {
   const dims = describeImageSize(image);
@@ -132,7 +143,7 @@ export function buildSheetImageToolResult({
       content: [
         {
           type: 'text',
-          text: `${label} image export returned neither image bytes nor a file path. Pass a filePath to have Tableau write the image to disk instead of returning it inline.`,
+          text: `${label} image export returned neither image bytes nor a file path.`,
         },
       ],
     };
@@ -146,12 +157,24 @@ export function buildSheetImageToolResult({
   const normalized = (image.effectiveMimeType ?? '').trim().toLowerCase();
   const actualMimeType = normalized === 'image/svg+xml' ? 'image/svg+xml' : 'image/png';
 
+  if (mode !== 'inline') {
+    const cacheFile = writeImageCacheFile({
+      cachePrefix,
+      bytes: decoded,
+      mimeType: actualMimeType,
+    });
+    return {
+      isError: false,
+      content: [{ type: 'text', text: `${label} image saved to cache file: ${cacheFile}${dims}.` }],
+    };
+  }
+
   const capBytes = config.inlineImageMaxBytes;
   // Bytes that actually ride inline: raster is one base64 block, but SVG is dual-emitted
   // (decoded text + base64 image block), so it costs ~2x its decoded size.
   const inlineBytes = inlineImageFootprintBytes(decoded.length, actualMimeType);
 
-  // (3) Over the cap: write the decoded bytes to a cache file and return its path.
+  // (4) Over the cap: write the decoded bytes to a cache file and return its path.
   const cachedResult = buildCachedImageToolResult({
     tool,
     label,
@@ -163,7 +186,7 @@ export function buildSheetImageToolResult({
   });
   if (cachedResult) return cachedResult;
 
-  // (2) Under the cap: inline image block. Real SVG also rides as a decoded text block.
+  // (3) Under the cap: inline image block. Real SVG also rides as a decoded text block.
   if (actualMimeType === 'image/svg+xml') {
     return {
       isError: false,
@@ -197,41 +220,27 @@ export function resolveImageExportQuery(args: { filePath?: string; mimeType?: st
 }
 
 /**
- * Runs an image-render call under a deadline scoped to that call only (the sheet-list call that
- * precedes it rides `signal`, the request's own signal). The first render after Desktop launches
- * can hang forever behind a modal dialog; this converts that into a reportable timeout instead of
- * an unbounded wait. The harness `read()` always passes the request signal into the closure, so
- * `doExport` receives the `combined` signal explicitly and must forward it to the executor.
+ * Runs an image export under a deadline scoped to that export only. The first render after
+ * Desktop launches can hang forever behind a modal dialog; this converts that into a reportable
+ * timeout instead of an unbounded wait. `exportImage` must forward `combined` to the executor.
  *
- * A timeout is distinguished from a caller cancellation: only when the timeout fired AND the
- * request signal did not is the failure reported as {@link ImageExportTimeoutError}; a cancelled
- * request keeps its original error. Shared by the worksheet and dashboard export tools, whose only
- * differences are the label, endpoint name, and executor method.
+ * Only when the timeout fired AND the request signal did not is the failure reported as
+ * {@link ImageExportTimeoutError}; a cancelled request keeps its original error.
  */
 export async function exportSheetImageWithDeadline({
   label,
-  endpoint,
   timeoutMs,
   signal,
-  read,
-  doExport,
+  exportImage,
 }: {
   label: string;
-  endpoint: string;
   timeoutMs: number;
   signal: AbortSignal;
-  read: ExternalApiRead;
-  doExport: (
-    executor: ExternalApiToolExecutor,
-    combined: AbortSignal,
-  ) => Promise<Result<ImageResult, ExecuteCommandError>>;
+  exportImage: (combined: AbortSignal) => Promise<Result<ImageResult, McpToolError>>;
 }): Promise<Result<ImageResult, McpToolError>> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const combined = AbortSignal.any([signal, timeoutSignal]);
-  const imageResult = await read<ImageResult>(
-    endpoint,
-    async (executor) => await doExport(executor, combined),
-  );
+  const imageResult = await exportImage(combined);
   if (imageResult.isErr() && timeoutSignal.aborted && !signal.aborted) {
     return new ImageExportTimeoutError(label, timeoutMs).toErr();
   }

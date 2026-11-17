@@ -6,8 +6,13 @@ import { WorksheetUnderlyingDataQuery } from '../../../desktop/externalApi/types
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { outputModeParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import {
+  buildRowsToolResult,
+  resolveLogicalTable,
+  rowParamsWithoutTable,
+} from './logicalTables.js';
 import { qualifyColumnFields } from './qualifyColumnField.js';
 
 const DEFAULT_MAX_ROWS = 200;
@@ -15,19 +20,16 @@ const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().describe('Worksheet name/id.'),
-  logicalTable: z
+  sheetId: z.string().min(1).describe('Worksheet id or name.'),
+  logicalTableId: z
     .string()
-    .describe("A logical table caption or id from the worksheet's logical tables."),
+    .min(1)
+    .optional()
+    .describe('Table id or caption; omit to list tables.'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
-  includeAllColumns: z
-    .boolean()
-    .optional()
-    .describe('Include every column, not only the ones the view references.'),
-  columns: z
-    .array(z.string())
-    .optional()
-    .describe('Field names to restrict the columns (e.g. "Region").'),
+  mode: outputModeParam(),
+  includeAllColumns: z.boolean().optional().describe('Add unreferenced columns.'),
+  columns: z.array(z.string()).optional().describe('Fields to keep.'),
 };
 const title = 'Get Worksheet Underlying Data';
 
@@ -38,63 +40,74 @@ export const getWorksheetUnderlyingDataTool = (
     server,
     name: 'get-worksheet-underlying-data',
     title,
-    description:
-      "Read row-level underlying data for one of a worksheet's logical tables (see list-worksheet-logical-tables).",
+    description: "A worksheet's logical tables; with logicalTableId, that table's rows.",
     paramsSchema,
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false, // file mode writes a cache file
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false, // each file-mode call writes a new cache file
       openWorldHint: false,
     },
     callback: async (
-      { session, worksheet, logicalTable, maxRows, includeAllColumns, columns },
+      { session, sheetId, logicalTableId, maxRows, mode, includeAllColumns, columns },
       extra,
     ): Promise<CallToolResult> => {
       return await getWorksheetUnderlyingData.logAndExecute({
         extra,
-        args: { session, worksheet, logicalTable, maxRows, includeAllColumns, columns },
+        args: { session, sheetId, logicalTableId, maxRows, mode, includeAllColumns, columns },
         callback: async () => {
+          if (logicalTableId === undefined) {
+            const stray = rowParamsWithoutTable({ maxRows, includeAllColumns, columns });
+            if (stray) {
+              return stray.toErr();
+            }
+          }
+
           return await runExternalApiReadTool({
             session,
             extra,
-            callback: async (executor, _signal, read) => {
-              const listResult = await read(
-                'worksheet list',
-                async (activeExecutor, activeSignal) =>
-                  await activeExecutor.listWorksheets(activeSignal),
-              );
-              if (listResult.isErr()) {
-                return listResult;
+            callback: async (executor, signal, read) => {
+              let worksheetId = sheetId;
+              let byId = await executor.listWorksheetLogicalTables(worksheetId, signal);
+              if (
+                byId.isErr() &&
+                byId.error.type === 'command-failed' &&
+                byId.error.error?.code === 'sheet-not-found'
+              ) {
+                const listResult = await read(
+                  'worksheet list',
+                  async (activeExecutor, activeSignal) =>
+                    await activeExecutor.listWorksheets(activeSignal),
+                );
+                if (listResult.isErr()) {
+                  return listResult;
+                }
+                const worksheetResult = resolveItemByNameOrId(
+                  'Worksheet',
+                  sheetId,
+                  listResult.value.worksheets ?? [],
+                );
+                if (worksheetResult.isErr()) {
+                  return worksheetResult.error.toErr();
+                }
+                if (worksheetResult.value.id !== sheetId) {
+                  worksheetId = worksheetResult.value.id;
+                  byId = await executor.listWorksheetLogicalTables(worksheetId, signal);
+                }
               }
-
-              const worksheetResult = resolveItemByNameOrId(
-                'Worksheet',
-                worksheet,
-                listResult.value.worksheets ?? [],
-              );
-              if (worksheetResult.isErr()) {
-                return worksheetResult.error.toErr();
-              }
-              const worksheetId = worksheetResult.value.id;
-
               const tablesResult = await read(
                 'worksheet logical tables',
-                async (activeExecutor, activeSignal) =>
-                  await activeExecutor.listWorksheetLogicalTables(worksheetId, activeSignal),
+                async () => await Promise.resolve(byId),
               );
-              if (tablesResult.isErr()) {
+              if (tablesResult.isErr() || logicalTableId === undefined) {
                 return tablesResult;
               }
-              const tables = (tablesResult.value.tables ?? []).map((table) => ({
-                id: table.id ?? '',
-                name: table.caption ?? table.id ?? '',
-              }));
-              const tableMatch = resolveItemByNameOrId('Logical table', logicalTable, tables);
+
+              const tableMatch = resolveLogicalTable(logicalTableId, tablesResult.value);
               if (tableMatch.isErr()) {
                 return tableMatch.error.toErr();
               }
-              const logicalTableId = tableMatch.value.id;
+              const resolvedTableId = tableMatch.value.id;
 
               let qualifiedColumns: Array<string> | undefined;
               if (columns && columns.length > 0) {
@@ -131,7 +144,7 @@ export const getWorksheetUnderlyingDataTool = (
                 async (activeExecutor, activeSignal) =>
                   await activeExecutor.getWorksheetUnderlyingData(
                     worksheetId,
-                    logicalTableId,
+                    resolvedTableId,
                     query,
                     activeSignal,
                   ),
@@ -139,6 +152,10 @@ export const getWorksheetUnderlyingDataTool = (
             },
           });
         },
+        getSuccessResult: (result) =>
+          logicalTableId === undefined
+            ? { isError: false, content: [{ type: 'text', text: JSON.stringify(result) }] }
+            : buildRowsToolResult({ rows: result, mode, cachePrefix: 'worksheet-rows' }),
       });
     },
   });

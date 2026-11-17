@@ -13,11 +13,8 @@ import * as sessionResolution from '../../../desktop/session/sessionResolution.j
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { exportDashboardImageTool } from './exportDashboardImage.js';
-import { exportStoryboardImageTool } from './exportStoryboardImage.js';
-import { exportWorksheetImageTool } from './exportWorksheetImage.js';
+import { exportSheetImageTool } from './exportSheetImage.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 // Only writeFileSync is stubbed — the cap-downgrade path must not touch disk. existsSync /
@@ -27,23 +24,64 @@ vi.mock('fs', async () => {
   return { ...actual, writeFileSync: vi.fn() };
 });
 
-describe('export-image tools', () => {
+describe('export-sheet-image', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('returns a worksheet image inline as a base64 PNG block after resolving the sheet by id', async () => {
-    const harness = await startHarness(exportWorksheetImageTool);
+  it('saves the image to a cache file by default and returns no inline image', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
+        mode: undefined,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toMatch(/^Worksheet image saved to cache file: .*\.png/);
+      expect(vi.mocked(writeFileSync)).toHaveBeenCalledWith(
+        expect.stringMatching(/worksheet-image-.*\.png$/),
+        expect.any(Buffer),
+        { flag: 'wx', mode: 0o600 },
+      );
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('lets filePath override file mode so Desktop writes the image', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
+        mode: 'file',
+        filePath: '/tmp/sales.png',
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('written to /tmp/sales.png');
+      expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('returns a worksheet image inline as a base64 PNG block from one call by id', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
       expect(result.content[0].mimeType).toBe('image/png');
       expect(result.content[0].data.length).toBeGreaterThan(0);
       expect(harness.server.requests.map((request) => request.path)).toEqual([
-        '/v0/workbook/worksheets',
         '/v0/workbook/worksheets/sheet-sales/image',
       ]);
       // No mimeType arg → no mimeType query param forwarded (Desktop defaults to image/png).
@@ -53,14 +91,15 @@ describe('export-image tools', () => {
     }
   });
 
-  it('resolves a worksheet by name before exporting', async () => {
-    const harness = await startHarness(exportWorksheetImageTool);
+  it('falls back to the worksheet list when sheetId is a name', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+      const result = await harness.callTool({ sheetId: 'Sales by Region', kind: 'worksheet' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
       expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets/Sales%20by%20Region/image',
         '/v0/workbook/worksheets',
         '/v0/workbook/worksheets/sheet-sales/image',
       ]);
@@ -69,16 +108,15 @@ describe('export-image tools', () => {
     }
   });
 
-  it('returns a dashboard image inline as a base64 PNG block after resolving by name', async () => {
-    const harness = await startHarness(exportDashboardImageTool);
+  it('returns a dashboard image inline as a base64 PNG block from one call by id', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ dashboardName: 'Executive Dashboard' });
+      const result = await harness.callTool({ sheetId: 'dash-exec', kind: 'dashboard' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
       expect(result.content[0].mimeType).toBe('image/png');
       expect(harness.server.requests.map((request) => request.path)).toEqual([
-        '/v0/workbook/dashboards',
         '/v0/workbook/dashboards/dash-exec/image',
       ]);
     } finally {
@@ -86,17 +124,35 @@ describe('export-image tools', () => {
     }
   });
 
-  it('returns a storyboard image inline as a base64 PNG block after resolving by name', async () => {
-    const harness = await startHarness(exportStoryboardImageTool);
+  it('returns a storyboard image inline as a base64 PNG block from one call by id', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ storyboardName: 'QBR Story' });
+      const result = await harness.callTool({ sheetId: 'story-qbr', kind: 'storyboard' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
       expect(result.content[0].mimeType).toBe('image/png');
       expect(harness.server.requests.map((request) => request.path)).toEqual([
-        '/v0/workbook/storyboards',
         '/v0/workbook/storyboards/story-qbr/image',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('refuses a storyboard export before API 0.2.7 and still exports a worksheet', async () => {
+    const harness = await startHarness(undefined, undefined, '0.2.6');
+    try {
+      const storyboard = await harness.callTool({ sheetId: 'story-qbr', kind: 'storyboard' });
+      expect(storyboard.isError).toBe(true);
+      invariant(storyboard.content[0].type === 'text');
+      expect(storyboard.content[0].text).toContain('does not serve the storyboard image endpoint');
+      expect(harness.server.requests).toEqual([]);
+
+      const worksheet = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
+      expect(worksheet.isError).toBe(false);
+      expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets/sheet-sales/image',
       ]);
     } finally {
       await harness.close();
@@ -105,7 +161,7 @@ describe('export-image tools', () => {
 
   it('forwards mimeType and returns an SVG as both a text and an image block', async () => {
     const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
@@ -119,7 +175,8 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
         mimeType: 'image/svg+xml',
       });
 
@@ -136,10 +193,11 @@ describe('export-image tools', () => {
   });
 
   it('projects the server-side file path when filePath is provided (no inline bytes)', async () => {
-    const harness = await startHarness(exportWorksheetImageTool);
+    const harness = await startHarness();
     try {
       const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
         filePath: '/tmp/sales.png',
       });
 
@@ -155,17 +213,15 @@ describe('export-image tools', () => {
 
   it.each([
     {
-      tool: exportWorksheetImageTool,
-      args: { worksheetName: 'sheet-sales' },
+      args: { sheetId: 'sheet-sales', kind: 'worksheet' },
       path: '/v0/workbook/worksheets/sheet-sales/image',
     },
     {
-      tool: exportDashboardImageTool,
-      args: { dashboardName: 'Executive Dashboard' },
+      args: { sheetId: 'dash-exec', kind: 'dashboard' },
       path: '/v0/workbook/dashboards/dash-exec/image',
     },
-  ])('reports no pixel size for an SVG written to $path', async ({ tool, args, path }) => {
-    const harness = await startHarness(tool, (server) => {
+  ])('reports no pixel size for an SVG written to $path', async ({ args, path }) => {
+    const harness = await startHarness((server) => {
       server.setOverride(`GET ${path}`, {
         status: 200,
         contentType: 'application/json',
@@ -195,11 +251,11 @@ describe('export-image tools', () => {
   });
 
   it('downgrades an over-cap inline image to a cache file instead of an image block', async () => {
-    const harness = await startHarness(exportWorksheetImageTool, undefined, {
+    const harness = await startHarness(undefined, {
       inlineImageMaxBytes: 1,
     });
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
@@ -216,11 +272,11 @@ describe('export-image tools', () => {
 
   it('keeps an inline image whose decoded size is exactly at the cap (inclusive floor)', async () => {
     // SAMPLE_IMAGE_BASE64 decodes to 69 bytes; a cap of exactly 69 must stay inline (`>` cap).
-    const harness = await startHarness(exportWorksheetImageTool, undefined, {
+    const harness = await startHarness(undefined, {
       inlineImageMaxBytes: 69,
     });
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
@@ -237,7 +293,6 @@ describe('export-image tools', () => {
     // Cap sits above the decoded size but below the SVG's doubled text+image footprint.
     const cap = svgBytes + 1;
     const harness = await startHarness(
-      exportWorksheetImageTool,
       (server) => {
         server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
           status: 200,
@@ -254,7 +309,8 @@ describe('export-image tools', () => {
     );
     try {
       const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
         mimeType: 'image/svg+xml',
       });
 
@@ -274,7 +330,7 @@ describe('export-image tools', () => {
   it('surfaces a neither-bytes-nor-path envelope as an error (no inline block, no file)', async () => {
     const eventSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent');
     const errorSpy = vi.spyOn(episodeEvents, 'emitToolErrorEvent');
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
@@ -282,7 +338,7 @@ describe('export-image tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -290,7 +346,7 @@ describe('export-image tools', () => {
       expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          tool: 'export-worksheet-image',
+          tool: 'export-sheet-image',
           error: 'Tool returned an error result.',
         }),
       );
@@ -298,7 +354,7 @@ describe('export-image tools', () => {
         expect.anything(),
         expect.objectContaining({
           type: 'tool_end',
-          tool: 'export-worksheet-image',
+          tool: 'export-sheet-image',
           success: false,
           outcome: 'failed',
         }),
@@ -315,7 +371,7 @@ describe('export-image tools', () => {
     // the bytes look like SVG, a `image/png` declaration yields a single image/png block with no
     // SVG text block — proving the label follows the field, not the content.
     const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
@@ -329,7 +385,8 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
         mimeType: 'image/svg+xml',
       });
 
@@ -344,7 +401,7 @@ describe('export-image tools', () => {
 
   it('normalizes effectiveMimeType (mixed case + trailing whitespace) to svg and dual-emits', async () => {
     const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
@@ -358,7 +415,8 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
         mimeType: 'image/svg+xml',
       });
 
@@ -378,7 +436,7 @@ describe('export-image tools', () => {
     // fallback, SVG-looking bytes and no declaration are labelled image/png — the documented
     // degradation on such builds.
     const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
@@ -387,7 +445,8 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
+        sheetId: 'sheet-sales',
+        kind: 'worksheet',
         mimeType: 'image/svg+xml',
       });
 
@@ -402,7 +461,6 @@ describe('export-image tools', () => {
 
   it('aborts a hung image render at the deadline and reports a timeout (not a cancellation)', async () => {
     const harness = await startHarness(
-      exportWorksheetImageTool,
       (server) => {
         server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
           status: 200,
@@ -412,7 +470,7 @@ describe('export-image tools', () => {
       { imageExportTimeoutMs: 1 },
     );
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -433,7 +491,7 @@ describe('export-image tools', () => {
   });
 
   it('surfaces the Problem code alongside the detail when the image endpoint returns a 500', async () => {
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 500,
         body: JSON.stringify({
@@ -448,7 +506,7 @@ describe('export-image tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -460,7 +518,7 @@ describe('export-image tools', () => {
   });
 
   it('surfaces a 409 viz-not-ready as a command error (not a too-new endpoint)', async () => {
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 409,
         body: JSON.stringify({
@@ -474,7 +532,7 @@ describe('export-image tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
+      const result = await harness.callTool({ sheetId: 'sheet-sales', kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -486,65 +544,16 @@ describe('export-image tools', () => {
     }
   });
 
-  it.each([
-    {
-      makeTool: exportWorksheetImageTool,
-      nameKey: 'worksheetName',
-      aliasKey: 'worksheet',
-      value: 'sheet-sales',
-      imagePath: '/v0/workbook/worksheets/sheet-sales/image',
-    },
-    {
-      makeTool: exportDashboardImageTool,
-      nameKey: 'dashboardName',
-      aliasKey: 'dashboard',
-      value: 'dash-exec',
-      imagePath: '/v0/workbook/dashboards/dash-exec/image',
-    },
-    {
-      makeTool: exportStoryboardImageTool,
-      nameKey: 'storyboardName',
-      aliasKey: 'storyboard',
-      value: 'story-qbr',
-      imagePath: '/v0/workbook/storyboards/story-qbr/image',
-    },
-  ])(
-    'accepts the deprecated $aliasKey alias key and rejects missing or conflicting keys',
-    async ({ makeTool, nameKey, aliasKey, value, imagePath }) => {
-      const harness = await startHarness(makeTool);
-      try {
-        const aliased = await harness.callTool({ [aliasKey]: value });
-        expect(aliased.isError).toBe(false);
-        invariant(aliased.content[0].type === 'image');
-        expect(harness.server.requests.at(-1)?.path).toBe(imagePath);
-
-        const missing = await harness.callTool({});
-        expect(missing.isError).toBe(true);
-        invariant(missing.content[0].type === 'text');
-        expect(missing.content[0].text).toContain(
-          `${nameKey} is required (${aliasKey} is a deprecated alias).`,
-        );
-
-        const conflict = await harness.callTool({ [nameKey]: value, [aliasKey]: 'other' });
-        expect(conflict.isError).toBe(true);
-        invariant(conflict.content[0].type === 'text');
-        expect(conflict.content[0].text).toContain(`${nameKey} ("${value}")`);
-        expect(conflict.content[0].text).toContain('Pass one of them.');
-      } finally {
-        await harness.close();
-      }
-    },
-  );
-
-  it('reports available worksheets when the selector does not resolve (no image call)', async () => {
-    const harness = await startHarness(exportWorksheetImageTool);
+  it('reports available worksheets when neither the id nor a name matches', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheetName: 'Missing Sheet' });
+      const result = await harness.callTool({ sheetId: 'Missing Sheet', kind: 'worksheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Worksheet "Missing Sheet" was not found.');
       expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets/Missing%20Sheet/image',
         '/v0/workbook/worksheets',
       ]);
     } finally {
@@ -554,27 +563,24 @@ describe('export-image tools', () => {
 
   it.each([
     {
-      makeTool: exportWorksheetImageTool,
-      args: { worksheetName: 'sheet-sales' },
+      args: { sheetId: 'sheet-sales', kind: 'worksheet' },
       overrideKey: 'GET /v0/workbook/worksheets/sheet-sales/image',
       expectedMessage: 'does not serve the worksheet image endpoint',
     },
     {
-      makeTool: exportDashboardImageTool,
-      args: { dashboardName: 'dash-exec' },
+      args: { sheetId: 'dash-exec', kind: 'dashboard' },
       overrideKey: 'GET /v0/workbook/dashboards/dash-exec/image',
       expectedMessage: 'does not serve the dashboard image endpoint',
     },
     {
-      makeTool: exportStoryboardImageTool,
-      args: { storyboardName: 'story-qbr' },
+      args: { sheetId: 'story-qbr', kind: 'storyboard' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr/image',
       expectedMessage: 'does not serve the storyboard image endpoint',
     },
   ])(
     'reports an honest too-new endpoint 404 for $expectedMessage',
-    async ({ makeTool, args, overrideKey, expectedMessage }) => {
-      const harness = await startHarness(makeTool, (server) => {
+    async ({ args, overrideKey, expectedMessage }) => {
+      const harness = await startHarness((server) => {
         server.setOverride(overrideKey, {
           status: 404,
           body: JSON.stringify({
@@ -602,36 +608,32 @@ describe('export-image tools', () => {
   it.each([
     {
       label: 'a relative worksheet filePath',
-      makeTool: exportWorksheetImageTool,
-      args: { worksheetName: 'sheet-sales', filePath: 'relative/report.png' },
+      args: { sheetId: 'sheet-sales', kind: 'worksheet', filePath: 'relative/report.png' },
       imagePath: '/v0/workbook/worksheets/sheet-sales/image',
     },
     {
       label: 'a ..-bearing worksheet filePath',
-      makeTool: exportWorksheetImageTool,
-      args: { worksheetName: 'sheet-sales', filePath: '/tmp/../etc/report.png' },
+      args: { sheetId: 'sheet-sales', kind: 'worksheet', filePath: '/tmp/../etc/report.png' },
       imagePath: '/v0/workbook/worksheets/sheet-sales/image',
     },
     {
       label: 'a relative dashboard filePath',
-      makeTool: exportDashboardImageTool,
-      args: { dashboardName: 'dash-exec', filePath: 'relative/dash.png' },
+      args: { sheetId: 'dash-exec', kind: 'dashboard', filePath: 'relative/dash.png' },
       imagePath: '/v0/workbook/dashboards/dash-exec/image',
     },
     {
       label: 'a relative storyboard filePath',
-      makeTool: exportStoryboardImageTool,
-      args: { storyboardName: 'story-qbr', filePath: 'relative/story.png' },
+      args: { sheetId: 'story-qbr', kind: 'storyboard', filePath: 'relative/story.png' },
       imagePath: '/v0/workbook/storyboards/story-qbr/image',
     },
   ])(
     'forwards the raw path and surfaces the Desktop 400 for $label (no client-side refine)',
-    async ({ makeTool, args, imagePath }) => {
+    async ({ args, imagePath }) => {
       // The tool boundary passes filePath through raw — Desktop is the authoritative path
       // boundary (a client-side refine would have to duplicate OS-specific absolute-path
       // semantics and risk rejecting valid Windows/UNC paths). This pins that the raw path
       // reaches the image endpoint and the resulting 400 (code + detail) surfaces to the model.
-      const harness = await startHarness(makeTool);
+      const harness = await startHarness();
       try {
         const result = await harness.callTool(args);
 
@@ -651,9 +653,9 @@ describe('export-image tools', () => {
 });
 
 async function startHarness(
-  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
   configure?: (server: MockExternalApiServer) => void,
   configPatch?: Partial<ReturnType<typeof getMockRequestHandlerExtra>['config']>,
+  apiVersion = '1.0',
 ): Promise<{
   server: MockExternalApiServer;
   callTool: (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -661,9 +663,11 @@ async function startHarness(
 }> {
   const server = await startMockExternalApiServer();
   configure?.(server);
-  const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+  const executor = new ExternalApiToolExecutor({
+    discover: () => [instanceFor(server, apiVersion)],
+  });
   await executor.start();
-  const tool = makeTool(new DesktopMcpServer());
+  const tool = exportSheetImageTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
     args: Record<string, unknown>,
     extra: ReturnType<typeof getMockRequestHandlerExtra>,
@@ -677,7 +681,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async (args) => await callback(args, extra),
+    callTool: async (args) => await callback({ mode: 'inline', ...args }, extra),
     close: async () => {
       executor.stop();
       await server.close();
@@ -685,12 +689,12 @@ async function startHarness(
   };
 }
 
-function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
+function instanceFor(server: MockExternalApiServer, apiVersion: string): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-export-image-tools',
-    apiVersion: '1.0',
+    apiVersion,
   };
 }

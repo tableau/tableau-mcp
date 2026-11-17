@@ -34,15 +34,14 @@ vi.mock('../../desktop/cache.js', () => ({
   },
 }));
 
-// Path arguments that are forwarded to Tableau Desktop on purpose: they name a user file
-// that Desktop opens or writes, never a DesktopCache file the server reads or writes.
+// Path arguments that name a user file on purpose: Desktop opens or writes it, or the server
+// writes a captured image to it. Never a DesktopCache file the server reads or writes.
 const FORWARDED_TO_DESKTOP: Record<string, string[]> = {
   'open-file': ['filePath'],
   'save-workbook': ['filePath'],
   'workbook-export-as': ['filePath'],
-  'export-worksheet-image': ['filePath'],
-  'export-dashboard-image': ['filePath'],
-  'export-storyboard-image': ['filePath'],
+  'export-sheet-image': ['filePath'],
+  'capture-window-screenshot': ['filePath'],
 };
 
 // Every cache-file argument, with arguments that satisfy the rest of the tool's input.

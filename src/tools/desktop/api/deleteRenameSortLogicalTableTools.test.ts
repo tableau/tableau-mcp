@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync, rmSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -16,7 +17,6 @@ import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getDeleteSheetTool } from './deleteSheet.js';
 import { getWorksheetUnderlyingDataTool } from './getWorksheetUnderlyingData.js';
-import { getListWorksheetLogicalTablesTool } from './listWorksheetLogicalTables.js';
 import { getRenameSheetTool } from './renameSheet.js';
 import { getSortWorksheetTool } from './sortWorksheet.js';
 
@@ -519,18 +519,46 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
-  it('list-worksheet-logical-tables GETs the logicalTables route and returns the tables', async () => {
-    const harness = await startHarness(getListWorksheetLogicalTablesTool);
+  it('get-worksheet-underlying-data without logicalTableId lists the tables from one call by id', async () => {
+    const harness = await startHarness(getWorksheetUnderlyingDataTool);
     try {
-      const { result } = await run(harness, { worksheet: WORKSHEET_NAME });
+      const { result } = await run(harness, { sheetId: WORKSHEET_ID });
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain(LOGICAL_TABLE_ID);
-      const got = harness.server.requests.filter(
-        (r) =>
-          r.method === 'GET' && r.path === `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables`,
+      expect(harness.server.requests.map((r) => r.path)).toEqual([
+        `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables`,
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('get-worksheet-underlying-data falls back to the worksheet list when sheetId is a name', async () => {
+    const harness = await startHarness(getWorksheetUnderlyingDataTool);
+    try {
+      const { result } = await run(harness, { sheetId: WORKSHEET_NAME });
+      expect(result.isError).toBeFalsy();
+      expect(harness.server.requests.map((r) => r.path)).toEqual([
+        `/v0/workbook/worksheets/${encodeURIComponent(WORKSHEET_NAME)}/logicalTables`,
+        '/v0/workbook/worksheets',
+        `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables`,
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('get-worksheet-underlying-data rejects row params without logicalTableId and makes no call', async () => {
+    const harness = await startHarness(getWorksheetUnderlyingDataTool);
+    try {
+      const { result } = await run(harness, { sheetId: WORKSHEET_ID, includeAllColumns: true });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'includeAllColumns applies only when reading rows. Pass logicalTableId, or omit it',
       );
-      expect(got).toHaveLength(1);
+      expect(harness.server.requests).toEqual([]);
     } finally {
       await harness.close();
     }
@@ -540,8 +568,8 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     const harness = await startHarness(getWorksheetUnderlyingDataTool);
     try {
       const { result } = await run(harness, {
-        worksheet: WORKSHEET_NAME,
-        logicalTable: LOGICAL_TABLE_ID,
+        sheetId: WORKSHEET_ID,
+        logicalTableId: LOGICAL_TABLE_ID,
         maxRows: 50,
         includeAllColumns: true,
       });
@@ -564,12 +592,34 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
+  it('get-worksheet-underlying-data saves rows to a JSON cache file by default', async () => {
+    const harness = await startHarness(getWorksheetUnderlyingDataTool);
+    try {
+      const { result } = await run(harness, {
+        sheetId: WORKSHEET_ID,
+        logicalTableId: LOGICAL_TABLE_ID,
+        mode: undefined,
+      });
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      const match = /cache file: (.*worksheet-rows-.*\.json)$/.exec(result.content[0].text);
+      invariant(match);
+      try {
+        expect(JSON.parse(readFileSync(match[1], 'utf-8'))).toHaveProperty('rows');
+      } finally {
+        rmSync(match[1], { force: true });
+      }
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('get-worksheet-underlying-data resolves a logical table caption to its id', async () => {
     const harness = await startHarness(getWorksheetUnderlyingDataTool);
     try {
       const { result } = await run(harness, {
-        worksheet: WORKSHEET_NAME,
-        logicalTable: 'Orders',
+        sheetId: WORKSHEET_ID,
+        logicalTableId: 'Orders',
       });
       expect(result.isError).toBeFalsy();
       const got = harness.server.requests.filter(
@@ -602,8 +652,8 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
           ),
         });
         const { result } = await run(harness, {
-          worksheet: WORKSHEET_NAME,
-          logicalTable: LOGICAL_TABLE_ID,
+          sheetId: WORKSHEET_ID,
+          logicalTableId: LOGICAL_TABLE_ID,
           columns: ['Sales'],
         });
         expect(result.isError).toBeFalsy();
@@ -690,7 +740,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async (args) => await callback(args, extra),
+    callTool: async (args) => await callback({ mode: 'inline', ...args }, extra),
     close: async () => {
       executor.stop();
       await server.close();

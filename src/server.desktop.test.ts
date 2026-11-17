@@ -457,11 +457,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 74-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 70-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(74);
+      expect(selected).toHaveLength(70);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -507,9 +507,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'list-available-fields',
         'search-workbook-fields',
         'get-show-me-options',
-        'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
-        'list-datasource-logical-tables',
         'get-datasource-underlying-data',
         'capture-window-screenshot',
         'add-worksheet',
@@ -530,9 +528,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'apply-workbook',
         'apply-dashboard',
         'apply-storyboard',
-        'export-worksheet-image',
-        'export-dashboard-image',
-        'export-storyboard-image',
+        'export-sheet-image',
       ]) {
         expect(selected.map((t) => t.name)).toContain(verb);
       }
@@ -584,10 +580,14 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     const captureTool = tools.find((tool) => tool.name === 'capture-window-screenshot');
 
     expect(captureTool).toBeDefined();
-    expect(captureTool?.paramsSchema).toEqual({ session: expect.any(Object) });
+    expect(captureTool?.paramsSchema).toEqual({
+      session: expect.any(Object),
+      mode: expect.any(Object),
+      filePath: expect.any(Object),
+    });
     expect(captureTool?.annotations).toEqual({
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: false,
     });
@@ -761,7 +761,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-worksheet')).toBe('0.2.6');
     expect(floors.get('add-dashboard')).toBe('0.2.6');
     expect(floors.get('add-storyboard')).toBe('0.2.6');
-    expect(floors.get('export-storyboard-image')).toBe('0.2.7');
+    expect(floors.get('export-sheet-image')).toBeUndefined();
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
     expect(floors.get('close-workbook')).toBe('0.2.32');
     expect(floors.get('get-workspace-extensions')).toBe('0.2.34');
@@ -781,7 +781,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('reload-extensions')).toBe('0.2.25');
     expect(floors.get('validate-calculated-field')).toBe('0.2.30');
     expect(floors.get('author-calc')).toBe('0.2.30');
-    expect(floors.get('list-datasource-logical-tables')).toBe('0.2.31');
     expect(floors.get('get-datasource-underlying-data')).toBe('0.2.31');
   });
 
@@ -856,7 +855,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
   });
 
   it.each(['full', '', 'dynamic-authoring'])(
-    'keeps worksheet and dashboard image exports while gating the 0.2.7 export routes in TOOL_PROFILE=%j',
+    'keeps export-sheet-image while gating workbook-export-as at 0.2.7 in TOOL_PROFILE=%j',
     (profile) => {
       const profileTools = selectToolsForProfile(
         desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
@@ -865,14 +864,10 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
       const at26 = filterToolsByApiVersion(profileTools, '0.2.6').map((tool) => tool.name);
       const at27 = filterToolsByApiVersion(profileTools, '0.2.7').map((tool) => tool.name);
 
-      for (const route of ['export-storyboard-image', 'workbook-export-as']) {
-        expect(at26).not.toContain(route);
-        expect(at27).toContain(route);
-      }
-      for (const route of ['export-worksheet-image', 'export-dashboard-image']) {
-        expect(at26).toContain(route);
-        expect(at27).toContain(route);
-      }
+      expect(at26).not.toContain('workbook-export-as');
+      expect(at27).toContain('workbook-export-as');
+      expect(at26).toContain('export-sheet-image');
+      expect(at27).toContain('export-sheet-image');
     },
   );
 

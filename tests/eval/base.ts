@@ -83,8 +83,8 @@ export async function getAgent({
   model: string;
   mcpServer?: MCPServerStdio;
   // Restrict the agent to these tools, by their recorded (underscored) names — e.g.
-  // ['author_action']. The desktop build exposes ~74 tools; registered both ways (see below)
-  // that is 148, over the model gateway's 128-tool cap. An allow-list also sharpens an arg-only
+  // ['author_action']. The desktop build exposes ~70 tools; registered both ways (see below)
+  // that is 140, over the model gateway's 128-tool cap. An allow-list also sharpens an arg-only
   // eval: with one tool and toolChoice:'required', the grade is purely whether the description
   // steers the arguments, not whether the model found the tool.
   toolAllowList?: Array<string>;

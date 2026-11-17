@@ -6,8 +6,8 @@ import { log } from '../../logging/logger.js';
 // config.desktop.ts `inlineImageMaxBytes` (env-overridable via INLINE_IMAGE_MAX_BYTES).
 export const DEFAULT_INLINE_IMAGE_MAX_BYTES = 1024 * 1024;
 
-// Deadline (ms) applied to the image-render call only (not the sheet-list call that precedes
-// it). The first image call after Desktop launches can hang forever when Desktop is showing a
+// Deadline (ms) applied to the image-render call, including the by-name fallback's sheet-list
+// lookup and second render. The first image call after Desktop launches can hang forever when Desktop is showing a
 // modal dialog that blocks rendering; this bounds that hang into a reportable timeout error.
 // Default for config.desktop.ts `imageExportTimeoutMs` (env-overridable via IMAGE_EXPORT_TIMEOUT_MS).
 export const DEFAULT_IMAGE_EXPORT_TIMEOUT_MS = 30_000;
@@ -54,8 +54,7 @@ export function buildInlineImageCapFileMessage(params: {
     nextStep ??
       'Open the file to view the image. This local cache file remains until manually removed. ' +
         'To get a smaller inline image next time, request a worksheet instead of a whole ' +
-        'dashboard, or pass a filePath to have Tableau write the image directly to a location ' +
-        'of your choosing.',
+        'dashboard.',
   ].join('\n');
 }
 
