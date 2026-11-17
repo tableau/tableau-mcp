@@ -334,8 +334,11 @@ export class DashboardApplyScenario {
         this.files.set(draftFile, args.xmlContent);
         return `Wrote ${Buffer.byteLength(args.xmlContent)} bytes to ${draftFile}\n\nFile is ready to use with apply-* tools.`;
       }
-      case 'get_dashboard_xml': {
-        invariant(args.dashboardName === dashboardName, 'dashboardName is required');
+      case 'get_xml': {
+        invariant(
+          args.kind === 'dashboard' && args.sheetId === dashboardName,
+          'kind=dashboard and sheetId are required',
+        );
         invariant(
           args.mode == null || args.mode === 'file' || args.mode === 'inline',
           'Invalid mode',
@@ -463,7 +466,7 @@ export class DashboardApplyScenario {
   }
 }
 
-const toolNames = ['read_cached_xml', 'write_cached_xml', 'apply_dashboard', 'get_dashboard_xml'];
+const toolNames = ['read_cached_xml', 'write_cached_xml', 'apply_dashboard', 'get_xml'];
 
 export async function getDashboardApplyEvalAgent(
   mcpServer: MCPServerStdio,

@@ -144,7 +144,6 @@ const NON_TOOL_VOCABULARY = [
   'no-desktop-instances-found',
   'non-empty',
   'non-string',
-  'non-template',
   'not-applied',
   'not-found',
   'on-empty',

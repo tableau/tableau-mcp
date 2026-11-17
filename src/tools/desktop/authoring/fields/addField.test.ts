@@ -281,7 +281,7 @@ describe('addFieldTool', () => {
     expect(refreshWorkbookCacheModule.refreshWorkbookCache).not.toHaveBeenCalled();
   });
 
-  // --- name-based path (no prior get-worksheet-xml call) ---
+  // --- name-based path (no prior get-xml call) ---
   it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
     vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
@@ -333,7 +333,7 @@ describe('addFieldTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Could not resolve a stable id for worksheet "Ghost"');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('get-sheets');
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
@@ -383,7 +383,7 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('get-sheets');
     expect(result.content[0].text).toContain('retry');
     expect(result.content[0].text).not.toContain('get-app-info');
     expect(writeFileSync).not.toHaveBeenCalled();

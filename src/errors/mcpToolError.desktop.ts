@@ -224,7 +224,7 @@ export class CacheFileOutsideCacheError extends McpToolError {
       type: 'cache-file-outside-cache',
       message:
         `Security error: ${argName} must be a regular file inside the Desktop cache directory. ` +
-        'Use a file path returned by a get-*/read tool (for example get-workbook-xml or get-worksheet-xml).',
+        'Use a file path returned by a get-*/read tool (for example get-xml).',
       statusCode: 400,
     });
   }

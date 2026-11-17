@@ -5022,7 +5022,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       JSON.stringify({
         status: 'bound',
         guidance:
-          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.',
+          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Post-apply state is uncertain: inspect live worksheet state with get-xml before any correction. Do NOT call bind-template again or replay apply.',
         applied: true,
         sheet_name: 'Sales by Region',
         phase_ms: { bind: 0, inject: 0, apply: 0 },
@@ -8109,7 +8109,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('target_worksheet "No Such Sheet" not found');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('get-sheets');
     expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
     expect(goToSheet).not.toHaveBeenCalled();
@@ -10219,7 +10219,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).not.toContain('HOST VERIFICATION');
     expect(applied.guidance).not.toContain('Done — no further tool calls needed');
     expect(applied.guidance).toContain('inspect live worksheet state');
-    expect(applied.guidance).toContain('get-worksheet-xml');
+    expect(applied.guidance).toContain('get-xml');
     expect(applied.guidance).toContain('Do NOT call bind-template again');
     expect(applied.completionEvidence).toBeUndefined();
     expect(

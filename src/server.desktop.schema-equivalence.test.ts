@@ -117,7 +117,7 @@ describe('desktop tools/list alwaysLoad pins', () => {
     for (const name of pinnedNames) {
       expect(tools.find((tool) => tool.name === name)?._meta).toEqual(ALWAYS_LOAD);
     }
-    const unpinned = tools.find((tool) => tool.name === 'list-worksheets');
+    const unpinned = tools.find((tool) => tool.name === 'get-sheets');
     expect(unpinned).toBeDefined();
     expect(unpinned).not.toHaveProperty('_meta');
     expect(tools.filter((tool) => '_meta' in tool).map((tool) => tool.name)).toEqual(
@@ -140,7 +140,7 @@ describe('desktop tools/list alwaysLoad pins', () => {
     for (const name of pinnedNames) {
       expect(tools.find((tool) => tool.name === name)?._meta).toEqual(ALWAYS_LOAD);
     }
-    const unpinned = tools.find((tool) => tool.name === 'list-worksheets');
+    const unpinned = tools.find((tool) => tool.name === 'get-sheets');
     expect(unpinned).toBeDefined();
     expect(unpinned!._meta).toBeUndefined();
     expect(
@@ -164,7 +164,7 @@ describe('always-load pin list', () => {
   it('is exactly the seven intended tools', () => {
     expect([...ALWAYS_LOAD_TOOL_NAMES].sort()).toEqual(
       [
-        'get-dashboard-xml',
+        'get-xml',
         'invoke-dialog-action',
         'read-expertise-resource',
         'rename-sheet',
