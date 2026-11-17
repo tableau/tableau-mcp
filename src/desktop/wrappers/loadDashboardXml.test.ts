@@ -1344,9 +1344,12 @@ describe('loadDashboardXml (External Client API transport)', () => {
           .mockResolvedValue(Ok({ storyboards: kind === 'storyboard' ? [item] : [] })),
         getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
         getStoryboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
-        applyDashboardDocument,
-        applyStoryboardDocument,
-        applyWorkbookDocument,
+        applyDashboardDocument:
+          applyDashboardDocument as unknown as ExternalApiToolExecutor['applyDashboardDocument'],
+        applyStoryboardDocument:
+          applyStoryboardDocument as unknown as ExternalApiToolExecutor['applyStoryboardDocument'],
+        applyWorkbookDocument:
+          applyWorkbookDocument as unknown as ExternalApiToolExecutor['applyWorkbookDocument'],
       });
       return { executor, applyDashboardDocument, applyStoryboardDocument, applyWorkbookDocument };
     }
