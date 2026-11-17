@@ -40,12 +40,6 @@ export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
     }
   }
 
-  async close(): Promise<void> {
-    for (const timer of this.refreshTimers.values()) clearTimeout(timer);
-    this.refreshTimers.clear();
-    this.map.clear();
-  }
-
   delete(key: string): Promise<void> {
     this.clearRefreshTimer(key);
     this.map.delete(key);

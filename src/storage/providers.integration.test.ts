@@ -5,12 +5,7 @@ import {
   resetSessionStore,
 } from '../sessionStore/init.js';
 import { stubDefaultEnvVars } from '../testShared.js';
-import {
-  disconnectKeyValueStore,
-  getKeyValueStore,
-  initializeKeyValueStore,
-  resetKeyValueStore,
-} from './init.js';
+import { getKeyValueStore, initializeKeyValueStore, resetKeyValueStore } from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 
 // Real Config/env parsing and real module loaders; no mocked storage wiring.
@@ -32,7 +27,7 @@ describe('session and KV environment configuration', () => {
   });
   afterEach(async () => {
     await disconnectSessionStore();
-    await disconnectKeyValueStore();
+    vi.clearAllTimers();
     vi.useRealTimers();
     vi.unstubAllEnvs();
   });

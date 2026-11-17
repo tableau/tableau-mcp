@@ -9,9 +9,9 @@ import {
   disconnectSessionStore,
   initializeSessionStore,
 } from '../sessionStore/init.js';
-import { disconnectKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
+import { initializeKeyValueStore } from '../storage/init.js';
 
-// Minimal shutdown hook: release storage provider resources and flush the Activity Log
+// Minimal shutdown hook: release the session store's backend resources and flush the Activity Log
 // on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
 // draining, no Express close).
 const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -23,7 +23,7 @@ function registerSessionStoreShutdown(): void {
       try {
         // A hung backend must not keep the process alive after SIGTERM.
         await Promise.race([
-          Promise.all([disconnectSessionStore(), disconnectKeyValueStore(), closeActivityLog()]),
+          Promise.all([disconnectSessionStore(), closeActivityLog()]),
           new Promise<never>((_, reject) => {
             timer = setTimeout(
               () => reject(new Error(`Shutdown timed out after ${SHUTDOWN_TIMEOUT_MS} ms`)),
@@ -36,7 +36,7 @@ function registerSessionStoreShutdown(): void {
       } catch (error) {
         clearTimeout(timer);
         log({
-          message: 'Error closing storage providers or Activity Log during shutdown',
+          message: 'Error closing session store or Activity Log during shutdown',
           level: 'error',
           logger: 'shutdown',
           data: error,

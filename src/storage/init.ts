@@ -1,4 +1,4 @@
-/** Independent KV provider initialization, access, and cleanup. */
+/** Independent KV provider initialization and access. */
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
@@ -7,10 +7,9 @@ import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 import type { KeyValueStore } from './keyValueStore.js';
 
-type StoreProvider = KeyValueStore<unknown> & { close?(): Promise<void> };
-let state: StoreProvider | null = null;
+let state: KeyValueStore<unknown> | null = null;
 
-function validateProvider(provider: unknown): asserts provider is StoreProvider {
+function validateProvider(provider: unknown): asserts provider is KeyValueStore<unknown> {
   if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) {
     throw new Error('Provider must be an object');
   }
@@ -38,13 +37,7 @@ export function getKeyValueStore(): KeyValueStore<unknown> {
   return state;
 }
 
-export async function disconnectKeyValueStore(): Promise<void> {
-  await state?.close?.();
-  state = null;
-  log({ message: 'Key-value store shutdown complete', level: 'info', logger: 'storage' });
-}
-
-function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
+function loadCustomProvider(config: Record<string, unknown>): KeyValueStore<unknown> {
   if (!config.module) {
     throw new Error('Custom key-value store provider requires "module" in providerConfig');
   }

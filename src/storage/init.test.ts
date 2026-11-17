@@ -12,12 +12,7 @@ import {
   initializeSessionStore,
   resetSessionStore,
 } from '../sessionStore/init.js';
-import {
-  disconnectKeyValueStore,
-  getKeyValueStore,
-  initializeKeyValueStore,
-  resetKeyValueStore,
-} from './init.js';
+import { getKeyValueStore, initializeKeyValueStore, resetKeyValueStore } from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 import type { KeyValueStore } from './keyValueStore.js';
 
@@ -48,8 +43,8 @@ describe('independent KV provider', () => {
     globalThis.__keyValueProviderConfig = undefined;
     globalThis.__keyValueProviderInstance = undefined;
   });
-  afterEach(async () => {
-    await disconnectKeyValueStore();
+  afterEach(() => {
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -175,34 +170,12 @@ describe('independent KV provider', () => {
     );
   });
 
-  it('cleans up memory data and timers and makes the getter unavailable on shutdown', async () => {
-    initializeKeyValueStore();
-    await getKeyValueStore().set('key', 'value', { ttlMs: 1000 });
-    await disconnectKeyValueStore();
-    expect(vi.getTimerCount()).toBe(0);
-    expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
-  });
-
-  it('retains a provider when cleanup fails and does not log shutdown success', async () => {
-    useCustomProvider({ rejectClose: true });
-    initializeKeyValueStore();
-    const store = getKeyValueStore();
-    vi.mocked(log).mockClear();
-    await expect(disconnectKeyValueStore()).rejects.toThrow('close failed');
-    expect(getKeyValueStore()).toBe(store);
-    expect(log).not.toHaveBeenCalled();
-    // Allow afterEach to release this test fixture.
-    useCustomProvider();
-    resetKeyValueStore();
-  });
-
   it('does not log keys, values, or configuration', async () => {
     const marker = 'PRIVATE_KV_DATA';
     useCustomProvider({ credential: marker });
     initializeKeyValueStore();
     await getKeyValueStore().set(marker, marker, { ttlMs: 100 });
     await getKeyValueStore().consume(marker);
-    await disconnectKeyValueStore();
     expect(JSON.stringify(vi.mocked(log).mock.calls)).not.toContain(marker);
   });
 });

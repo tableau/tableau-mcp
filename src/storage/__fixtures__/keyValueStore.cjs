@@ -5,7 +5,6 @@ class KeyValueStore {
       throw new Error(JSON.stringify(config), { cause: new Error(config.credential) });
     }
     this.map = new Map();
-    this.config = config;
     globalThis.__keyValueProviderConfig = config;
     globalThis.__keyValueProviderInstance = this;
     if (config.omitConsume) this.consume = undefined;
@@ -44,12 +43,6 @@ class KeyValueStore {
     const value = this.read(key);
     this.map.delete(key);
     return Promise.resolve(value);
-  }
-
-  close() {
-    if (this.config.rejectClose) return Promise.reject(new Error('close failed'));
-    this.map.clear();
-    return Promise.resolve();
   }
 }
 

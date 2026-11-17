@@ -9,7 +9,7 @@ import {
   disconnectSessionStore,
   initializeSessionStore,
 } from '../sessionStore/init.js';
-import { disconnectKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
+import { initializeKeyValueStore } from '../storage/init.js';
 
 const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
@@ -57,7 +57,6 @@ vi.mock('../sdks/tableau/restApi.js', () => ({
 
 vi.mock('../storage/init.js', () => ({
   initializeKeyValueStore: vi.fn(),
-  disconnectKeyValueStore: vi.fn(async () => undefined),
 }));
 
 vi.mock('../sessionStore/init.js', () => ({
@@ -225,7 +224,6 @@ describe('initializeWebRuntime', () => {
 
     await runtimeState.shutdownHandlers.get('SIGINT')!();
     expect(disconnectSessionStore).toHaveBeenCalledOnce();
-    expect(disconnectKeyValueStore).toHaveBeenCalledOnce();
     expect(closeActivityLog).toHaveBeenCalledOnce();
     expect(processExitSpy).toHaveBeenLastCalledWith(0);
 
@@ -235,7 +233,7 @@ describe('initializeWebRuntime', () => {
     expect(closeActivityLog).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Error closing storage providers or Activity Log during shutdown',
+        message: 'Error closing session store or Activity Log during shutdown',
         level: 'error',
         logger: 'shutdown',
       }),

@@ -2,7 +2,10 @@ import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 
 describe('InMemoryKeyValueStore per-write expiration', () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
 
   it('uses independent lifetimes for keys in the same store', async () => {
     const store = new InMemoryKeyValueStore<string>();
@@ -93,17 +96,5 @@ describe('InMemoryKeyValueStore per-write expiration', () => {
     await vi.advanceTimersByTimeAsync(26 * 24 * 60 * 60 * 1000);
     await expect(store.get('key')).resolves.toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it('clears ordinary and long-TTL records and timers on close', async () => {
-    const store = new InMemoryKeyValueStore<string>();
-    await store.set('short', 'a', { ttlMs: 100 });
-    await store.set('long', 'b', { ttlMs: 30 * 24 * 60 * 60 * 1000 });
-    await store.close();
-    expect(vi.getTimerCount()).toBe(0);
-    await expect(store.get('short')).resolves.toBeUndefined();
-    await expect(store.get('long')).resolves.toBeUndefined();
-    await vi.advanceTimersByTimeAsync(31 * 24 * 60 * 60 * 1000);
-    await expect(store.get('long')).resolves.toBeUndefined();
   });
 });

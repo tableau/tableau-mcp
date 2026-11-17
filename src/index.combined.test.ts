@@ -93,7 +93,6 @@ vi.mock('./sdks/tableau/restApi.js', () => ({
 
 vi.mock('./storage/init.js', () => ({
   initializeKeyValueStore: vi.fn(),
-  disconnectKeyValueStore: vi.fn(async () => undefined),
 }));
 
 vi.mock('./sessionStore/init.js', () => ({

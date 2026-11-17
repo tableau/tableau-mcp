@@ -22,7 +22,7 @@ settings configure generic key-value storage. OAuth session storage has its own
 
 Startup calls `initializeKeyValueStore()` to construct and validate the configured provider.
 The getter returns that exact instance and does not initialize it lazily. KV providers do not
-have an `init()` hook. A provider may expose `close(): Promise<void>` for cleanup at shutdown.
+have lifecycle hooks.
 
 Invalid configuration, module-loading failures, and missing operations fail startup. An
 explicitly configured custom provider is never silently replaced with memory. Malformed JSON,
@@ -65,7 +65,7 @@ write's TTL; reads do not extend it.
 
 The memory implementation uses ExpiringMap timers, supports lifetimes beyond Node's timer
 limit, and clamps non-positive TTLs to one millisecond. Timer cleanup can be delayed while the
-event loop is blocked. Shutdown clears stored records and timers.
+event loop is blocked.
 
 Custom providers enforce the supplied lifetime themselves. Expired data must not be returned
 merely because the backing service has not physically deleted it yet.
