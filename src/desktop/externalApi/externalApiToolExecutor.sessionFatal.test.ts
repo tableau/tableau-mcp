@@ -1,5 +1,5 @@
 import { DesktopMcpServer } from '../../server.desktop.js';
-import { getGetWorkbookXmlTool } from '../../tools/desktop/api/getWorkbookXml.js';
+import { getXmlTool } from '../../tools/desktop/api/getXml.js';
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { Provider } from '../../utils/provider.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
@@ -180,10 +180,16 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
         tableauErrorCode: 'E71AE512',
       }),
     });
-    const callback = await Provider.from(getGetWorkbookXmlTool(new DesktopMcpServer()).callback);
+    const callback = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
 
     const result = await callback(
-      { session: '999', mode: 'inline' },
+      {
+        session: '999',
+        kind: undefined,
+        sheetId: undefined,
+        datasourceId: undefined,
+        mode: 'inline',
+      },
       {
         ...getMockRequestHandlerExtra(),
         getExecutor: vi.fn().mockResolvedValue(executor),
