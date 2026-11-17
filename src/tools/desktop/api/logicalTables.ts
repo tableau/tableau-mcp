@@ -36,7 +36,7 @@ export function buildRowsToolResult({
   cachePrefix,
 }: {
   rows: DataTable;
-  mode: 'file' | 'inline' | undefined;
+  mode: 'file' | 'inline';
   cachePrefix: string;
 }): CallToolResult {
   const text = JSON.stringify(table);

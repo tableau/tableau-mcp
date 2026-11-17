@@ -20,7 +20,7 @@ import { buildCachedImageToolResult, writeImageCacheFile } from './exportSheetIm
 
 const paramsSchema = {
   session: sessionParam(),
-  mode: outputModeParam(),
+  mode: outputModeParam({ inlineCap: true }),
   filePath: imageFilePathParam(),
 };
 

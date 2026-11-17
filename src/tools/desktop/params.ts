@@ -23,12 +23,18 @@ export function sessionParam(options: { max?: number } = {}): z.ZodOptional<z.Zo
   return base.optional().describe('Session ID; optional if pinned or unique.');
 }
 
-export function outputModeParam(): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'inline']>>> {
+export function outputModeParam(
+  options: { inlineCap?: boolean } = {},
+): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'inline']>>> {
   return z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file: cache path; inline: content.');
+    .describe(
+      options.inlineCap
+        ? 'file: cache path; inline: content, or a path if over cap.'
+        : 'file: cache path; inline: content.',
+    );
 }
 
 export function imageFilePathParam(): z.ZodOptional<z.ZodString> {

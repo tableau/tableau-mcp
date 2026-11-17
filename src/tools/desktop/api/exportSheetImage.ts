@@ -23,7 +23,7 @@ const paramsSchema = {
   session: sessionParam(),
   sheetId: z.string().min(1).describe('Sheet id; a unique name also works.'),
   kind: z.enum(['worksheet', 'dashboard', 'storyboard']).describe('Sheet kind.'),
-  mode: outputModeParam(),
+  mode: outputModeParam({ inlineCap: true }),
   filePath: imageFilePathParam(),
   mimeType: z.enum(['image/png', 'image/svg+xml']).optional().describe('Defaults to image/png.'),
 };

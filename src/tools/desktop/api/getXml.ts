@@ -43,7 +43,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe('Datasource id or name, for kind datasource.'),
-  mode: outputModeParam(),
+  mode: outputModeParam({ inlineCap: true }),
 };
 
 type GetXmlToolResult =

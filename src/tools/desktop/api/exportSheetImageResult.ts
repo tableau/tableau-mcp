@@ -20,11 +20,11 @@ type BuildSheetImageToolResultArgs = {
   tool: string;
   /** Human label for messages, e.g. `Worksheet` / `Dashboard`. */
   label: string;
-  /** Cache-file prefix used when the cap forces a file, e.g. `worksheet-image`. */
+  /** Cache-file prefix for file-mode and over-cap exports, e.g. `worksheet-image`. */
   cachePrefix: string;
   /** The Desktop image export envelope. */
   image: ImageResult;
-  mode: 'file' | 'inline' | undefined;
+  mode: 'file' | 'inline';
   config: Config;
 };
 
@@ -143,7 +143,7 @@ export function buildSheetImageToolResult({
       content: [
         {
           type: 'text',
-          text: `${label} image export returned neither image bytes nor a file path. Pass a filePath to have Tableau write the image to disk instead of returning it inline.`,
+          text: `${label} image export returned neither image bytes nor a file path.`,
         },
       ],
     };
