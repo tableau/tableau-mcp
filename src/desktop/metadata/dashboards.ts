@@ -9,14 +9,7 @@ import {
 import type { ParsedDashboard, ParsedWindow, ParsedWorkbook } from './types.js';
 
 type SizingMode =
-  | 'auto'
-  | 'fixed'
-  | 'min'
-  | 'max'
-  | 'range'
-  | 'fit-width'
-  | 'fit-height'
-  | 'vscroll';
+  'auto' | 'fixed' | 'min' | 'max' | 'range' | 'fit-width' | 'fit-height' | 'vscroll';
 
 function createValidSize(
   sizingMode: SizingMode,

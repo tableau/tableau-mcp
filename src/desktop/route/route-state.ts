@@ -53,10 +53,7 @@ export interface RouteOverride {
 export type BindOutcome = 'bound' | 'propose' | 'escalate';
 
 export type BindRecoveryPhase =
-  | 'awaiting-proposal'
-  | 'proposal-attempted'
-  | 'retry-used'
-  | 'terminal';
+  'awaiting-proposal' | 'proposal-attempted' | 'retry-used' | 'terminal';
 
 /** Maximum genuinely distinct proposal corrections retained for one normalized ask. */
 export const MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES = 8;

@@ -645,8 +645,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   const runElements = selectElements('//run', doc);
   for (const run of runElements) {
     const textNode = Array.from(run.childNodes).find((n) => n.nodeType === TEXT_NODE) as
-      | Text
-      | undefined;
+      Text | undefined;
     if (textNode) {
       const text = textNode.data;
       if (text.includes('\n') || text.includes('<') || text.includes('>')) {

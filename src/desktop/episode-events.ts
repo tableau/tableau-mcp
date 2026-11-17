@@ -35,12 +35,7 @@ export type DesktopRpcOperation = 'read' | 'command' | 'document_apply';
 export const TOOL_PROFILE_NAMES = ['dynamic-authoring', 'demo', 'full', 'combined-lean'] as const;
 export type ToolSchemaProfile = (typeof TOOL_PROFILE_NAMES)[number];
 export type BatchApplyOutcome =
-  | 'succeeded'
-  | 'partial'
-  | 'unknown'
-  | 'refused'
-  | 'failed'
-  | 'aborted';
+  'succeeded' | 'partial' | 'unknown' | 'refused' | 'failed' | 'aborted';
 
 export type EpisodeEventInput =
   | (SessionEventBase & {

@@ -28,13 +28,12 @@ const VALID_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 const MALFORMED_XML = '<worksheet name="Sheet1"><table></worksheet>';
 
 function setupCacheMock(): void {
-  vi.mocked(DesktopCache).mockImplementation(
-    () =>
-      ({
-        getCacheFilePath: ({ prefix, id }: { prefix: string; id?: string }) =>
-          `${CACHE_DIR}/${prefix}-${id ?? 'default'}.xml`,
-      }) as unknown as DesktopCache,
-  );
+  vi.mocked(DesktopCache).mockImplementation(function () {
+    return {
+      getCacheFilePath: ({ prefix, id }: { prefix: string; id?: string }) =>
+        `${CACHE_DIR}/${prefix}-${id ?? 'default'}.xml`,
+    } as unknown as DesktopCache;
+  });
 }
 
 function mockPinnedSession(desktopSessionId: string | undefined): void {

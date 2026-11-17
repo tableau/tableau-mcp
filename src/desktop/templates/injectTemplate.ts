@@ -62,8 +62,7 @@ export function injectTemplate(
   carryNamespaceDeclarations(template.workbook as Record<string, unknown>, wb);
 
   const templateContainer = (template.workbook as Record<string, unknown>)?.[container] as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (!templateContainer) throw new Error(`Template does not contain <${container}>`);
 
   const templateSheets = normalizeArray<unknown>(templateContainer[element]);

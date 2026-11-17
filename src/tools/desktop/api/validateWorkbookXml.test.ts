@@ -11,6 +11,7 @@ import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import type { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getValidateWorkbookXmlTool } from './validateWorkbookXml.js';
 
@@ -102,7 +103,7 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
 
     const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>', {
       session: '999',
-      getExecutor: vi.fn().mockResolvedValue(executor),
+      getExecutor: vi.fn<GetExecutor>().mockResolvedValue(executor),
     });
 
     expect(result.isError).toBe(false);
@@ -134,7 +135,7 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
 
     const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>', {
       session: '999',
-      getExecutor: vi.fn().mockResolvedValue(executor),
+      getExecutor: vi.fn<GetExecutor>().mockResolvedValue(executor),
     });
 
     expect(result.isError).toBe(true);
@@ -156,7 +157,7 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
 
     const result = await getResult('<workbook><worksheets></workbook>', {
       session: '999',
-      getExecutor: vi.fn().mockResolvedValue(executor),
+      getExecutor: vi.fn<GetExecutor>().mockResolvedValue(executor),
     });
 
     expect(result.isError).toBe(true);
@@ -181,7 +182,7 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
 
     const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>', {
       session: '999',
-      getExecutor: vi.fn().mockResolvedValue(executor),
+      getExecutor: vi.fn<GetExecutor>().mockResolvedValue(executor),
     });
 
     expect(result.isError).toBe(true);
@@ -190,9 +191,11 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
   });
 });
 
+type GetExecutor = TableauDesktopToolContext['getExecutor'];
+
 function getResult(
   xml: string,
-  options?: { session?: string; getExecutor?: ReturnType<typeof vi.fn> },
+  options?: { session?: string; getExecutor?: GetExecutor },
 ): Promise<CallToolResult> {
   const tool = getValidateWorkbookXmlTool(new DesktopMcpServer());
   return Provider.from(tool.callback).then((callback) =>

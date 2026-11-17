@@ -5,11 +5,7 @@ import { parseShelfValue } from './shelfTree.js';
 import type { ParsedWorksheet } from './types.js';
 
 export type SearchWorkbookFieldMatchAttribute =
-  | 'caption'
-  | 'localName'
-  | 'formula'
-  | 'folder'
-  | 'datasource';
+  'caption' | 'localName' | 'formula' | 'folder' | 'datasource';
 
 export interface SearchWorkbookFieldPlacement {
   worksheet: string;

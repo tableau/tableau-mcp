@@ -1,12 +1,5 @@
 export type EncodingType =
-  | 'color'
-  | 'size'
-  | 'lod'
-  | 'detail'
-  | 'text'
-  | 'tooltip'
-  | 'path'
-  | 'angle';
+  'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
 
 export type FieldLocation = 'rows' | 'cols' | 'encodings';
 
