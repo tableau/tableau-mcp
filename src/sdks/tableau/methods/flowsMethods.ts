@@ -57,31 +57,6 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
   };
 
   /**
-   * Returns flows the user owns or can view. Required scope: `tableau:flows:read`.
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flows_for_user
-   */
-  queryFlowsForUser = async ({
-    siteId,
-    userId,
-    ownedBy,
-    pageSize,
-    pageNumber,
-  }: {
-    siteId: string;
-    userId: string;
-    ownedBy?: boolean;
-    pageSize?: number;
-    pageNumber?: number;
-  }): Promise<{ pagination: Pagination; flows: Flow[] }> => {
-    const response = await this._apiClient.queryFlowsForUser({
-      params: { siteId, userId },
-      queries: { ownedBy, pageSize, pageNumber },
-      ...this.authHeader,
-    });
-    return { pagination: response.pagination, flows: response.flows.flow ?? [] };
-  };
-
-  /**
    * Returns information about the specified flow, including the flow's output steps,
    * project, owner, tags, and parameters.
    *

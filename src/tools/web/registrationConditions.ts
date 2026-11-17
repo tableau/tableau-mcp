@@ -194,8 +194,8 @@ function unmet(
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
   RequiresFlows:
-    'NOTE: Tableau Flow tools were omitted because flow ownership or administrator access ' +
-    'could not be confirmed. Publish a flow or ask your Tableau administrator about access, ' +
+    'NOTE: Tableau Flow tools were omitted because access to a visible flow or administrator access ' +
+    'could not be confirmed. Ask your Tableau administrator about access to flows, ' +
     'then reconnect to check again.',
   // Kept generic: the probe cannot tell a site without Knowledge from a denied check.
   RequiresKnowledge:
@@ -252,7 +252,7 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 /** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
 export const MAX_API_RETRY_ATTEMPTS = 2;
 
-/** One single-item ownership query, with no retries or pagination. Admins need not own flows. */
+/** One single-item visible-flow query, with no retries or pagination. Admins need not have flows. */
 async function checkFlowsAvailable(
   restApiArgs: RestApiArgs,
   context: RegistrationContext,
@@ -263,13 +263,8 @@ async function checkFlowsAvailable(
       signal: AbortSignal.any([restApiArgs.signal, AbortSignal.timeout(5_000)]),
       jwtScopes: REGISTRATION_CONDITION_API_SCOPES.RequiresFlows,
       callback: async (restApi) => {
-        // Bearer tokens without MFA omit the userId claim; auth resolves it from the session.
-        const userId = restApi.userId || restApiArgs.tableauAuthInfo?.userId;
-        if (!userId) return false;
-        const { flows } = await restApi.flowsMethods.queryFlowsForUser({
+        const { flows } = await restApi.flowsMethods.queryFlowsForSite({
           siteId: restApi.siteId,
-          userId,
-          ownedBy: true,
           pageSize: 1,
         });
         if (flows.length > 0) return true;

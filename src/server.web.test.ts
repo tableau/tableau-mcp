@@ -724,7 +724,7 @@ describe('server', () => {
           conditions.includes('RequiresFlows'),
         ),
       ).toHaveLength(9);
-      if (!available) expect(getInstructions(server)).toContain('Publish a flow');
+      if (!available) expect(getInstructions(server)).toContain('access to flows');
     },
   );
 

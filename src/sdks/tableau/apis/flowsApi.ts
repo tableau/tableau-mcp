@@ -106,20 +106,6 @@ const queryFlowEndpoint = makeEndpoint({
   }),
 });
 
-const queryFlowsForUserEndpoint = makeEndpoint({
-  method: 'get',
-  path: '/sites/:siteId/users/:userId/flows',
-  alias: 'queryFlowsForUser',
-  description: 'Returns flows the user owns, or can view when ownedBy is false.',
-  parameters: [
-    ...paginationParameters,
-    pathParam('siteId', 'segment'),
-    pathParam('userId'),
-    { name: 'ownedBy', type: 'Query', schema: z.boolean().optional() },
-  ],
-  response: queryFlowsForSiteEndpoint.response,
-});
-
 const queryFlowConnectionsEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/flows/:flowId/connections',
@@ -192,7 +178,6 @@ const cancelFlowRunEndpoint = makeEndpoint({
 
 const flowsApi = makeApi([
   queryFlowsForSiteEndpoint,
-  queryFlowsForUserEndpoint,
   queryFlowEndpoint,
   queryFlowConnectionsEndpoint,
   getFlowRunsEndpoint,
