@@ -20,6 +20,7 @@ declare global {
   var __sharedSessionBackend: Map<string, unknown> | undefined;
   var __sharedSessionStoresText: boolean | undefined;
   var __sharedSessionStoreDown: boolean | undefined;
+  var __sharedSessionStoreErrorCode: string | undefined;
 }
 
 type EvidenceModule = typeof import('./evidence.js');
@@ -57,6 +58,7 @@ describe('preview evidence across replicas sharing a custom session store', () =
     globalThis.__sharedSessionBackend = undefined;
     globalThis.__sharedSessionStoresText = undefined;
     globalThis.__sharedSessionStoreDown = undefined;
+    globalThis.__sharedSessionStoreErrorCode = undefined;
   });
 
   it('works with a provider that stores values as text', async () => {
@@ -124,6 +126,23 @@ describe('preview evidence across replicas sharing a custom session store', () =
       },
     });
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('test-password');
+  });
+
+  it('does not log a store error code that is not code-shaped', async () => {
+    const a = await startReplica();
+    globalThis.__sharedSessionStoreDown = true;
+    globalThis.__sharedSessionStoreErrorCode = 'secret123';
+
+    await expect(new a.RegistryEvidence().establish(makeCtx())).rejects.toThrow(
+      'confirmation store is unavailable',
+    );
+    expect(mocks.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Preview evidence store operation failed',
+        data: expect.objectContaining({ operation: 'set', errorCode: undefined }),
+      }),
+    );
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('secret123');
   });
 
   it('confirms a RegistryEvidence nonce on a different replica, exactly once', async () => {

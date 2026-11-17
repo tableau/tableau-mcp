@@ -165,11 +165,14 @@ function sha256(fields: ReadonlyArray<string>): string {
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 
-// Provider errors can carry credentials in any field, so only identifier-shaped values are logged.
-function safeIdentifier(value: unknown): string | undefined {
-  const text = typeof value === 'number' ? String(value) : value;
-  return typeof text === 'string' && /^[\w.-]{1,64}$/.test(text) ? text : undefined;
+// Provider errors can carry credentials in any field, so only values shaped like an error class name
+// (`ConditionalCheckFailedException`) or a system/driver code (`ECONNREFUSED`) are logged.
+function safeErrorLabel(value: unknown, pattern: RegExp): string | undefined {
+  return typeof value === 'string' && pattern.test(value) ? value : undefined;
 }
+
+const ERROR_NAME_PATTERN = /^([A-Z][A-Za-z]{0,60})?(Error|Exception)$/;
+const ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,40}$/;
 
 // Store failures surface as a fixed message so backend details (hosts, ports) never reach a client.
 async function withStore<T>(
@@ -188,8 +191,8 @@ async function withStore<T>(
       data: {
         namespace,
         operation,
-        errorName: safeIdentifier(name),
-        errorCode: safeIdentifier(code),
+        errorName: safeErrorLabel(name, ERROR_NAME_PATTERN),
+        errorCode: safeErrorLabel(code, ERROR_CODE_PATTERN),
       },
     });
     throw new EvidenceStoreUnavailableError();
