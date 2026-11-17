@@ -3218,6 +3218,7 @@ describe('bindTemplateTool', () => {
     const { manifests } = vi.mocked(binderModule.bindTemplate).mock.calls[0][0];
     expect([...manifests.keys()]).toEqual(['seam-probe']);
     expect(manifests.get('seam-probe')).toMatchObject({ template: fakeDescriptor.template });
+    expect(manifests.get('seam-probe')?.slots).toEqual(fakeDescriptor.slots);
   });
 });
 

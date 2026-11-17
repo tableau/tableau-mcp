@@ -214,34 +214,33 @@ describe('authorization code callback', () => {
   it('should match site by contentUrl when contentUrl differs from display name', async () => {
     vi.stubEnv('SITE_NAME', 'Internal');
 
-    vi.mocked(RestApi).mockImplementationOnce(
-      () =>
-        ({
-          signIn: vi.fn().mockResolvedValue(undefined),
-          signOut: vi.fn().mockResolvedValue(undefined),
-          setCredentials: vi.fn().mockResolvedValue(undefined),
-          authenticatedServerMethods: {
-            getCurrentServerSession: vi.fn().mockResolvedValue(
-              Ok({
-                site: {
-                  id: 'site_id',
-                  name: '[INTERNAL] My Company',
-                  contentUrl: 'Internal',
-                },
-                user: {
-                  id: 'user_id',
-                  name: 'test-user',
-                },
-              }),
-            ),
-          },
-          serverMethods: {
-            getServerInfo: vi.fn().mockResolvedValue({
-              productVersion: testProductVersion,
+    vi.mocked(RestApi).mockImplementationOnce(function () {
+      return {
+        signIn: vi.fn().mockResolvedValue(undefined),
+        signOut: vi.fn().mockResolvedValue(undefined),
+        setCredentials: vi.fn().mockResolvedValue(undefined),
+        authenticatedServerMethods: {
+          getCurrentServerSession: vi.fn().mockResolvedValue(
+            Ok({
+              site: {
+                id: 'site_id',
+                name: '[INTERNAL] My Company',
+                contentUrl: 'Internal',
+              },
+              user: {
+                id: 'user_id',
+                name: 'test-user',
+              },
             }),
-          },
-        }) as unknown as RestApi,
-    );
+          ),
+        },
+        serverMethods: {
+          getServerInfo: vi.fn().mockResolvedValue({
+            productVersion: testProductVersion,
+          }),
+        },
+      } as unknown as RestApi;
+    });
 
     const { app } = await startServer();
 
