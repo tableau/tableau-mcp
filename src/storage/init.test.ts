@@ -169,7 +169,7 @@ describe('independent KV provider', () => {
   });
 
   it('requires a default or named KeyValueStore export', () => {
-    useCustomProvider({ module: './src/sessionStore/__fixtures__/namedSessionStore.cjs' });
+    useCustomProvider({ module: './src/storage/__fixtures__/sessionStore.cjs' });
     expect(() => initializeKeyValueStore()).toThrow(
       'Failed to load custom key-value store provider',
     );

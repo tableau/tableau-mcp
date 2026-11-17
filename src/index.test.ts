@@ -108,6 +108,9 @@ vi.mock('./storage/init.js', () => ({
 
 vi.mock('./sessionStore/init.js', () => ({
   initializeSessionStore: vi.fn(() => {
+    startupState.events.push('session store init');
+  }),
+  connectSessionStore: vi.fn(() => {
     startupState.events.push('session store connected');
     return startupState.connectPromise;
   }),
@@ -171,6 +174,7 @@ describe('default entrypoint startup', () => {
     expect(startupState.events).toEqual([
       'feature gate',
       'activity log init',
+      'session store init',
       'session store connected',
       'server info',
       'http opened',

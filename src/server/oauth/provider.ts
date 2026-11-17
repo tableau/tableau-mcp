@@ -63,9 +63,7 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
     });
   private readonly authorizationCodes: SessionStore<AuthorizationCode> = createNamespacedStore(
     'authorizationCode',
-    {
-      ttlMs: getConfig().oauth.authzCodeTimeoutMs,
-    },
+    { ttlMs: getConfig().oauth.authzCodeTimeoutMs },
   );
   private readonly refreshTokens: SessionStore<RefreshTokenData> = createNamespacedStore(
     'refreshToken',
@@ -78,10 +76,7 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   );
   private readonly clientRegistrations: SessionStore<ClientRegistration> = createNamespacedStore(
     'clientRegistration',
-    {
-      ttlMs: milliseconds.fromDays(24),
-      maxSize: 10_000,
-    },
+    { ttlMs: milliseconds.fromDays(24), maxSize: 10_000 },
   );
 
   private readonly privateKey: KeyObject;

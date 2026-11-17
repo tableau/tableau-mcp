@@ -113,7 +113,8 @@ vi.mock('./storage/init.js', () => ({
 }));
 
 vi.mock('./sessionStore/init.js', () => ({
-  initializeSessionStore: vi.fn(async () => {
+  initializeSessionStore: vi.fn(),
+  connectSessionStore: vi.fn(async () => {
     await startupState.connectPromise;
     startupState.sessionStoreConnected = true;
   }),
@@ -132,7 +133,7 @@ import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger } from './logging/fileLogger.js';
 import { startExpressServer } from './server/express.js';
-import { initializeSessionStore } from './sessionStore/init.js';
+import { connectSessionStore, initializeSessionStore } from './sessionStore/init.js';
 
 function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void } {
   let reject!: (reason?: unknown) => void;
@@ -205,7 +206,7 @@ describe('desktop binary startup', () => {
     startupState.connectPromise = connect.promise;
 
     await import('./index.desktop.js');
-    await vi.waitFor(() => expect(initializeSessionStore).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(connectSessionStore).toHaveBeenCalledOnce());
     connect.reject(new Error('session store init failed'));
     await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalledWith(1));
 

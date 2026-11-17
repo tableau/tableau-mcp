@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../../logging/logger.js';
-import type { SessionStore } from '../../sessionStore/sessionStore.js';
+import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema } from './schemas.js';
 import { RefreshTokenData } from './types.js';
 

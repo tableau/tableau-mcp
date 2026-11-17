@@ -14,7 +14,7 @@ export function isSessionStoreProvider(provider: unknown): provider is SessionSt
 }
 
 /**
- * Schema for in-memory session store config (per-instance InMemorySessionStore)
+ * Schema for in-memory session store config (per-namespace InMemorySessionStore)
  */
 export const memorySessionStoreConfigSchema = z.object({
   provider: z.literal('memory'),

@@ -1,17 +1,17 @@
 import {
+  connectSessionStore,
+  createNamespacedStore,
+  disconnectSessionStore,
+  resetSessionStore,
+} from '../sessionStore/init.js';
+import { stubDefaultEnvVars } from '../testShared.js';
+import {
   disconnectKeyValueStore,
   getKeyValueStore,
   initializeKeyValueStore,
   resetKeyValueStore,
-} from '../storage/init.js';
-import { InMemoryKeyValueStore } from '../storage/inMemoryKeyValueStore.js';
-import { stubDefaultEnvVars } from '../testShared.js';
-import {
-  createNamespacedStore,
-  disconnectSessionStore,
-  initializeSessionStore,
-  resetSessionStore,
 } from './init.js';
+import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 
 // Real Config/env parsing and real module loaders; no mocked storage wiring.
 describe('session and KV environment configuration', () => {
@@ -41,9 +41,9 @@ describe('session and KV environment configuration', () => {
     vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
     vi.stubEnv(
       'SESSION_STORE_PROVIDER_CONFIG',
-      JSON.stringify({ module: './src/sessionStore/__fixtures__/namedSessionStore.cjs' }),
+      JSON.stringify({ module: './src/storage/__fixtures__/sessionStore.cjs' }),
     );
-    await initializeSessionStore();
+    await connectSessionStore();
     initializeKeyValueStore();
     expect(getKeyValueStore()).toBeInstanceOf(InMemoryKeyValueStore);
     const first = createNamespacedStore<string>('codes', { ttlMs: 100 });
@@ -66,7 +66,7 @@ describe('session and KV environment configuration', () => {
       'KV_STORE_PROVIDER_CONFIG',
       JSON.stringify({ module: './src/storage/__fixtures__/keyValueStore.cjs', throwOnInit: true }),
     );
-    await initializeSessionStore();
+    await connectSessionStore();
     initializeKeyValueStore();
     expect(globalThis.__initCalls).toBe(1);
     const session = createNamespacedStore<string>('codes', { ttlMs: 100 });

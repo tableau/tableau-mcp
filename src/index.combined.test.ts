@@ -97,7 +97,8 @@ vi.mock('./storage/init.js', () => ({
 }));
 
 vi.mock('./sessionStore/init.js', () => ({
-  initializeSessionStore: vi.fn(async () => {
+  initializeSessionStore: vi.fn(),
+  connectSessionStore: vi.fn(async () => {
     startupState.sessionStoreConnected = true;
   }),
   disconnectSessionStore: vi.fn(async () => {
@@ -136,7 +137,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
-import { initializeSessionStore } from './sessionStore/init.js';
+import { connectSessionStore } from './sessionStore/init.js';
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -186,7 +187,7 @@ describe('combined entrypoint startup', () => {
 
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
     expect(initializeActivityLog).toHaveBeenCalledOnce();
-    expect(initializeSessionStore).toHaveBeenCalledOnce();
+    expect(connectSessionStore).toHaveBeenCalledOnce();
     expect(McpServer).not.toHaveBeenCalled();
 
     serverInfo.resolve({});

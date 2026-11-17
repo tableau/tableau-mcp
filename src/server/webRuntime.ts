@@ -4,15 +4,19 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import { disconnectSessionStore, initializeSessionStore } from '../sessionStore/init.js';
+import {
+  connectSessionStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+} from '../sessionStore/init.js';
 import { disconnectKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
 
-// Minimal shutdown hook: release both storage providers and flush the Activity Log
+// Minimal shutdown hook: release storage provider resources and flush the Activity Log
 // on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
 // draining, no Express close).
 const SHUTDOWN_TIMEOUT_MS = 5000;
 
-function registerStorageShutdown(): void {
+function registerSessionStoreShutdown(): void {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, async () => {
       let timer: NodeJS.Timeout | undefined;
@@ -50,9 +54,10 @@ export async function initializeWebRuntime(
 
   initializeFeatureGate();
   await initializeActivityLog();
-  await initializeSessionStore();
-  await initializeKeyValueStore();
-  registerStorageShutdown();
+  initializeSessionStore();
+  await connectSessionStore();
+  initializeKeyValueStore();
+  registerSessionStoreShutdown();
 
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
     log({

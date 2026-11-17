@@ -15,6 +15,7 @@ import {
 import { log } from './logging/logger.js';
 import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
+  isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
   SessionStoreConfig,
 } from './sessionStore/types.js';
@@ -387,7 +388,7 @@ export class Config extends BaseConfig {
       };
     }
 
-    // KV and SessionStore have separate contracts and independent provider settings.
+    // Key-value store provider configuration
     if (keyValueStoreProvider === undefined && keyValueStoreProviderConfig !== undefined) {
       throw new Error('KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided');
     }
@@ -403,15 +404,24 @@ export class Config extends BaseConfig {
             ),
           }
         : { provider: 'memory' };
-    this.sessionStore =
-      sessionStoreProvider === 'custom'
-        ? {
-            provider: 'custom',
-            providerConfig: sessionStoreProviderConfigSchema.parse(
-              parseStorageProviderConfig(sessionStoreProviderConfig, 'SESSION_STORE_PROVIDER'),
-            ),
-          }
-        : { provider: 'memory' };
+    // Session store provider configuration (similar to feature gate provider)
+    if (isSessionStoreProvider(sessionStoreProvider) && sessionStoreProvider === 'custom') {
+      if (!sessionStoreProviderConfig) {
+        throw new Error(
+          'SESSION_STORE_PROVIDER_CONFIG is required when SESSION_STORE_PROVIDER is "custom"',
+        );
+      }
+      this.sessionStore = {
+        provider: 'custom',
+        providerConfig: sessionStoreProviderConfigSchema.parse(
+          JSON.parse(sessionStoreProviderConfig),
+        ),
+      };
+    } else {
+      this.sessionStore = {
+        provider: 'memory',
+      };
+    }
 
     // Activity Log provider configuration (similar to feature gate provider)
     if (isActivityLogProvider(activityLogProvider) && activityLogProvider === 'custom') {

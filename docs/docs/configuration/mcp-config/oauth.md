@@ -463,17 +463,7 @@ SESSION_STORE_PROVIDER_CONFIG='{"module":"./my-session-store.js"}'
 
 The custom provider module should export a default class or named export `SessionStore` that
 implements the [`SessionStore`](https://github.com/tableau/tableau-mcp/blob/main/src/sessionStore/sessionStore.ts)
-type, available at `@tableau/mcp-server/sessionStore/sessionStore`. It provides
-`get(key)`, `set(key, value)`, `delete(key)`, and atomic `consume(key)` operations.
-
-Custom providers may implement `configureNamespace(namespace, { ttlMs, maxSize? })` to receive
-expiration and capacity settings for each namespace. Keys are prefixed with `<namespace>:`.
-Providers enforce their own expiration and capacity policies.
-
-The optional `init()` hook is awaited during startup, and `close()` is awaited during shutdown.
-Each memory session-store handle has its own fixed TTL and capacity bound.
-
-`consume` must be implemented as a truly atomic operation against the backing store
+interface. `consume` must be implemented as a truly atomic operation against the backing store
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
 Redis, or a transaction for a relational store).
 

@@ -8,7 +8,7 @@ import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
-import type { SessionStore } from '../../sessionStore/sessionStore.js';
+import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
 import { siteBindingRequired, siteMatchesConfig } from './siteBinding.js';

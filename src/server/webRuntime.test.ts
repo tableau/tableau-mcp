@@ -4,7 +4,11 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import { disconnectSessionStore, initializeSessionStore } from '../sessionStore/init.js';
+import {
+  connectSessionStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+} from '../sessionStore/init.js';
 import { disconnectKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
 
 const runtimeState = vi.hoisted(() => ({
@@ -51,8 +55,16 @@ vi.mock('../sdks/tableau/restApi.js', () => ({
   RestApi: { host: '' },
 }));
 
+vi.mock('../storage/init.js', () => ({
+  initializeKeyValueStore: vi.fn(),
+  disconnectKeyValueStore: vi.fn(async () => undefined),
+}));
+
 vi.mock('../sessionStore/init.js', () => ({
   initializeSessionStore: vi.fn(() => {
+    runtimeState.events.push('session store init');
+  }),
+  connectSessionStore: vi.fn(() => {
     runtimeState.events.push('session store connect');
     return runtimeState.connectPromise;
   }),
@@ -64,11 +76,6 @@ vi.mock('../sessionStore/init.js', () => ({
       throw new Error('session store close failed');
     }
   }),
-}));
-
-vi.mock('../storage/init.js', () => ({
-  initializeKeyValueStore: vi.fn(),
-  disconnectKeyValueStore: vi.fn(async () => undefined),
 }));
 
 import { initializeWebRuntime } from './webRuntime.js';
@@ -123,12 +130,13 @@ describe('initializeWebRuntime', () => {
     runtimeState.serverInfoPromise = serverInfo.promise;
 
     const runtimePromise = initializeWebRuntime(config);
-    await vi.waitFor(() => expect(initializeSessionStore).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(connectSessionStore).toHaveBeenCalledOnce());
 
     expect(RestApi.host).toBe(config.server);
     expect(runtimeState.events).toEqual([
       'feature gate',
       'activity log init',
+      'session store init',
       'session store connect',
     ]);
     expect(initializeKeyValueStore).not.toHaveBeenCalled();
@@ -141,6 +149,7 @@ describe('initializeWebRuntime', () => {
     expect(runtimeState.events).toEqual([
       'feature gate',
       'activity log init',
+      'session store init',
       'session store connect',
       'server info',
     ]);
@@ -160,7 +169,7 @@ describe('initializeWebRuntime', () => {
     expect(ready).toBe(true);
   });
 
-  it('waits for Activity Log init before connecting the session store', async () => {
+  it('waits for Activity Log init before initializing the session store', async () => {
     const activityLogInit = deferred<void>();
     runtimeState.activityLogInitPromise = activityLogInit.promise;
 
@@ -176,7 +185,7 @@ describe('initializeWebRuntime', () => {
     expect(runtimeState.events.slice(0, 3)).toEqual([
       'feature gate',
       'activity log init',
-      'session store connect',
+      'session store init',
     ]);
   });
 
@@ -223,7 +232,6 @@ describe('initializeWebRuntime', () => {
     runtimeState.disconnectShouldReject = true;
     await runtimeState.shutdownHandlers.get('SIGTERM')!();
     expect(disconnectSessionStore).toHaveBeenCalledTimes(2);
-    expect(disconnectKeyValueStore).toHaveBeenCalledTimes(2);
     expect(closeActivityLog).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -258,8 +266,7 @@ describe('initializeWebRuntime', () => {
       vi.useRealTimers();
     }
   });
-
-  it('does not register startup handlers when the generic KV provider cannot initialize', async () => {
+  it('fails startup before registering handlers when the KV provider cannot initialize', async () => {
     vi.mocked(initializeKeyValueStore).mockImplementationOnce(() => {
       throw new Error('KV load failed');
     });
