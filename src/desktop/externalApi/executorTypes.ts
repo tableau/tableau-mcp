@@ -19,8 +19,7 @@ export type GetCommandStatusResponse = z.infer<typeof getCommandStatusResponseSc
 
 // Passthrough: carriers add extension keys (e.g. `tableau-error-code`) beyond the required three.
 export type ExecuteCommandResponseError =
-  | ({ code: string; message: string; recoverable: boolean } & Record<string, unknown>)
-  | undefined;
+  ({ code: string; message: string; recoverable: boolean } & Record<string, unknown>) | undefined;
 
 type WithAbortSignal = {
   signal: AbortSignal;

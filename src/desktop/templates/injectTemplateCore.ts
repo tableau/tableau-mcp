@@ -247,8 +247,7 @@ function spliceHistogramBinSize(templateXml: string, binSize: number | undefined
  * Structural failures inside injectTemplate THROW and propagate to the caller.
  */
 export type InjectTemplateCoreResult =
-  | { ok: true; xml: string; warnings?: string[] }
-  | { ok: false; issues: string[] };
+  { ok: true; xml: string; warnings?: string[] } | { ok: false; issues: string[] };
 
 /**
  * True when any `<zone>` element ANYWHERE in the parsed workbook carries the sheet
@@ -316,9 +315,7 @@ export function workbookHasSheetNamed(workbookXml: string, name: string): boolea
     const container = root?.[containerName];
     if (!container || typeof container !== 'object') return false;
     const sheets = (container as Record<string, unknown>)[sheetName] as
-      | Record<string, unknown>
-      | Record<string, unknown>[]
-      | undefined;
+      Record<string, unknown> | Record<string, unknown>[] | undefined;
     return normalizeArray<Record<string, unknown>>(sheets).some((sheet) => {
       const sheetName = sheet['@_name'];
       return typeof sheetName === 'string' && parsedXmlNamesEqual(sheetName, name);

@@ -20,11 +20,13 @@ describe('initializeTelemetry', () => {
     stubDefaultEnvVars();
 
     // Default mock implementations
-    mocks.MockNoOpTelemetryProvider.mockImplementation(() => ({
-      initialize: vi.fn(),
-      recordMetric: vi.fn(),
-      recordHistogram: vi.fn(),
-    }));
+    mocks.MockNoOpTelemetryProvider.mockImplementation(function () {
+      return {
+        initialize: vi.fn(),
+        recordMetric: vi.fn(),
+        recordHistogram: vi.fn(),
+      };
+    });
   });
 
   afterEach(() => {
