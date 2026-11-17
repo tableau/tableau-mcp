@@ -167,3 +167,30 @@ describe('CabuMethods.streamUtterance', () => {
     }
   });
 });
+
+describe('CabuMethods.waitForSampling', () => {
+  it('requests the sampling stream and resolves complete on its terminal event', async () => {
+    const cabuMethods = makeMethods();
+    const stream = fakeStream([
+      'event: status\ndata: {"status":"IN_PROGRESS"}\n\n',
+      'event: status\ndata: {"status":"COMPLETED"}\n\n',
+      'event: complete\ndata: {}\n\n',
+    ]);
+    const get = vi.fn().mockResolvedValue({ data: stream });
+    // @ts-expect-error - Replacing the Axios client for transport configuration coverage.
+    cabuMethods._apiClient.axios.get = get;
+
+    const result = await cabuMethods.waitForSampling('conv-1', 10_000);
+
+    expect(result).toEqual({ status: 'complete', responseComplete: undefined });
+    expect(get).toHaveBeenCalledWith('/conversations/conv-1/sampling/stream', {
+      headers: {
+        Authorization: 'Bearer token',
+        Cookie: 'XSRF-TOKEN=tableau-mcp',
+        'X-XSRF-TOKEN': 'tableau-mcp',
+      },
+      responseType: 'stream',
+      timeout: 10_000,
+    });
+  });
+});

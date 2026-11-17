@@ -11,6 +11,9 @@ import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const mocks = vi.hoisted(() => ({
   mockStartConversation: vi.fn(),
+  mockWaitForSampling: vi.fn(),
+  mockQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
 
@@ -19,6 +22,13 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       cabuMethods: {
         startConversation: mocks.mockStartConversation,
+        waitForSampling: mocks.mockWaitForSampling,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
       },
       siteId: 'test-site-id',
     }),
@@ -69,11 +79,109 @@ describe('cabuStartConversationTool', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.conversationId).toBe('conversation-1');
     expect(typeof parsed.utteranceArgs).toBe('string');
+    expect(mocks.mockWaitForSampling).not.toHaveBeenCalled();
     expect(decodeUtteranceArgs(parsed.utteranceArgs)).toEqual({
       scope: 'tenant-123',
       datasources: [{ datasourceLuid: '11111111-1111-1111-1111-111111111111' }],
       localization: { locale: 'en-US', language: 'en' },
       embedded: false,
+    });
+  });
+
+  describe('with a workbookLuid', () => {
+    const datasourceLuid = '11111111-1111-1111-1111-111111111111';
+    const workbookLuid = '22222222-2222-2222-2222-222222222222';
+
+    beforeEach(() => {
+      mocks.mockQueryDatasource.mockResolvedValue({ id: datasourceLuid, name: 'Superstore' });
+      mocks.mockStartConversation.mockResolvedValue({
+        conversationId: 'conversation-1',
+        scope: 'tenant-123',
+        datasources: [{ datasourceLuid, vdsDatasourceLuid: 'embedded-copy-luid' }],
+      });
+      mocks.mockWaitForSampling.mockResolvedValue({ status: 'complete' });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: 'embedded-copy-luid', name: 'Superstore' } },
+      ]);
+    });
+
+    it('sends the workbook and the datasource name CES matches its connection by', async () => {
+      // An embedded copy of a published datasource has its own id but keeps the published name.
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: 'embedded-copy-luid', name: 'Superstore' } },
+      ]);
+
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockStartConversation).toHaveBeenCalledWith({
+        workbookLuid,
+        dashboardDatasources: [{ datasourceLuid, name: 'Superstore' }],
+        embedded: false,
+      });
+    });
+
+    it('waits for field sampling before returning, so the session outlives it', async () => {
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockWaitForSampling).toHaveBeenCalledWith('conversation-1', expect.any(Number));
+    });
+
+    it('does not wait when CES resolved no data source to sample', async () => {
+      mocks.mockStartConversation.mockResolvedValue({
+        conversationId: 'conversation-1',
+        scope: 'tenant-123',
+        datasources: [{ datasourceLuid, vdsDatasourceLuid: null }],
+      });
+
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockWaitForSampling).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['fails', () => mocks.mockWaitForSampling.mockRejectedValue(new Error('403'))],
+      ['times out', () => mocks.mockWaitForSampling.mockResolvedValue({ status: 'incomplete' })],
+    ])('still returns the conversation when sampling %s', async (_, arrange) => {
+      arrange();
+
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).conversationId).toBe('conversation-1');
+    });
+
+    it('returns an error and starts no conversation when the workbook does not use the datasource', async () => {
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: 'other-luid', name: 'Medicare-Claims' } },
+      ]);
+
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('does not connect to the data source "Superstore"');
+      expect(mocks.mockStartConversation).not.toHaveBeenCalled();
+    });
+
+    it('returns a workbook-not-allowed error when the workbook is outside tool-scoping', async () => {
+      vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-luid');
+
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        `Querying the workbook with LUID ${workbookLuid} is not allowed.`,
+      );
+      expect(mocks.mockStartConversation).not.toHaveBeenCalled();
     });
   });
 

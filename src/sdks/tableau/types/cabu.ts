@@ -63,6 +63,9 @@ export type UtteranceSource = z.infer<typeof utteranceSourceSchema>;
 // --- POST conversations ---
 
 export const cabuConversationRequestSchema = z.object({
+  // With a workbook, CES samples field values from the workbook's connection to each datasource
+  // (matched by `name`) and loads the workbook's business preferences.
+  workbookLuid: z.string().optional(),
   dashboardDatasources: z.array(dashboardDatasourceMetadataSchema),
   embedded: z.boolean().optional(),
 });

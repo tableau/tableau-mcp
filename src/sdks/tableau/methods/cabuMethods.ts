@@ -98,4 +98,29 @@ export default class CabuMethods extends AuthenticatedMethods<typeof cabuApis> {
 
     return drainSseStream(response.data, this._streamTimeoutMs);
   };
+
+  /**
+   * Waits on a conversation's field-value sampling stream until CES reports it finished, or until
+   * `timeoutMs`. CES samples in the background with the caller's session, so a caller that signs
+   * out right after `startConversation` cancels it.
+   */
+  waitForSampling = async (
+    conversationId: string,
+    timeoutMs: number,
+  ): Promise<CabuStreamResult> => {
+    const response = await this._apiClient.axios.get(
+      buildRestPath('conversations', conversationId, 'sampling', 'stream'),
+      {
+        headers: {
+          ...this.authHeader.headers,
+          Cookie: `XSRF-TOKEN=${XSRF_TOKEN_VALUE}`,
+          'X-XSRF-TOKEN': XSRF_TOKEN_VALUE,
+        },
+        responseType: 'stream',
+        timeout: timeoutMs,
+      },
+    );
+
+    return drainSseStream(response.data, timeoutMs);
+  };
 }
