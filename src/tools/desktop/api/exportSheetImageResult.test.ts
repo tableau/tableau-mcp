@@ -49,7 +49,7 @@ describe('buildCachedImageToolResult', () => {
     const bytes = Buffer.from([0, 1, 2, 3, 254, 255]);
 
     const result = buildCachedImageToolResult({
-      tool: 'export-worksheet-image',
+      tool: 'export-sheet-image',
       label: 'Worksheet',
       cachePrefix: 'worksheet-image',
       bytes,
@@ -87,7 +87,7 @@ describe('buildCachedImageToolResult', () => {
 
       expect(() =>
         buildCachedImageToolResult({
-          tool: 'export-worksheet-image',
+          tool: 'export-sheet-image',
           label: 'Worksheet',
           cachePrefix: 'worksheet-image',
           bytes: Buffer.from([1, 2, 3, 4]),

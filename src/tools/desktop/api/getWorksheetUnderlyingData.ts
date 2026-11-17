@@ -8,6 +8,7 @@ import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { resolveLogicalTable, rowParamsWithoutTable } from './logicalTables.js';
 import { qualifyColumnFields } from './qualifyColumnField.js';
 
 const DEFAULT_MAX_ROWS = 200;
@@ -15,19 +16,18 @@ const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().describe('Worksheet name/id.'),
-  logicalTable: z
+  sheetId: z.string().min(1).describe('Worksheet id; a name also works.'),
+  logicalTableId: z
     .string()
-    .describe("A logical table caption or id from the worksheet's logical tables."),
+    .min(1)
+    .optional()
+    .describe('Logical table id or caption. Omit it to list the tables.'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   includeAllColumns: z
     .boolean()
     .optional()
-    .describe('Include every column, not only the ones the view references.'),
-  columns: z
-    .array(z.string())
-    .optional()
-    .describe('Field names to restrict the columns (e.g. "Region").'),
+    .describe('Include columns the view does not reference.'),
+  columns: z.array(z.string()).optional().describe('Field names to keep (e.g. "Region").'),
 };
 const title = 'Get Worksheet Underlying Data';
 
@@ -39,7 +39,7 @@ export const getWorksheetUnderlyingDataTool = (
     name: 'get-worksheet-underlying-data',
     title,
     description:
-      "Read row-level underlying data for one of a worksheet's logical tables (see list-worksheet-logical-tables).",
+      "Without logicalTableId: a worksheet's logical tables (id + caption). With it: that table's underlying rows.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -48,53 +48,65 @@ export const getWorksheetUnderlyingDataTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, worksheet, logicalTable, maxRows, includeAllColumns, columns },
+      { session, sheetId, logicalTableId, maxRows, includeAllColumns, columns },
       extra,
     ): Promise<CallToolResult> => {
       return await getWorksheetUnderlyingData.logAndExecute({
         extra,
-        args: { session, worksheet, logicalTable, maxRows, includeAllColumns, columns },
+        args: { session, sheetId, logicalTableId, maxRows, includeAllColumns, columns },
         callback: async () => {
+          if (logicalTableId === undefined) {
+            const stray = rowParamsWithoutTable({ maxRows, includeAllColumns, columns });
+            if (stray) {
+              return stray.toErr();
+            }
+          }
+
           return await runExternalApiReadTool({
             session,
             extra,
-            callback: async (executor, _signal, read) => {
-              const listResult = await read(
-                'worksheet list',
-                async (activeExecutor, activeSignal) =>
-                  await activeExecutor.listWorksheets(activeSignal),
-              );
-              if (listResult.isErr()) {
-                return listResult;
+            callback: async (executor, signal, read) => {
+              let worksheetId = sheetId;
+              let byId = await executor.listWorksheetLogicalTables(worksheetId, signal);
+              if (
+                byId.isErr() &&
+                byId.error.type === 'command-failed' &&
+                byId.error.error?.code === 'sheet-not-found'
+              ) {
+                const listResult = await read(
+                  'worksheet list',
+                  async (activeExecutor, activeSignal) =>
+                    await activeExecutor.listWorksheets(activeSignal),
+                );
+                if (listResult.isErr()) {
+                  return listResult;
+                }
+                const worksheetResult = resolveItemByNameOrId(
+                  'Worksheet',
+                  sheetId,
+                  listResult.value.worksheets ?? [],
+                );
+                if (worksheetResult.isErr()) {
+                  return worksheetResult.error.toErr();
+                }
+                if (worksheetResult.value.id !== sheetId) {
+                  worksheetId = worksheetResult.value.id;
+                  byId = await executor.listWorksheetLogicalTables(worksheetId, signal);
+                }
               }
-
-              const worksheetResult = resolveItemByNameOrId(
-                'Worksheet',
-                worksheet,
-                listResult.value.worksheets ?? [],
-              );
-              if (worksheetResult.isErr()) {
-                return worksheetResult.error.toErr();
-              }
-              const worksheetId = worksheetResult.value.id;
-
               const tablesResult = await read(
                 'worksheet logical tables',
-                async (activeExecutor, activeSignal) =>
-                  await activeExecutor.listWorksheetLogicalTables(worksheetId, activeSignal),
+                async () => await Promise.resolve(byId),
               );
-              if (tablesResult.isErr()) {
+              if (tablesResult.isErr() || logicalTableId === undefined) {
                 return tablesResult;
               }
-              const tables = (tablesResult.value.tables ?? []).map((table) => ({
-                id: table.id ?? '',
-                name: table.caption ?? table.id ?? '',
-              }));
-              const tableMatch = resolveItemByNameOrId('Logical table', logicalTable, tables);
+
+              const tableMatch = resolveLogicalTable(logicalTableId, tablesResult.value);
               if (tableMatch.isErr()) {
                 return tableMatch.error.toErr();
               }
-              const logicalTableId = tableMatch.value.id;
+              const resolvedTableId = tableMatch.value.id;
 
               let qualifiedColumns: Array<string> | undefined;
               if (columns && columns.length > 0) {
@@ -131,7 +143,7 @@ export const getWorksheetUnderlyingDataTool = (
                 async (activeExecutor, activeSignal) =>
                   await activeExecutor.getWorksheetUnderlyingData(
                     worksheetId,
-                    logicalTableId,
+                    resolvedTableId,
                     query,
                     activeSignal,
                   ),

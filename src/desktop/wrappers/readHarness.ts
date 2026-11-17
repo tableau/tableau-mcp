@@ -30,9 +30,6 @@ export type ExternalApiCall = <T>(
   },
 ) => Promise<Result<T, McpToolError>>;
 
-/** @deprecated Use {@link ExternalApiCall}; retained for source compatibility. */
-export type ExternalApiRead = ExternalApiCall;
-
 type RunExternalApiToolOptions<T> = {
   session: string | undefined;
   extra: ExternalApiHarnessExtra;

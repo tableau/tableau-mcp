@@ -10,9 +10,7 @@ import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
 import { getCloseWorkbookTool } from './api/closeWorkbook.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
-import { exportDashboardImageTool } from './api/exportDashboardImage.js';
-import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
-import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
+import { exportSheetImageTool } from './api/exportSheetImage.js';
 import { getActiveDialogsTool } from './api/getActiveDialogs.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
@@ -29,10 +27,8 @@ import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData
 import { getWorkspaceExtensionsTool } from './api/getWorkspaceExtensions.js';
 import { getXmlTool } from './api/getXml.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
-import { getListDatasourceLogicalTablesTool } from './api/listDatasourceLogicalTables.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListSavedDatasourcesTool } from './api/listSavedDatasources.js';
-import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
 import { getRefreshDatasourceTool } from './api/refreshDatasource.js';
@@ -138,14 +134,10 @@ export const desktopToolFactories = [
   getAuthorParameterTool,
   getApplyStoryboardTool,
   getSummaryDataTool,
-  getListWorksheetLogicalTablesTool,
   getWorksheetUnderlyingDataTool,
-  getListDatasourceLogicalTablesTool,
   getDatasourceUnderlyingDataTool,
   getCaptureWindowScreenshotTool,
-  exportWorksheetImageTool,
-  exportDashboardImageTool,
-  exportStoryboardImageTool,
+  exportSheetImageTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getValidateCalculatedFieldTool,

@@ -4,8 +4,6 @@ import { Result } from 'ts-results-es';
 
 import { Config } from '../../../config.desktop.js';
 import { DesktopCache } from '../../../desktop/cache.js';
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { ImageResult } from '../../../desktop/externalApi/types.js';
 import {
   buildInlineImageCapFileMessage,
@@ -14,7 +12,6 @@ import {
   isOverInlineImageCap,
   logInlineImageCapHit,
 } from '../../../desktop/limits/inlineImageCap.js';
-import { ExternalApiRead } from '../../../desktop/wrappers/readHarness.js';
 import { ImageExportTimeoutError } from '../../../errors/mcpToolError.desktop.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 
@@ -197,41 +194,27 @@ export function resolveImageExportQuery(args: { filePath?: string; mimeType?: st
 }
 
 /**
- * Runs an image-render call under a deadline scoped to that call only (the sheet-list call that
- * precedes it rides `signal`, the request's own signal). The first render after Desktop launches
- * can hang forever behind a modal dialog; this converts that into a reportable timeout instead of
- * an unbounded wait. The harness `read()` always passes the request signal into the closure, so
- * `doExport` receives the `combined` signal explicitly and must forward it to the executor.
+ * Runs an image export under a deadline scoped to that export only. The first render after
+ * Desktop launches can hang forever behind a modal dialog; this converts that into a reportable
+ * timeout instead of an unbounded wait. `exportImage` must forward `combined` to the executor.
  *
- * A timeout is distinguished from a caller cancellation: only when the timeout fired AND the
- * request signal did not is the failure reported as {@link ImageExportTimeoutError}; a cancelled
- * request keeps its original error. Shared by the worksheet and dashboard export tools, whose only
- * differences are the label, endpoint name, and executor method.
+ * Only when the timeout fired AND the request signal did not is the failure reported as
+ * {@link ImageExportTimeoutError}; a cancelled request keeps its original error.
  */
 export async function exportSheetImageWithDeadline({
   label,
-  endpoint,
   timeoutMs,
   signal,
-  read,
-  doExport,
+  exportImage,
 }: {
   label: string;
-  endpoint: string;
   timeoutMs: number;
   signal: AbortSignal;
-  read: ExternalApiRead;
-  doExport: (
-    executor: ExternalApiToolExecutor,
-    combined: AbortSignal,
-  ) => Promise<Result<ImageResult, ExecuteCommandError>>;
+  exportImage: (combined: AbortSignal) => Promise<Result<ImageResult, McpToolError>>;
 }): Promise<Result<ImageResult, McpToolError>> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const combined = AbortSignal.any([signal, timeoutSignal]);
-  const imageResult = await read<ImageResult>(
-    endpoint,
-    async (executor) => await doExport(executor, combined),
-  );
+  const imageResult = await exportImage(combined);
   if (imageResult.isErr() && timeoutSignal.aborted && !signal.aborted) {
     return new ImageExportTimeoutError(label, timeoutMs).toErr();
   }

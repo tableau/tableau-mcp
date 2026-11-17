@@ -1,32 +1,42 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
-import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
-import { DatasourceLogicalTableDataQuery } from '../../../desktop/externalApi/types.js';
+import {
+  DatasourceItem,
+  DatasourceLogicalTableDataQuery,
+} from '../../../desktop/externalApi/types.js';
 import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactNameParam, sessionParam } from '../params.js';
+import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { isNotADatasourceId } from './getDatasources.js';
+import { resolveLogicalTable, rowParamsWithoutTable } from './logicalTables.js';
 import { isDatasourceQualified } from './qualifyColumnField.js';
-import { resolveDatasourceRef } from './resolveDatasourceRef.js';
+import { resolveDatasource } from './resolveDatasourceRef.js';
 
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
   session: sessionParam(),
-  datasourceName: artifactNameParam('datasource', { min: 1 }),
-  logicalTable: z
+  datasourceId: z
     .string()
     .min(1)
-    .describe("A logical table caption or id from the datasource's logical tables."),
+    .describe('Datasource id, as returned (percent-encoded); a name or caption also works.'),
+  logicalTableId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Logical table id or caption. Omit it to list the tables.'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   columns: z
     .array(z.string().min(1))
     .optional()
-    .describe('Source column names to restrict the columns (e.g. "Region").'),
+    .describe('Source column names to keep (e.g. "Region").'),
 };
 const title = 'Get Datasource Underlying Data';
 
@@ -39,7 +49,7 @@ export const getDatasourceUnderlyingDataTool = (
     minApiVersion: DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION,
     title,
     description:
-      "Read raw row-level data for one of a datasource's logical tables (see list-datasource-logical-tables), independent of any worksheet.",
+      "Without logicalTableId: a datasource's logical tables (id + caption). With it: that table's raw rows, independent of any worksheet.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -48,67 +58,104 @@ export const getDatasourceUnderlyingDataTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, datasourceName, logicalTable, maxRows, columns },
+      { session, datasourceId, logicalTableId, maxRows, columns },
       extra,
     ): Promise<CallToolResult> => {
       return await getDatasourceUnderlyingData.logAndExecute({
         extra,
-        args: { session, datasourceName, logicalTable, maxRows, columns },
+        args: { session, datasourceId, logicalTableId, maxRows, columns },
         callback: async () => {
-          const resolved = await resolveDatasourceRef({ session, datasourceName, extra });
-          if (resolved.isErr()) {
-            return resolved;
+          if (logicalTableId === undefined) {
+            const stray = rowParamsWithoutTable({ maxRows, columns });
+            if (stray) {
+              return stray.toErr();
+            }
           }
-          const { id: datasourceId, name: internalName, caption } = resolved.value;
 
           return await runExternalApiReadTool({
-            session: resolved.value.resolvedSession,
+            session,
             extra,
-            callback: async (activeExecutor, _signal, read) => {
+            callback: async (executor, signal, read) => {
+              let resolvedId = datasourceId;
+              let datasources: DatasourceItem[] | undefined;
+              const listDatasources = async (): Promise<Result<DatasourceItem[], McpToolError>> =>
+                (
+                  await read(
+                    'workbook datasources',
+                    async (activeExecutor, activeSignal) =>
+                      await activeExecutor.listWorkbookDatasources(activeSignal),
+                  )
+                ).map((list) => list.datasources ?? []);
+
+              let byId = await executor.listDatasourceLogicalTables(resolvedId, signal);
+              if (byId.isErr() && isNotADatasourceId(byId.error)) {
+                const list = await listDatasources();
+                if (list.isErr()) {
+                  return list;
+                }
+                datasources = list.value;
+                const resolved = resolveDatasource(datasourceId, datasources);
+                if (resolved.isErr()) {
+                  return resolved.error.toErr();
+                }
+                if (resolved.value.id !== datasourceId) {
+                  resolvedId = resolved.value.id;
+                  byId = await executor.listDatasourceLogicalTables(resolvedId, signal);
+                }
+              }
               const tablesResult = await read(
                 'datasource logical tables',
-                async (executor, signal) =>
-                  await executor.listDatasourceLogicalTables(datasourceId, signal),
+                async () => await Promise.resolve(byId),
               );
-              if (tablesResult.isErr()) {
+              if (tablesResult.isErr() || logicalTableId === undefined) {
                 return tablesResult;
               }
-              const tables = (tablesResult.value.tables ?? []).map((table) => ({
-                id: table.id ?? '',
-                name: table.caption ?? table.id ?? '',
-              }));
-              const tableMatch = resolveItemByNameOrId('Logical table', logicalTable, tables);
+
+              const tableMatch = resolveLogicalTable(logicalTableId, tablesResult.value);
               if (tableMatch.isErr()) {
                 return tableMatch.error.toErr();
               }
-              const logicalTableId = tableMatch.value.id;
+              const resolvedTableId = tableMatch.value.id;
+
+              let qualifiedColumns: string[] | undefined;
+              if (columns && columns.length > 0) {
+                if (datasources === undefined) {
+                  const list = await listDatasources();
+                  if (list.isErr()) {
+                    return list;
+                  }
+                  datasources = list.value;
+                }
+                const datasource = resolveDatasource(resolvedId, datasources);
+                if (datasource.isErr()) {
+                  return datasource.error.toErr();
+                }
+                const { name: internalName, caption } = datasource.value;
+                qualifiedColumns = columns.map((raw) => {
+                  const column = raw.trim();
+                  return isDatasourceQualified(column)
+                    ? column
+                    : qualifyDatasourceColumn(
+                        executor.desktopApiVersion,
+                        { internalName, caption: caption ?? internalName },
+                        column,
+                      );
+                });
+              }
 
               const query: DatasourceLogicalTableDataQuery = {
                 maxRows: Math.min(maxRows ?? DEFAULT_MAX_ROWS, MAX_ROWS_CAP),
-                ...(columns && columns.length > 0
-                  ? {
-                      columnsToIncludeByFieldName: columns.map((raw) => {
-                        const column = raw.trim();
-                        return isDatasourceQualified(column)
-                          ? column
-                          : qualifyDatasourceColumn(
-                              activeExecutor.desktopApiVersion,
-                              { internalName, caption },
-                              column,
-                            );
-                      }),
-                    }
-                  : {}),
+                ...(qualifiedColumns ? { columnsToIncludeByFieldName: qualifiedColumns } : {}),
               };
 
               return await read(
                 'datasource underlying data',
-                async (executor, signal) =>
-                  await executor.getDatasourceLogicalTableData(
-                    datasourceId,
-                    logicalTableId,
+                async (activeExecutor, activeSignal) =>
+                  await activeExecutor.getDatasourceLogicalTableData(
+                    resolvedId,
+                    resolvedTableId,
                     query,
-                    signal,
+                    activeSignal,
                   ),
               );
             },
