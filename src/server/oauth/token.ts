@@ -9,7 +9,7 @@ import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js'
 import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
-import type { KeyValueStore } from '../../storage/keyValueStore.js';
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
@@ -33,10 +33,10 @@ export const AUDIENCE = 'tableau-mcp-server';
  */
 export function token(
   app: express.Application,
-  authorizationCodes: KeyValueStore<AuthorizationCode>,
-  refreshTokens: KeyValueStore<RefreshTokenData>,
+  authorizationCodes: SessionStore<AuthorizationCode>,
+  refreshTokens: SessionStore<RefreshTokenData>,
   publicKey: KeyObject,
-  refreshTokenIndex: KeyValueStore<string>,
+  refreshTokenIndex: SessionStore<string>,
 ): void {
   const config = getConfig();
 

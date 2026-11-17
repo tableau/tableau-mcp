@@ -1,4 +1,8 @@
+import { inspect } from 'node:util';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
 
 vi.mock('../config.js', () => ({
   getConfig: vi.fn(() => ({
@@ -7,7 +11,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getConfig } from '../config.js';
-import type { KeyValueStore } from '../storage/keyValueStore.js';
+import { log } from '../logging/logger.js';
 import {
   connectSessionStore,
   createNamespacedStore,
@@ -15,6 +19,7 @@ import {
   initializeSessionStore,
   resetSessionStore,
 } from './init.js';
+import type { SessionStore } from './sessionStore.js';
 import { isSessionStoreProvider, sessionStoreProviderSchema } from './types.js';
 
 const FAKE_STORE_MODULE = './src/sessionStore/__fixtures__/fakeSessionStore.cjs';
@@ -88,7 +93,7 @@ describe('SessionStore init', () => {
       } as any);
 
       await expect(initializeSessionStore()).rejects.toThrow(
-        /Failed to load custom key-value store provider/,
+        /Failed to load custom session store provider/,
       );
     });
 
@@ -116,7 +121,7 @@ describe('SessionStore init', () => {
 
     it('requires initialization before creating a store', () => {
       expect(() => createNamespacedStore('ns', { ttlMs: 10000 })).toThrow(
-        'Key-value store is not initialized.',
+        'Session store is not initialized.',
       );
       expect(getConfig).not.toHaveBeenCalled();
     });
@@ -187,21 +192,21 @@ describe('SessionStore init', () => {
     });
   });
 
-  describe('generic storage compatibility', () => {
+  describe('custom session providers', () => {
     function useCustomStore(module: string, options: Record<string, unknown> = {}): void {
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: { provider: 'custom', providerConfig: { module, ...options } },
       } as any);
     }
 
-    it('uses an unchanged legacy provider through the generic contract', async () => {
+    it('uses an custom provider with the two-argument set contract', async () => {
       useCustomStore(FAKE_STORE_MODULE);
       await initializeSessionStore();
 
-      const sessions: KeyValueStore<{ userId: string }> = createNamespacedStore('sessions', {
+      const sessions: SessionStore<{ userId: string }> = createNamespacedStore('sessions', {
         ttlMs: 10000,
       });
-      const proofs: KeyValueStore<string> = createNamespacedStore('proofs', {
+      const proofs: SessionStore<string> = createNamespacedStore('proofs', {
         ttlMs: 1000,
       });
 
@@ -226,7 +231,7 @@ describe('SessionStore init', () => {
       expect(globalThis.__initCalls).toBe(1);
     });
 
-    it('legacy lifecycle aliases share the same initializer and only initialize once', async () => {
+    it('session lifecycle functions share the same initializer and only initialize once', async () => {
       useCustomStore(LIFECYCLE_STORE_MODULE);
       await initializeSessionStore();
       await connectSessionStore();
@@ -305,4 +310,111 @@ describe('SessionStore init', () => {
       });
     });
   });
+});
+
+describe('SessionStore configuration and provider validation', () => {
+  beforeEach(() => {
+    resetSessionStore();
+    vi.clearAllMocks();
+    vi.mocked(getConfig).mockReturnValue({ sessionStore: { provider: 'memory' } } as any);
+  });
+
+  it.each(['memory', 'custom'] as const)(
+    'validates TTL and namespace before accessing %s configuration',
+    (provider) => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: { provider, providerConfig: { module: FAKE_STORE_MODULE } },
+      } as any);
+      for (const options of [
+        undefined,
+        {},
+        { ttlMs: undefined },
+        { ttlMs: NaN },
+        { ttlMs: Infinity },
+        { ttlMs: '100' },
+      ]) {
+        expect(() => Reflect.apply(createNamespacedStore, undefined, ['ns', options])).toThrow(
+          'ttlMs must be a finite number.',
+        );
+      }
+      for (const namespace of ['', ':', 'a:b', undefined, null, 42]) {
+        expect(() =>
+          Reflect.apply(createNamespacedStore, undefined, [namespace, { ttlMs: 100 }]),
+        ).toThrow('Namespace must be a non-empty string without ":".');
+      }
+      expect(getConfig).not.toHaveBeenCalled();
+    },
+  );
+
+  it('loads named SessionStore exports', async () => {
+    vi.mocked(getConfig).mockReturnValue({
+      sessionStore: {
+        provider: 'custom',
+        providerConfig: { module: './src/sessionStore/__fixtures__/namedSessionStore.cjs' },
+      },
+    } as any);
+    await initializeSessionStore();
+    const store = createNamespacedStore<string>('session', { ttlMs: 100 });
+    await store.set('key', 'value');
+    await expect(createNamespacedStore<string>('session', { ttlMs: 100 }).get('key')).resolves.toBe(
+      'value',
+    );
+  });
+
+  it('requires a default class or named SessionStore export', async () => {
+    vi.mocked(getConfig).mockReturnValue({
+      sessionStore: {
+        provider: 'custom',
+        providerConfig: { module: './src/storage/__fixtures__/keyValueStore.cjs' },
+      },
+    } as any);
+    await expect(initializeSessionStore()).rejects.toThrow(
+      'Failed to load custom session store provider',
+    );
+    expect(() => createNamespacedStore('session', { ttlMs: 100 })).toThrow(
+      'Session store is not initialized.',
+    );
+  });
+
+  it('keeps a failed custom initialization unavailable without memory fallback or success logging', async () => {
+    vi.mocked(getConfig).mockReturnValue({
+      sessionStore: {
+        provider: 'custom',
+        providerConfig: { module: REJECTING_LIFECYCLE_STORE_MODULE },
+      },
+    } as any);
+    await expect(initializeSessionStore()).rejects.toThrow('init failed');
+    expect(() => createNamespacedStore('session', { ttlMs: 100 })).toThrow(
+      'Session store is not initialized.',
+    );
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it.each(['module', 'constructor'] as const)(
+    'does not expose configuration through %s failures',
+    async (failure) => {
+      const marker = 'PRIVATE_SESSION_CONFIG_MARKER';
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: {
+            module:
+              failure === 'module'
+                ? `./${marker}.cjs`
+                : './src/sessionStore/__fixtures__/throwingSessionStore.cjs',
+            throwInConstructor: true,
+            credential: marker,
+          },
+        },
+      } as any);
+      const error = await initializeSessionStore().catch((error: unknown) => error);
+      expect(error).toHaveProperty(
+        'message',
+        'Failed to load custom session store provider. Check its module export and configuration.',
+      );
+      expect(inspect(error)).not.toContain(marker);
+      expect(error).not.toHaveProperty('cause');
+      expect(log).not.toHaveBeenCalled();
+    },
+  );
 });

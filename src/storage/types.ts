@@ -14,7 +14,7 @@ export function isKeyValueStoreProvider(provider: unknown): provider is KeyValue
 }
 
 /**
- * Schema for in-memory key-value store config (per-namespace InMemoryKeyValueStore)
+ * Schema for in-memory key-value store config (shared InMemoryKeyValueStore)
  */
 export const memoryKeyValueStoreConfigSchema = z.object({
   provider: z.literal('memory'),

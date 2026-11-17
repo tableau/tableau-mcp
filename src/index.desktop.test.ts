@@ -108,11 +108,16 @@ vi.mock('./server/express.js', () => ({
 }));
 
 vi.mock('./storage/init.js', () => ({
-  initializeKeyValueStore: vi.fn(async () => {
+  initializeKeyValueStore: vi.fn(),
+  disconnectKeyValueStore: vi.fn(async () => undefined),
+}));
+
+vi.mock('./sessionStore/init.js', () => ({
+  initializeSessionStore: vi.fn(async () => {
     await startupState.connectPromise;
     startupState.sessionStoreConnected = true;
   }),
-  disconnectKeyValueStore: vi.fn(async () => {
+  disconnectSessionStore: vi.fn(async () => {
     startupState.sessionStoreDisconnected = true;
   }),
 }));
@@ -127,7 +132,7 @@ import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger } from './logging/fileLogger.js';
 import { startExpressServer } from './server/express.js';
-import { initializeKeyValueStore } from './storage/init.js';
+import { initializeSessionStore } from './sessionStore/init.js';
 
 function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void } {
   let reject!: (reason?: unknown) => void;
@@ -173,7 +178,7 @@ describe('desktop binary startup', () => {
 
     expect(startupState.connectedAtExpressStart).toBe(true);
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
-    expect(initializeKeyValueStore).toHaveBeenCalledOnce();
+    expect(initializeSessionStore).toHaveBeenCalledOnce();
     expect(getTableauServerInfo).toHaveBeenCalledOnce();
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
     expect(startupState.shutdownHandlers.size).toBe(2);
@@ -195,13 +200,13 @@ describe('desktop binary startup', () => {
     expect(startExpressServer).toHaveBeenCalledWith(expect.objectContaining({ host: expected }));
   });
 
-  it('fails closed before opening HTTP when the key-value store cannot connect', async () => {
+  it('fails closed before opening HTTP when the session store cannot connect', async () => {
     const connect = deferred<void>();
     startupState.connectPromise = connect.promise;
 
     await import('./index.desktop.js');
-    await vi.waitFor(() => expect(initializeKeyValueStore).toHaveBeenCalledOnce());
-    connect.reject(new Error('key-value store init failed'));
+    await vi.waitFor(() => expect(initializeSessionStore).toHaveBeenCalledOnce());
+    connect.reject(new Error('session store init failed'));
     await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalledWith(1));
 
     expect(startExpressServer).not.toHaveBeenCalled();
@@ -218,7 +223,7 @@ describe('desktop binary startup', () => {
     expect(getDesktopConfig).toHaveBeenCalledOnce();
     expect(getConfig).not.toHaveBeenCalled();
     expect(initializeFeatureGate).not.toHaveBeenCalled();
-    expect(initializeKeyValueStore).not.toHaveBeenCalled();
+    expect(initializeSessionStore).not.toHaveBeenCalled();
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(startExpressServer).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();

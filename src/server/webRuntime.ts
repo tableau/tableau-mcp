@@ -4,21 +4,22 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
+import { disconnectSessionStore, initializeSessionStore } from '../sessionStore/init.js';
 import { disconnectKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
 
-// Minimal shutdown hook: release the KV store's backend resources and flush the Activity Log
+// Minimal shutdown hook: release both storage providers and flush the Activity Log
 // on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
 // draining, no Express close).
 const SHUTDOWN_TIMEOUT_MS = 5000;
 
-function registerKeyValueStoreShutdown(): void {
+function registerStorageShutdown(): void {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, async () => {
       let timer: NodeJS.Timeout | undefined;
       try {
         // A hung backend must not keep the process alive after SIGTERM.
         await Promise.race([
-          Promise.all([disconnectKeyValueStore(), closeActivityLog()]),
+          Promise.all([disconnectSessionStore(), disconnectKeyValueStore(), closeActivityLog()]),
           new Promise<never>((_, reject) => {
             timer = setTimeout(
               () => reject(new Error(`Shutdown timed out after ${SHUTDOWN_TIMEOUT_MS} ms`)),
@@ -31,7 +32,7 @@ function registerKeyValueStoreShutdown(): void {
       } catch (error) {
         clearTimeout(timer);
         log({
-          message: 'Error closing key-value store or Activity Log during shutdown',
+          message: 'Error closing storage providers or Activity Log during shutdown',
           level: 'error',
           logger: 'shutdown',
           data: error,
@@ -49,8 +50,9 @@ export async function initializeWebRuntime(
 
   initializeFeatureGate();
   await initializeActivityLog();
+  await initializeSessionStore();
   await initializeKeyValueStore();
-  registerKeyValueStoreShutdown();
+  registerStorageShutdown();
 
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
     log({

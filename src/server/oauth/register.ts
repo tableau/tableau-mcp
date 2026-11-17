@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import express from 'express';
 
-import type { KeyValueStore } from '../../storage/keyValueStore.js';
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { ClientRegistration } from './types.js';
 
@@ -14,7 +14,7 @@ import { ClientRegistration } from './types.js';
  */
 export function register(
   app: express.Application,
-  clientRegistrations: KeyValueStore<ClientRegistration>,
+  clientRegistrations: SessionStore<ClientRegistration>,
 ): void {
   app.post('/oauth2/register', express.json(), async (req, res) => {
     const { redirect_uris } = req.body;

@@ -92,10 +92,15 @@ vi.mock('./sdks/tableau/restApi.js', () => ({
 }));
 
 vi.mock('./storage/init.js', () => ({
-  initializeKeyValueStore: vi.fn(async () => {
+  initializeKeyValueStore: vi.fn(),
+  disconnectKeyValueStore: vi.fn(async () => undefined),
+}));
+
+vi.mock('./sessionStore/init.js', () => ({
+  initializeSessionStore: vi.fn(async () => {
     startupState.sessionStoreConnected = true;
   }),
-  disconnectKeyValueStore: vi.fn(async () => {
+  disconnectSessionStore: vi.fn(async () => {
     startupState.sessionStoreDisconnected = true;
   }),
 }));
@@ -131,7 +136,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
-import { initializeKeyValueStore } from './storage/init.js';
+import { initializeSessionStore } from './sessionStore/init.js';
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -181,7 +186,7 @@ describe('combined entrypoint startup', () => {
 
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
     expect(initializeActivityLog).toHaveBeenCalledOnce();
-    expect(initializeKeyValueStore).toHaveBeenCalledOnce();
+    expect(initializeSessionStore).toHaveBeenCalledOnce();
     expect(McpServer).not.toHaveBeenCalled();
 
     serverInfo.resolve({});

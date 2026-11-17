@@ -15,6 +15,10 @@ import {
 import { log } from './logging/logger.js';
 import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
+  providerConfigSchema as sessionStoreProviderConfigSchema,
+  SessionStoreConfig,
+} from './sessionStore/types.js';
+import {
   isKeyValueStoreProvider,
   KeyValueStoreConfig,
   providerConfigSchema as keyValueStoreProviderConfigSchema,
@@ -24,6 +28,20 @@ import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
+
+function parseStorageProviderConfig(rawConfig: string | undefined, setting: string): unknown {
+  if (!rawConfig) {
+    throw new Error(`${setting}_CONFIG is required when ${setting} is "custom"`);
+  }
+  let parsedConfig: unknown;
+  try {
+    parsedConfig = JSON.parse(rawConfig);
+  } catch {
+    // JSON.parse errors can echo credentials from the supplied configuration.
+    throw new Error(`${setting}_CONFIG is not valid JSON`);
+  }
+  return parsedConfig;
+}
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -98,7 +116,7 @@ export class Config extends BaseConfig {
   latencyMetricName: string;
   featureGate: FeatureGateConfig;
   keyValueStore: KeyValueStoreConfig;
-  sessionStore: KeyValueStoreConfig;
+  sessionStore: SessionStoreConfig;
   activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
@@ -369,40 +387,31 @@ export class Config extends BaseConfig {
       };
     }
 
-    // Generic KV settings take precedence as a pair; legacy session settings remain a fallback.
-    const useKeyValueSettings = keyValueStoreProvider !== undefined;
-    if (!useKeyValueSettings && keyValueStoreProviderConfig !== undefined) {
+    // KV and SessionStore have separate contracts and independent provider settings.
+    if (keyValueStoreProvider === undefined && keyValueStoreProviderConfig !== undefined) {
       throw new Error('KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided');
     }
-    if (useKeyValueSettings && !isKeyValueStoreProvider(keyValueStoreProvider)) {
+    if (keyValueStoreProvider !== undefined && !isKeyValueStoreProvider(keyValueStoreProvider)) {
       throw new Error('KV_STORE_PROVIDER must be "memory" or "custom"');
     }
-    const storeProvider = useKeyValueSettings ? keyValueStoreProvider : sessionStoreProvider;
-    const storeProviderConfig = useKeyValueSettings
-      ? keyValueStoreProviderConfig
-      : sessionStoreProviderConfig;
-    if (storeProvider === 'custom') {
-      const variable = useKeyValueSettings ? 'KV_STORE_PROVIDER' : 'SESSION_STORE_PROVIDER';
-      if (!storeProviderConfig) {
-        throw new Error(`${variable}_CONFIG is required when ${variable} is "custom"`);
-      }
-      let parsedConfig: unknown;
-      try {
-        parsedConfig = JSON.parse(storeProviderConfig);
-      } catch {
-        // JSON.parse errors can include raw configuration, including credentials.
-        throw new Error(`${variable}_CONFIG is not valid JSON`);
-      }
-      this.keyValueStore = {
-        provider: 'custom',
-        providerConfig: keyValueStoreProviderConfigSchema.parse(parsedConfig),
-      };
-    } else {
-      this.keyValueStore = {
-        provider: 'memory',
-      };
-    }
-    this.sessionStore = this.keyValueStore;
+    this.keyValueStore =
+      keyValueStoreProvider === 'custom'
+        ? {
+            provider: 'custom',
+            providerConfig: keyValueStoreProviderConfigSchema.parse(
+              parseStorageProviderConfig(keyValueStoreProviderConfig, 'KV_STORE_PROVIDER'),
+            ),
+          }
+        : { provider: 'memory' };
+    this.sessionStore =
+      sessionStoreProvider === 'custom'
+        ? {
+            provider: 'custom',
+            providerConfig: sessionStoreProviderConfigSchema.parse(
+              parseStorageProviderConfig(sessionStoreProviderConfig, 'SESSION_STORE_PROVIDER'),
+            ),
+          }
+        : { provider: 'memory' };
 
     // Activity Log provider configuration (similar to feature gate provider)
     if (isActivityLogProvider(activityLogProvider) && activityLogProvider === 'custom') {

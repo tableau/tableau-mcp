@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../../logging/logger.js';
-import type { KeyValueStore } from '../../storage/keyValueStore.js';
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema } from './schemas.js';
 import { RefreshTokenData } from './types.js';
 
@@ -40,9 +40,9 @@ const revokeSchema = z.object({
  */
 export function revoke(
   app: express.Application,
-  refreshTokens: KeyValueStore<RefreshTokenData>,
+  refreshTokens: SessionStore<RefreshTokenData>,
   privateKey: KeyObject,
-  refreshTokenIndex: KeyValueStore<string>,
+  refreshTokenIndex: SessionStore<string>,
 ): void {
   app.post('/oauth2/revoke', async (req, res) => {
     const result = revokeSchema.safeParse(req.body);
@@ -81,8 +81,8 @@ export function revoke(
  */
 async function tryRevokeRefreshToken(
   token: string,
-  refreshTokens: KeyValueStore<RefreshTokenData>,
-  refreshTokenIndex: KeyValueStore<string>,
+  refreshTokens: SessionStore<RefreshTokenData>,
+  refreshTokenIndex: SessionStore<string>,
 ): Promise<boolean> {
   const data = await refreshTokens.consume(token);
   if (!data) return false;
@@ -105,8 +105,8 @@ async function tryRevokeRefreshToken(
 async function tryRevokeAccessToken(
   token: string,
   privateKey: KeyObject,
-  refreshTokens: KeyValueStore<RefreshTokenData>,
-  refreshTokenIndex: KeyValueStore<string>,
+  refreshTokens: SessionStore<RefreshTokenData>,
+  refreshTokenIndex: SessionStore<string>,
 ): Promise<void> {
   let tableauAccessToken: string | undefined;
   let tableauServer: string | undefined;

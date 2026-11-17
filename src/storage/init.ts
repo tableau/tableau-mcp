@@ -1,4 +1,4 @@
-/** Configured KV provider loading, lifecycle, and namespaced store factories. */
+/** Independent KV provider initialization, access, and cleanup. */
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
@@ -7,19 +7,8 @@ import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 import type { KeyValueStore } from './keyValueStore.js';
 
-type NamespaceOptions = { ttlMs: number; maxSize?: number };
-
-// Provider hooks are optional infrastructure concerns, not part of the consumer KV interface.
-// Existing SessionStore providers already use these hooks and remain compatible.
-type StoreProvider<V = unknown> = KeyValueStore<V> & {
-  configureNamespace?(namespace: string, options: NamespaceOptions): void;
-  /** @deprecated Legacy SessionStore hook. Still awaited for backward compatibility. */
-  init?(): Promise<void>;
-  close?(): Promise<void>;
-};
-
-type StoreState = { kind: 'memory' } | { kind: 'custom'; store: StoreProvider };
-let state: StoreState | null = null;
+type StoreProvider = KeyValueStore<unknown> & { close?(): Promise<void> };
+let state: StoreProvider | null = null;
 
 function validateProvider(provider: unknown): asserts provider is StoreProvider {
   if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) {
@@ -32,33 +21,27 @@ function validateProvider(provider: unknown): asserts provider is StoreProvider 
   }
 }
 
-/** Select and initialize the configured provider before the server reports healthy. */
-export async function initializeKeyValueStore(): Promise<void> {
+/** Construct the configured provider. KV providers do not have an init hook. */
+export function initializeKeyValueStore(): void {
   if (state !== null) return;
-  const config = getConfig();
-  // sessionStore supports existing integrations supplying the legacy configuration property.
-  const storeConfig = config.keyValueStore ?? config.sessionStore;
-  const selected: StoreState =
-    storeConfig.provider === 'custom'
-      ? { kind: 'custom', store: loadCustomProvider(storeConfig.providerConfig) }
-      : { kind: 'memory' };
-  if (selected.kind === 'custom') await selected.store.init?.();
-  state = selected;
-  log({
-    message: 'Key-value store ready',
-    level: 'info',
-    logger: 'storage',
-  });
+  const storage = getConfig().keyValueStore;
+  state =
+    storage.provider === 'custom'
+      ? loadCustomProvider(storage.providerConfig)
+      : new InMemoryKeyValueStore<unknown>();
+  log({ message: 'Key-value store ready', level: 'info', logger: 'storage' });
 }
 
-/** Release an optional provider connection on shutdown, once per shared backend. */
+/** Return the configured implementation without constructing or wrapping it. */
+export function getKeyValueStore(): KeyValueStore<unknown> {
+  if (state === null) throw new Error('Key-value store is not initialized.');
+  return state;
+}
+
 export async function disconnectKeyValueStore(): Promise<void> {
-  if (state?.kind === 'custom') await state.store.close?.();
-  log({
-    message: 'Key-value store shutdown complete',
-    level: 'info',
-    logger: 'storage',
-  });
+  await state?.close?.();
+  state = null;
+  log({ message: 'Key-value store shutdown complete', level: 'info', logger: 'storage' });
 }
 
 function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
@@ -77,11 +60,9 @@ function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
   try {
     // Module paths come only from trusted operator configuration, like the other BYOI providers.
     const module = loadProviderModule(resolvedPath, require);
-    const ProviderClass = module.default || module.KeyValueStore || module.SessionStore;
+    const ProviderClass = module.default || module.KeyValueStore;
     if (!ProviderClass) {
-      throw new Error(
-        'Module must export a default class or named export "KeyValueStore" (legacy "SessionStore" is also supported)',
-      );
+      throw new Error('Module must export a default class or named export "KeyValueStore"');
     }
     const provider: unknown = new ProviderClass(config);
     validateProvider(provider);
@@ -94,42 +75,7 @@ function loadCustomProvider(config: Record<string, unknown>): StoreProvider {
   }
 }
 
-/**
- * Create a namespace using the configured backend. Memory instances remain independent;
- * custom providers share one backend with prefixed keys and optional namespace configuration.
- * Namespaces must be non-empty strings without colons; keys may contain colons.
- * Every namespace requires an explicit TTL in milliseconds, matching the legacy session contract.
- */
-export function createNamespacedKeyValueStore<V>(
-  namespace: string,
-  options: NamespaceOptions,
-): KeyValueStore<V> {
-  if (typeof namespace !== 'string' || namespace.length === 0 || namespace.includes(':')) {
-    throw new Error('Namespace must be a non-empty string without ":".');
-  }
-  if (!Number.isFinite(options?.ttlMs)) {
-    throw new Error('ttlMs must be a finite number.');
-  }
-  if (state === null) {
-    throw new Error('Key-value store is not initialized.');
-  }
-  if (state.kind === 'memory') return new InMemoryKeyValueStore<V>(options);
-
-  const shared = state.store as StoreProvider<V>;
-  shared.configureNamespace?.(namespace, options);
-  const prefix = `${namespace}:`;
-  return {
-    get: (key) => shared.get(`${prefix}${key}`),
-    set: (key, value) => shared.set(`${prefix}${key}`, value),
-    delete: (key) => shared.delete(`${prefix}${key}`),
-    consume: (key) => shared.consume(`${prefix}${key}`),
-  };
-}
-
 /** Reset provider selection for tests. */
 export function resetKeyValueStore(): void {
   state = null;
 }
-
-/** @deprecated Await initializeKeyValueStore from storage/init instead. */
-export const initializeSessionStore = initializeKeyValueStore;

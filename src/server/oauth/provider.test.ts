@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'crypto';
 
 import { getConfig } from '../../config.js';
-import { initializeKeyValueStore, resetKeyValueStore } from '../../storage/init.js';
+import { initializeSessionStore, resetSessionStore } from '../../sessionStore/init.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   createOAuthProvider,
@@ -16,8 +16,8 @@ describe('createOAuthProvider', () => {
     stubDefaultEnvVars();
     vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
     vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
-    resetKeyValueStore();
-    await initializeKeyValueStore();
+    resetSessionStore();
+    await initializeSessionStore();
   });
 
   afterEach(() => {

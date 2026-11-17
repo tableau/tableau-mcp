@@ -1,8 +1,8 @@
 # Key-value storage
 
-Tableau MCP supports a bring-your-own implementation for key-value storage. The server ships
-an in-memory implementation; deployments can supply a module backed by Redis, DynamoDB, or
-another service. The same configured provider serves session state and other KV namespaces.
+Key-value storage uses one configured provider instance per process, exposed to server code
+by `getKeyValueStore()` from `src/storage/init.ts`. The server includes an in-memory
+implementation and supports custom providers.
 
 ## Provider selection
 
@@ -16,83 +16,56 @@ KV_STORE_PROVIDER_CONFIG='{"module":"./my-kv-provider.cjs","table":"mcp-state"}'
 be a path relative to the server's working directory, an absolute path, or an installed npm
 package name. All configuration fields are passed to its constructor.
 
-When `KV_STORE_PROVIDER` is set, its settings take precedence as a pair. Providing
-`KV_STORE_PROVIDER_CONFIG` without `KV_STORE_PROVIDER` fails startup. When both KV settings
-are absent, the existing `SESSION_STORE_PROVIDER` and `SESSION_STORE_PROVIDER_CONFIG`
-settings are used. The legacy configuration and imports remain supported; callers do not
-need separate provider systems.
+Providing `KV_STORE_PROVIDER_CONFIG` without `KV_STORE_PROVIDER` fails startup. These
+settings configure generic key-value storage. OAuth session storage has its own
+[provider settings](oauth.md#session_store_provider).
 
-The legacy `SessionStore` type and session-store lifecycle/factory function names are deprecated
-in favor of the generic storage API. Existing aliases remain available. Server startup calls
-`await initializeKeyValueStore()`, which selects and constructs the configured provider, then
-awaits its optional `init()` hook. Store access requires initialization to have completed.
-The legacy `initializeSessionStore()` and `connectSessionStore()` aliases use this same async
-initializer and must be awaited.
+Startup calls `initializeKeyValueStore()` to construct and validate the configured provider.
+The getter returns that exact instance and does not initialize it lazily. KV providers do not
+have an `init()` hook. A provider may expose `close(): Promise<void>` for cleanup at shutdown.
 
-Invalid KV provider settings, module-loading errors, and missing required methods fail startup.
-An explicitly configured custom provider is never silently replaced with memory.
-
-Malformed provider JSON errors identify the setting without echoing its value. Module-loading
-and constructor failures use a fixed error message without the original error or module path.
-Providers must also keep configuration values and credentials out of their own errors and
-logs, including errors from optional lifecycle hooks.
+Invalid configuration, module-loading failures, and missing operations fail startup. An
+explicitly configured custom provider is never silently replaced with memory. Malformed JSON,
+module-loading, and constructor errors do not echo configuration values. Providers must also
+keep keys, values, and credentials out of their own errors and logs.
 
 ## Provider contract
 
-Import the public, dependency-free interface and implement it on your provider class:
+Implement the public, dependency-free interface:
 
 ```typescript
-import type { KeyValueStore } from '@tableau/mcp-server/storage/keyValueStore';
+import type { KeyValueStore, SetOptions } from '@tableau/mcp-server/storage/keyValueStore';
 ```
 
-The module must export a default class or a named `KeyValueStore` class. Existing named
-`SessionStore` providers are also accepted. Implementations must support the value types of all
-enabled consumers, including OAuth objects when embedded OAuth is enabled.
+The module must export a default class or a named `KeyValueStore` class. It must implement:
 
 | Operation | Behavior |
 | --- | --- |
-| `get(key)` | Return the value, or `undefined` if absent. |
-| `set(key, value)` | Store or replace a value. |
+| `get(key)` | Return the value, or `undefined` if absent or expired. |
+| `set(key, value, { ttlMs })` | Store or replace a value with an explicit lifetime. |
 | `delete(key)` | Remove a value; missing keys are harmless. |
-| `consume(key)` | Atomically return and delete a value, so at most one caller receives it. |
+| `consume(key)` | Atomically return and delete a value, or `undefined` if absent or expired. |
 
-Methods return promises. Backend errors must reject. For shared backends, `consume` must be
-atomic across replicas; separate read and delete requests are insufficient.
+Operations return promises and backend errors reject. For shared backends, `consume` must be
+atomic across replicas; separate read and delete requests are insufficient. Providers own
+serialization and must reject values that cannot be encoded faithfully or exceed backend limits.
 
-Providers are responsible for encoding and decoding values without loss. `set()` must reject
-values that cannot be represented faithfully or whose encoded records exceed backend storage
-limits, rather than silently truncating or discarding data. Supported value types, encodings,
-and limits are provider-specific.
+## Per-write expiration
 
-## Namespaces and expiration
+```typescript
+initializeKeyValueStore();
+const store = getKeyValueStore();
+await store.set('report:abc', value, { ttlMs: 60_000 });
+```
 
-Server code obtains a scoped store with `createNamespacedKeyValueStore(namespace, options)`
-from `src/storage/init.ts`.
-Namespaces must be non-empty strings without `:`; invalid names are rejected before provider
-initialization. Custom providers receive keys prefixed with `<namespace>:`, so the namespace
-is the text before the first colon. Keys may contain colons and are passed through unchanged
-after that prefix. One custom provider instance is shared across namespaces. Memory stores
-are independent per factory call.
+Every write requires a finite `ttlMs` in milliseconds. Prefixes are chosen by callers; the KV
+API has no namespace factory or `configureNamespace()` hook. Different keys in the same
+instance may have different lifetimes. Overwriting a key starts a new lifetime using the new
+write's TTL; reads do not extend it.
 
-Every namespace requires an explicit, finite `ttlMs` in milliseconds when it is created;
-`maxSize` remains optional. Server code supplies each namespace's lifetime, so deployments do
-not need to choose these values. Missing or non-finite TTLs are rejected before a store is
-created. Memory stores expire entries using this TTL, and existing session callers continue
-supplying their configured lifetimes.
+The memory implementation uses ExpiringMap timers, supports lifetimes beyond Node's timer
+limit, and clamps non-positive TTLs to one millisecond. Timer cleanup can be delayed while the
+event loop is blocked. Shutdown clears stored records and timers.
 
-Each `set` starts a new lifetime using the namespace TTL. Custom providers must return
-`undefined` from `get` and `consume` for expired records even if the backend has not yet
-deleted them. In particular, DynamoDB TTL cleanup is asynchronous, so its provider must
-check expiration before returning a value. The memory provider uses `ExpiringMap` timers
-for expiration; cleanup may be delayed while the event loop is blocked. It retains the
-existing one-millisecond minimum for non-positive TTLs.
-
-For compatibility, a custom provider may implement
-`configureNamespace(namespace, { ttlMs, maxSize? })` to receive namespace settings. The hook
-always receives a numeric TTL. The provider owns backend expiration and capacity behavior.
-Repeated configuration calls with identical settings must be harmless. Callers remain
-responsible for domain-specific validity checks.
-
-Providers may also implement the existing optional `init()` and `close()` hooks for readiness
-and connection cleanup. Startup awaits `init()` and fails if it rejects; shutdown awaits
-`close()`. These hooks are provider infrastructure and are not part of `KeyValueStore`.
+Custom providers enforce the supplied lifetime themselves. Expired data must not be returned
+merely because the backing service has not physically deleted it yet.

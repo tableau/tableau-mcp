@@ -102,11 +102,16 @@ vi.mock('./server/express.js', () => ({
 }));
 
 vi.mock('./storage/init.js', () => ({
-  initializeKeyValueStore: vi.fn(() => {
-    startupState.events.push('key-value store connected');
+  initializeKeyValueStore: vi.fn(),
+  disconnectKeyValueStore: vi.fn(async () => undefined),
+}));
+
+vi.mock('./sessionStore/init.js', () => ({
+  initializeSessionStore: vi.fn(() => {
+    startupState.events.push('session store connected');
     return startupState.connectPromise;
   }),
-  disconnectKeyValueStore: vi.fn(async () => undefined),
+  disconnectSessionStore: vi.fn(async () => undefined),
 }));
 
 import { getTableauServerInfo } from './getTableauServerInfo.js';
@@ -166,7 +171,7 @@ describe('default entrypoint startup', () => {
     expect(startupState.events).toEqual([
       'feature gate',
       'activity log init',
-      'key-value store connected',
+      'session store connected',
       'server info',
       'http opened',
     ]);

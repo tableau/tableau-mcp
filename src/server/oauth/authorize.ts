@@ -8,7 +8,7 @@ import { fromError } from 'zod-validation-error/v3';
 import { getConfig } from '../../config.js';
 import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
-import type { KeyValueStore } from '../../storage/keyValueStore.js';
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
@@ -39,8 +39,8 @@ import { ClientRegistration, PendingAuthorization } from './types.js';
  */
 export function authorize(
   app: express.Application,
-  pendingAuthorizations: KeyValueStore<PendingAuthorization>,
-  clientRegistrations: KeyValueStore<ClientRegistration>,
+  pendingAuthorizations: SessionStore<PendingAuthorization>,
+  clientRegistrations: SessionStore<ClientRegistration>,
 ): void {
   const config = getConfig();
 
