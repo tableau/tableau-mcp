@@ -103,6 +103,8 @@ export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> 
   'query-admin-insights': null,
   'update-user': idIn('user', 'userId'),
   'delete-content': typedIdIn('resourceType', 'resourceId'),
+  'add-content-tags': typedIdIn('resourceType', 'resourceId'),
+  'remove-content-tag': typedIdIn('resourceType', 'resourceId'),
   'confirm-delete-content': typedIdIn('resourceType', 'resourceId'),
   'render-interactive-viz': typedIdIn('objectType', 'luid'),
   'query-knowledge-context': null,

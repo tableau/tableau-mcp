@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
@@ -21,12 +20,23 @@ import {
   GetPageResult,
   MAX_PAGE_SIZE,
 } from '../../../utils/paginate.js';
+import {
+  contentTagSearchDescription,
+  contentTagSearchLabelsSchema,
+  withContentTagFilter,
+} from '../_lib/contentTagFilter.js';
+import { withContentTagResponseValidation } from '../_lib/contentTagResponse.js';
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
+  tagLabels: contentTagSearchLabelsSchema
+    .optional()
+    .describe(
+      'Exact decoded tags to search for. One label matches that tag; multiple labels match ANY (OR). Cannot be combined with a tags clause in filter.',
+    ),
   filter: z.string().optional(),
   pageNumber: z
     .number()
@@ -82,6 +92,9 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
 
   ${genericFilterDescription}
 
+  **Tag-only discovery**
+  ${contentTagSearchDescription}
+
   **Example Usage:**
   - List workbooks with the name "Superstore":
       filter: "name:eq:Superstore"
@@ -104,15 +117,19 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, tagLabels, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listWorkbooksTool.name);
 
       return await listWorkbooksTool.logAndExecute<ListWorkbooksResult>({
         extra,
-        args: {},
+        args: { filter, tagLabels, pageNumber, limit },
         callback: async () => {
+          const combinedFilter = withContentTagFilter(filter, tagLabels);
+          if (combinedFilter.isErr()) return combinedFilter;
+          const validatedFilter = combinedFilter.value
+            ? parseAndValidateWorkbooksFilterString(combinedFilter.value)
+            : undefined;
           const pageExceedsLimitMessage = getPageExceedsLimitMessage({
             pageNumber,
             maxResultLimit,
@@ -121,9 +138,11 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
             return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
           }
 
-          return new Ok(
-            await useRestApi({
+          return await withContentTagResponseValidation(() =>
+            useRestApi({
               ...extra,
+              // Raw pages precede bounded-context filtering and must not reach debug notifications.
+              disableLogging: true,
               jwtScopes: listWorkbooksTool.requiredApiScopes,
               callback: async (restApi) => {
                 const page = await getPage({
