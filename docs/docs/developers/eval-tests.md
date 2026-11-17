@@ -108,11 +108,11 @@ in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe
 registrations in both empty and populated dashboards, preserving concurrent Desktop edits, and
 repairing unsafe zone types already present in the live dashboard. Known crash hazards cannot be
 grandfathered from the live baseline. Existing-dashboard edits use the surgical dashboard endpoint.
-Desktop builds advertising External Client API 0.2.22 or later create missing worksheet views
-during surgical dashboard apply. The MCP planner permits automatic completion on those builds,
-after every worksheet has been populated, and apply verifies the registrations in live readback.
-Older or unknown API versions still require manual registration in Desktop. A whole-workbook
-replacement is never a fallback for missing registrations.
+Desktop builds advertising External Client API 0.2.22 or later create missing worksheet views during
+surgical dashboard apply. The MCP planner permits automatic completion on those builds, after every
+worksheet has been populated, and apply verifies the registrations in live readback. Older or
+unknown API versions still require manual registration in Desktop. A whole-workbook replacement is
+never a fallback for missing registrations.
 
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
@@ -139,6 +139,64 @@ actions, incomplete Phone repairs, discarded draft changes, and omitted readback
 ```sh
 npm run test:eval -- run tests/eval/dashboardApplyScenario.test.ts tests/eval/base.test.ts
 ```
+
+## Tableau Agent evals
+
+These evals cover the `cabu-start-conversation` and `cabu-ask` tools. They run against the
+`tableauagent1` site on test-dataplane1, which has Tableau Agent enabled, not the default 10ax site.
+
+| File                          | What it checks                                                                                                                                                                                                                                         | Model needed |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| `cases/cabuGoldDreamforce.ts` | Not a test. Tableau Agent's gold suite: 59 sales-pipeline questions with reference answers, on the `tabagent-tdp1-evals` site. Select it with `EVAL_SUITE=gold`.                                                                                       | —            |
+| `cases/dataQuestions.ts`      | Not a test. About 40 data questions on "Sample - Superstore" and "Medicare-Claims" with known answers, each with the VizQL query that produced them.                                                                                                   | —            |
+| `dataQuestionsOracle.test.ts` | Runs each case's query through `query-datasource` and checks the expected numbers still hold.                                                                                                                                                          | No           |
+| `dataQuestions.test.ts`       | Pass/fail. **plain**: the question as written must use `query-datasource`, not Tableau Agent. **tableau-agent**: only turn 1 says "Ask Tableau Agent:"; every turn must stay in one Tableau Agent conversation. Both modes must get the numbers right. | Yes          |
+| `cabuSelection.test.ts`       | Tool choice only: ordinary prompts avoid Tableau Agent, explicit requests use it, and a follow-up threads through the same conversation.                                                                                                               | Yes          |
+| `cabuAb.test.ts`              | A measurement, not a gate: answer accuracy, latency, and client token use with Tableau Agent off, on and opted in, and on with plain prompts. Writes a report to `tests/eval/results/`.                                                                | Yes          |
+
+Answers are graded numerically first. When that fails, an LLM judge compares the answer to the
+case's reference answer.
+
+To run them:
+
+1. Create `tests/.env` for the site with a PAT:
+
+   ```
+   SERVER=https://test-dataplane1.tableau.sfdc-ckzqgc.svc.sfdcfc.net
+   SITE_NAME=tableauagent1
+   AUTH=pat
+   PAT_NAME=<your PAT name>
+   PAT_VALUE=<your PAT value>
+   ```
+
+2. Create `tests/.env.reset` with the same keys and empty values.
+3. Set `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and optionally `EVAL_TEST_MODEL` in `tests/eval/.env`.
+4. Build and run:
+
+   ```sh
+   npm run build
+   npx vitest run --config ./vitest.config.eval.ts tests/eval/dataQuestionsOracle.test.ts
+   npx vitest run --config ./vitest.config.eval.ts tests/eval/dataQuestions.test.ts
+   ```
+
+Run the oracle test first when adding cases or when answers fail on numbers. It separates data drift
+and case typos from model mistakes.
+
+`dataQuestions.test.ts` runs only the smoke cases by default, in both modes: 8 tests, roughly 10
+minutes. Tableau Agent turns take about 30–90 seconds each. Tests run one at a time because the site
+rate-limits parallel queries.
+
+### The gold suite
+
+`EVAL_SUITE=gold` runs `dataQuestions.test.ts` or `cabuAb.test.ts` on Tableau Agent's gold suite
+instead. It lives on a different site, so point `tests/.env` at `SITE_NAME=tabagent-tdp1-evals` with
+a PAT for that site. The oracle test doesn't apply: the gold cases have reference answers, not
+queries.
+
+Each gold prompt names the workbook as well as the data source. With the workbook, Tableau Agent
+samples field values and applies the workbook's business preferences, such as a fiscal year that
+starts in February. The plain path doesn't get those preferences, so expect it to miss fiscal and
+vocabulary questions.
 
 ## Environment Variables
 
@@ -175,8 +233,8 @@ When `true`, enables evals that can invoke the content-mutating Tableau Prep flo
 are skipped by default because the eval harness executes real MCP tool calls against the configured
 Tableau site. Only enable them on a disposable site.
 
-This is a test-safety gate, separate from the product feature gates. Mutating flow evals also require
-`FLOW_WRITE_TOOLS_ENABLED=true`.
+This is a test-safety gate, separate from the product feature gates. Mutating flow evals also
+require `FLOW_WRITE_TOOLS_ENABLED=true`.
 
 <hr />
 
@@ -184,6 +242,46 @@ This is a test-safety gate, separate from the product feature gates. Mutating fl
 
 Required, together with `ALLOW_MUTATING_FLOW_EVALS=true`, to expose the mutating flow tools during
 the mutating flow evals. Leave unset for the default eval run.
+
+<hr />
+
+### `EVAL_DATA_CASES`
+
+Which cases `dataQuestions.test.ts` runs: unset for the smoke cases, `all` for every case, or a
+comma-separated list of case ids from `tests/eval/cases/dataQuestions.ts`.
+
+<hr />
+
+### `EVAL_SUITE`
+
+The case suite for `dataQuestions.test.ts` and `cabuAb.test.ts`: `data` (default, `tableauagent1`)
+or `gold` (`tabagent-tdp1-evals`).
+
+<hr />
+
+### `EVAL_DATA_MODES`
+
+Limits `dataQuestions.test.ts` to one mode: `plain` or `tableau-agent`. Runs both when unset.
+
+<hr />
+
+### `EVAL_JUDGE_MODEL`
+
+The model that grades answers when the numeric check fails. Defaults to `EVAL_TEST_MODEL`.
+
+<hr />
+
+### `EVAL_WRITE_EXPECTED`
+
+When `true`, `dataQuestionsOracle.test.ts` prints each query's rows instead of checking them. Use it
+to fill in the expected numbers for new cases.
+
+<hr />
+
+### `RUN_CABU_AB`
+
+When `true`, runs the `cabuAb.test.ts` A/B measurement. `AB_ARMS`, `AB_CASES`, `AB_REPEATS`,
+`AB_TURN_TIMEOUT_MS`, and `AB_MAX_TURNS` tune it; see the file header.
 
 ## Running the Eval tests against a different site
 

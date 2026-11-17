@@ -57,3 +57,6 @@ tableau-mcp-desktop.exe
 sea-prep.*.blob
 sea-config.*.generated.json
 asset-manifest.*.generated.json
+
+# CABU A/B eval output
+/tests/eval/results/

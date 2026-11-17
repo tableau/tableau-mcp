@@ -80,6 +80,15 @@ const environmentData: EnvironmentData = {
             },
           },
         },
+        tableauagent1: {
+          datasources: {
+            'Superstore Datasource': { id: '4f38234e-21f9-405a-ad27-5d63c398f78f' },
+            'Sample - Superstore': { id: '434405df-0708-4505-9eac-a678f87a893c' },
+            'Medicare-Claims': { id: '799ac010-28d7-4436-b36f-8ecdef9a7312' },
+          },
+          workbooks: {},
+          pulse: { definitions: {} },
+        },
       },
     },
     'https://test-dataplane7.tableau.sfdc-ckzqgc.svc.sfdcfc.net': {

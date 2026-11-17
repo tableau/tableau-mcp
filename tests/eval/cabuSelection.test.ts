@@ -1,17 +1,17 @@
-import {
-  Agent,
-  AgentInputItem,
-  MCPServerStdio,
-  run,
-  StreamedRunResult,
-  withTrace,
-} from '@openai/agents';
+import { MCPServerStdio } from '@openai/agents';
 import dotenv from 'dotenv';
 import z from 'zod';
 
 import invariant from '../../src/utils/invariant.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
-import { getAgent, getCallToolResult, getMcpServer, getModel, getToolExecutions } from './base.js';
+import { getAgent, getMcpServer, getModel, getToolExecutions } from './base.js';
+import {
+  CABU_TOOLS,
+  findCalls,
+  normalizeToolName,
+  parseToolResult,
+  runTurn,
+} from './cabuHelpers.js';
 
 dotenv.config({ path: 'tests/eval/.env' });
 
@@ -32,51 +32,10 @@ const agentSystemPrompt = `
   You are an assistant responsible for evaluating the results of calling various tools.
   Given the user's query, use the tools available to you to answer the question.`;
 
-const CABU_TOOLS = ['cabu_start_conversation', 'cabu_ask'];
-
-type ToolExecution = Awaited<ReturnType<typeof getToolExecutions>>[number];
-
-// Tools may be recorded with or without the `tableau_` prefix (see getAgent).
-function normalizeToolName(name: string): string {
-  return name.replace(/^tableau_/, '').replace(/-/g, '_');
-}
-
-async function runTurn(
-  agent: Agent,
-  input: string | Array<AgentInputItem>,
-): Promise<StreamedRunResult<any, any>> {
-  return await withTrace('run_cabu_eval_agent', async () => {
-    const result = await run(agent, input, { stream: true });
-    if (process.env.ENABLE_LOGGING === 'true') {
-      result.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
-    }
-
-    await result.completed;
-    return result;
-  });
-}
-
 async function getCalledToolNames(mcpServer: MCPServerStdio, prompt: string): Promise<string[]> {
   const agent = await getAgent({ mcpServer, model: getModel(), systemPrompt: agentSystemPrompt });
   const toolExecutions = await getToolExecutions(await runTurn(agent, prompt));
   return toolExecutions.map((toolExecution) => normalizeToolName(toolExecution.name));
-}
-
-// Returns undefined (instead of throwing) when the tool errored or returned another shape, so the
-// test can fail with a message that says which step broke.
-function parseToolResult<Z extends z.ZodTypeAny>(
-  execution: ToolExecution,
-  schema: Z,
-): z.infer<Z> | undefined {
-  try {
-    return getCallToolResult(execution, schema);
-  } catch {
-    return undefined;
-  }
-}
-
-function findCalls(executions: Array<ToolExecution>, toolName: string): Array<ToolExecution> {
-  return executions.filter((execution) => normalizeToolName(execution.name) === toolName);
 }
 
 const ORDINARY_DATA_PROMPTS = [

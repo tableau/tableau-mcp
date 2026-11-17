@@ -36,8 +36,13 @@ export function getModel(): string {
   return process.env.EVAL_TEST_MODEL || DEFAULT_MODEL;
 }
 
+let mcpServerCount = 0;
+
 export async function getMcpServer(env?: Record<string, string>): Promise<MCPServerStdio> {
   const mcpServer = new MCPServerStdio({
+    // The Agents SDK caches tool lists by server name across servers, so servers started with
+    // different env (tool sets) need distinct names.
+    name: `tableau-mcp-${++mcpServerCount}`,
     command: 'node',
     args: ['build/index.js'],
     // The MCP SDK passes only a safe env whitelist plus this, so the child would default to telemetry on.
