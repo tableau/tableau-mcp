@@ -10,6 +10,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import { buildTemplateZip, copyFileAtomically, TEMPLATE_ZIP_FILENAME } from './buildTemplateZip.js';
 import { findDesktopSources } from './desktopSources.js';
 import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers.js';
+import { buildPrepAuthoringWorker } from './prepAuthoringAssets.js';
 import { isVariant, variants } from './variants.js';
 
 const dev = process.argv.includes('--dev');
@@ -71,6 +72,10 @@ const checkNoDesktopSources = variant === 'default';
 
   if (checkNoDesktopSources) {
     await exitOnDesktopSources(result.metafile, buildOptions.outfile);
+  }
+
+  if (variant !== 'desktop') {
+    await buildPrepAuthoringWorker('./build/prep-authoring-worker.cjs');
   }
 
   if (variant === 'desktop' || variant === 'combined') {

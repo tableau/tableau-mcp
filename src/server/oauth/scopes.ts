@@ -15,6 +15,7 @@ import {
   isKnowledgeWriteToolsEnabled,
 } from '../../features/knowledgeTools.js';
 import { getTableauServerInfo } from '../../getTableauServerInfo.js';
+import { prepAuthoringEnabled } from '../../tools/web/prepAuthoring/engineClient.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import { isDataAppVersionSupported } from '../../tools/web/scaffoldDataApp/dataAppVersion.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
@@ -26,6 +27,7 @@ import type { WebToolName } from '../../tools/web/toolName.js';
  * when authenticating with the MCP server.
  */
 export type McpScope =
+  | 'tableau:mcp:prep:author'
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:datasource:create'
@@ -136,6 +138,11 @@ export const RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES: ReadonlyArray<TableauApiSc
   'tableau:mcp_site_settings:read',
 ];
 
+export const PREP_AUTHORING_READ_API_SCOPES: TableauApiScope[] = [
+  'tableau:flows:download',
+  ...RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES,
+];
+
 /**
  * Tableau API scopes for the `get-flow` tool, defined here so the tool composes
  * its per-call scope set from named constants instead of scattering scope
@@ -240,6 +247,14 @@ const toolScopeMap: Record<
     optionalApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
+  'prepare-prep-flow-edit': {
+    mcp: ['tableau:mcp:prep:author'],
+    api: new Set(PREP_AUTHORING_READ_API_SCOPES),
+  },
+  'generate-prep-flow': {
+    mcp: ['tableau:mcp:prep:author'],
+    api: new Set(RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES),
+  },
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -582,6 +597,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const datasourceAuthoringEnabled =
     (await featureGate.isFeatureEnabled('datasource-authoring')) && authoringAllowedForClient;
   const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
+  if (!prepAuthoringEnabled(config)) {
+    enabledTools.delete('prepare-prep-flow-edit');
+    enabledTools.delete('generate-prep-flow');
+  }
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await isKnowledgeToolsEnabled(config);
   const knowledgeWriteToolsEnabled = await isKnowledgeWriteToolsEnabled(config);

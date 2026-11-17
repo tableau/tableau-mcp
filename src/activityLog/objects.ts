@@ -44,6 +44,8 @@ function typedIdIn(typeArg: string, idArg: string): ObjectSource {
  * Typed as a `Record` so a new tool doesn't compile until it is classified here.
  */
 export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> = {
+  'prepare-prep-flow-edit': null,
+  'generate-prep-flow': null,
   'list-datasources': null,
   'list-extract-refresh-tasks': null,
   'update-cloud-extract-refresh-task': idIn('extract-refresh-task', 'taskId'),

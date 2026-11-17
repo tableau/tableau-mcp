@@ -42,6 +42,7 @@ export const PENDING_DELETION_MAX_AGE_DAYS_MIN = 1;
 export const PENDING_DELETION_MAX_AGE_DAYS_MAX = 90;
 
 export class Config extends BaseConfig {
+  prepAuthoring: { enabled: boolean; workspace: string };
   auth: AuthType;
   server: string;
   sslKey: string;
@@ -120,6 +121,10 @@ export class Config extends BaseConfig {
     super();
 
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
+    this.prepAuthoring = {
+      enabled: cleansedVars.PREP_AUTHORING_ENABLED === 'true',
+      workspace: cleansedVars.PREP_AUTHORING_WORKSPACE ?? '',
+    };
     const {
       AUTH: auth,
       SERVER: server,
