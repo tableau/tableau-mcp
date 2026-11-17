@@ -288,28 +288,32 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
   });
 
-  it('returns an error for Passthrough auth before creating a signed upload URL', async () => {
-    const result = await getToolResult(
-      { fileName: 'BoltBikes Workbook.twb' },
-      {
-        tableauAuthInfo: {
-          type: 'Passthrough',
-          username: 'viewer@example.com',
-          userId: 'test-user-id',
-          server: 'https://tableau.example.com',
-          siteId: 'test-site-id',
-          siteName: 'test-site',
-          raw: 'passthrough-token',
+  it.each(['Passthrough', 'ServerEas'] as const)(
+    'rejects %s before creating a signed upload URL',
+    async (type) => {
+      const result = await getToolResult(
+        { fileName: 'BoltBikes Workbook.twb' },
+        {
+          tableauAuthInfo: {
+            type,
+            accessToken: 'eas-session',
+            username: 'viewer@example.com',
+            userId: 'test-user-id',
+            server: 'https://tableau.example.com',
+            siteId: 'test-site-id',
+            siteName: 'test-site',
+            raw: 'passthrough-token',
+          },
         },
-      },
-    );
+      );
 
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Passthrough authentication');
-    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
-  });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Passthrough authentication');
+      expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+      expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
+    },
+  );
 
   it('redacts no presigned URL from logs because it is only produced after execution', async () => {
     const tool = getRequestWorkbookUploadTool(new WebMcpServer());

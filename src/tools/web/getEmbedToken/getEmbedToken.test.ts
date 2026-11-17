@@ -213,3 +213,21 @@ async function getToolResult(extra: Extra): Promise<CallToolResult> {
   const callback = await Provider.from(tool.callback);
   return await callback({}, extra);
 }
+
+it('does not expose an EAS session credential as an embedding token', async () => {
+  const extra = getMockRequestHandlerExtra();
+  extra.config.auth = 'server-eas';
+  extra.tableauAuthInfo = {
+    type: 'ServerEas',
+    username: 'viewer',
+    userId: 'viewer-id',
+    siteId: 'site-id',
+    server: 'https://tableau.example.com',
+    siteName: 'site',
+    accessToken: 'opaque-eas-session',
+  };
+  const callback = await Provider.from(getEmbedTokenTool(new WebMcpServer()).callback);
+  const result = await callback({}, extra);
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result)).not.toContain('opaque-eas-session');
+});

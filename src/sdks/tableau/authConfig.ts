@@ -2,6 +2,10 @@ export type AuthConfig = {
   siteName: string;
 } & (
   | {
+      type: 'server-eas';
+      jwt: string;
+    }
+  | {
       type: 'pat';
       patName: string;
       patValue: string;

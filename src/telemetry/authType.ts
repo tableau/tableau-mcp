@@ -15,6 +15,8 @@ export function getAuthTypeForTelemetry(
   // Server-level modes (pat/uat/direct-trust) and embedded oauth are identified by
   // config.auth — tableauAuthInfo is undefined for the former, 'X-Tableau-Auth' for the latter.
   switch (config.auth) {
+    case 'server-eas':
+      return 'server-eas';
     case 'pat':
       return 'pat';
     case 'uat':

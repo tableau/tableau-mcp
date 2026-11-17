@@ -287,28 +287,32 @@ describe('requestDatasourceUploadTool', () => {
     expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
   });
 
-  it('returns an error for Passthrough auth before creating a signed upload URL', async () => {
-    const result = await getToolResult(
-      { fileName: 'Superstore.tds' },
-      {
-        tableauAuthInfo: {
-          type: 'Passthrough',
-          username: 'viewer@example.com',
-          userId: 'test-user-id',
-          server: 'https://tableau.example.com',
-          siteId: 'test-site-id',
-          siteName: 'test-site',
-          raw: 'passthrough-token',
+  it.each(['Passthrough', 'ServerEas'] as const)(
+    'rejects %s before creating a signed upload URL',
+    async (type) => {
+      const result = await getToolResult(
+        { fileName: 'Superstore.tds' },
+        {
+          tableauAuthInfo: {
+            type,
+            accessToken: 'eas-session',
+            username: 'viewer@example.com',
+            userId: 'test-user-id',
+            server: 'https://tableau.example.com',
+            siteId: 'test-site-id',
+            siteName: 'test-site',
+            raw: 'passthrough-token',
+          },
         },
-      },
-    );
+      );
 
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Passthrough authentication');
-    expect(mocks.mockRequestStagedDatasourceUpload).not.toHaveBeenCalled();
-    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
-  });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Passthrough authentication');
+      expect(mocks.mockRequestStagedDatasourceUpload).not.toHaveBeenCalled();
+      expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
+    },
+  );
 });
 
 async function getToolResult(

@@ -57,6 +57,7 @@ export async function resolveEmbedToken({
       return Ok({ token });
     }
 
+    case 'server-eas':
     case 'pat':
       // PAT cannot sign embed tokens.
       return Err('embed-token-not-available');

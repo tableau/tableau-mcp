@@ -25,7 +25,7 @@ import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough', 'server-eas'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -266,7 +266,11 @@ export class Config extends BaseConfig {
     }
 
     this.oauth = {
-      enabled: !purePassthroughAuth && !disableOauthOverride && !!oauthIssuer,
+      enabled:
+        normalizedAuth !== 'server-eas' &&
+        !purePassthroughAuth &&
+        !disableOauthOverride &&
+        !!oauthIssuer,
       embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
@@ -449,7 +453,36 @@ export class Config extends BaseConfig {
     };
 
     this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
-    this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
+    this.transport = isTransport(transport)
+      ? transport
+      : this.oauth.enabled || this.auth === 'server-eas'
+        ? 'http'
+        : 'stdio';
+
+    if (this.auth === 'server-eas') {
+      invariant(this.transport === 'http', 'AUTH=server-eas requires TRANSPORT=http');
+      invariant(server, 'AUTH=server-eas requires SERVER');
+      validateHttpsOrLoopbackUri('SERVER', server);
+      invariant(
+        !this.enablePassthroughAuth,
+        'AUTH=server-eas cannot enable passthrough authentication',
+      );
+      invariant(
+        !oauthIssuer && !this.oauth.external && !oauthJwePrivateKey && !oauthJwePrivateKeyPath,
+        'AUTH=server-eas cannot be combined with an OAuth provider',
+      );
+      invariant(
+        !clientId &&
+          !secretId &&
+          !secretValue &&
+          !uatIssuer &&
+          !uatPrivateKey &&
+          !uatPrivateKeyPath &&
+          !patName &&
+          !patValue,
+        'AUTH=server-eas cannot be combined with server-side credentials',
+      );
+    }
 
     if (this.oauth.external) {
       validateOAuthExternal({
@@ -463,6 +496,7 @@ export class Config extends BaseConfig {
     if (
       this.transport === 'http' &&
       this.auth !== 'passthrough' &&
+      this.auth !== 'server-eas' &&
       !disableOauthOverride &&
       !this.oauth.issuer
     ) {

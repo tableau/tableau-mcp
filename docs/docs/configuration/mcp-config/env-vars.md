@@ -42,7 +42,7 @@ The MCP transport type to use for the server.
 The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat`, `direct-trust`, `oauth`, or `passthrough`
+- Possible values: `pat`, `uat`, `direct-trust`, `oauth`, `passthrough`, or `server-eas`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
 - Setting `passthrough` implies
@@ -51,6 +51,9 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
   header or the `workgroup_session_id` cookie (there is no fallback auth method).
   OAuth stays disabled in this mode, even when `OAUTH_ISSUER` is set. See
   [Passthrough Authentication](authentication/passthrough).
+
+- `server-eas` accepts externally obtained JWTs over HTTP and delegates validation to Tableau Server.
+  See [Server-level EAS](authentication/server-eas.md).
 
 <hr />
 
@@ -550,7 +553,7 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 | `success`                                      | yes                                                                                                                                         | yes                                                                                   |
 | `error_code`                                   | empty on success. On failure, the HTTP status of the error, empty if the error result carries none, or `500` for a thrown error without one | status code of a typed tool error, else empty                                         |
 | `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
-| `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
+| `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough`, `server-eas` or `unknown`                                                 | `desktop`                                                                             |
 | `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a

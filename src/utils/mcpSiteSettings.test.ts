@@ -295,3 +295,29 @@ describe('mcpSiteSettings', () => {
     });
   });
 });
+
+it('fails closed with a typed permission denial for an EAS startup settings scope rejection', async () => {
+  vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
+  const upstream = new AxiosError('private upstream detail', '401', undefined, undefined, {
+    status: 401,
+  } as never);
+  mocks.mockGetMcpSiteSettings.mockRejectedValueOnce(upstream);
+  await expect(
+    getConfigWithOverrides({
+      restApiArgs: {
+        server: new WebMcpServer(),
+        disableLogging: true,
+        tableauAuthInfo: {
+          type: 'ServerEas',
+          server: 'https://my-tableau-server.com',
+          siteName: 'tc25',
+          siteId: 'eas-denied-settings-site',
+          userId: 'viewer',
+          username: 'viewer',
+          accessToken: 'opaque-session',
+        },
+      },
+      requestOverrides: undefined,
+    }),
+  ).rejects.toMatchObject({ type: 'mcp-site-settings-forbidden', statusCode: 403 });
+});
