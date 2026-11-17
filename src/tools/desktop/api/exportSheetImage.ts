@@ -10,7 +10,7 @@ import { ImageExportQuery, ImageResult, SheetKind } from '../../../desktop/exter
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { imageFilePathParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import {
   buildSheetImageToolResult,
@@ -25,10 +25,7 @@ const paramsSchema = {
   kind: z
     .enum(['worksheet', 'dashboard', 'storyboard'])
     .describe('Which kind of sheet sheetId is.'),
-  filePath: z
-    .string()
-    .optional()
-    .describe('Absolute path to save the image to. Omit to get the image inline.'),
+  filePath: imageFilePathParam(),
   mimeType: z
     .enum(['image/png', 'image/svg+xml'])
     .optional()
