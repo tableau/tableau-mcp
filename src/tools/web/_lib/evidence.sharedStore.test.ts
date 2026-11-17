@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import type { EvidenceContext } from './evidence.js';
 
-// Each replica is a fresh module graph (its own session store state and memoized proof stores);
+// Each replica is a fresh module graph (its own key-value store state);
 // only the provider's backend Map, kept on globalThis by the fixture, is shared between them.
 const config = vi.hoisted(() => ({
-  sessionStore: {
+  keyValueStore: {
     provider: 'custom',
-    providerConfig: { module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs' },
+    providerConfig: { module: './src/storage/__fixtures__/sharedBackendKeyValueStore.cjs' },
   } as Record<string, unknown>,
 }));
 const mocks = vi.hoisted(() => ({ log: vi.fn() }));
@@ -26,6 +26,8 @@ type EvidenceModule = typeof import('./evidence.js');
 
 async function startReplica(): Promise<EvidenceModule> {
   vi.resetModules();
+  const { initializeKeyValueStore } = await import('../../../storage/init.js');
+  initializeKeyValueStore();
   return import('./evidence.js');
 }
 
@@ -42,9 +44,9 @@ function makeCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
 
 describe('preview evidence across replicas sharing a custom session store', () => {
   beforeEach(() => {
-    config.sessionStore = {
+    config.keyValueStore = {
       provider: 'custom',
-      providerConfig: { module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs' },
+      providerConfig: { module: './src/storage/__fixtures__/sharedBackendKeyValueStore.cjs' },
     };
     globalThis.__sharedSessionBackend = new Map();
     mocks.log.mockClear();
@@ -277,7 +279,7 @@ describe('preview evidence across replicas sharing a custom session store', () =
   });
 
   it('keeps proof process-local on the memory provider', async () => {
-    config.sessionStore = { provider: 'memory' };
+    config.keyValueStore = { provider: 'memory' };
     const a = await startReplica();
     const b = await startReplica();
 
@@ -293,18 +295,19 @@ describe('preview evidence across replicas sharing a custom session store', () =
     );
   });
 
-  it('picks up a new provider after the store and proof stores are reset', async () => {
-    config.sessionStore = { provider: 'memory' };
+  it('picks up a new provider after the store is reset', async () => {
+    config.keyValueStore = { provider: 'memory' };
     const a = await startReplica();
-    const { resetKeyValueStore } = await import('../../../storage/storageProvider.js');
+    const { initializeKeyValueStore, resetKeyValueStore } =
+      await import('../../../storage/init.js');
     await new a.RegistryEvidence().establish(makeCtx());
 
     resetKeyValueStore();
-    a.resetPreviewProofStores();
-    config.sessionStore = {
+    config.keyValueStore = {
       provider: 'custom',
-      providerConfig: { module: './src/sessionStore/__fixtures__/sharedBackendSessionStore.cjs' },
+      providerConfig: { module: './src/storage/__fixtures__/sharedBackendKeyValueStore.cjs' },
     };
+    initializeKeyValueStore();
     await new a.RegistryEvidence().establish(makeCtx());
     expect(globalThis.__sharedSessionBackend!.size).toBe(1);
   });

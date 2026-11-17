@@ -264,6 +264,14 @@ describe('initializeWebRuntime', () => {
       vi.useRealTimers();
     }
   });
+  it('fails startup before registering handlers when the KV provider cannot initialize', async () => {
+    vi.mocked(initializeKeyValueStore).mockImplementationOnce(() => {
+      throw new Error('KV load failed');
+    });
+    await expect(initializeWebRuntime(config)).rejects.toThrow('KV load failed');
+    expect(getTableauServerInfo).not.toHaveBeenCalled();
+    expect(processOnceSpy).not.toHaveBeenCalled();
+  });
 
   it('warns when stateless HTTP runs on the memory key-value store', async () => {
     await initializeWebRuntime({

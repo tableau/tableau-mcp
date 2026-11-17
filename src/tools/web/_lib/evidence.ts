@@ -3,8 +3,7 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import type { KeyValueStore } from '../../../storage/keyValueStore.js';
-import { createNamespacedKeyValueStore } from '../../../storage/storageProvider.js';
+import { getKeyValueStore } from '../../../storage/init.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
 import { WebToolName } from '../toolName.js';
@@ -148,30 +147,16 @@ export function getMutationPreviewTtlMs(): number {
   return milliseconds.fromMinutes(ttlMinutes);
 }
 
-// Preview proof lives in the configured key-value store, so with a shared custom store a confirm
-// verifies on whichever replica it reaches. With the default memory store it stays process-local: a
-// confirm reaching another process (or after a restart) is rejected and the caller re-previews.
+// Preview proof lives in the independent key-value store, so with a shared custom provider a confirm
+// verifies on whichever replica it reaches. With the default memory provider it stays process-local:
+// a confirm reaching another process (or after a restart) is rejected and the caller re-previews.
 //
-// Each scope holds one entry, so a new preview replaces the last one and only the latest token works.
+// Each key holds one entry, so a new preview replaces the last one and only the latest token works.
 // The entry is a string carrying its own expiry, which survives any provider's serialization and
-// keeps a provider that ignores the namespace TTL from stretching the approval window. The
-// namespace `ttlMs` is only a cleanup backstop; the embedded expiry is the authoritative check, so a
-// provider may add slack to it (e.g. ttl = write + ttlMs + 60s) without extending the window.
-const proofStores = new Map<string, KeyValueStore<string>>();
-
-function getProofStore(namespace: string): KeyValueStore<string> {
-  let store = proofStores.get(namespace);
-  if (!store) {
-    // Memoized: on the memory provider every factory call returns a fresh store.
-    store = createNamespacedKeyValueStore<string>(namespace, { ttlMs: getMutationPreviewTtlMs() });
-    proofStores.set(namespace, store);
-  }
-  return store;
-}
-
-/** Drop memoized proof stores so the next call picks up the current provider. For tests. */
-export function resetPreviewProofStores(): void {
-  proofStores.clear();
+// keeps a provider that ignores `ttlMs` from stretching the approval window. The write's `ttlMs` is
+// only a cleanup backstop; the embedded expiry is the authoritative check.
+function proofKey(namespace: string, key: string): string {
+  return `${namespace}:${key}`;
 }
 
 function sha256(fields: ReadonlyArray<string>): string {
@@ -214,7 +199,9 @@ async function withStore<T>(
 async function recordProof(namespace: string, key: string, secret = ''): Promise<void> {
   const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
   await withStore(namespace, 'set', () =>
-    getProofStore(namespace).set(key, `${expiresAtMs}.${secret}`),
+    getKeyValueStore().set(proofKey(namespace, key), `${expiresAtMs}.${secret}`, {
+      ttlMs: getMutationPreviewTtlMs(),
+    }),
   );
 }
 
@@ -238,12 +225,15 @@ function matchesProof(stored: unknown, secret: string): stored is string {
 // Consume, then check: one atomic store call keeps a token single-use across replicas. A wrong token
 // burns the pending proof, but the key is scoped to the caller's own preview, so they re-preview.
 async function consumeProof(namespace: string, key: string, secret = ''): Promise<boolean> {
-  const stored = await withStore(namespace, 'consume', () => getProofStore(namespace).consume(key));
+  const stored = await withStore(namespace, 'consume', () =>
+    getKeyValueStore().consume(proofKey(namespace, key)),
+  );
   return matchesProof(stored, secret);
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// The KV is one flat keyspace shared with other features, so each proof kind gets a key prefix.
 const NONCE_NAMESPACE = 'mutation-confirmation-nonces-v1';
 const APPROVAL_NAMESPACE = 'mutation-app-approvals-v1';
 
@@ -268,7 +258,7 @@ const APPROVAL_NAMESPACE = 'mutation-app-approvals-v1';
  * DELETEs, which carry no payload beyond the target id) pass no `binding`, so their key is unchanged.
  */
 export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
-  // The preview-tool name that scopes the approval key (not the KV namespace). The preview tool and
+  // The preview-tool name that scopes the approval key (not the KV key prefix). The preview tool and
   // its model-invisible confirm tool run under DIFFERENT tool names, so the key must NOT be
   // `ctx.tool` (that would never match across the pair). Both sides pass the SAME name (e.g.
   // 'delete-content', 'update-cloud-extract-refresh-task') so the pair resolves one entry and each
