@@ -13,7 +13,7 @@ type CardItem = {
 const cards: CardItem[] = [
   {
     title: 'Getting Started',
-    href: '/tableau-mcp/docs/getting-started',
+    href: '/docs/getting-started',
     description:
       'Quick start guide to connect your AI tool to Tableau. Configure authentication and run your first query in minutes.',
     icon: (
@@ -31,7 +31,7 @@ const cards: CardItem[] = [
   },
   {
     title: 'Hosted Tableau MCP',
-    href: '/tableau-mcp/docs/hosted-tableau-mcp',
+    href: '/docs/hosted-tableau-mcp',
     description:
       'Tableau MCP as a managed cloud service — no installation required. OAuth 2.1 secured and available to all Tableau Cloud customers.',
     icon: (
@@ -54,7 +54,7 @@ const cards: CardItem[] = [
   },
   {
     title: 'Enterprise Deployment',
-    href: '/tableau-mcp/docs/enterprise',
+    href: '/docs/enterprise',
     description:
       'Deploy Tableau MCP for your organization. Covers Tableau Cloud and Server configuration, OAuth setup, and production best practices.',
     icon: (
@@ -71,7 +71,7 @@ const cards: CardItem[] = [
   },
   {
     title: 'Developers',
-    href: '/tableau-mcp/docs/category/developers',
+    href: '/docs/developers',
     description:
       'Build on top of Tableau MCP. Contributing guidelines, local development setup, tool authoring, testing, and debugging resources.',
     icon: (

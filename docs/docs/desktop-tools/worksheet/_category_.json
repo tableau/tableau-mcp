@@ -1,0 +1,8 @@
+{
+  "label": "Worksheets",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for creating, applying, refining, and deleting worksheets in the open workbook."
+  }
+}
