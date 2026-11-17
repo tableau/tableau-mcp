@@ -75,6 +75,7 @@ export const getDescribeFlowTool = (
   const describeFlowTool = new WebTool({
     server,
     name: 'describe-flow',
+    registrationConditions: ['RequiresFlows'],
     minRequiredRole: SiteRole.EXPLORER,
     disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
