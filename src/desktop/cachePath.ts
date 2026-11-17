@@ -46,11 +46,7 @@ export const CONTAINED_CACHE_READ_ISSUE = {
 } as const;
 
 type UnsafeFileReason =
-  | 'symlink'
-  | 'not-regular-file'
-  | 'hard-linked'
-  | 'outside-cache'
-  | 'changed-during-check';
+  'symlink' | 'not-regular-file' | 'hard-linked' | 'outside-cache' | 'changed-during-check';
 
 type OtherIssue<T> = Exclude<T[keyof T], 'unsafe-file'>;
 
