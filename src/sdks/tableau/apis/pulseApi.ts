@@ -84,10 +84,32 @@ const listPulseMetricsFromMetricDefinitionIdRestEndpoint = makeEndpoint({
   path: '/pulse/definitions/:pulseMetricDefinitionID/metrics',
   alias: 'listPulseMetricsFromMetricDefinitionId',
   description: 'Returns a list of published Pulse Metrics for a specific Pulse Metric Definition.',
-  parameters: [pathParam('pulseMetricDefinitionID')],
+  parameters: [
+    pathParam('pulseMetricDefinitionID'),
+    {
+      name: 'page_size',
+      type: 'Query',
+      schema: z.coerce.number().int().positive().optional(),
+      description: 'Specifies the number of metrics in a paged response.',
+    },
+    {
+      name: 'page_token',
+      type: 'Query',
+      schema: z.string().optional(),
+      description: 'Continuation token from the previous response. Omit for the first page.',
+    },
+    {
+      name: 'exclude_metrics_without_followers',
+      type: 'Query',
+      schema: z.boolean().optional(),
+      description: 'Whether to exclude metrics without followers. Omit to use the REST default.',
+    },
+  ],
   response: z.object({
     metrics: z.array(pulseMetricSchema),
-    total_available: z.number(),
+    next_page_token: z.string().optional(),
+    offset: z.coerce.number().optional(),
+    total_available: z.coerce.number(),
   }),
 });
 
