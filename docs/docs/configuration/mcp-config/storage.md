@@ -65,7 +65,7 @@ and limits are provider-specific.
 ## Namespaces and expiration
 
 Server code obtains a scoped store with `createNamespacedKeyValueStore(namespace, options)`
-from `src/storage/storageProvider.ts`.
+from `src/storage/init.ts`.
 Namespaces must be non-empty strings without `:`; invalid names are rejected before provider
 initialization. Custom providers receive keys prefixed with `<namespace>:`, so the namespace
 is the text before the first colon. Keys may contain colons and are passed through unchanged

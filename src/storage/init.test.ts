@@ -11,13 +11,13 @@ vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
 import { type Config, getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
 import { createNamespacedStore } from '../sessionStore/init.js';
-import type { KeyValueStore } from './keyValueStore.js';
 import {
   connectKeyValueStore,
   createNamespacedKeyValueStore,
   disconnectKeyValueStore,
   resetKeyValueStore,
-} from './storageProvider.js';
+} from './init.js';
+import type { KeyValueStore } from './keyValueStore.js';
 
 const MODULE = './src/storage/__fixtures__/keyValueStore.cjs';
 

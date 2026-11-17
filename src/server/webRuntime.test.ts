@@ -4,7 +4,7 @@ import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
 import { log } from '../logging/logger.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import { connectKeyValueStore, disconnectKeyValueStore } from '../storage/storageProvider.js';
+import { connectKeyValueStore, disconnectKeyValueStore } from '../storage/init.js';
 
 const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
@@ -50,7 +50,7 @@ vi.mock('../sdks/tableau/restApi.js', () => ({
   RestApi: { host: '' },
 }));
 
-vi.mock('../storage/storageProvider.js', () => ({
+vi.mock('../storage/init.js', () => ({
   connectKeyValueStore: vi.fn(() => {
     runtimeState.events.push('key-value store connect');
     return runtimeState.connectPromise;

@@ -4,18 +4,18 @@ import {
   disconnectKeyValueStore,
   initializeSessionStore,
   resetKeyValueStore,
-} from '../storage/storageProvider.js';
+} from '../storage/init.js';
 
 export { initializeSessionStore };
 
-/** @deprecated Use connectKeyValueStore from storage/storageProvider instead. */
+/** @deprecated Use connectKeyValueStore from storage/init instead. */
 export const connectSessionStore = connectKeyValueStore;
 
-/** @deprecated Use createNamespacedKeyValueStore from storage/storageProvider instead. */
+/** @deprecated Use createNamespacedKeyValueStore from storage/init instead. */
 export const createNamespacedStore = createNamespacedKeyValueStore;
 
-/** @deprecated Use disconnectKeyValueStore from storage/storageProvider instead. */
+/** @deprecated Use disconnectKeyValueStore from storage/init instead. */
 export const disconnectSessionStore = disconnectKeyValueStore;
 
-/** @deprecated Use resetKeyValueStore from storage/storageProvider instead. */
+/** @deprecated Use resetKeyValueStore from storage/init instead. */
 export const resetSessionStore = resetKeyValueStore;
