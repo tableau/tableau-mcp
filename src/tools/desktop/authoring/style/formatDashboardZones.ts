@@ -31,8 +31,7 @@ export type DashboardZoneFormatRequest = {
 };
 
 export type FormatDashboardZonesDocumentResult =
-  | { ok: true; xml: string; targetZoneIds: string[] }
-  | { ok: false; message: string };
+  { ok: true; xml: string; targetZoneIds: string[] } | { ok: false; message: string };
 
 type ZoneFormatReceipt = {
   dashboard: string;

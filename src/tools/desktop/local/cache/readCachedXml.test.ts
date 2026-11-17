@@ -21,13 +21,12 @@ const CACHED_FILE = `${CACHE_DIR}/worksheet-session-1.xml`;
 const SAMPLE_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 
 function setupCacheMock(): void {
-  vi.mocked(DesktopCache).mockImplementation(
-    () =>
-      ({
-        getCacheFilePath: ({ prefix, id }: { prefix: string; id?: string }) =>
-          `${CACHE_DIR}/${prefix}-${id ?? 'default'}.xml`,
-      }) as unknown as DesktopCache,
-  );
+  vi.mocked(DesktopCache).mockImplementation(function () {
+    return {
+      getCacheFilePath: ({ prefix, id }: { prefix: string; id?: string }) =>
+        `${CACHE_DIR}/${prefix}-${id ?? 'default'}.xml`,
+    } as unknown as DesktopCache;
+  });
 }
 
 describe('readCachedXmlTool', () => {
@@ -154,8 +153,8 @@ describe('readCachedXmlTool', () => {
     });
 
     it.each([
-      ['worksheet', { worksheet: 'Nope &amp; Co' }, 'list-worksheets'],
-      ['dashboard', { dashboard: 'Nope &amp; Co' }, 'list-dashboards'],
+      ['worksheet', { worksheet: 'Nope &amp; Co' }, 'get-sheets'],
+      ['dashboard', { dashboard: 'Nope &amp; Co' }, 'get-sheets'],
     ])('not-found %s selector says to use the plain name', async (kind, selectors, listTool) => {
       const result = await getResult(CACHED_FILE, selectors);
 

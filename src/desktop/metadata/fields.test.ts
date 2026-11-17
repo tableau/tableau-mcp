@@ -602,7 +602,7 @@ describe('remove-field stale placement recovery', () => {
       expect(attempt).toThrow('"cols":["[Sample].[none:Category:nk]"]');
       expect(attempt).toThrow('"color":["[Sample].[none:Category:nk]"]');
       expect(attempt).toThrow('read-cached-xml');
-      expect(attempt).toThrow('get-worksheet-xml');
+      expect(attempt).toThrow('get-xml');
       expect(attempt).toThrow('pending edits');
     },
   );

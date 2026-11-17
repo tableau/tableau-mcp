@@ -1,7 +1,6 @@
 import { Ok } from 'ts-results-es';
 
 import * as cachePathModule from '../../../../desktop/cachePath.js';
-import * as getWorksheetXmlCmd from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlCmd from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   DesktopMcpServer,
@@ -12,7 +11,7 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from '../../api/applyWorksheet.js';
-import { getGetWorksheetXmlTool } from '../../api/getWorksheetXml.js';
+import { getXmlTool } from '../../api/getXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { desktopToolFactories } from '../../tools.js';
@@ -26,7 +25,6 @@ vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   writeContainedCacheTextFile: vi.fn(),
   writeCacheTextFile: vi.fn(),
 }));
-vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
   ...(await importOriginal<typeof loadWorksheetXmlCmd>()),
   loadWorksheetXml: vi.fn(),
@@ -71,12 +69,7 @@ describe('no served tool accepts a whole document', () => {
   });
 
   it('keeps the whole cache-splice route inside the served profile', () => {
-    for (const tool of [
-      'get-worksheet-xml',
-      'read-cached-xml',
-      'write-cached-xml',
-      'apply-worksheet',
-    ]) {
+    for (const tool of ['get-xml', 'read-cached-xml', 'write-cached-xml', 'apply-worksheet']) {
       expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool as never)).toBe(true);
     }
   });
@@ -112,18 +105,31 @@ describe('the served profile still has a working edit path with no document para
   });
 
   it('runs the get -> slice-read -> splice-write -> apply(file) repair path', async () => {
-    vi.spyOn(getWorksheetXmlCmd, 'getWorksheetXml').mockResolvedValue(
-      Ok({ xml: SHEET, name: 'Sales' }),
-    );
     const loadSpy = vi
       .spyOn(loadWorksheetXmlCmd, 'loadWorksheetXml')
       .mockResolvedValue(Ok({ validationWarnings: [], readbackWarnings: [] }));
 
-    const getCb = await Provider.from(getGetWorksheetXmlTool(new DesktopMcpServer()).callback);
-    const getResult = await getCb({ session: 's1', worksheetName: 'Sales', mode: 'file' }, extra());
+    const listWorksheets = vi
+      .fn()
+      .mockResolvedValue(Ok({ worksheets: [{ id: '{WS-SALES}', name: 'Sales' }] }));
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: SHEET }));
+    const getCb = await Provider.from(getXmlTool(new DesktopMcpServer()).callback);
+    const getResult = await getCb(
+      {
+        session: 's1',
+        kind: 'worksheet',
+        sheetId: '{WS-SALES}',
+        datasourceId: undefined,
+        mode: 'file',
+      },
+      {
+        ...extra(),
+        getExecutor: vi.fn().mockResolvedValue({ listWorksheets, getWorksheetDocument }),
+      },
+    );
     invariant(getResult.content[0].type === 'text');
     const file = [...store.keys()].find((key) => !key.endsWith('.session'));
-    invariant(file, 'get-worksheet-xml must mint a cache file the agent can address');
+    invariant(file, 'get-xml must mint a cache file the agent can address');
     expect(getResult.content[0].text).toContain(file);
 
     const readCb = await Provider.from(getReadCachedXmlTool(new DesktopMcpServer()).callback);

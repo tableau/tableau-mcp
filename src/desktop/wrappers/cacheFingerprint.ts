@@ -31,16 +31,10 @@ export interface InstanceFingerprint {
 }
 
 export type CacheArtifactKind =
-  | 'worksheet'
-  | 'workbook'
-  | 'dashboard'
-  | 'storyboard'
-  | 'datasource';
+  'worksheet' | 'workbook' | 'dashboard' | 'storyboard' | 'datasource';
 
 export type CacheSidecarInput =
-  | { type: 'read'; text: string }
-  | { type: 'missing' }
-  | { type: 'unreadable'; error?: unknown };
+  { type: 'read'; text: string } | { type: 'missing' } | { type: 'unreadable'; error?: unknown };
 
 export interface CacheSidecarMeta extends InstanceFingerprint {
   session_id: string;
@@ -58,11 +52,11 @@ export interface CheckSidecarResult {
 export type FingerprintResolver = (sessionId: string) => InstanceFingerprint | undefined;
 
 const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
-  worksheet: 'get-worksheet-xml',
-  workbook: 'get-workbook-xml',
-  dashboard: 'get-dashboard-xml',
-  storyboard: 'get-storyboard-xml',
-  datasource: 'get-datasource-xml',
+  worksheet: 'get-xml (kind=worksheet)',
+  workbook: 'get-xml (no kind)',
+  dashboard: 'get-xml (kind=dashboard)',
+  storyboard: 'get-xml (kind=storyboard)',
+  datasource: 'get-xml (kind=datasource)',
 };
 
 export function sidecarPath(cacheFile: string): string {

@@ -1326,7 +1326,7 @@ export async function startMockExternalApiServer(
     if (method === 'POST' && dashboardRefreshNowMatch) {
       const dashboardId = decodeURIComponent(dashboardRefreshNowMatch[1]);
       if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
-        sendProblem(res, 404, 'dashboard-not-found', `Dashboard not found: ${dashboardId}`);
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
         return;
       }
       sendJson(res, 200, {

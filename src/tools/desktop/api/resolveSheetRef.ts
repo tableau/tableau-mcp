@@ -7,7 +7,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 export type ResolvedSheetRef = {
   ref: SheetRef;
   previousName: string;
-  worksheetCount: number;
+  worksheetCount: number | undefined;
 };
 
 /**
@@ -29,56 +29,73 @@ export async function resolveSheetRef({
     session,
     extra,
     callback: async (_executor, _signal, read) => {
-      const worksheets = await read(
-        'worksheet list',
-        async (executor, signal) => await executor.listWorksheets(signal),
-      );
-      if (worksheets.isErr()) {
-        return worksheets;
-      }
-      const dashboards = await read(
-        'dashboard list',
-        async (executor, signal) => await executor.listDashboards(signal),
-      );
-      if (dashboards.isErr()) {
-        return dashboards;
-      }
-      const storyboards = await read(
-        'storyboard list',
-        async (executor, signal) => await executor.listStoryboards(signal),
-      );
-      if (storyboards.isErr()) {
-        return storyboards;
+      const tagged: Array<{ id: string; name: string; kind: SheetKind }> = [];
+      let worksheetCount: number | undefined;
+
+      if (kind === undefined || kind === 'worksheet') {
+        const worksheets = await read(
+          'worksheet list',
+          async (executor, signal) => await executor.listWorksheets(signal),
+        );
+        if (worksheets.isErr()) {
+          return worksheets;
+        }
+        const worksheetItems = worksheets.value.worksheets ?? [];
+        worksheetCount = worksheetItems.length;
+        tagged.push(
+          ...worksheetItems.map((w) => ({ id: w.id, name: w.name, kind: 'worksheet' as const })),
+        );
       }
 
-      const worksheetItems = worksheets.value.worksheets ?? [];
-      const tagged: Array<{ id: string; name: string; kind: SheetKind }> = [
-        ...worksheetItems.map((w) => ({ id: w.id, name: w.name, kind: 'worksheet' as const })),
-        ...(dashboards.value.dashboards ?? []).map((d) => ({
-          id: d.id,
-          name: d.name,
-          kind: 'dashboard' as const,
-        })),
-        ...(storyboards.value.storyboards ?? []).map((s) => ({
-          id: s.id,
-          name: s.name,
-          kind: 'storyboard' as const,
-        })),
-      ];
+      if (kind === undefined || kind === 'dashboard') {
+        const dashboards = await read(
+          'dashboard list',
+          async (executor, signal) => await executor.listDashboards(signal),
+        );
+        if (dashboards.isErr()) {
+          return dashboards;
+        }
+        tagged.push(
+          ...(dashboards.value.dashboards ?? []).map((d) => ({
+            id: d.id,
+            name: d.name,
+            kind: 'dashboard' as const,
+          })),
+        );
+      }
 
-      const resolved = resolveItemByNameOrId(
-        'Sheet',
-        sheet,
-        kind ? tagged.filter((item) => item.kind === kind) : tagged,
-      );
+      if (kind === undefined || kind === 'storyboard') {
+        const storyboards = await read(
+          'storyboard list',
+          async (executor, signal) => await executor.listStoryboards(signal),
+        );
+        if (storyboards.isErr()) {
+          return storyboards;
+        }
+        tagged.push(
+          ...(storyboards.value.storyboards ?? []).map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: 'storyboard' as const,
+          })),
+        );
+      }
+
+      const resolved = resolveItemByNameOrId(kind ? SHEET_LABEL[kind] : 'Sheet', sheet, tagged);
       if (resolved.isErr()) {
         return resolved.error.toErr();
       }
       return new Ok({
         ref: { kind: resolved.value.kind, id: resolved.value.id },
         previousName: resolved.value.name,
-        worksheetCount: worksheetItems.length,
+        worksheetCount,
       });
     },
   });
 }
+
+const SHEET_LABEL: Record<SheetKind, string> = {
+  worksheet: 'Worksheet',
+  dashboard: 'Dashboard',
+  storyboard: 'Storyboard',
+};

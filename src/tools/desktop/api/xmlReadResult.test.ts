@@ -32,7 +32,7 @@ describe('finishXmlRead cache write', () => {
         artifactKind: 'workbook',
         label: 'Workbook',
         inlineKey: 'workbookXml',
-        toolName: 'get-workbook-xml',
+        toolName: 'get-xml',
         applyTool: 'apply-workbook',
         pathParam: 'workbookFile',
         xml: '<workbook/>',

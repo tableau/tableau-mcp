@@ -16,13 +16,10 @@ export interface TargetWorksheetState {
 }
 
 export type TargetWorksheetDriftReason =
-  | 'target-worksheet-drift'
-  | 'target-window-drift'
-  | 'datasource-drift';
+  'target-worksheet-drift' | 'target-window-drift' | 'datasource-drift';
 
 export type TargetWorksheetStateComparison =
-  | { ok: true }
-  | { ok: false; reasons: TargetWorksheetDriftReason[] };
+  { ok: true } | { ok: false; reasons: TargetWorksheetDriftReason[] };
 
 interface FieldKey {
   datasource: string;
