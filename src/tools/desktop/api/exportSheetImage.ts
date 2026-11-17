@@ -10,7 +10,7 @@ import { ImageExportQuery, ImageResult, SheetKind } from '../../../desktop/exter
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { imageFilePathParam, sessionParam } from '../params.js';
+import { imageFilePathParam, outputModeParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import {
   buildSheetImageToolResult,
@@ -21,15 +21,11 @@ import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheetId: z.string().min(1).describe('Id of the sheet to render. A unique sheet name also works.'),
-  kind: z
-    .enum(['worksheet', 'dashboard', 'storyboard'])
-    .describe('Which kind of sheet sheetId is.'),
+  sheetId: z.string().min(1).describe('Sheet id; a unique name also works.'),
+  kind: z.enum(['worksheet', 'dashboard', 'storyboard']).describe('Sheet kind.'),
+  mode: outputModeParam(),
   filePath: imageFilePathParam(),
-  mimeType: z
-    .enum(['image/png', 'image/svg+xml'])
-    .optional()
-    .describe('Image MIME type to render. Defaults to image/png.'),
+  mimeType: z.enum(['image/png', 'image/svg+xml']).optional().describe('Defaults to image/png.'),
 };
 const title = 'Export Sheet Image';
 
@@ -49,8 +45,7 @@ export const exportSheetImageTool = (
     name: 'export-sheet-image',
     title,
     description:
-      'Render one worksheet, dashboard or storyboard as an image. ' +
-      'A storyboard renders only its active story point; other points cannot be selected.',
+      'Render a worksheet, dashboard or storyboard as an image. A storyboard renders only its active story point.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -59,7 +54,7 @@ export const exportSheetImageTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, sheetId, kind, filePath, mimeType },
+      { session, sheetId, kind, mode, filePath, mimeType },
       extra,
     ): Promise<CallToolResult> => {
       const { query } = resolveImageExportQuery({ filePath, mimeType });
@@ -67,7 +62,7 @@ export const exportSheetImageTool = (
       const endpoint = `${kind} image`;
       return await exportSheetImage.logAndExecute<ImageResult>({
         extra,
-        args: { session, sheetId, kind, filePath, mimeType },
+        args: { session, sheetId, kind, mode, filePath, mimeType },
         callback: async () =>
           await runExternalApiReadTool<ImageResult>({
             session,
@@ -120,6 +115,7 @@ export const exportSheetImageTool = (
             label,
             cachePrefix: `${kind}-image`,
             image,
+            mode,
             config: extra.config,
           }),
       });

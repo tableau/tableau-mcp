@@ -9,6 +9,7 @@ const ALLOWED: Record<string, string> = {
   'desktop/limits/redactedXmlCache.ts': 'the redacting writers',
   'desktop/wrappers/cacheFingerprint.ts': 'writes the JSON sidecar, not XML',
   'tools/desktop/authoring/fields/worksheetEditBuffer.ts': 'writes a JSON pointer, not XML',
+  'tools/desktop/api/logicalTables.ts': 'writes JSON rows, not XML',
   'tools/desktop/local/cache/writeCachedXml.ts':
     'model-supplied XML: redacting would make apply refuse what the user wrote',
 };

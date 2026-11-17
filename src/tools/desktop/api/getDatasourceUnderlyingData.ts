@@ -11,10 +11,14 @@ import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDataso
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { outputModeParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { isNotADatasourceId } from './getDatasources.js';
-import { resolveLogicalTable, rowParamsWithoutTable } from './logicalTables.js';
+import {
+  buildRowsToolResult,
+  resolveLogicalTable,
+  rowParamsWithoutTable,
+} from './logicalTables.js';
 import { isDatasourceQualified } from './qualifyColumnField.js';
 import { resolveDatasource } from './resolveDatasourceRef.js';
 
@@ -23,20 +27,15 @@ const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
   session: sessionParam(),
-  datasourceId: z
-    .string()
-    .min(1)
-    .describe('Datasource id, as returned (percent-encoded); a name or caption also works.'),
+  datasourceId: z.string().min(1).describe('Datasource id (percent-encoded), name or caption.'),
   logicalTableId: z
     .string()
     .min(1)
     .optional()
-    .describe('Logical table id or caption. Omit it to list the tables.'),
+    .describe('Table id or caption; omit to list tables.'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
-  columns: z
-    .array(z.string().min(1))
-    .optional()
-    .describe('Source column names to keep (e.g. "Region").'),
+  mode: outputModeParam(),
+  columns: z.array(z.string().min(1)).optional().describe('Source column names to keep.'),
 };
 const title = 'Get Datasource Underlying Data';
 
@@ -48,22 +47,21 @@ export const getDatasourceUnderlyingDataTool = (
     name: 'get-datasource-underlying-data',
     minApiVersion: DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION,
     title,
-    description:
-      "Without logicalTableId: a datasource's logical tables (id + caption). With it: that table's raw rows, independent of any worksheet.",
+    description: "Lists a datasource's logical tables, or a table's raw rows with logicalTableId.",
     paramsSchema,
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false, // file mode writes a cache file
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false, // each file-mode call writes a new cache file
       openWorldHint: false,
     },
     callback: async (
-      { session, datasourceId, logicalTableId, maxRows, columns },
+      { session, datasourceId, logicalTableId, maxRows, mode, columns },
       extra,
     ): Promise<CallToolResult> => {
       return await getDatasourceUnderlyingData.logAndExecute({
         extra,
-        args: { session, datasourceId, logicalTableId, maxRows, columns },
+        args: { session, datasourceId, logicalTableId, maxRows, mode, columns },
         callback: async () => {
           if (logicalTableId === undefined) {
             const stray = rowParamsWithoutTable({ maxRows, columns });
@@ -161,6 +159,10 @@ export const getDatasourceUnderlyingDataTool = (
             },
           });
         },
+        getSuccessResult: (result) =>
+          logicalTableId === undefined
+            ? { isError: false, content: [{ type: 'text', text: JSON.stringify(result) }] }
+            : buildRowsToolResult({ rows: result, mode, cachePrefix: 'datasource-rows' }),
       });
     },
   });

@@ -10,7 +10,6 @@ describe('buildInlineImageCapFileMessage', () => {
     });
 
     expect(message).toContain('worksheet instead of a whole dashboard');
-    expect(message).toContain('pass a filePath');
     expect(message).toContain('remains until manually removed');
   });
 

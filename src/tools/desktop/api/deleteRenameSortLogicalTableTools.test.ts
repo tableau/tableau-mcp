@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync, rmSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -591,6 +592,28 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
+  it('get-worksheet-underlying-data saves rows to a JSON cache file by default', async () => {
+    const harness = await startHarness(getWorksheetUnderlyingDataTool);
+    try {
+      const { result } = await run(harness, {
+        sheetId: WORKSHEET_ID,
+        logicalTableId: LOGICAL_TABLE_ID,
+        mode: undefined,
+      });
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      const match = /cache file: (.*worksheet-rows-.*\.json)$/.exec(result.content[0].text);
+      invariant(match);
+      try {
+        expect(JSON.parse(readFileSync(match[1], 'utf-8'))).toHaveProperty('rows');
+      } finally {
+        rmSync(match[1], { force: true });
+      }
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('get-worksheet-underlying-data resolves a logical table caption to its id', async () => {
     const harness = await startHarness(getWorksheetUnderlyingDataTool);
     try {
@@ -717,7 +740,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async (args) => await callback(args, extra),
+    callTool: async (args) => await callback({ mode: 'inline', ...args }, extra),
     close: async () => {
       executor.stop();
       await server.close();
