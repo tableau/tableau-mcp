@@ -1,5 +1,6 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Err, Ok } from 'ts-results-es';
+import type { Mock } from 'vitest';
 
 import * as loggerModule from '../../logging/logger.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
@@ -586,7 +587,7 @@ describe('strict vs. subset scope matching', () => {
   function initializeReq(scopes: string[]): {
     req: AuthenticatedRequest;
     res: any;
-    next: ReturnType<typeof vi.fn>;
+    next: Mock<() => void>;
     authInfo: { scopes: string[]; clientId: string };
     middleware: ReturnType<typeof authMiddleware>;
   } {
@@ -607,7 +608,7 @@ describe('strict vs. subset scope matching', () => {
       },
     } as unknown as AuthenticatedRequest;
     const res = makeRes();
-    const next = vi.fn();
+    const next = vi.fn<() => void>();
     return { req, res, next, authInfo, middleware };
   }
 
