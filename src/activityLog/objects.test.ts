@@ -32,8 +32,7 @@ describe('activityLogObjectSources', () => {
       }
 
       const schema = (await Provider.from(tool.paramsSchema)) as
-        | ZodRawShapeCompat
-        | { shape: ZodRawShapeCompat };
+        ZodRawShapeCompat | { shape: ZodRawShapeCompat };
       const argNames = Object.keys('shape' in schema ? schema.shape : schema);
       expect(argNames, tool.name).toEqual(expect.arrayContaining([...source.args]));
       checked.push(tool.name);

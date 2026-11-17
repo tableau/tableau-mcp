@@ -38,8 +38,7 @@ import { BearerToken, bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
 
 export type RestApiCredentials =
-  | ({ type: 'X-Tableau-Auth' } & Credentials)
-  | { type: 'Bearer'; token: string };
+  ({ type: 'X-Tableau-Auth' } & Credentials) | { type: 'Bearer'; token: string };
 
 /**
  * Interface for the Tableau REST APIs

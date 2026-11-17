@@ -79,8 +79,7 @@ async function schemasByToolName(): Promise<Map<string, Record<string, z.ZodType
   for (const factory of desktopToolFactories) {
     const tool = factory(server);
     const paramsSchema = (await Provider.from(tool.paramsSchema)) as
-      | Record<string, z.ZodTypeAny>
-      | undefined;
+      Record<string, z.ZodTypeAny> | undefined;
     schemas.set(tool.name, paramsSchema ?? {});
   }
   return schemas;

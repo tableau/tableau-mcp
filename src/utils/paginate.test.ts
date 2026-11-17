@@ -1,4 +1,5 @@
 import { Ok } from 'ts-results-es';
+import type { Mock } from 'vitest';
 
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
 import {
@@ -867,7 +868,12 @@ describe('getPage', () => {
       pageNumber: number;
       count: number;
       rawTotal: number;
-    }): ReturnType<typeof vi.fn> {
+    }): Mock<
+      (page: {
+        pageSize: number;
+        pageNumber: number;
+      }) => Promise<{ pagination: Pagination; data: Array<{ id: number }> }>
+    > {
       const start = (pageNumber - 1) * 1000;
       return vi.fn().mockResolvedValue({
         pagination: { pageNumber, pageSize: 1000, totalAvailable: rawTotal },
