@@ -32,6 +32,10 @@ vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => {
       datasourcesMethods: {
         listDatasources: vi.fn().mockResolvedValue(mockDatasources),
       },
+      // A site settings read that fails rejects the MCP connection, so the fake site has none.
+      mcpSettingsMethods: {
+        getMcpSiteSettings: vi.fn().mockResolvedValue({ settings: [] }),
+      },
       serverMethods: {
         getServerInfo: vi.fn().mockResolvedValue({
           productVersion: testProductVersion,
