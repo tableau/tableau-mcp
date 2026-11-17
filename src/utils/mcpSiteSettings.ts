@@ -95,7 +95,9 @@ async function getMcpSiteSettings({
         },
         restApiArgs,
       );
-      throw toSiteSettingsUnavailableError(error);
+      // OAuth and passthrough send Tableau the caller's own token.
+      const usedCallerToken = tableauAuthInfo?.type === 'Passthrough' || config.auth === 'oauth';
+      throw toSiteSettingsUnavailableError(error, usedCallerToken);
     }
   }
 
@@ -110,12 +112,22 @@ async function getMcpSiteSettings({
 }
 
 // Keeps Tableau's 4xx or 5xx so a client fault is not reported as ours; a failure with no HTTP status is a 500.
-function toSiteSettingsUnavailableError(error: unknown): McpSiteSettingsUnavailableError {
+function toSiteSettingsUnavailableError(
+  error: unknown,
+  usedCallerToken: boolean,
+): McpSiteSettingsUnavailableError {
   const upstreamStatus = error instanceof Error ? Number(getHttpStatus(error)) : NaN;
   if (!(upstreamStatus >= 400 && upstreamStatus <= 599)) {
     return new McpSiteSettingsUnavailableError(
       'Could not get the MCP settings for this Tableau site.',
       500,
+    );
+  }
+  if (upstreamStatus === 401 && !usedCallerToken) {
+    // A 401 for this server's own credentials is a fault the client can't fix, so it is a 502.
+    return new McpSiteSettingsUnavailableError(
+      'Could not get the MCP settings for this Tableau site: Tableau rejected the credentials this MCP server is configured with (status code 401).',
+      502,
     );
   }
   const message =

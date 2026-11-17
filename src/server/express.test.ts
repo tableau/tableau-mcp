@@ -111,15 +111,15 @@ describe.each([false, true])(
   (stateless) => {
     const servers: Array<http.Server> = [];
 
-    // Set per test: afterEach's restoreAllMocks clears a mockImplementation.
+    // Set per test: afterEach's restoreAllMocks clears a mockImplementation. A function, not an
+    // arrow: express calls `new WebMcpServer(...)`, and vitest 5 rejects `new` on an arrow mock.
     beforeEach(() => {
-      vi.mocked(WebMcpServer).mockImplementation(
-        () =>
-          ({
-            registerTools: mocks.registerTools,
-            mcpServer: { server: { setRequestHandler: vi.fn() }, connect: vi.fn(), close: vi.fn() },
-          }) as never,
-      );
+      vi.mocked(WebMcpServer).mockImplementation(function () {
+        return {
+          registerTools: mocks.registerTools,
+          mcpServer: { server: { setRequestHandler: vi.fn() }, connect: vi.fn(), close: vi.fn() },
+        } as never;
+      });
     });
 
     afterEach(async () => {
@@ -160,7 +160,6 @@ describe.each([false, true])(
 
     it.each([
       [400, -32000],
-      [401, -32000],
       [404, -32000],
       [500, -32603],
       [502, -32603],
@@ -182,6 +181,22 @@ describe.each([false, true])(
         });
       },
     );
+
+    it('answers a site settings 401 with the OAuth challenge, so the client signs in again', async () => {
+      mocks.registerTools.mockRejectedValue(
+        new McpSiteSettingsUnavailableError('Could not get the MCP settings.', 401),
+      );
+
+      const response = await postInitialize();
+
+      expect(response.status).toBe(401);
+      const challenge = response.headers.get('www-authenticate');
+      expect(challenge).toMatch(
+        /^Bearer realm="MCP", resource_metadata="http:\/\/127\.0\.0\.1:\d+\/\.well-known\/oauth-protected-resource"/,
+      );
+      expect(challenge).toContain('error="invalid_token"');
+      expect(await response.json()).toMatchObject({ error: 'invalid_token' });
+    });
 
     it.each([
       ['an untyped error', new Error('secret internals')],

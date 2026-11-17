@@ -227,7 +227,7 @@ describe('mcpSiteSettings', () => {
     });
 
     it.each([400, 401, 404, 429, 500, 502, 503])(
-      'rejects with status %i when Tableau answers with it',
+      'rejects with status %i when Tableau answers a passthrough token with it',
       async (status) => {
         mocks.mockGetMcpSiteSettings.mockRejectedValue(axiosError(status));
 
@@ -237,6 +237,41 @@ describe('mcpSiteSettings', () => {
         await expect(result).rejects.toMatchObject({ statusCode: status });
       },
     );
+
+    it('rejects with status 401 when Tableau rejects the caller OAuth token', async () => {
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', 'http://127.0.0.1:3927');
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY', 'test-private-key');
+      // Config refuses to start under the default scope posture without it.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      mocks.mockGetMcpSiteSettings.mockRejectedValue(axiosError(401));
+
+      const result = getConfigWithOverrides({
+        restApiArgs: {
+          server: new WebMcpServer(),
+          tableauAuthInfo: {
+            type: 'Bearer',
+            username: 'u',
+            server: 'https://my-tableau-server.com',
+            siteId: 'oauth-401',
+            siteName: 'oauth-401',
+            raw: 'token',
+          },
+          disableLogging: true,
+        },
+        requestOverrides: undefined,
+      });
+
+      await expect(result).rejects.toMatchObject({ statusCode: 401 });
+    });
+
+    it('rejects with status 502 when Tableau rejects the server credentials (401)', async () => {
+      // A site of its own, so settings cached by another test don't answer.
+      vi.stubEnv('SITE_NAME', 'server-credentials-401');
+      mocks.mockGetMcpSiteSettings.mockRejectedValue(axiosError(401));
+
+      await expect(getFor(undefined)).rejects.toMatchObject({ statusCode: 502 });
+    });
 
     it.each([
       ['a plain Error', new Error('boom')],
