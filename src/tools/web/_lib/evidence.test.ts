@@ -1,10 +1,12 @@
 import { afterEach, beforeEach } from 'vitest';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { getKeyValueStore } from '../../../storage/init.js';
 import {
   AllEvidence,
   AppApprovalEvidence,
   EvidenceContext,
+  getMutationPreviewTtlMs,
   NoEvidence,
   RegistryEvidence,
   TagEvidence,
@@ -159,6 +161,19 @@ describe('RegistryEvidence', () => {
     // The TTL is read once when the cache is lazily created (module-level singleton). Keep the
     // default; the single-use + miss behaviors below don't depend on the exact TTL value.
     vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
+  });
+
+  it('writes the nonce with the preview TTL so the provider can expire it', async () => {
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '3');
+    const set = vi.spyOn(getKeyValueStore(), 'set');
+
+    await new RegistryEvidence().establish(makeCtx());
+
+    expect(set).toHaveBeenCalledOnce();
+    expect(set).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      ttlMs: 3 * 60 * 1000,
+    });
+    expect(getMutationPreviewTtlMs()).toBe(3 * 60 * 1000);
   });
 
   it('describes itself as a registry-nonce and NEVER leaks the raw nonce in the descriptor', async () => {
@@ -343,6 +358,18 @@ describe('AppApprovalEvidence', () => {
       ...overrides,
     });
   }
+
+  it('writes the approval with the preview TTL so the provider can expire it', async () => {
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '7');
+    const set = vi.spyOn(getKeyValueStore(), 'set');
+
+    await new AppApprovalEvidence('delete-content').establish(appCtx());
+
+    expect(set).toHaveBeenCalledOnce();
+    expect(set).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      ttlMs: 7 * 60 * 1000,
+    });
+  });
 
   it('describes itself as a registry-nonce with a human-gesture detail and leaks no secret', () => {
     const descriptor = new AppApprovalEvidence('delete-content').describeEvidence();
