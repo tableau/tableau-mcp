@@ -81,9 +81,7 @@ function findWorksheetNode(parsed: Record<string, unknown>): Record<string, unkn
   const candidate =
     normalizeArray(
       (wbWorksheets?.['worksheet'] ?? workbook?.['worksheet'] ?? parsed['worksheet']) as
-        | Record<string, unknown>
-        | Record<string, unknown>[]
-        | undefined,
+        Record<string, unknown> | Record<string, unknown>[] | undefined,
     )[0] ?? undefined;
   return candidate;
 }

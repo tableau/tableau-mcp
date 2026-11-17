@@ -47,12 +47,10 @@ export const rankAsMembershipRule: ValidationRule = {
           new RegExp(FIRST_LAST_VS_ZERO_LABEL.source, 'gi'),
           ' ',
         );
-        if (
-          !(
-            POSITIONAL_TABLECALC.test(withoutZeroForm) &&
-            POSITIONAL_VS_THRESHOLD.test(withoutZeroForm)
-          )
-        ) {
+        if (!(
+          POSITIONAL_TABLECALC.test(withoutZeroForm) &&
+          POSITIONAL_VS_THRESHOLD.test(withoutZeroForm)
+        )) {
           continue;
         }
       }

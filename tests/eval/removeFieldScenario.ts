@@ -88,16 +88,14 @@ export const removeFieldCases: RemoveFieldCase[] = [
     removals: 0,
     previousRemoval: { target: 'rows', columnRef: sales },
   },
-  ...(['size', 'angle'] as const).map(
-    (encodingType): RemoveFieldCase => ({
-      name: `absent ${encodingType} encoding leaves other placements intact`,
-      request: `Finish clearing Sales from ${encodingType} in this draft after the failed attempt. Keep its other placements.`,
-      current: color,
-      expected: color,
-      removals: 0,
-      previousRemoval: { target: 'encoding', encodingType, columnRef: sales },
-    }),
-  ),
+  ...(['size', 'angle'] as const).map((encodingType): RemoveFieldCase => ({
+    name: `absent ${encodingType} encoding leaves other placements intact`,
+    request: `Finish clearing Sales from ${encodingType} in this draft after the failed attempt. Keep its other placements.`,
+    current: color,
+    expected: color,
+    removals: 0,
+    previousRemoval: { target: 'encoding', encodingType, columnRef: sales },
+  })),
   {
     name: 'pending Profit edit survives removal of Sales',
     request:

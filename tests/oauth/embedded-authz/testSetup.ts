@@ -10,38 +10,36 @@ import { mockDatasources } from '../../../src/tools/web/datasources/mockDatasour
 vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../src/sdks/tableau/restApi.js')>();
   const MockRestApi = Object.assign(
-    vi.fn().mockImplementation(() => ({
-      signIn: vi.fn().mockResolvedValue(undefined),
-      signOut: vi.fn().mockResolvedValue(undefined),
-      setCredentials: vi.fn().mockResolvedValue(undefined),
-      authenticatedServerMethods: {
-        getCurrentServerSession: vi.fn().mockResolvedValue(
-          Ok({
-            site: {
-              id: 'site_id',
-              name: 'mcp-test',
-              contentUrl: 'mcp-test',
-            },
-            user: {
-              id: 'user_id',
-              name: 'test-user',
-            },
+    vi.fn().mockImplementation(function () {
+      return {
+        signIn: vi.fn().mockResolvedValue(undefined),
+        signOut: vi.fn().mockResolvedValue(undefined),
+        setCredentials: vi.fn().mockResolvedValue(undefined),
+        authenticatedServerMethods: {
+          getCurrentServerSession: vi.fn().mockResolvedValue(
+            Ok({
+              site: {
+                id: 'site_id',
+                name: 'mcp-test',
+                contentUrl: 'mcp-test',
+              },
+              user: {
+                id: 'user_id',
+                name: 'test-user',
+              },
+            }),
+          ),
+        },
+        datasourcesMethods: {
+          listDatasources: vi.fn().mockResolvedValue(mockDatasources),
+        },
+        serverMethods: {
+          getServerInfo: vi.fn().mockResolvedValue({
+            productVersion: testProductVersion,
           }),
-        ),
-      },
-      datasourcesMethods: {
-        listDatasources: vi.fn().mockResolvedValue(mockDatasources),
-      },
-      // A site settings read that fails rejects the MCP connection, so the fake site has none.
-      mcpSettingsMethods: {
-        getMcpSiteSettings: vi.fn().mockResolvedValue({ settings: [] }),
-      },
-      serverMethods: {
-        getServerInfo: vi.fn().mockResolvedValue({
-          productVersion: testProductVersion,
-        }),
-      },
-    })),
+        },
+      };
+    }),
     { versionIsAtLeast: vi.fn().mockReturnValue(true) },
   );
   return {

@@ -26,10 +26,7 @@ export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
   'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.';
 
 export type DesktopUnavailableReason =
-  | 'pinned-unreachable'
-  | 'pinned-not-accepting'
-  | 'stale-session'
-  | 'no-api';
+  'pinned-unreachable' | 'pinned-not-accepting' | 'stale-session' | 'no-api';
 
 export class ExternalClientApiUnavailableError extends ServiceUnavailableError {
   constructor(sessionId: string | number, reason: DesktopUnavailableReason = 'no-api') {

@@ -19,10 +19,7 @@ import { retry } from '../../utils/retry.js';
  * then add or update the `registrationConditions` property for all the tools the condition should apply to.
  */
 export type RegistrationCondition =
-  | 'RequiresKnowledge'
-  | 'RequiresPulse'
-  | 'RequiresPulsePremium'
-  | 'MissingConditionCheck';
+  'RequiresKnowledge' | 'RequiresPulse' | 'RequiresPulsePremium' | 'MissingConditionCheck';
 
 /**
  * Map of registration conditions to the JWT scopes needed for checking said condition.
