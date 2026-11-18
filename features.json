@@ -18,5 +18,6 @@
   "authoring-with-slack": false,
   "activity-log": false,
   "admin-tools": false,
-  "disable-strict-scope-match": false
+  "disable-strict-scope-match": false,
+  "mcp-wildcard-scope": true
 }
