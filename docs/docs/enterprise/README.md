@@ -10,8 +10,10 @@ you adapt operations such as telemetry and monitoring to fit your environment.
 
 ## Tableau Server
 
-[Tableau MCP deployment guide for Tableau Server customers](./tableau-server.md).
+- [Deployment Guide for Tableau Server Customers](./tableau-server.md): Step-by-step self-hosted deployment for Tableau Server.
 
 ## Tableau Cloud
 
-[Tableau MCP deployment guide for Tableau Cloud customers](./tableau-cloud.md).
+- [Deployment Guide for Tableau Cloud Customers](./tableau-cloud.md): Step-by-step self-hosted deployment for Tableau Cloud. Hosted MCP at `https://mcp.tableau.com` is available if you do not need to self-host.
+
+

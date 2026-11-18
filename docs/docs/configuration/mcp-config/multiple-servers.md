@@ -37,7 +37,7 @@ truly need both — it is the most common source of "why did it query the wrong 
 
 Before trusting an admin/insights result when multiple servers are configured, confirm the
 target. Ask the client to run a cheap, unambiguous call first (for example
-[`list-projects`](../../tools/projects/list-projects.md)) and check it returns *your* site's
+[`list-projects`](../../web-tools/projects/list-projects.md)) and check it returns *your* site's
 content. In Claude Code, `/mcp` shows which servers are connected vs failed.
 
 You can also add a line to your client's memory (e.g. `CLAUDE.md`) so the AI self-discloses the
@@ -72,4 +72,4 @@ re-authenticate.
 
 - [Authentication](authentication/README.md)
 - [OAuth](authentication/oauth.md) — see **Known Issues** for multi-site connection pitfalls
-- [Query Admin Insights](../../tools/admin-insights/query-admin-insights.md)
+- [Query Admin Insights](../../web-tools/admin-insights/query-admin-insights.md)
