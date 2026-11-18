@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { listFields } from '../../../../desktop/metadata/index.js';
@@ -16,7 +17,11 @@ import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
-import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  McpToolError,
+  XmlModificationError,
+} from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { resolveShelfField } from '../../api/resolveShelfField.js';
 import { sessionParam } from '../../params.js';
@@ -24,7 +29,7 @@ import { DesktopTool } from '../../tool.js';
 
 const displayUnitsSchema = z.enum(['none', 'thousands', 'millions', 'billions']);
 const currencySymbolSchema = z.enum(['$', '€', '£', '¥']);
-const numberFormatSchema = z
+export const numberFormatSchema = z
   .object({
     field: z.string().trim().min(1).max(255),
     kind: z.enum(['number', 'currency', 'percentage']),
@@ -56,7 +61,7 @@ const numberFormatSchema = z
     }
   });
 
-const worksheetFormatSchema = z
+export const worksheetFormatSchema = z
   .object({
     name: z.string().trim().min(1).max(255),
     showLabels: z.boolean().optional(),
@@ -72,6 +77,7 @@ const paramsSchema = {
 };
 
 type NumberFormat = z.infer<typeof numberFormatSchema>;
+export type WorksheetFormat = z.infer<typeof worksheetFormatSchema>;
 type NumberFormatSetting = Omit<NumberFormat, 'field'>;
 export type WorksheetFormatRequest = {
   showLabels?: boolean;
@@ -81,7 +87,7 @@ export type WorksheetFormatRequest = {
 export type FormatWorksheetDocumentResult =
   { ok: true; xml: string } | { ok: false; message: string };
 
-type FormattedWorksheet = { worksheet: string; verified: true; readbackWarning?: string };
+export type FormattedWorksheet = { worksheet: string; verified: true; readbackWarning?: string };
 
 export type FormatOptions = {
   showLabels: boolean | null;
@@ -118,126 +124,126 @@ export const getFormatWorksheetsTool = (
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) return sessionResult.error.toErr();
           const executor = await extra.getExecutor(sessionResult.value);
-          const listed = await executor.listWorksheets(extra.signal);
-          if (listed.isErr()) return new DesktopCommandExecutionError(listed.error).toErr();
-
-          const resolved = [];
-          for (const request of worksheets) {
-            const item = resolveItemByNameOrId(
-              'Worksheet',
-              request.name,
-              listed.value.worksheets ?? [],
-            );
-            if (item.isErr()) return item.error.toErr();
-            resolved.push({
-              request,
-              worksheetId: item.value.id,
-              worksheetName: item.value.name,
-            });
-          }
-
-          const worksheetIds = resolved.map(({ worksheetId }) => worksheetId);
-          if (new Set(worksheetIds).size !== worksheetIds.length) {
-            return new ArgsValidationError(
-              'Worksheet targets must not contain duplicates.',
-            ).toErr();
-          }
-
-          const prepared = [];
-          for (const { request, worksheetId, worksheetName } of resolved) {
-            const document = await executor.getWorksheetDocument(worksheetId, extra.signal);
-            if (document.isErr()) {
-              return new DesktopCommandExecutionError(document.error).toErr();
-            }
-            const edited = formatWorksheetDocument(document.value.xml, {
-              showLabels: request.showLabels,
-              numberFormats: request.numberFormats,
-            });
-            if (!edited.ok) return new ArgsValidationError(edited.message).toErr();
-            prepared.push({
-              worksheetId,
-              worksheetName,
-              xml: edited.xml,
-              sourceHash: sourceSha256(document.value.xml),
-              alreadyFormatted: hasRequestedFormatting(document.value.xml, edited.xml),
-            });
-          }
-
-          const formatted: FormattedWorksheet[] = [];
-          let updatedWorksheetCount = 0;
-          for (const {
-            worksheetId,
-            worksheetName,
-            xml,
-            sourceHash,
-            alreadyFormatted,
-          } of prepared) {
-            if (alreadyFormatted) {
-              formatted.push({ worksheet: worksheetName, verified: true });
-              continue;
-            }
-            const applied = await withApplyLock(async () => {
-              const latest = await executor.getWorksheetDocument(worksheetId, extra.signal);
-              if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
-              if (sourceSha256(latest.value.xml) !== sourceHash) {
-                return { kind: 'drift' as const };
-              }
-              const result = await executor.applyWorksheetDocument(worksheetId, xml, extra.signal);
-              return result.isErr()
-                ? { kind: 'error' as const, error: result.error }
-                : { kind: 'applied' as const };
-            });
-            if (applied.kind === 'error') {
-              return new DesktopCommandExecutionError(
-                applied.error,
-                earlierUpdatesWarning(updatedWorksheetCount),
-              ).toErr();
-            }
-            if (applied.kind === 'drift') {
-              return new XmlModificationError(
-                `Worksheet "${worksheetName}" changed while formatting was being applied. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
-              ).toErr();
-            }
-
-            const readback = await pollReadback({
-              read: async () => await executor.getWorksheetDocument(worksheetId, extra.signal),
-              settled: (value) =>
-                hasRequestedFormatting(value.xml, xml) &&
-                !isReadbackUnsettled(verifyWorksheetReadback(xml, value.xml)),
-              signal: extra.signal,
-            });
-            if (!readback.ok) {
-              return new DesktopCommandExecutionError(
-                readback.error,
-                earlierUpdatesWarning(updatedWorksheetCount),
-              ).toErr();
-            }
-            // W-24366132: shelf and sort warnings are non-blocking once the poll budget is spent.
-            const lastFindings = verifyWorksheetReadback(xml, readback.value.xml);
-            const onlyWarnings =
-              hasRequestedFormatting(readback.value.xml, xml) &&
-              !lastFindings.some((finding) => finding.severity === 'error');
-            if (!readback.settled && !onlyWarnings) {
-              return new XmlModificationError(
-                `Desktop accepted formatting for "${worksheetName}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
-              ).toErr();
-            }
-            updatedWorksheetCount += 1;
-            const readbackWarning = formatReadbackVerificationWarnings(lastFindings).trim();
-            formatted.push({
-              worksheet: worksheetName,
-              verified: true,
-              ...(readbackWarning ? { readbackWarning } : {}),
-            });
-          }
-
-          return new Ok({ formatted });
+          return await applyWorksheetFormats({ executor, worksheets, signal: extra.signal });
         },
       });
     },
   });
   return tool;
 };
+
+export async function applyWorksheetFormats({
+  executor,
+  worksheets,
+  signal,
+}: {
+  executor: ExternalApiToolExecutor;
+  worksheets: WorksheetFormat[];
+  signal: AbortSignal;
+}): Promise<Result<{ formatted: FormattedWorksheet[] }, McpToolError>> {
+  const listed = await executor.listWorksheets(signal);
+  if (listed.isErr()) return new DesktopCommandExecutionError(listed.error).toErr();
+
+  const resolved = [];
+  for (const request of worksheets) {
+    const item = resolveItemByNameOrId('Worksheet', request.name, listed.value.worksheets ?? []);
+    if (item.isErr()) return item.error.toErr();
+    resolved.push({
+      request,
+      worksheetId: item.value.id,
+      worksheetName: item.value.name,
+    });
+  }
+
+  const worksheetIds = resolved.map(({ worksheetId }) => worksheetId);
+  if (new Set(worksheetIds).size !== worksheetIds.length) {
+    return new ArgsValidationError('Worksheet targets must not contain duplicates.').toErr();
+  }
+
+  const prepared = [];
+  for (const { request, worksheetId, worksheetName } of resolved) {
+    const document = await executor.getWorksheetDocument(worksheetId, signal);
+    if (document.isErr()) {
+      return new DesktopCommandExecutionError(document.error).toErr();
+    }
+    const edited = formatWorksheetDocument(document.value.xml, {
+      showLabels: request.showLabels,
+      numberFormats: request.numberFormats,
+    });
+    if (!edited.ok) return new ArgsValidationError(edited.message).toErr();
+    prepared.push({
+      worksheetId,
+      worksheetName,
+      xml: edited.xml,
+      sourceHash: sourceSha256(document.value.xml),
+      alreadyFormatted: hasRequestedFormatting(document.value.xml, edited.xml),
+    });
+  }
+
+  const formatted: FormattedWorksheet[] = [];
+  let updatedWorksheetCount = 0;
+  for (const { worksheetId, worksheetName, xml, sourceHash, alreadyFormatted } of prepared) {
+    if (alreadyFormatted) {
+      formatted.push({ worksheet: worksheetName, verified: true });
+      continue;
+    }
+    const applied = await withApplyLock(async () => {
+      const latest = await executor.getWorksheetDocument(worksheetId, signal);
+      if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
+      if (sourceSha256(latest.value.xml) !== sourceHash) {
+        return { kind: 'drift' as const };
+      }
+      const result = await executor.applyWorksheetDocument(worksheetId, xml, signal);
+      return result.isErr()
+        ? { kind: 'error' as const, error: result.error }
+        : { kind: 'applied' as const };
+    });
+    if (applied.kind === 'error') {
+      return new DesktopCommandExecutionError(
+        applied.error,
+        earlierUpdatesWarning(updatedWorksheetCount),
+      ).toErr();
+    }
+    if (applied.kind === 'drift') {
+      return new XmlModificationError(
+        `Worksheet "${worksheetName}" changed while formatting was being applied. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
+      ).toErr();
+    }
+
+    const readback = await pollReadback({
+      read: async () => await executor.getWorksheetDocument(worksheetId, signal),
+      settled: (value) =>
+        hasRequestedFormatting(value.xml, xml) &&
+        !isReadbackUnsettled(verifyWorksheetReadback(xml, value.xml)),
+      signal: signal,
+    });
+    if (!readback.ok) {
+      return new DesktopCommandExecutionError(
+        readback.error,
+        earlierUpdatesWarning(updatedWorksheetCount),
+      ).toErr();
+    }
+    // W-24366132: shelf and sort warnings are non-blocking once the poll budget is spent.
+    const lastFindings = verifyWorksheetReadback(xml, readback.value.xml);
+    const onlyWarnings =
+      hasRequestedFormatting(readback.value.xml, xml) &&
+      !lastFindings.some((finding) => finding.severity === 'error');
+    if (!readback.settled && !onlyWarnings) {
+      return new XmlModificationError(
+        `Desktop accepted formatting for "${worksheetName}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
+      ).toErr();
+    }
+    updatedWorksheetCount += 1;
+    const readbackWarning = formatReadbackVerificationWarnings(lastFindings).trim();
+    formatted.push({
+      worksheet: worksheetName,
+      verified: true,
+      ...(readbackWarning ? { readbackWarning } : {}),
+    });
+  }
+
+  return new Ok({ formatted });
+}
 
 export function formatWorksheetDocument(
   worksheetXml: string,

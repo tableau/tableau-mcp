@@ -65,6 +65,7 @@ import { getComposeStoryTool } from './authoring/sheets/composeStory.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
 import { getFormatDashboardZonesTool } from './authoring/style/formatDashboardZones.js';
+import { getFormatWorkbookTool } from './authoring/style/formatWorkbook.js';
 import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
 import { getGetFormatOptionsTool } from './authoring/style/getFormatOptions.js';
 import { getSetMemberColorsTool } from './authoring/style/setMemberColors.js';
@@ -135,6 +136,7 @@ export const desktopToolFactories = [
   getAuthorActionTool,
   getFormatWorksheetsTool,
   getGetFormatOptionsTool,
+  getFormatWorkbookTool,
   getFormatDashboardZonesTool,
   getSetMemberColorsTool,
   getAuthorParameterTool,

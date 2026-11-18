@@ -1,8 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { DOMParser, Element as XmlElement, Node as XmlNode } from '@xmldom/xmldom';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
@@ -10,18 +11,29 @@ import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
-import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  McpToolError,
+  XmlModificationError,
+} from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { artifactNameParam, sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
-const scopeSchema = z.enum(['all', 'containers', 'zone_ids']);
+export const scopeSchema = z.enum(['all', 'containers', 'zone_ids']);
+export const cornerRadiusSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(100)
+  .describe('Radius in pixels, from 0 to 100.');
+export const zoneIdsSchema = z.array(z.string().trim().min(1).max(255)).min(1).max(64).optional();
 const paramsSchema = {
   session: sessionParam(),
   dashboardName: artifactNameParam('dashboard'),
-  cornerRadius: z.number().int().min(0).max(100).describe('Radius in pixels, from 0 to 100.'),
+  cornerRadius: cornerRadiusSchema,
   scope: scopeSchema.describe('Zones to format.'),
-  zoneIds: z.array(z.string().trim().min(1).max(255)).min(1).max(64).optional(),
+  zoneIds: zoneIdsSchema,
 };
 
 export type DashboardZoneFormatRequest = {
@@ -33,7 +45,7 @@ export type DashboardZoneFormatRequest = {
 export type FormatDashboardZonesDocumentResult =
   { ok: true; xml: string; targetZoneIds: string[] } | { ok: false; message: string };
 
-type ZoneFormatReceipt = {
+export type ZoneFormatReceipt = {
   dashboard: string;
   cornerRadius: number;
   zoneIds: string[];
@@ -71,95 +83,11 @@ export const getFormatDashboardZonesTool = (
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) return sessionResult.error.toErr();
           const executor = await extra.getExecutor(sessionResult.value);
-          const listed = await executor.listDashboards(extra.signal);
-          if (listed.isErr()) return new DesktopCommandExecutionError(listed.error).toErr();
-          const resolved = resolveItemByNameOrId(
-            'Dashboard',
+          return await applyDashboardZoneFormat({
+            executor,
             dashboardName,
-            listed.value.dashboards ?? [],
-          );
-          if (resolved.isErr()) return resolved.error.toErr();
-
-          const document = await executor.getDashboardDocument(resolved.value.id, extra.signal);
-          if (document.isErr()) return new DesktopCommandExecutionError(document.error).toErr();
-          const versionError = unsupportedCornerRadiusVersionMessage(
-            document.value.applicationVersion,
-          );
-          if (versionError !== undefined) {
-            return new XmlModificationError(versionError).toErr();
-          }
-          const formatted = formatDashboardZonesDocument(document.value.xml, {
-            cornerRadius,
-            scope,
-            zoneIds,
-          });
-          if (!formatted.ok) return new ArgsValidationError(formatted.message).toErr();
-
-          if (formatted.xml !== document.value.xml) {
-            const sourceHash = sourceSha256(document.value.xml);
-            const applied = await withApplyLock(async () => {
-              const latest = await executor.getDashboardDocument(resolved.value.id, extra.signal);
-              if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
-              const latestVersionError = unsupportedCornerRadiusVersionMessage(
-                latest.value.applicationVersion,
-              );
-              if (latestVersionError !== undefined) {
-                return { kind: 'unsupported-version' as const, message: latestVersionError };
-              }
-              if (sourceSha256(latest.value.xml) !== sourceHash) {
-                return { kind: 'drift' as const };
-              }
-              const result = await executor.applyDashboardDocument(
-                resolved.value.id,
-                formatted.xml,
-                extra.signal,
-              );
-              if (result.isErr()) return { kind: 'error' as const, error: result.error };
-              const warnings = result.value.warnings ?? [];
-              if (warnings.length > 0) return { kind: 'warnings' as const, warnings };
-
-              const readback = await pollReadback({
-                read: async () =>
-                  await executor.getDashboardDocument(resolved.value.id, extra.signal),
-                settled: ({ xml }) =>
-                  hasExactCornerRadius(xml, formatted.targetZoneIds, cornerRadius) &&
-                  hasSameDashboardStructure(xml, formatted.xml) &&
-                  hasSameDashboardContent(xml, formatted.xml, formatted.targetZoneIds),
-                signal: extra.signal,
-              });
-              if (!readback.ok) return { kind: 'error' as const, error: readback.error };
-              return readback.settled
-                ? { kind: 'verified' as const }
-                : { kind: 'unsettled' as const };
-            });
-            if (applied.kind === 'error') {
-              return new DesktopCommandExecutionError(applied.error).toErr();
-            }
-            if (applied.kind === 'drift') {
-              return new XmlModificationError(
-                `Dashboard "${resolved.value.name}" changed while rounded corners were being applied. Re-read and retry.`,
-              ).toErr();
-            }
-            if (applied.kind === 'unsupported-version') {
-              return new XmlModificationError(applied.message).toErr();
-            }
-            if (applied.kind === 'warnings') {
-              return new XmlModificationError(
-                `Desktop reported document warnings while applying rounded corners to dashboard "${resolved.value.name}": ${applied.warnings.map(({ message }) => message).join('; ')}`,
-              ).toErr();
-            }
-            if (applied.kind === 'unsettled') {
-              return new XmlModificationError(
-                `Desktop accepted rounded corners for dashboard "${resolved.value.name}", but the exact target zones, dashboard structure or content did not survive readback.`,
-              ).toErr();
-            }
-          }
-
-          return new Ok({
-            dashboard: resolved.value.name,
-            cornerRadius,
-            zoneIds: formatted.targetZoneIds,
-            verified: true,
+            request: { cornerRadius, scope, zoneIds },
+            signal: extra.signal,
           });
         },
       });
@@ -167,6 +95,100 @@ export const getFormatDashboardZonesTool = (
   });
   return tool;
 };
+
+export async function applyDashboardZoneFormat({
+  executor,
+  dashboardName,
+  request: { cornerRadius, scope, zoneIds },
+  signal,
+}: {
+  executor: ExternalApiToolExecutor;
+  dashboardName: string;
+  request: DashboardZoneFormatRequest;
+  signal: AbortSignal;
+}): Promise<Result<ZoneFormatReceipt, McpToolError>> {
+  const listed = await executor.listDashboards(signal);
+  if (listed.isErr()) return new DesktopCommandExecutionError(listed.error).toErr();
+  const resolved = resolveItemByNameOrId('Dashboard', dashboardName, listed.value.dashboards ?? []);
+  if (resolved.isErr()) return resolved.error.toErr();
+
+  const document = await executor.getDashboardDocument(resolved.value.id, signal);
+  if (document.isErr()) return new DesktopCommandExecutionError(document.error).toErr();
+  const versionError = unsupportedCornerRadiusVersionMessage(document.value.applicationVersion);
+  if (versionError !== undefined) {
+    return new XmlModificationError(versionError).toErr();
+  }
+  const formatted = formatDashboardZonesDocument(document.value.xml, {
+    cornerRadius,
+    scope,
+    zoneIds,
+  });
+  if (!formatted.ok) return new ArgsValidationError(formatted.message).toErr();
+
+  if (formatted.xml !== document.value.xml) {
+    const sourceHash = sourceSha256(document.value.xml);
+    const applied = await withApplyLock(async () => {
+      const latest = await executor.getDashboardDocument(resolved.value.id, signal);
+      if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
+      const latestVersionError = unsupportedCornerRadiusVersionMessage(
+        latest.value.applicationVersion,
+      );
+      if (latestVersionError !== undefined) {
+        return { kind: 'unsupported-version' as const, message: latestVersionError };
+      }
+      if (sourceSha256(latest.value.xml) !== sourceHash) {
+        return { kind: 'drift' as const };
+      }
+      const result = await executor.applyDashboardDocument(
+        resolved.value.id,
+        formatted.xml,
+        signal,
+      );
+      if (result.isErr()) return { kind: 'error' as const, error: result.error };
+      const warnings = result.value.warnings ?? [];
+      if (warnings.length > 0) return { kind: 'warnings' as const, warnings };
+
+      const readback = await pollReadback({
+        read: async () => await executor.getDashboardDocument(resolved.value.id, signal),
+        settled: ({ xml }) =>
+          hasExactCornerRadius(xml, formatted.targetZoneIds, cornerRadius) &&
+          hasSameDashboardStructure(xml, formatted.xml) &&
+          hasSameDashboardContent(xml, formatted.xml, formatted.targetZoneIds),
+        signal: signal,
+      });
+      if (!readback.ok) return { kind: 'error' as const, error: readback.error };
+      return readback.settled ? { kind: 'verified' as const } : { kind: 'unsettled' as const };
+    });
+    if (applied.kind === 'error') {
+      return new DesktopCommandExecutionError(applied.error).toErr();
+    }
+    if (applied.kind === 'drift') {
+      return new XmlModificationError(
+        `Dashboard "${resolved.value.name}" changed while rounded corners were being applied. Re-read and retry.`,
+      ).toErr();
+    }
+    if (applied.kind === 'unsupported-version') {
+      return new XmlModificationError(applied.message).toErr();
+    }
+    if (applied.kind === 'warnings') {
+      return new XmlModificationError(
+        `Desktop reported document warnings while applying rounded corners to dashboard "${resolved.value.name}": ${applied.warnings.map(({ message }) => message).join('; ')}`,
+      ).toErr();
+    }
+    if (applied.kind === 'unsettled') {
+      return new XmlModificationError(
+        `Desktop accepted rounded corners for dashboard "${resolved.value.name}", but the exact target zones, dashboard structure or content did not survive readback.`,
+      ).toErr();
+    }
+  }
+
+  return new Ok({
+    dashboard: resolved.value.name,
+    cornerRadius,
+    zoneIds: formatted.targetZoneIds,
+    verified: true,
+  });
+}
 
 export function formatDashboardZonesDocument(
   dashboardXml: string,

@@ -44,6 +44,7 @@ export const desktopToolNames = [
   'author-action',
   'format-worksheets',
   'get-format-options',
+  'format-workbook',
   'format-dashboard-zones',
   'set-member-colors',
   'author-parameter',
