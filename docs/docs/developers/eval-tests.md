@@ -200,9 +200,8 @@ queries.
 
 Each gold prompt names the suite's view, "Sales by Account - Dreamforce", as well as the data
 source. The model must find the view's workbook and pass it to Tableau Agent. With the workbook,
-Tableau Agent samples field values and applies the workbook's business preferences, such as a fiscal
-year that starts in February. The plain path doesn't get those preferences, so expect it to miss
-fiscal and vocabulary questions.
+Tableau Agent samples field values. Neither path gets the suite's business preferences, such as a
+fiscal year that starts in February, so expect both to miss fiscal and vocabulary questions.
 
 ## Environment Variables
 

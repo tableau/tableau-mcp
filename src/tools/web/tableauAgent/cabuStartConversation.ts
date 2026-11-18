@@ -61,7 +61,7 @@ Use \`search-content\` or \`list-datasources\` first to find the data source's L
 **Parameters:**
 
 - \`datasourceLuid\` (required): The LUID of the published data source to ask Tableau Agent about.
-- \`workbookLuid\` (optional): The LUID of a published workbook that connects to this data source. With it, Tableau Agent sees sample values of the data source's fields, which helps it match names and other values in a question, and applies the workbook's business preferences. Pass it when the user names a workbook or dashboard built on this data source, or when you already know one. \`get-workbook\` lists a workbook's data sources: the one to use has this data source as its \`publishedParent\`. Without a workbook, Tableau Agent sees only the data source's fields.
+- \`workbookLuid\` (optional): The LUID of a published workbook that connects to this data source. With it, Tableau Agent sees sample values of the data source's fields, which helps it match names and other values in a question. Pass it when the user names a workbook or dashboard built on this data source, or when you already know one. \`get-workbook\` lists a workbook's data sources: the one to use has this data source as its \`publishedParent\`. Without a workbook, Tableau Agent sees only the data source's fields.
 `,
     paramsSchema,
     annotations: {

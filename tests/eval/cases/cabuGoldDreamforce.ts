@@ -8,10 +8,10 @@ import type { AbCase } from './dataQuestions.js';
  * suite's `ground_truth_answer`; there are no oracle queries, since the suite's reference queries
  * are SQL over a semantic view.
  *
- * Supra sends the workbook's business preferences (fiscal year starting 1 February, "closed" means
- * ACV, "pipe" means Open Pipe). Tableau Agent loads them from the workbook, so pass the workbook to
- * `tableau-agent-start-conversation`. The plain path doesn't see them, so expect it to miss fiscal and
- * vocabulary questions.
+ * Supra sends the suite's business preferences (fiscal year starting 1 February, "closed" means
+ * ACV, "pipe" means Open Pipe) with each request. Tableau MCP doesn't: CES reads a workbook's
+ * preferences only from a live VizQL session, which a headless conversation lacks. Expect both paths
+ * to miss fiscal and vocabulary questions. Pass the workbook anyway so Tableau Agent gets sample values.
  *
  * Generated from the YAML: `numbers` holds every decimal amount with a K/M/B suffix in the
  * reference answer. Integer amounts are left to the judge: in this suite they are mostly category

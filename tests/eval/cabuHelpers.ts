@@ -124,7 +124,7 @@ export function checkSourceChoice(abCase: AbCase, executions: Array<ToolExecutio
       }
     }
   }
-  // Only Tableau Agent uses the workbook: it loads sample values and business preferences from it.
+  // Only Tableau Agent uses the workbook: it samples field values from it.
   if (abCase.workbookLuid) {
     for (const call of findCalls(executions, 'tableau_agent_start_conversation')) {
       if (call.arguments.workbookLuid !== abCase.workbookLuid) {
