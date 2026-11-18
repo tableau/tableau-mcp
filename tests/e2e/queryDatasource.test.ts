@@ -127,15 +127,23 @@ describe('query-datasource', () => {
       }
     });
 
-    it('should accept null in SET filter values', async () => {
-      const rows = await query({
-        fields: [{ fieldCaption: 'Category' }],
-        filters: [
-          { field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['Furniture', null] },
-        ],
-      });
+    it('should match null members with null in SET filter values', async () => {
+      // Superstore has no null Category, so make one.
+      const calculation = "IF [Category] = 'Furniture' THEN NULL ELSE [Category] END";
+      const queryWithSetValues = async (values?: Array<string | null>): Promise<unknown[]> => {
+        const rows = await query({
+          fields: [{ fieldCaption: 'Category Or Null', calculation }],
+          ...(values ? { filters: [{ field: { calculation }, filterType: 'SET', values }] } : {}),
+        });
+        return rows.map((row) => row['Category Or Null']).sort();
+      };
 
-      expect(rows).toEqual([{ Category: 'Furniture' }]);
+      expect(await queryWithSetValues()).toEqual(['Office Supplies', 'Technology', null]);
+      expect(await queryWithSetValues([null])).toEqual([null]);
+      expect(await queryWithSetValues(['Office Supplies', null])).toEqual([
+        'Office Supplies',
+        null,
+      ]);
     });
   });
 });
