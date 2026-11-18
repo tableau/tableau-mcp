@@ -110,7 +110,7 @@ for more details.
 
 <hr />
 
-### ENABLE_PASSTHROUGH_AUTH
+### `ENABLE_PASSTHROUGH_AUTH`
 
 - Default: `false`
 - When `true`, passthrough authentication is enabled, falling back to the [`AUTH`](../env-vars.md#auth)
@@ -119,7 +119,7 @@ for more details.
 
 <hr />
 
-### PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES
+### `PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES`
 
 - Default: `10` minutes
 - How often the server re-checks that a passthrough auth token is still valid. Between checks,
