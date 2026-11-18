@@ -107,6 +107,71 @@ describe('authMiddleware auth-error wording (W-23757363)', () => {
   });
 });
 
+describe('authMiddleware WWW-Authenticate challenge (RFC 6750 §3)', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('names no error when the request carried no token', async () => {
+    const middleware = authMiddleware(makeValidator(new Err('unused')));
+    const req = { headers: {}, method: 'POST', body: {} } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.headers['WWW-Authenticate']).toContain('resource_metadata="');
+    expect(res.headers['WWW-Authenticate']).not.toContain('error=');
+  });
+
+  it('challenges with invalid_token and the metadata URL when the token is rejected', async () => {
+    const middleware = authMiddleware(makeValidator(new Err('token "expired"\nat 12:00')));
+    const req = {
+      headers: { authorization: 'Bearer bad-token' },
+      method: 'POST',
+      body: {},
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(401);
+    const header = res.headers['WWW-Authenticate'] as string;
+    expect(header).toMatch(
+      /^Bearer realm="MCP", resource_metadata="[^"]+\/\.well-known\/oauth-protected-resource"/,
+    );
+    expect(header).toContain(
+      'error="invalid_token", error_description="The access token is invalid or expired"',
+    );
+    // The validator's text stays in the body: it may hold characters a header value can't carry.
+    expect(header).not.toContain('expired"\n');
+    expect(res.body.error_description).toContain('token "expired"');
+  });
+
+  it('sends the same challenge on an SSE request with a rejected token', async () => {
+    const middleware = authMiddleware(makeValidator(new Err('token expired')));
+    const req = {
+      headers: { authorization: 'Bearer bad-token', accept: 'text/event-stream' },
+      method: 'GET',
+      body: {},
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.writeHead).toHaveBeenCalledWith(
+      401,
+      expect.objectContaining({
+        'WWW-Authenticate': expect.stringContaining('error="invalid_token"'),
+      }),
+    );
+  });
+});
+
 describe('scaffold-data-app required API scope', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
