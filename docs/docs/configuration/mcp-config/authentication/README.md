@@ -5,13 +5,13 @@ site.
 
 This authenticated user must have access to the published data source(s) you plan to access.
 
-There are a couple different ways to authenticate to Tableau.
+Here are the ways you can authenticate to Tableau.
 
-1. Provide your Tableau [Personal Access Token](pat.md) (PAT).
-2. Use Tableau [Connected Apps](direct-trust.md).
-3. Use Tableau [Unified Access Tokens](uat.md).
-4. Use Tableau [OAuth](oauth.md).
-5. Use [Passthrough Authentication](passthrough.md).
+- [PAT](pat.md): Authenticate with a Tableau Personal Access Token.
+- [Direct Trust](direct-trust.md): Authenticate with a Tableau Connected App (direct trust) JWT.
+- [Unified Access Tokens](uat.md): Authenticate with a Tableau Unified Access Token (Cloud only).
+- [OAuth](oauth.md): Sign in through Tableau OAuth, for hosted Cloud and for self-hosted Cloud or Server.
+- [Passthrough Authentication](passthrough.md): Reuse an `X-Tableau-Auth` header the way Tableau REST APIs do.
 
 ## Troubleshooting authentication errors
 
