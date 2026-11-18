@@ -29,6 +29,7 @@ describe('combined-lean against the real MCP SDK server', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     mocks.enabledFeatures.clear();
     mocks.siteRole.mockReset();
   });
