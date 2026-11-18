@@ -1,0 +1,8 @@
+{
+  "label": "Fields",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for listing, adding, removing, and resolving fields on a worksheet."
+  }
+}

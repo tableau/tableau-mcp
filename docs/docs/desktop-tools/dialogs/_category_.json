@@ -1,0 +1,8 @@
+{
+  "label": "Dialogs",
+  "position": 16,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for listing modal dialogs in Tableau Studio and invoking a specific dialog action."
+  }
+}

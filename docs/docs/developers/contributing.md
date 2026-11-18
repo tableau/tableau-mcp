@@ -479,7 +479,7 @@ AI's context window is finite, so every token counts.
 - [ ] `npx tsc --noEmit` has no type errors
 - [ ] `npx eslint src/` passes
 - [ ] `npm test` passes
-- [ ] Tool documentation page added in `docs/docs/tools/`
+- [ ] Tool documentation page added in `docs/docs/web-tools/`
 
 ## Getting Help
 
