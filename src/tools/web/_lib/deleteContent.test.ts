@@ -9,11 +9,13 @@ import {
 } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getKeyValueStore } from '../../../storage/init.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from '../workbooks/mockWorkbook.js';
 import { auditRecordSchema } from './auditRecord.js';
+import { getConfirmDeleteContentTool } from './confirmDeleteContent.js';
 import { getDeleteContentTool } from './deleteContent.js';
 import { AppApprovalEvidence, RegistryEvidence } from './evidence.js';
 import { checkContentStillStale } from './stalenessCheck.js';
@@ -1123,9 +1125,57 @@ describe('deleteContentTool', () => {
 
         expect(result.isError).toBe(true);
         expect(approvalSpy).not.toHaveBeenCalled();
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
       } finally {
         vi.mocked(RegistryEvidence.prototype.establish).mockRestore();
         approvalSpy.mockRestore();
+      }
+    });
+
+    it('denies app confirm after an approval write commits then reports failure', async () => {
+      const store = getKeyValueStore();
+      const originalSet = store.set.bind(store);
+      const set = vi.spyOn(store, 'set').mockImplementation(async (key, value, options) => {
+        await originalSet(key, value, options);
+        if (key.startsWith('mutation-app-approvals-v1:')) {
+          throw new Error('write committed before timeout');
+        }
+      });
+      try {
+        const preview = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          mcpAppToolsRenderable: true,
+        });
+        expect(preview.isError).toBe(true);
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+        const tool = getConfirmDeleteContentTool(new WebMcpServer());
+        const callback = await Provider.from(tool.callback);
+        const confirm = await callback(
+          {
+            resourceType: 'extract-refresh-task',
+            resourceId: validTaskId,
+            cleanupDate: undefined,
+            minAgeDays: undefined,
+          },
+          getMockRequestHandlerExtra(),
+        );
+        expect(confirm.isError).toBe(true);
+        invariant(confirm.content[0].type === 'text');
+        expect(confirm.content[0].text).toContain('could not verify');
+        expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+      } finally {
+        set.mockRestore();
       }
     });
 

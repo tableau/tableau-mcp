@@ -1,10 +1,10 @@
 // Test fixture: a custom KeyValueStore whose Map lives on globalThis, so every provider instance (one
 // per simulated replica, each loaded from a fresh module graph) reads and writes the same backend,
 // like replicas sharing one Redis. It deliberately ignores TTL, like a provider that never expires.
-class SharedBackendSessionStore {
+class SharedBackendKeyValueStore {
   constructor() {
-    globalThis.__sharedSessionBackend ??= new Map();
-    this.map = globalThis.__sharedSessionBackend;
+    globalThis.__sharedKvBackend ??= new Map();
+    this.map = globalThis.__sharedKvBackend;
   }
 
   async get(key) {
@@ -15,7 +15,14 @@ class SharedBackendSessionStore {
   async set(key, value) {
     this.throwIfDown();
     // Opt-in: store values as text, like a provider over plain Redis SET/GET.
-    this.map.set(key, globalThis.__sharedSessionStoresText ? String(value) : value);
+    this.map.set(key, globalThis.__sharedKvStoresText ? String(value) : value);
+    if (
+      globalThis.__sharedKvFailAfterSetPrefix &&
+      key.startsWith(globalThis.__sharedKvFailAfterSetPrefix)
+    ) {
+      globalThis.__sharedKvFailAfterSetPrefix = undefined;
+      throw new Error('write committed before timeout');
+    }
   }
 
   async delete(key) {
@@ -31,15 +38,15 @@ class SharedBackendSessionStore {
   }
 
   throwIfDown() {
-    if (globalThis.__sharedSessionStoreDown) {
+    if (globalThis.__sharedKvStoreDown) {
       throw Object.assign(
         new Error('store down: redis://test-user:test-password@backend.invalid'),
         {
-          code: globalThis.__sharedSessionStoreErrorCode ?? 'ECONNREFUSED',
+          code: globalThis.__sharedKvStoreErrorCode ?? 'ECONNREFUSED',
         },
       );
     }
   }
 }
 
-module.exports = { default: SharedBackendSessionStore };
+module.exports = { default: SharedBackendKeyValueStore };

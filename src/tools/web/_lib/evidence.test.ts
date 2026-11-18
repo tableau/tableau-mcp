@@ -633,6 +633,51 @@ describe('AllEvidence (AND-composition)', () => {
     expect(all.explainRejection()).toContain('different cleanup batch');
   });
 
+  it('audits every member detail, including the pending-deletion tag', () => {
+    const descriptor = new AllEvidence([
+      new AppApprovalEvidence('delete-content'),
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+    ]).describeEvidence();
+    expect(descriptor.kind).toBe('registry-nonce');
+    expect(descriptor.detail).toContain('app-approval');
+    expect(descriptor.detail).toContain("pending-deletion tag 'pending-deletion-2026-09-25'");
+  });
+
+  it('revokes approval when a later tag write fails', async () => {
+    const error = new Error('tag write failed');
+    mocks.mockAddTagsToWorkbook.mockRejectedValueOnce(error);
+    const ctx = appCtx('failed-tag');
+    const approval = new AppApprovalEvidence('delete-content');
+    const all = new AllEvidence([
+      approval,
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+    ]);
+    await expect(all.establish(ctx)).rejects.toBe(error);
+    await expect(approval.verify(ctx)).resolves.toBe(false);
+  });
+
+  it('attempts all cleanup even if one revoke fails and preserves the original error', async () => {
+    const error = new Error('write failed');
+    const first = {
+      establish: vi.fn().mockResolvedValue(undefined),
+      revoke: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+      verify: vi.fn(),
+      describeEvidence: () => ({ kind: 'registry-nonce' as const }),
+    };
+    const failing = {
+      ...first,
+      establish: vi.fn().mockRejectedValue(error),
+      revoke: vi.fn().mockResolvedValue(undefined),
+    };
+    const unattempted = { ...first, revoke: vi.fn() };
+    await expect(new AllEvidence([first, failing, unattempted]).establish(makeCtx())).rejects.toBe(
+      error,
+    );
+    expect(first.revoke).toHaveBeenCalledOnce();
+    expect(failing.revoke).toHaveBeenCalledOnce();
+    expect(unattempted.revoke).not.toHaveBeenCalled();
+  });
+
   it('describes itself with the kind of its primary (first) strategy for the audit record', () => {
     const all = new AllEvidence([
       new AppApprovalEvidence('delete-content'),

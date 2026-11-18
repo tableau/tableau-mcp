@@ -44,6 +44,8 @@ export interface EvidenceContext {
  */
 export interface EvidenceStrategy<TTarget> {
   establish(ctx: EvidenceContext): Promise<void>;
+  // Best-effort removal of proof after a partially established preview fails.
+  revoke?(ctx: EvidenceContext): Promise<void>;
   verify(ctx: EvidenceContext): Promise<boolean>;
   describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string };
   explainRejection?(): string | undefined;
@@ -165,25 +167,63 @@ function sha256(fields: ReadonlyArray<string>): string {
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 
-// Provider errors can carry credentials in any field, so only values shaped like an error class name
-// (`ConditionalCheckFailedException`) or a system/driver code (`ECONNREFUSED`) are logged.
-function safeErrorLabel(value: unknown, pattern: RegExp): string | undefined {
-  return typeof value === 'string' && pattern.test(value) ? value : undefined;
-}
+// Shape alone cannot distinguish credentials from diagnostic labels. Only known, fixed labels may
+// leave the provider boundary, including when a provider exposes throwing getters or a Proxy.
+const SAFE_ERROR_NAMES = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'TimeoutError',
+  'AbortError',
+  'Http2Error',
+  'S3ServiceException',
+  'ResourceNotFoundException',
+  'ConditionalCheckFailedException',
+  'ProvisionedThroughputExceededException',
+  'ThrottlingException',
+  'InternalServerError',
+  'AccessDeniedException',
+  'ValidationException',
+]);
+const SAFE_ERROR_CODES = new Set<string | number>([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'NOSCRIPT',
+  '23505',
+  '503',
+  503,
+]);
 
-const ERROR_NAME_PATTERN = /^([A-Z][A-Za-z]{0,60})?(Error|Exception)$/;
-const ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,40}$/;
+function safeErrorLabels(error: unknown): { errorName?: string; errorCode?: string | number } {
+  try {
+    const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
+    return {
+      errorName: typeof name === 'string' && SAFE_ERROR_NAMES.has(name) ? name : undefined,
+      errorCode:
+        (typeof code === 'string' || typeof code === 'number') && SAFE_ERROR_CODES.has(code)
+          ? code
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
 
 // Store failures surface as a fixed message so backend details (hosts, ports) never reach a client.
 async function withStore<T>(
   namespace: string,
-  operation: 'set' | 'consume',
+  operation: 'set' | 'consume' | 'delete',
   run: () => Promise<T>,
 ): Promise<T> {
   try {
     return await run();
   } catch (error) {
-    const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
     log({
       message: 'Preview evidence store operation failed',
       level: 'error',
@@ -191,8 +231,7 @@ async function withStore<T>(
       data: {
         namespace,
         operation,
-        errorName: safeErrorLabel(name, ERROR_NAME_PATTERN),
-        errorCode: safeErrorLabel(code, ERROR_CODE_PATTERN),
+        ...safeErrorLabels(error),
       },
     });
     throw new EvidenceStoreUnavailableError();
@@ -200,12 +239,17 @@ async function withStore<T>(
 }
 
 async function recordProof(namespace: string, key: string, secret = ''): Promise<void> {
-  const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
+  const ttlMs = getMutationPreviewTtlMs();
+  const expiresAtMs = Date.now() + ttlMs;
   await withStore(namespace, 'set', () =>
     getKeyValueStore().set(proofKey(namespace, key), `${expiresAtMs}.${secret}`, {
-      ttlMs: getMutationPreviewTtlMs(),
+      ttlMs,
     }),
   );
+}
+
+async function revokeProof(namespace: string, key: string): Promise<void> {
+  await withStore(namespace, 'delete', () => getKeyValueStore().delete(proofKey(namespace, key)));
 }
 
 function matchesProof(stored: unknown, secret: string): stored is string {
@@ -282,6 +326,10 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
     await recordProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
   }
 
+  async revoke(ctx: EvidenceContext): Promise<void> {
+    await revokeProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
+  }
+
   async verify(ctx: EvidenceContext): Promise<boolean> {
     // Single-use: consuming the approval means it cannot be replayed.
     return consumeProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
@@ -320,6 +368,11 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
     this.lastNonce = undefined;
     await recordProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx), sha256([nonce]));
     this.lastNonce = nonce;
+  }
+
+  async revoke(ctx: EvidenceContext): Promise<void> {
+    this.lastNonce = undefined;
+    await revokeProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx));
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
@@ -367,8 +420,20 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
-    for (const strategy of this.strategies) {
-      await strategy.establish(ctx);
+    const attempted: Array<EvidenceStrategy<MutationTarget>> = [];
+    try {
+      for (const strategy of this.strategies) {
+        // A write may commit before reporting failure, so include the failing member in cleanup.
+        attempted.push(strategy);
+        await strategy.establish(ctx);
+      }
+    } catch (error) {
+      // Cleanup must try every attempted member and preserve the original failure. Existing Tableau
+      // tags are left intact; only strategies with revocable proof opt in. A concurrent newer preview
+      // may also be removed, which safely forces a re-preview. Backend outages can prevent cleanup;
+      // the embedded expiry still bounds any remaining proof's lifetime.
+      await Promise.allSettled(attempted.map(async (strategy) => strategy.revoke?.(ctx)));
+      throw error;
     }
   }
 

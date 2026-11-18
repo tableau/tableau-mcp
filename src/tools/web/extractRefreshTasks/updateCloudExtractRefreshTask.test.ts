@@ -10,11 +10,13 @@ import {
   updateCloudExtractRefreshScheduleSchema,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getKeyValueStore } from '../../../storage/init.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
 import { AppApprovalEvidence, RegistryEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getConfirmUpdateCloudExtractRefreshTaskTool } from './confirmUpdateCloudExtractRefreshTask.js';
 import {
   getUpdateCloudExtractRefreshTaskTool,
   scheduleBinding,
@@ -774,6 +776,39 @@ describe('updateCloudExtractRefreshTaskTool', () => {
         });
       } finally {
         establish.mockRestore();
+      }
+    });
+
+    it('denies app confirm after an approval write commits then reports failure', async () => {
+      const store = getKeyValueStore();
+      const originalSet = store.set.bind(store);
+      const set = vi.spyOn(store, 'set').mockImplementation(async (key, value, options) => {
+        await originalSet(key, value, options);
+        if (key.startsWith('mutation-app-approvals-v1:')) {
+          throw new Error('write committed before timeout');
+        }
+      });
+      try {
+        const preview = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(preview.isError).toBe(true);
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+        const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+        const callback = await Provider.from(tool.callback);
+        const confirm = await callback(
+          { taskId: validTaskId, schedule: validSchedule },
+          getMockRequestHandlerExtra(),
+        );
+        expect(confirm.isError).toBe(true);
+        invariant(confirm.content[0].type === 'text');
+        expect(confirm.content[0].text).toContain('could not verify');
+        expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+      } finally {
+        set.mockRestore();
       }
     });
 
