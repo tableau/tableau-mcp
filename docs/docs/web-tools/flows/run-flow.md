@@ -35,6 +35,15 @@ sidebar_position: 8
   - Not idempotent — each call enqueues another run. A run may be rejected if one is already queued or in progress for the flow.
   - Requires Tableau REST API access scopes `tableau:flows:run`, `tableau:flows:read` (for bounded-context verification), and `tableau:mcp_site_settings:read`.
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_WRITE_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-write-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_write_tools_enabled).
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

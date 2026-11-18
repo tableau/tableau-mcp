@@ -10,6 +10,14 @@ sidebar_position: 8
 
 Renders a workbook or view (identified by luid, objectType "workbook" or "view") as a live, interactive Tableau embed the user can explore — filter, drill down, hover, and change selections in place. Use whenever the user wants to see, open, or interact with a view, dashboard, workbook, or viz (e.g. "show me the view", "show me the workbook", "open this dashboard", "let me explore this"). This is the default for any request to display a viz. Returns an interactive embed, NOT a static image — for a fixed image snapshot (screenshot, PNG/PDF, thumbnail) use get-view-image instead.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** both `mcp-apps` and `interactive-viz` feature flags must be enabled.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

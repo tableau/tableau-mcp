@@ -15,6 +15,15 @@ Retrieves a list of background jobs for the Tableau site. Each job represents a 
 Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#admin_tools_enabled)`=true`. At request time the caller's site role is verified and anything below `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator` is rejected.
 :::
 
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `SupportUser`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
+
 ## APIs called
 
 This tool reads background jobs through the **Tableau REST API** (Tableau Cloud or Server). Every request is admin-gated — the admin-gate read below runs first and rejects non-administrators before the jobs list is returned. The MCP-layer OAuth scope for this tool is `tableau:mcp:jobs:read`; it requires the union of the scopes cited per operation below (`tableau:jobs:read` and `tableau:users:read`).

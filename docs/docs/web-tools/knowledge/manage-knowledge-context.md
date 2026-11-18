@@ -18,6 +18,17 @@ their reply. Find the id of an existing rule with inspect-knowledge-context firs
 that already exists instead of adding a duplicate. Tell the user exactly what the response says
 happened.
 
+## Access requirements
+
+- **User/site role:** `Creator` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Creator`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `KNOWLEDGE_TOOLS_ENABLED` when explicitly set; otherwise `knowledge-tools`.
+  Writes additionally require `KNOWLEDGE_WRITE_TOOLS_ENABLED` or, when unset, `knowledge-write-tools`.
+- **Registration conditions:** `RequiresKnowledge`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

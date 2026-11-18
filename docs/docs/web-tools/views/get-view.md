@@ -13,6 +13,13 @@ information, project details, owner, tags, and usage statistics. To retrieve the
 image instead of its metadata, use [Get View Data](get-view-data.md) or
 [Get View Image](get-view-image.md).
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server) to fetch the view, then

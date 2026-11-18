@@ -11,6 +11,13 @@ sidebar_position: 3
 Executes VizQL queries against a published Tableau data source to answer business questions from
 your data. The tool is read-only: it runs the query you supply and returns the resulting rows.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool runs its queries against the VizQL Data Service (VDS) API (served by Tableau Cloud or
@@ -112,6 +119,50 @@ See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_re
 #### Example
 
 `2000`
+
+### `interpretFieldCaptionsAsFieldNames`
+
+Requires Tableau 2025.3 or later. Set to `true` to use the exact `fieldName` and `parameterName`
+values returned by [Get Datasource Metadata](get-datasource-metadata.md), for example when several
+logical tables contain fields with the same display caption. Choose the intended logical table; do
+not invent or qualify names yourself.
+
+On earlier versions, this argument is omitted from the tool schema and the metadata tool does not
+recommend field-name queries. The runtime version check still rejects clients that send `true`.
+
+Use underlying names consistently for existing fields and parameters, including bracketed references
+inside calculation expressions. The VDS request properties remain `fieldCaption` and
+`parameterCaption`; their values are interpreted as underlying names when this option is enabled. A
+new ad hoc calculation's `fieldCaption` remains a caller-chosen output label.
+
+For example, if metadata returns `fieldName: "staffing_cost"`, reference `[staffing_cost]` inside
+the formula:
+
+```json
+{
+  "interpretFieldCaptionsAsFieldNames": true,
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Total staffing cost",
+        "calculation": "SUM([staffing_cost])"
+      }
+    ]
+  }
+}
+```
+
+Omit or set to `false` to retain display-caption queries. Earlier Tableau versions reject `true`
+before datasource requests, including when supplementary query validation is disabled.
+
+### `workbookLuid`
+
+The LUID of the workbook an embedded (workbook) data source belongs to, potentially retrieved by the
+[Get Workbook](../../web-tools/workbooks/get-workbook.md) tool. Required to access an embedded data
+source when [tool scoping](../../configuration/mcp-config/tool-scoping.md#embedded-data-sources) is
+enabled. Ignored for published data sources.
+
+Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 ## Notes and caveats
 

@@ -38,6 +38,15 @@ role and rejects anything below `SiteAdministratorCreator` / `SiteAdministratorE
 pass `datasourceLuid`.
 :::
 
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `SupportUser`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
+
 ## APIs called
 
 This tool spans two Tableau API surfaces: it runs the datasource queries against the **VizQL Data

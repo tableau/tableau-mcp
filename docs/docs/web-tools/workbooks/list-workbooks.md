@@ -13,6 +13,13 @@ and information about the views contained in each workbook. Supports optional fi
 `field:operator:value` expressions (e.g. `name:eq:Superstore`) for precise, flexible workbook
 discovery. Use this tool when a user requests to list, search, or filter Tableau workbooks on a site.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server) to list the site's workbooks,

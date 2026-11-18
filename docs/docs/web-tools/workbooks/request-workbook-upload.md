@@ -10,6 +10,15 @@ sidebar_position: 5
 
 Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. PUT exactly `fileSizeBytes` bytes to the returned URL with the returned `requiredHeaders`, then call publish-workbook with the returned workbookUploadId. Each upload id can be published once.
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Client access:** Slack clients additionally require `authoring-with-slack`.
+- **Storage:** requires configured `MCP_S3_BUCKET` staging storage.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

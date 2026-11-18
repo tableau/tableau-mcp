@@ -17,6 +17,15 @@ is not enabled for the site, the tool reports that Pulse is unavailable instead 
 definitions.
 :::
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Registration conditions:** `RequiresPulse`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server) via its Pulse endpoints. The

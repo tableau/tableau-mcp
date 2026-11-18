@@ -18,6 +18,13 @@ API. Use it to ground a tool that queries Tableau published data sources. The re
   context such as descriptions, data categories, and roles
 - Tableau parameters
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 The tool reads from two Tableau services — the VizQL Data Service (VDS) API and the Metadata API

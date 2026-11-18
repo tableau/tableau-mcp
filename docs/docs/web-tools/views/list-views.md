@@ -12,6 +12,13 @@ Retrieves a list of views on a Tableau site, including metadata such as each vie
 the workbook it belongs to. Supports optional `filter` expressions for precise, flexible view
 discovery.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server) to list the site's views, then

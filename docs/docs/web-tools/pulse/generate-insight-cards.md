@@ -20,6 +20,16 @@ scoped further with [`INCLUDE_TOOLS`](../../configuration/mcp-config/env-vars.md
 `insights`, e.g. `INCLUDE_TOOLS=insights`).
 :::
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `INSIGHTS_TOOLS_ENABLED=true`, VizQL Data Service access, and Pulse access.
+- **Registration conditions:** `RequiresPulse`, `RequiresPulsePremium`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server), the **VizQL Data Service

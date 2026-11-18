@@ -40,3 +40,17 @@ uvx linkchecker --check-extern --no-warnings http://localhost:3000/tableau-mcp/ 
 
 Note: We need to run `build` and `serve` here for this link checker to work properly. (It doesn't work
 when just running `start`.)
+
+## Keeping tool references current
+
+Each web tool in `src/tools/web/tools.ts` needs a page under `docs/docs/web-tools/` and a row in
+[Tool Access Requirements](docs/web-tools/overview.md). When changing role declarations,
+registration conditions, or app-only visibility, update the access requirements on the tool page
+and in the table. Run the registry check from the repository root:
+
+```bash
+npx vitest run src/tools/web/toolDocumentation.test.ts
+```
+
+This checks declared roles, conditions, app-only visibility, and top-level argument coverage,
+including disabled tools; feature gates determine which appear in a session.

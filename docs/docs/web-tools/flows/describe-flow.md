@@ -42,6 +42,15 @@ sidebar_position: 4
       flowId: "d00700fe-28a0-4ece-a7af-5543ddf38a82"
       includeFieldSchemas: true
 
+## Access requirements
+
+- **User/site role:** `Explorer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Explorer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_READ_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-read-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled).
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

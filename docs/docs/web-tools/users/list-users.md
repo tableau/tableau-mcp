@@ -23,6 +23,15 @@ Use this tool when you need to:
 Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#admin_tools_enabled)`=true`; the caller's site role is verified at request time and must be `SiteAdministratorCreator`, `SiteAdministratorExplorer`, or `ServerAdministrator`.
 :::
 
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `SupportUser`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
+
 ## APIs called
 
 This tool reads users on the Tableau site through the **Tableau REST API** (Tableau Cloud or Server). Pagination is handled server-side (the tool fetches one page at a time); any `filter` is applied client-side after fetching. The MCP-layer OAuth scope for this tool is `tableau:mcp:users:read`.

@@ -83,6 +83,15 @@ sidebar_position: 6
   - Recent failures across all flows: filter: "status:eq:Failed,startedAt:gt:2025-01-01"
   - In-progress runs right now: filter: "status:eq:InProgress"
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_READ_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-read-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled).
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

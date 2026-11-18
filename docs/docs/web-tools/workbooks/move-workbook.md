@@ -10,6 +10,14 @@ sidebar_position: 4
 
 Moves a workbook into a different project. Use list-projects to discover available project IDs.nPass personalSpace: true instead of projectId to move it into your Personal Space (passing both is an error).
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** the `data-apps` feature flag must be enabled.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

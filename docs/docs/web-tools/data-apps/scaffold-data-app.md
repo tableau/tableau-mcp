@@ -10,6 +10,16 @@ sidebar_position: 1
 
 Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as `simple-id`. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Client access:** Slack clients additionally require `authoring-with-slack`.
+- **Availability:** the `data-apps` feature flag must be enabled.
+- **Site/version:** Tableau 2026.3.0 or later and a successful allowed-origins lookup.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

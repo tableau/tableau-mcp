@@ -11,8 +11,18 @@ sidebar_position: 2
 Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to `Unlicensed` to reclaim licenses. This is a two-phase mutation — a preview call reports the proposed change and returns a single-use confirmation token, and a second call with that token applies it.
 
 :::warning[Admin Only]
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
+This tool checks administrative access at request time. Enable it with `ADMIN_TOOLS_ENABLED=true`
+or the `admin-tools` feature flag; see the access requirements below for accepted site roles.
 :::
+
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `SupportUser`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
 
 ## APIs called
 

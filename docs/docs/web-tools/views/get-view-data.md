@@ -12,6 +12,13 @@ Retrieves data in comma separated value (CSV) format for the specified view in a
 including the user's filters. For custom views, use the [Get Custom View Data](get-custom-view-data.md)
 tool with the custom view id instead.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 The tool talks to the **Tableau REST API** (Tableau Cloud or Server). At the MCP layer it is gated by

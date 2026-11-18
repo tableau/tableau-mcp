@@ -11,6 +11,15 @@ sidebar_position: 3
 Retrieves a list of published Pulse metrics for a single Pulse metric definition. Use this tool
 when a user wants the metrics that belong to a specific Pulse metric definition on the current site.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Registration conditions:** `RequiresPulse`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 This tool reads from the Tableau REST API (Tableau Cloud or Server) through its Pulse endpoints. It

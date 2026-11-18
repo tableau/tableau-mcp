@@ -32,6 +32,15 @@ sidebar_position: 9
   - **Bounded-context note:** when this MCP server is restricted to specific projects/tags, this tool cannot verify that a task's flow is in the allowed set (a task carries no project/tag and is addressed only by task id), so it refuses. Use `run-flow` (by flow id) in that configuration.
   - Requires Tableau REST API access scopes `tableau:flow_tasks:run` and `tableau:mcp_site_settings:read`.
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_WRITE_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-write-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_write_tools_enabled).
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

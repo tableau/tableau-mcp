@@ -18,6 +18,15 @@ Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-
 This tool calls the **Cloud variant** of the update endpoint and is not appropriate for Tableau Server, whose variant has a different payload shape.
 :::
 
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud). At the MCP layer it is gated on the `tableau:mcp:tasks:write` scope; the underlying REST calls require the `tableau:tasks:write` and `tableau:users:read` OAuth scopes. It follows a two-phase preview → confirm flow: the preview phase only reads (to authorize the caller and describe the change), and the write is issued only on the confirm phase.
