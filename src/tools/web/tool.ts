@@ -30,7 +30,6 @@ import {
   buildAuthenticationErrorMessage,
   buildPermissionErrorMessage,
 } from '../../utils/authErrorMessage.js';
-import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
@@ -207,7 +206,9 @@ export class WebTool<
     const productTelemetryForwarder = getProductTelemetry();
 
     let success = false;
-    let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
+    let errorCode = '';
+    let errorType = '';
+    let errorSubtype = '';
     let toolResult: CallToolResult | undefined;
 
     try {
@@ -219,8 +220,16 @@ export class WebTool<
           // Constrained result is either 'empty' or 'error'
           const isError = constrainedResult.type === 'error';
           success = !isError;
-          if (isError && constrainedResult.error) {
-            errorCode = getHttpStatus(constrainedResult.error);
+          if (isError) {
+            if (constrainedResult.error instanceof McpToolError) {
+              errorType = constrainedResult.error.type;
+              errorSubtype = constrainedResult.error.subtype ?? '';
+            } else {
+              errorType = 'unknown';
+            }
+            if (constrainedResult.error) {
+              errorCode = getHttpStatus(constrainedResult.error);
+            }
           }
           toolResult = {
             isError,
@@ -247,6 +256,8 @@ export class WebTool<
         return toolResult;
       }
 
+      errorType = result.error.type;
+      errorSubtype = result.error.subtype ?? '';
       toolResult = {
         isError: true,
         content: [{ type: 'text', text: result.error.getErrorText() }],
@@ -261,6 +272,7 @@ export class WebTool<
       if (error instanceof RouteSafetyError) {
         const argsError = new ArgsValidationError(error.message);
         errorCode = getHttpStatus(argsError);
+        errorType = argsError.type;
         log(
           {
             message: `Tool ${this.name} rejected an unsafe REST route: ${error.message}`,
@@ -279,6 +291,14 @@ export class WebTool<
       }
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
+      }
+      // Typed errors normally return as an Err; a thrown one is rare but still carries its slug.
+      // Everything else is an untyped failure.
+      if (error instanceof McpToolError) {
+        errorType = error.type;
+        errorSubtype = error.subtype ?? '';
+      } else {
+        errorType = 'unknown';
       }
       log(
         {
@@ -317,10 +337,14 @@ export class WebTool<
         user_luid: extra.getUserLuid(),
         success,
         error_code: errorCode,
-        // Only populated for genuine error results (isError: true). The ZodiosValidationError
-        // passthrough returns isError: false with the full API payload, so keying off isError
-        // (not !success) keeps successful response data out of telemetry.
-        error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
+        // Stable McpToolError.type slug only (e.g. 'query-validation'), never the human-readable
+        // message — keeps customer data (field/parameter names, values, file paths) off the wire,
+        // matching desktop (src/tools/desktop/tool.ts). Empty on success and on the
+        // ZodiosValidationError passthrough (isError: false), which leaves errorType unset.
+        error_message: errorType,
+        // Fine-grained, stable sub-code for the generic buckets (e.g. 'filter-value-invalid');
+        // empty when the error carries none. Also PII-free by construction.
+        error_subtype: errorSubtype,
         oauth_client_id: sanitizedClientId,
         oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),

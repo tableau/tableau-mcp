@@ -104,6 +104,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     // slug as `error_message` — the human-readable message is omitted to keep PII off the wire.
     let errorCode = '';
     let errorType = '';
+    // Hand-assigned sub-code for the generic buckets (e.g. 'filter-value-invalid'); empty when the
+    // error carries none. PII-free by construction. See src/errors/errorSubtypes.ts.
+    let errorSubtype = '';
 
     try {
       const result = await raceDeadline(extra, callback);
@@ -141,6 +144,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       if (result.error instanceof McpToolError) {
         errorCode = String(result.error.statusCode);
         errorType = result.error.type;
+        errorSubtype = result.error.subtype ?? '';
       }
       const structuredContent = getStructuredContent(result.error);
       toolResult = {
@@ -171,6 +175,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       if (error instanceof McpToolError) {
         errorCode = String(error.statusCode);
         errorType = error.type;
+        errorSubtype = error.subtype ?? '';
       }
       log({
         message: timedOut
@@ -230,6 +235,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is
         // omitted to keep PII off the wire.
         error_message: errorType,
+        // Fine-grained, stable sub-code for the generic buckets (e.g. 'filter-value-invalid');
+        // empty when the error carries none. Also PII-free by construction.
+        error_subtype: errorSubtype,
         auth_type: 'desktop',
         // oauth is omitted due to using stdio for desktop
         oauth_client_id: '',
