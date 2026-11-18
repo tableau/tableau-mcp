@@ -11,12 +11,12 @@ Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/st
 A read-only Tableau Cloud admin workflow that identifies stale workbooks and published data sources and renders them as a report for review.
 
 :::warning[Admin Only]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable.
+This prompt is restricted to Tableau site administrators and requires the [`ADMIN_TOOLS_ENABLED`](../configuration/mcp-config/env-vars.md#admin_tools_enabled) environment variable.
 :::
 
 ## Workflow
 
-The prompt instructs the model to call [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "stale-content"` exactly once — which performs the TS Events / Site Content anti-join and applies the staleness threshold server-side — and render the already-filtered rows as a Markdown table. No client-side math; no tagging, notification, or deletion. Pair with [stale-content-cleanup-apply](stale-content-cleanup-apply.md) to act on the results.
+The prompt instructs the model to call [`query-admin-insights`](../web-tools/admin-insights/query-admin-insights.md) with `kind: "stale-content"` exactly once — which performs the [TS Events](https://help.tableau.com/current/online/en-gb/adminview_insights_events.htm) / Site Content anti-join and applies the staleness threshold server-side — and render the already-filtered rows as a Markdown table. No client-side math; no tagging, notification, or deletion. Pair with [stale-content-cleanup-apply](stale-content-cleanup-apply.md) to act on the results.
 
 ## Arguments
 
