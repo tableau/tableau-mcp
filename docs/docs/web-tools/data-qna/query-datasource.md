@@ -60,6 +60,12 @@ The VizQL query to execute against the data source. See
 [Create a Query](https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html)
 for more information.
 
+Some query features need a recent Tableau version. The tool rejects them on earlier versions with an
+error that names the version they need:
+
+- Table calculation fields (`tableCalculation`) require Tableau 2025.3 or later.
+- `CONDITION` filters require Tableau 2026.1 or later.
+
 #### Example
 
 ```json
