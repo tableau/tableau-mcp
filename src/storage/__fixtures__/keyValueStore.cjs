@@ -1,4 +1,4 @@
-// New KV contract: expiration is supplied with every write; no init/namespace hooks.
+// Per-write expiration; optional lifecycle hooks are enabled only for lifecycle tests.
 class KeyValueStore {
   constructor(config) {
     if (config.throwInConstructor) {
@@ -8,10 +8,20 @@ class KeyValueStore {
     globalThis.__keyValueProviderConfig = config;
     globalThis.__keyValueProviderInstance = this;
     if (config.omitConsume) this.consume = undefined;
-    if (config.throwOnInit)
-      this.init = () => {
-        throw new Error('KV must not call init');
-      };
+    if (config.lifecycle) {
+      this.init =
+        config.initHook ??
+        (() => {
+          globalThis.__keyValueInitCalls++;
+          return Promise.resolve();
+        });
+      this.close =
+        config.closeHook ??
+        (() => {
+          globalThis.__keyValueCloseCalls++;
+          return Promise.resolve();
+        });
+    }
   }
 
   read(key) {

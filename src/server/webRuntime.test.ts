@@ -9,14 +9,17 @@ import {
   disconnectSessionStore,
   initializeSessionStore,
 } from '../sessionStore/init.js';
-import { initializeKeyValueStore } from '../storage/init.js';
+import { closeKeyValueStore, initializeKeyValueStore } from '../storage/init.js';
 
 const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
   activityLogInitPromise: Promise.resolve(),
   connectPromise: Promise.resolve(),
+  keyValueInitPromise: Promise.resolve(),
   disconnectShouldReject: false,
   closeActivityLogShouldReject: false,
+  closeKeyValueStoreShouldReject: false,
+  closeKeyValueStoreNeverResolves: false,
   disconnectNeverResolves: false,
   serverInfoPromise: Promise.resolve({}),
   shutdownHandlers: new Map<string, () => Promise<void>>(),
@@ -56,7 +59,15 @@ vi.mock('../sdks/tableau/restApi.js', () => ({
 }));
 
 vi.mock('../storage/init.js', () => ({
-  initializeKeyValueStore: vi.fn(),
+  initializeKeyValueStore: vi.fn(() => runtimeState.keyValueInitPromise),
+  closeKeyValueStore: vi.fn(async () => {
+    if (runtimeState.closeKeyValueStoreNeverResolves) {
+      await new Promise(() => undefined);
+    }
+    if (runtimeState.closeKeyValueStoreShouldReject) {
+      throw new Error('KV close failed');
+    }
+  }),
 }));
 
 vi.mock('../sessionStore/init.js', () => ({
@@ -104,8 +115,11 @@ describe('initializeWebRuntime', () => {
     runtimeState.events = [];
     runtimeState.activityLogInitPromise = Promise.resolve();
     runtimeState.connectPromise = Promise.resolve();
+    runtimeState.keyValueInitPromise = Promise.resolve();
     runtimeState.disconnectShouldReject = false;
     runtimeState.closeActivityLogShouldReject = false;
+    runtimeState.closeKeyValueStoreShouldReject = false;
+    runtimeState.closeKeyValueStoreNeverResolves = false;
     runtimeState.disconnectNeverResolves = false;
     runtimeState.serverInfoPromise = Promise.resolve({});
     runtimeState.shutdownHandlers.clear();
@@ -225,6 +239,7 @@ describe('initializeWebRuntime', () => {
     await runtimeState.shutdownHandlers.get('SIGINT')!();
     expect(disconnectSessionStore).toHaveBeenCalledOnce();
     expect(closeActivityLog).toHaveBeenCalledOnce();
+    expect(closeKeyValueStore).toHaveBeenCalledOnce();
     expect(processExitSpy).toHaveBeenLastCalledWith(0);
 
     runtimeState.disconnectShouldReject = true;
@@ -233,7 +248,7 @@ describe('initializeWebRuntime', () => {
     expect(closeActivityLog).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Error closing session store or Activity Log during shutdown',
+        message: 'Error closing storage providers or Activity Log during shutdown',
         level: 'error',
         logger: 'shutdown',
       }),
@@ -247,29 +262,70 @@ describe('initializeWebRuntime', () => {
     expect(processExitSpy).toHaveBeenLastCalledWith(1);
   });
 
-  it('logs and exits one when shutdown hangs past the timeout', async () => {
-    const { serverInfoReady } = await initializeWebRuntime(config);
-    await serverInfoReady;
-    runtimeState.disconnectNeverResolves = true;
-    vi.useFakeTimers();
-    try {
-      void runtimeState.shutdownHandlers.get('SIGTERM')!();
-      await vi.advanceTimersByTimeAsync(5000);
+  it.each(['session', 'kv'])(
+    'logs and exits one when %s shutdown hangs past the timeout',
+    async (store) => {
+      const { serverInfoReady } = await initializeWebRuntime(config);
+      await serverInfoReady;
+      runtimeState.disconnectNeverResolves = store === 'session';
+      runtimeState.closeKeyValueStoreNeverResolves = store === 'kv';
+      vi.useFakeTimers();
+      try {
+        void runtimeState.shutdownHandlers.get('SIGTERM')!();
+        await vi.advanceTimersByTimeAsync(5000);
 
-      expect(processExitSpy).toHaveBeenLastCalledWith(1);
-      expect(log).toHaveBeenCalledWith(
-        expect.objectContaining({ logger: 'shutdown', level: 'error' }),
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+        expect(processExitSpy).toHaveBeenLastCalledWith(1);
+        expect(log).toHaveBeenCalledWith(
+          expect.objectContaining({ logger: 'shutdown', level: 'error' }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
   it('fails startup before registering handlers when the KV provider cannot initialize', async () => {
-    vi.mocked(initializeKeyValueStore).mockImplementationOnce(() => {
-      throw new Error('KV load failed');
-    });
+    vi.mocked(initializeKeyValueStore).mockRejectedValueOnce(new Error('KV load failed'));
     await expect(initializeWebRuntime(config)).rejects.toThrow('KV load failed');
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
+  });
+
+  it('waits for KV initialization before fetching server info or registering shutdown handlers', async () => {
+    const ready = deferred<void>();
+    runtimeState.keyValueInitPromise = ready.promise;
+    const startup = initializeWebRuntime(config);
+    await vi.waitFor(() => expect(initializeKeyValueStore).toHaveBeenCalledOnce());
+    expect(getTableauServerInfo).not.toHaveBeenCalled();
+    expect(processOnceSpy).not.toHaveBeenCalled();
+    ready.resolve();
+    await startup;
+    expect(getTableauServerInfo).toHaveBeenCalledOnce();
+    expect(processOnceSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('still closes other providers and exits one when KV cleanup fails', async () => {
+    await initializeWebRuntime(config);
+    runtimeState.closeKeyValueStoreShouldReject = true;
+    await runtimeState.shutdownHandlers.get('SIGTERM')!();
+    expect(closeKeyValueStore).toHaveBeenCalledOnce();
+    expect(disconnectSessionStore).toHaveBeenCalledOnce();
+    expect(closeActivityLog).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({ logger: 'shutdown', level: 'error' }),
+    );
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('waits for KV cleanup before exiting successfully', async () => {
+    const closed = deferred<void>();
+    vi.mocked(closeKeyValueStore).mockImplementationOnce(() => closed.promise);
+    await initializeWebRuntime(config);
+    const shutdown = runtimeState.shutdownHandlers.get('SIGTERM')!();
+    await Promise.resolve();
+    expect(closeKeyValueStore).toHaveBeenCalledOnce();
+    expect(processExitSpy).not.toHaveBeenCalled();
+    closed.resolve();
+    await shutdown;
+    expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 });

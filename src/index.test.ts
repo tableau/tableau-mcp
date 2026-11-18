@@ -103,6 +103,7 @@ vi.mock('./server/express.js', () => ({
 
 vi.mock('./storage/init.js', () => ({
   initializeKeyValueStore: vi.fn(),
+  closeKeyValueStore: vi.fn(),
 }));
 
 vi.mock('./sessionStore/init.js', () => ({
@@ -120,6 +121,7 @@ import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
+import { initializeKeyValueStore } from './storage/init.js';
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -260,4 +262,25 @@ describe('default entrypoint startup', () => {
     await vi.waitFor(() => expect(startupState.events).toContain('stdio connected'));
     expect(startExpressServer).not.toHaveBeenCalled();
   });
+
+  it.each(['http', 'stdio'] as const)(
+    'exits before opening %s when KV initialization rejects',
+    async (transport) => {
+      startupState.transport = transport;
+      vi.mocked(initializeKeyValueStore).mockRejectedValueOnce(
+        new Error('KV initialization failed'),
+      );
+      await import('./index.js');
+      await vi.waitFor(() => expect(processExitSpy).toHaveBeenCalledWith(1));
+      expect(startExpressServer).not.toHaveBeenCalled();
+      expect(WebMcpServer).not.toHaveBeenCalled();
+      expect(getTableauServerInfo).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Fatal error when starting the server',
+          level: 'error',
+        }),
+      );
+    },
+  );
 });

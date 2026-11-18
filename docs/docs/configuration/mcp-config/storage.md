@@ -20,14 +20,15 @@ Providing `KV_STORE_PROVIDER_CONFIG` without `KV_STORE_PROVIDER` fails startup. 
 settings configure generic key-value storage. OAuth session storage has its own
 [provider settings](oauth.md#session_store_provider).
 
-Startup calls `initializeKeyValueStore()` to construct and validate the configured provider.
-The getter returns that exact instance and does not initialize it lazily. KV providers do not
-have lifecycle hooks.
+Startup awaits `initializeKeyValueStore()` to construct and validate the configured provider, then
+await its optional `init()` hook before accepting requests. The getter returns that exact instance
+after initialization succeeds and does not initialize it lazily. Concurrent initialization calls
+share the same initialization attempt.
 
-Invalid configuration, module-loading failures, and missing operations fail startup. An
-explicitly configured custom provider is never silently replaced with memory. Malformed JSON,
-module-loading, and constructor errors do not echo configuration values. Providers must also
-keep keys, values, and credentials out of their own errors and logs.
+Invalid configuration, module-loading failures, and missing operations fail startup. An explicitly
+configured custom provider is never silently replaced with memory. Malformed JSON, module-loading,
+constructor, and lifecycle-hook errors do not echo configuration values. Providers must also keep
+keys, values, and credentials out of their own errors and logs.
 
 ## Provider contract
 
@@ -46,6 +47,18 @@ The module must export a default class or a named `KeyValueStore` class. It must
 | `delete(key)` | Remove a value; missing keys are harmless. |
 | `consume(key)` | Atomically return and delete a value, or `undefined` if absent or expired. |
 
+Providers may also implement optional lifecycle hooks returning `void` or `Promise<void>`:
+
+- `init()` performs backend setup or readiness checks. Throwing or rejecting fails startup; the
+  provider is unavailable until initialization succeeds. Bound connection attempts with timeouts and
+  release partially initialized resources before rejecting.
+- `close()` releases backend resources during `SIGTERM` or `SIGINT` shutdown. Cleanup runs alongside
+  SessionStore and Activity Log cleanup within the existing five-second shutdown timeout. Cleanup
+  failures cause exit code 1. The server does not drain in-flight requests before calling the hook.
+
+For example, a DynamoDB provider could check its table in `init()` and call its SDK client's
+`destroy()` method in `close()`. Providers without lifecycle hooks continue to work.
+
 Operations return promises and backend errors reject. For shared backends, `consume` must be
 atomic across replicas; separate read and delete requests are insufficient. Providers own
 serialization and must reject values that cannot be encoded faithfully or exceed backend limits.
@@ -53,7 +66,7 @@ serialization and must reject values that cannot be encoded faithfully or exceed
 ## Per-write expiration
 
 ```typescript
-initializeKeyValueStore();
+await initializeKeyValueStore();
 const store = getKeyValueStore();
 await store.set('report:abc', value, { ttlMs: 60_000 });
 ```

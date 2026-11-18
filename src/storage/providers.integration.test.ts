@@ -5,7 +5,12 @@ import {
   resetSessionStore,
 } from '../sessionStore/init.js';
 import { stubDefaultEnvVars } from '../testShared.js';
-import { getKeyValueStore, initializeKeyValueStore, resetKeyValueStore } from './init.js';
+import {
+  closeKeyValueStore,
+  getKeyValueStore,
+  initializeKeyValueStore,
+  resetKeyValueStore,
+} from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
 
 // Real Config/env parsing and real module loaders; no mocked storage wiring.
@@ -24,9 +29,12 @@ describe('session and KV environment configuration', () => {
     resetSessionStore();
     globalThis.__initCalls = 0;
     globalThis.__closeCalls = 0;
+    globalThis.__keyValueInitCalls = 0;
+    globalThis.__keyValueCloseCalls = 0;
   });
   afterEach(async () => {
     await disconnectSessionStore();
+    await closeKeyValueStore();
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -39,7 +47,7 @@ describe('session and KV environment configuration', () => {
       JSON.stringify({ module: './src/storage/__fixtures__/sessionStore.cjs' }),
     );
     await connectSessionStore();
-    initializeKeyValueStore();
+    await initializeKeyValueStore();
     expect(getKeyValueStore()).toBeInstanceOf(InMemoryKeyValueStore);
     const first = createNamespacedStore<string>('codes', { ttlMs: 100 });
     const second = createNamespacedStore<string>('codes', { ttlMs: 100 });
@@ -50,7 +58,7 @@ describe('session and KV environment configuration', () => {
     await expect(first.get('key')).resolves.toBeUndefined();
   });
 
-  it('uses independent providers and runs the SessionStore lifecycle hooks', async () => {
+  it("uses independent providers and runs both providers' lifecycle hooks", async () => {
     vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
     vi.stubEnv(
       'SESSION_STORE_PROVIDER_CONFIG',
@@ -59,11 +67,12 @@ describe('session and KV environment configuration', () => {
     vi.stubEnv('KV_STORE_PROVIDER', 'custom');
     vi.stubEnv(
       'KV_STORE_PROVIDER_CONFIG',
-      JSON.stringify({ module: './src/storage/__fixtures__/keyValueStore.cjs', throwOnInit: true }),
+      JSON.stringify({ module: './src/storage/__fixtures__/keyValueStore.cjs', lifecycle: true }),
     );
     await connectSessionStore();
-    initializeKeyValueStore();
+    await initializeKeyValueStore();
     expect(globalThis.__initCalls).toBe(1);
+    expect(globalThis.__keyValueInitCalls).toBe(1);
     const session = createNamespacedStore<string>('codes', { ttlMs: 100 });
     await session.set('key', 'session');
     await getKeyValueStore().set('codes:key', 'new', { ttlMs: 100 });
@@ -72,7 +81,9 @@ describe('session and KV environment configuration', () => {
     await vi.advanceTimersByTimeAsync(100);
     await expect(getKeyValueStore().get('codes:key')).resolves.toBeUndefined();
     await disconnectSessionStore();
+    await closeKeyValueStore();
     expect(globalThis.__closeCalls).toBe(1);
+    expect(globalThis.__keyValueCloseCalls).toBe(1);
     // Avoid closing the same session fixture twice in afterEach.
     resetSessionStore();
   });

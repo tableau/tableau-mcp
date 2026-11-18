@@ -1,4 +1,4 @@
-// New KV contract: expiration is supplied with every write; no init/namespace hooks.
+// Minimal KV provider: per-write expiration and no optional lifecycle hooks.
 class KeyValueStore {
   constructor(config) {
     if (config.throwInConstructor) {
@@ -8,10 +8,6 @@ class KeyValueStore {
     globalThis.__keyValueProviderConfig = config;
     globalThis.__keyValueProviderInstance = this;
     if (config.omitConsume) this.consume = undefined;
-    if (config.throwOnInit)
-      this.init = () => {
-        throw new Error('KV must not call init');
-      };
   }
 
   read(key) {

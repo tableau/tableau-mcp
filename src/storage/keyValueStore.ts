@@ -15,6 +15,20 @@ export interface SetOptions {
  * encoded faithfully or exceed backend limits.
  */
 export interface KeyValueStore<V> {
+  /**
+   * Optional backend setup, awaited before the provider becomes available or the server starts
+   * accepting requests. Throw or reject to fail startup. Release partially initialized resources
+   * before rejecting. Providers should bound their own connection attempts with timeouts.
+   */
+  init?(): void | Promise<void>;
+
+  /**
+   * Optional resource cleanup, awaited during shutdown within the server's shutdown timeout.
+   * Synchronous cleanup (for example, DynamoDBClient.destroy()) is supported. This hook does not
+   * imply that the server has drained in-flight requests.
+   */
+  close?(): void | Promise<void>;
+
   /** Return the value, or undefined if the key is absent or expired. Reads do not extend its TTL. */
   get(key: string): Promise<V | undefined>;
 
