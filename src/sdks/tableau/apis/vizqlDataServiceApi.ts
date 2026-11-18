@@ -131,16 +131,10 @@ const tableCalcCustomSortSchema = z
   .object({ fieldCaption: z.string(), function: functionSchema, direction: sortDirectionSchema })
   .strict();
 
-// VDS treats UNSPECIFIED (2026.2+) as unset.
-const tableCalcComputedAggregationSchema = z.enum(['UNSPECIFIED', 'SUM', 'AVG', 'MIN', 'MAX']);
-const tableCalcRelativeToSchema = z.enum(['UNSPECIFIED', 'PREVIOUS', 'NEXT', 'FIRST', 'LAST']);
-const tableCalcRankTypeSchema = z.enum([
-  'UNSPECIFIED',
-  'COMPETITION',
-  'MODIFIED COMPETITION',
-  'DENSE',
-  'UNIQUE',
-]);
+// Upstream also allows UNSPECIFIED, but only from 2026.2, and it means the same as omitting the field.
+const tableCalcComputedAggregationSchema = z.enum(['SUM', 'AVG', 'MIN', 'MAX']);
+const tableCalcRelativeToSchema = z.enum(['PREVIOUS', 'NEXT', 'FIRST', 'LAST']);
+const tableCalcRankTypeSchema = z.enum(['COMPETITION', 'MODIFIED COMPETITION', 'DENSE', 'UNIQUE']);
 
 const tableCalcSpecificationBaseSchema = z.object({
   dimensions: z.array(tableCalcFieldReferenceSchema),

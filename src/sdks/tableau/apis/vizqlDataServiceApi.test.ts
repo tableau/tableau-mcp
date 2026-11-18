@@ -72,14 +72,44 @@ describe('Table calculation Field schema', () => {
     expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).not.toThrow();
   });
 
-  it('accepts UNSPECIFIED in the table calc enums', () => {
-    for (const tableCalculation of [
-      { tableCalcType: 'RANK', dimensions, rankType: 'UNSPECIFIED' },
-      { tableCalcType: 'DIFFERENCE_FROM', dimensions, relativeTo: 'UNSPECIFIED' },
-      { tableCalcType: 'RUNNING_TOTAL', dimensions, aggregation: 'UNSPECIFIED' },
-    ]) {
-      expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).not.toThrow();
-    }
+  // Servers before 2026.2 don't accept UNSPECIFIED; omitting the field means the same thing.
+  describe('rejects UNSPECIFIED in the table calc enums', () => {
+    const cases = [
+      { tableCalcType: 'RANK', property: 'rankType', valid: 'DENSE' },
+      { tableCalcType: 'DIFFERENCE_FROM', property: 'relativeTo', valid: 'PREVIOUS' },
+      { tableCalcType: 'RUNNING_TOTAL', property: 'aggregation', valid: 'SUM' },
+      { tableCalcType: 'MOVING_CALCULATION', property: 'aggregation', valid: 'SUM' },
+    ];
+    const spec = (
+      { tableCalcType, property }: (typeof cases)[number],
+      value: string,
+    ): Record<string, unknown> => ({ tableCalcType, dimensions, [property]: value });
+
+    // Each case also parses the valid value, so the rejection must come from UNSPECIFIED.
+    const expectOnlyUnspecifiedRejected = (
+      c: (typeof cases)[number],
+      wrap: (s: Record<string, unknown>) => Record<string, unknown>,
+    ): void => {
+      expect(() => fieldSchema.parse(wrap(spec(c, c.valid)))).not.toThrow();
+      expect(() => fieldSchema.parse(wrap(spec(c, 'UNSPECIFIED')))).toThrow();
+    };
+
+    it.each(cases)('$property in a primary $tableCalcType', (c) => {
+      expectOnlyUnspecifiedRejected(c, tableCalcField);
+    });
+
+    it.each(cases.slice(0, 2))('$property in a secondary $tableCalcType', (c) => {
+      expectOnlyUnspecifiedRejected(c, (secondaryTableCalculation) =>
+        tableCalcField({ tableCalcType: 'RUNNING_TOTAL', dimensions, secondaryTableCalculation }),
+      );
+    });
+
+    it.each(cases)('$property in a nested $tableCalcType', (c) => {
+      expectOnlyUnspecifiedRejected(c, (nested) => ({
+        ...tableCalcField({ tableCalcType: 'NESTED', dimensions, fieldCaption: 'Inner' }),
+        nestedTableCalculations: [nested],
+      }));
+    });
   });
 
   it('accepts a table calc on a calculation, and on a bare field caption', () => {
