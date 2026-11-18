@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
+import { listFields } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
   formatReadbackVerificationWarnings,
@@ -71,6 +72,7 @@ const paramsSchema = {
 };
 
 type NumberFormat = z.infer<typeof numberFormatSchema>;
+type NumberFormatSetting = Omit<NumberFormat, 'field'>;
 export type WorksheetFormatRequest = {
   showLabels?: boolean;
   numberFormats?: NumberFormat[];
@@ -80,6 +82,16 @@ export type FormatWorksheetDocumentResult =
   { ok: true; xml: string } | { ok: false; message: string };
 
 type FormattedWorksheet = { worksheet: string; verified: true; readbackWarning?: string };
+
+export type FormatOptions = {
+  showLabels: boolean | null;
+  numberFormats: Array<{
+    field: string;
+    caption: string;
+    current: NumberFormatSetting | null;
+    customFormat?: true;
+  }>;
+};
 
 const title = 'Format';
 
@@ -279,6 +291,85 @@ export function formatWorksheetDocument(
     }
   }
   return { ok: true, xml };
+}
+
+export function readFormatOptions(worksheetXml: string): FormatOptions {
+  const pane = firstElementBounds(worksheetXml, 'pane');
+  const showLabels =
+    pane === undefined
+      ? null
+      : readStyleFormat(worksheetXml.slice(pane.start, pane.end), 'mark', 'mark-labels-show') ===
+        'true';
+
+  const panesStart = worksheetXml.search(/<panes\b/);
+  const tableScope = panesStart === -1 ? worksheetXml : worksheetXml.slice(0, panesStart);
+  const measures = listFields(worksheetXml)
+    .map(({ column }) => column)
+    .filter((column, index, columns) => columns.indexOf(column) === index)
+    .filter(
+      (column) =>
+        parseCanonicalColumnRef(column)?.pivot === 'qk' &&
+        numberFormatElements(worksheetXml, column).length > 0,
+    );
+
+  const numberFormats = measures.map((column) => {
+    const caption = parseCanonicalColumnRef(column)?.localFieldName ?? column;
+    const raw =
+      readStyleFormat(tableScope, 'label', 'text-format', column) ??
+      readStyleFormat(tableScope, 'cell', 'text-format', column);
+    if (raw === undefined) return { field: column, caption, current: null };
+    const current = parseNumberFormat(raw);
+    return current === undefined
+      ? { field: column, caption, current: null, customFormat: true as const }
+      : { field: column, caption, current };
+  });
+  return { showLabels, numberFormats };
+}
+
+function readStyleFormat(
+  styleOwnerXml: string,
+  element: string,
+  attr: string,
+  field?: string,
+): string | undefined {
+  const rules = styleOwnerXml.matchAll(
+    new RegExp(
+      `<style-rule\\b[^>]*element=(['"])${escapeRegExp(element)}\\1[^>]*>[\\s\\S]*?<\\/style-rule>`,
+      'g',
+    ),
+  );
+  for (const [rule] of rules) {
+    for (const [tag] of rule.matchAll(/<format\b[^>]*\/?\s*>/g)) {
+      if (readXmlAttribute(tag, 'attr') !== attr) continue;
+      if (field !== undefined && readXmlAttribute(tag, 'field') !== field) continue;
+      return readXmlAttribute(tag, 'value');
+    }
+  }
+  return undefined;
+}
+
+function parseNumberFormat(value: string): NumberFormatSetting | undefined {
+  const percentage = /^p0(?:\.(0{1,2}))?%$/.exec(value);
+  if (percentage) return { kind: 'percentage', decimals: percentage[1]?.length ?? 0 };
+
+  const match =
+    /^(n|c"([$€£¥])")#,##0(,{0,3})(?:\.(0{1,2}))?([KMB]?);-(?:"\2")?#,##0\3(?:\.\4)?\5$/.exec(
+      value,
+    );
+  if (!match) return undefined;
+  const [, prefix, currencySymbol, scale, decimalZeros, suffix] = match;
+  const displayUnits = (
+    { '': 'none', ',K': 'thousands', ',,M': 'millions', ',,,B': 'billions' } as const
+  )[`${scale}${suffix}` as '' | ',K' | ',,M' | ',,,B'];
+  if (displayUnits === undefined) return undefined;
+  const decimals = decimalZeros?.length ?? 0;
+  if (prefix === 'n') return { kind: 'number', decimals, displayUnits };
+  return {
+    kind: 'currency',
+    decimals,
+    displayUnits,
+    currencySymbol: currencySymbol as NumberFormatSetting['currencySymbol'],
+  };
 }
 
 function renderNumberFormat(format: NumberFormat): string {
