@@ -1,0 +1,8 @@
+{
+  "label": "Templates",
+  "position": 11,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for injecting XML templates into the open workbook."
+  }
+}

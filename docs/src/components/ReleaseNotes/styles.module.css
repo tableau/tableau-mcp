@@ -1,0 +1,287 @@
+.root {
+  margin-top: 1rem;
+}
+
+/* Sticky multiselect filter header: the change list scrolls beneath it. */
+.header {
+  position: sticky;
+  top: var(--ifm-navbar-height, 60px);
+  z-index: 2;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem 1rem;
+  background-color: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.headerTitle {
+  font-weight: 700;
+}
+
+.release {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--ifm-color-content);
+  background-color: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Push the Reset button to the far right of the header row. */
+.headerTop .pill {
+  margin-left: auto;
+}
+
+.pill {
+  padding: 0.15rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ifm-color-content);
+  background-color: var(--ifm-color-emphasis-100);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pill:hover:not(:disabled) {
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+.pill:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+}
+
+.fieldLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ifm-color-content-secondary);
+  padding-top: 0.3rem;
+}
+
+.keyword {
+  width: 100%;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.9rem;
+  color: var(--ifm-color-content);
+  background-color: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin: 0;
+}
+
+.check input {
+  cursor: pointer;
+}
+
+/* Category facet grouped by tool type. */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.groupLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ifm-color-content-secondary);
+}
+
+.allButton {
+  padding: 0.02rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--ifm-color-content);
+  background-color: var(--ifm-color-emphasis-100);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.allButton:hover {
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+.allButtonActive {
+  color: var(--ifm-color-primary-contrast-foreground, #fff);
+  background-color: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+}
+
+.month {
+  margin-bottom: 1.75rem;
+}
+
+.monthHeading {
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+/* Per-release site-content synopsis, shown atop a month's stack of tool changes. */
+.synopsis {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  background-color: var(--ifm-color-emphasis-100);
+  border-left: 3px solid var(--ifm-color-primary);
+  border-radius: 6px;
+}
+
+.synopsisLabel {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ifm-color-content-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.synopsisText {
+  margin: 0;
+}
+
+.synopsisList {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.synopsisList > li {
+  margin-bottom: 0.2rem;
+}
+
+.toolTypeGroup {
+  margin-bottom: 1rem;
+}
+
+.toolTypeHeading {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0.5rem 0 0.4rem;
+  color: var(--ifm-color-content-secondary);
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.list > li {
+  margin-bottom: 0.4rem;
+  line-height: 1.55;
+}
+
+.sublist {
+  margin: 0.3rem 0 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.sublist > li {
+  margin-bottom: 0.3rem;
+  line-height: 1.55;
+}
+
+.category {
+  font-weight: 700;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  vertical-align: middle;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.badgeAdd {
+  color: #1a7f37;
+  background-color: #dcfce7;
+}
+
+.badgeUpdate {
+  color: #1f6feb;
+  background-color: #dbeafe;
+}
+
+.badgeDeprecate {
+  color: #9a6700;
+  background-color: #fef3c7;
+}
+
+.badgeRetire {
+  color: #b42318;
+  background-color: #fee2e2;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.summary {
+  color: var(--ifm-color-content-secondary);
+}
+
+.empty {
+  color: var(--ifm-color-content-secondary);
+  font-style: italic;
+}
+
+@media screen and (max-width: 768px) {
+  .field {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}

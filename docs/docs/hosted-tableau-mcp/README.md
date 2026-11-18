@@ -13,8 +13,8 @@ The hosted service is intended for **Tableau Cloud customers** who want to conne
 ## What you get
 
 - **OAuth 2.1 authentication out of the box.** Every user signs in to their own Tableau Cloud identity. The MCP server then makes Tableau REST API calls *as that user*, so every existing per-user permission and access control is enforced automatically.
-- **Pod-aware routing.** A single URL (`https://mcp.tableau.com`) works for every Tableau Cloud pod. The Tableau Routing layer routes authenticated OAuth requests to the correct pod by inspecting the OAuth token. See [Architecture](architecture.md) for details.
-- **The full Tableau MCP tool catalog.** All tools documented in the [Tools](./category/tools) section are available, subject to your site's SKU entitlements and the signed-in user's permissions.
+- **Pod-aware routing.** A single URL (`https://mcp.tableau.com`) works for every Tableau Cloud pod. Tableau Routing layer routes an authenticated OAuth request to the correct pod by inspecting OAuth token. See [Architecture](architecture.md) for details.
+- **The full Tableau MCP tool catalog.** All tools documented in the [Web Tools](./category/web-tools) section are available, subject to your site's SKU entitlements and the signed-in user's permissions.
 - **Continuously updated.** New tools and fixes ship to the hosted service automatically — no client-side upgrade required.
 
 ## Availability and scope
@@ -22,10 +22,6 @@ The hosted service is intended for **Tableau Cloud customers** who want to conne
 - Available to **Tableau Cloud customers on any SKU**.
 - Not available for Tableau Server. Server customers should [self-host](../enterprise/tableau-server.md).
 - Some tools require additional entitlements (e.g. Pulse Insight Briefs and Tableau Knowledge require Tableau+; the full Metadata API surface requires Data Management). Tools that require entitlements the signed-in user lacks will return an error at call time.
-
-## Connect a client
-
-See [Popular Client Integrations](./client-integrations.md) for step-by-step instructions for Slack, Claude, ChatGPT, and other common AI clients. In general, point any MCP-compatible client at `https://mcp.tableau.com` and complete the OAuth sign-in flow when prompted.
 
 ## Switching Tableau Cloud sites
 
@@ -41,7 +37,11 @@ Clients name this differently. Use the option that matches yours.
 
 The Tableau Cloud consent page shows the site and username that will be used. Choose **Switch site** or **Switch username** if either is wrong, then approve access.
 
-<img src={require('./images/tableau-cloud-consent.png').default} alt="Tableau Cloud OAuth consent page" width="600" />
+![Tableau Cloud OAuth consent page](./images/tableau-cloud-consent.png)
+
+## Connect a client
+
+See [Popular Client Integrations](./client-integrations.md) for step-by-step instructions for Slack, Claude, ChatGPT, and other common AI clients. In general, point any MCP-compatible client at `https://mcp.tableau.com` and complete the OAuth sign-in flow when prompted.
 
 ## Admin controls
 
@@ -77,3 +77,8 @@ The Tableau Cloud consent page shows the site and username that will be used. Ch
 ## Data handling
 
 The hosted service does not store your Tableau data. Each tool call is proxied to the same Tableau REST, VDS, Metadata, Pulse, and Knowledge APIs your Tableau Cloud site already exposes, using the signed-in user's access token. See the [Privacy Policy](../privacy.md) for the umbrella data-handling policy.
+
+In this section:
+
+- [Architecture](architecture.md): How hosted MCP routes each agent request to the signed-in user's Tableau Cloud pod.
+- [Popular Client Integrations](client-integrations.md): Connect Slack, Claude, ChatGPT, and other MCP clients to `https://mcp.tableau.com`.
