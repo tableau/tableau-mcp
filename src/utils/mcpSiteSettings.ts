@@ -1,4 +1,5 @@
 import { Config, getConfig } from '../config.js';
+import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import {
   getOverridableConfig,
@@ -11,6 +12,7 @@ import { McpSiteSettings, McpSiteSettingsResult } from '../sdks/tableau/types/mc
 import { isAxiosError } from './axios.js';
 import { ExpiringMap } from './expiringMap.js';
 import { getExceptionMessage } from './getExceptionMessage.js';
+import { getHttpStatus } from './getHttpStatus.js';
 import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
 import { DistributiveOmit } from './types.js';
 
@@ -18,7 +20,6 @@ type SiteNameOrSiteId = string;
 
 const MCP_SITE_SETTINGS_MIN_REST_API_VERSION = '3.29';
 let loggedUncacheableSite = false;
-const loggedFetchFailureKeys = new Set<string>();
 let mcpSiteSettingsCache: ExpiringMap<SiteNameOrSiteId, McpSiteSettings>;
 
 async function getMcpSiteSettings({
@@ -70,7 +71,6 @@ async function getMcpSiteSettings({
   }
 
   const mcpSiteSettings: McpSiteSettings = {};
-  let cacheResult = cacheable;
   try {
     const result: McpSiteSettingsResult = await useRestApi({
       ...restApiArgs,
@@ -84,30 +84,20 @@ async function getMcpSiteSettings({
       }
     }
   } catch (error) {
-    if (isAxiosError(error)) {
-      if (error.response?.status === 500) {
-        throw new Error(
-          'Internal Server Error: The MCP settings are in a bad state and need to be overwritten.',
-        );
-      } else if (error.response?.status !== 403) {
-        throw new Error(
-          `An unexpected error occurred while getting MCP settings for site. Status code: ${error.response?.status}`,
-        );
-      }
-      // else: (403 status code) MCP settings feature flag was disabled on this site,
-      // continue and cache with empty settings.
-    } else {
-      cacheResult = false;
-      // Uncacheable requests share one key so forged site parts cannot grow the set.
-      const warnKey = cacheable ? cacheKey : 'uncacheable';
-      if (!loggedFetchFailureKeys.has(warnKey)) {
-        loggedFetchFailureKeys.add(warnKey);
-        log({
-          message: `Could not get MCP site settings; using none and retrying on the next request: ${getExceptionMessage(error)}`,
-          level: 'warning',
+    // A 403 means the MCP settings feature is disabled on this site: continue and cache with empty settings.
+    if (!isAxiosError(error) || error.response?.status !== 403) {
+      log(
+        {
+          message: `Could not get MCP site settings: ${getExceptionMessage(error)}`,
+          level: 'error',
           logger: 'config',
-        });
-      }
+          data: error,
+        },
+        restApiArgs,
+      );
+      // OAuth and passthrough send Tableau the caller's own token.
+      const usedCallerToken = tableauAuthInfo?.type === 'Passthrough' || config.auth === 'oauth';
+      throw toSiteSettingsUnavailableError(error, usedCallerToken);
     }
   }
 
@@ -115,10 +105,36 @@ async function getMcpSiteSettings({
     delete mcpSiteSettings.ALLOWED_REQUEST_OVERRIDES;
   }
 
-  if (cacheResult) {
+  if (cacheable) {
     mcpSiteSettingsCache.set(cacheKey, mcpSiteSettings);
   }
   return mcpSiteSettings;
+}
+
+// Keeps Tableau's 4xx or 5xx so a client fault is not reported as ours; a failure with no HTTP status is a 500.
+function toSiteSettingsUnavailableError(
+  error: unknown,
+  usedCallerToken: boolean,
+): McpSiteSettingsUnavailableError {
+  const upstreamStatus = error instanceof Error ? Number(getHttpStatus(error)) : NaN;
+  if (!(upstreamStatus >= 400 && upstreamStatus <= 599)) {
+    return new McpSiteSettingsUnavailableError(
+      'Could not get the MCP settings for this Tableau site.',
+      500,
+    );
+  }
+  if (upstreamStatus === 401 && !usedCallerToken) {
+    // A 401 for this server's own credentials is a fault the client can't fix, so it is a 502.
+    return new McpSiteSettingsUnavailableError(
+      'Could not get the MCP settings for this Tableau site: Tableau rejected the credentials this MCP server is configured with (status code 401).',
+      502,
+    );
+  }
+  const message =
+    upstreamStatus === 500
+      ? 'The MCP settings for this Tableau site are in a bad state and need to be overwritten.'
+      : `Could not get the MCP settings for this Tableau site. Status code: ${upstreamStatus}`;
+  return new McpSiteSettingsUnavailableError(message, upstreamStatus);
 }
 
 // Make "config" and "signal" optional
