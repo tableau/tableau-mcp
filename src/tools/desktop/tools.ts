@@ -66,6 +66,7 @@ import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
 import { getFormatDashboardZonesTool } from './authoring/style/formatDashboardZones.js';
 import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
+import { getGetFormatOptionsTool } from './authoring/style/getFormatOptions.js';
 import { getSetMemberColorsTool } from './authoring/style/setMemberColors.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
 import { getAskUserTool } from './local/askUser.js';
@@ -133,6 +134,7 @@ export const desktopToolFactories = [
   getAuthorSetTool,
   getAuthorActionTool,
   getFormatWorksheetsTool,
+  getGetFormatOptionsTool,
   getFormatDashboardZonesTool,
   getSetMemberColorsTool,
   getAuthorParameterTool,

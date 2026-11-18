@@ -9,7 +9,11 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { formatWorksheetDocument, getFormatWorksheetsTool } from './formatWorksheets.js';
+import {
+  formatWorksheetDocument,
+  getFormatWorksheetsTool,
+  readFormatOptions,
+} from './formatWorksheets.js';
 
 const WORKSHEET_XML = `<worksheet name='Sales by Category'>
   <table>
@@ -231,6 +235,63 @@ describe('formatWorksheetDocument', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.xml).toContain(`value='${expected}'`);
+  });
+});
+
+describe('readFormatOptions', () => {
+  it('reports labels off and an unformatted measure on a plain worksheet', () => {
+    expect(readFormatOptions(WORKSHEET_XML)).toEqual({
+      showLabels: false,
+      numberFormats: [
+        { field: '[Sample - Superstore].[sum:Sales:qk]', caption: 'Sales', current: null },
+      ],
+    });
+  });
+
+  it.each([
+    [{ kind: 'currency', currencySymbol: '€', decimals: 1, displayUnits: 'millions' }],
+    [{ kind: 'number', decimals: 2, displayUnits: 'none' }],
+    [{ kind: 'number', decimals: 0, displayUnits: 'billions' }],
+    [{ kind: 'percentage', decimals: 1 }],
+  ] as const)('round-trips a format written by formatWorksheetDocument: %o', (setting) => {
+    const formatted = formatWorksheetDocument(WORKSHEET_XML, {
+      showLabels: true,
+      numberFormats: [{ field: 'Sales', ...setting }],
+    });
+    invariant(formatted.ok);
+
+    expect(readFormatOptions(formatted.xml)).toEqual({
+      showLabels: true,
+      numberFormats: [
+        { field: '[Sample - Superstore].[sum:Sales:qk]', caption: 'Sales', current: setting },
+      ],
+    });
+  });
+
+  it('flags a format the tool cannot express as custom', () => {
+    const custom = WORKSHEET_XML.replace(
+      '<style/>',
+      "<style><style-rule element='label'><format attr='text-format' field='[Sample - Superstore].[sum:Sales:qk]' value='*0.000e+00' /></style-rule></style>",
+    );
+
+    expect(readFormatOptions(custom).numberFormats).toEqual([
+      {
+        field: '[Sample - Superstore].[sum:Sales:qk]',
+        caption: 'Sales',
+        current: null,
+        customFormat: true,
+      },
+    ]);
+  });
+
+  it('lists only measures, not dimensions on a shelf', () => {
+    const fields = readFormatOptions(WORKSHEET_XML).numberFormats.map((f) => f.field);
+    expect(fields).not.toContain('[Sample - Superstore].[none:Category:nk]');
+  });
+
+  it('reports showLabels as null when the worksheet has no pane', () => {
+    const paneless = WORKSHEET_XML.replace(/<panes>[\s\S]*<\/panes>/, '');
+    expect(readFormatOptions(paneless).showLabels).toBeNull();
   });
 });
 
