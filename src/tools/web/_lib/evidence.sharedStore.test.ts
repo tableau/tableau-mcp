@@ -155,8 +155,9 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
     ['S3ServiceException', '23505'],
     ['Http2Error', 503],
     ['ResourceNotFoundException', 'ECONNREFUSED'],
-    ['SECRET_ACCESS_KEYError', 'SECRET_ACCESS_KEY_ABC123'],
-  ])('logs only allowlisted labels (%s, %s)', async (name, code) => {
+    ['DynamoDBV2InternalFault', 'EAI_AGAIN'],
+    ['Error', 'NOSCRIPT'],
+  ])('logs structurally safe labels (%s, %s)', async (name, code) => {
     const a = await startReplica();
     const { getKeyValueStore } = await import('../../../storage/init.js');
     vi.spyOn(getKeyValueStore(), 'set').mockRejectedValueOnce({ name, code });
@@ -165,13 +166,29 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
     );
     expect(mocks.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          errorName: name.startsWith('SECRET') ? undefined : name,
-          errorCode: name.startsWith('SECRET') ? undefined : code,
-        }),
+        data: expect.objectContaining({ errorName: name, errorCode: code }),
       }),
     );
-    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('SECRET_ACCESS_KEY');
+  });
+
+  it.each([
+    ['SECRET_ACCESS_KEYError', 'SECRET_ACCESS_KEY_ABC123'],
+    ['password=hunter2', 'AKIAIOSFODNN7EXAMPLE'],
+    ['Error: host=10.0.0.1:8000', 'secret123'],
+    ['arn:aws:dynamodb:table/SECRET', 99999999],
+  ])('drops labels that could carry free text (%s, %s)', async (name, code) => {
+    const a = await startReplica();
+    const { getKeyValueStore } = await import('../../../storage/init.js');
+    vi.spyOn(getKeyValueStore(), 'set').mockRejectedValueOnce({ name, code });
+    await expect(new a.RegistryEvidence().establish(makeCtx())).rejects.toThrow(
+      'confirmation store is unavailable',
+    );
+    expect(mocks.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ errorName: undefined, errorCode: undefined }),
+      }),
+    );
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/SECRET|hunter2|AKIA|10\.0\.0\.1/);
   });
 
   it('fails closed when the store was never initialized', async () => {
