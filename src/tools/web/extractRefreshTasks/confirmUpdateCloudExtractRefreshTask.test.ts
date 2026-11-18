@@ -8,6 +8,7 @@ import {
   UpdateCloudExtractRefreshSchedule,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
@@ -116,6 +117,8 @@ async function establishApproval(
     binding: scheduleBinding(schedule),
   });
 }
+
+beforeEach(resetTestKeyValueStore);
 
 describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {

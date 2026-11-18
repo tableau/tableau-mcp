@@ -11,6 +11,7 @@ import {
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getKeyValueStore } from '../../../storage/init.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
@@ -124,6 +125,8 @@ const updatedTask: ExtractRefreshTask = {
     },
   },
 };
+
+beforeEach(resetTestKeyValueStore);
 
 describe('updateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {

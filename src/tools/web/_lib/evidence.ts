@@ -401,7 +401,7 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
 /**
  * AllEvidence — AND-composition of several strategies. `verify` is true only when EVERY member
  * verifies; `establish` establishes every member; `explainRejection` delegates to the member that
- * failed. Used by confirm-delete-workbook to require BOTH a
+ * failed. Used by confirm-delete-content to require BOTH a
  * live batch `pending-deletion-YYYY-MM-DD` tag (durable, un-forgeable) AND a fresh in-iframe human approval
  * (AppApprovalEvidence) — layering the human-gesture proof ON TOP of the tag so the composite can
  * only ever NARROW access (reject), never wrongly allow.

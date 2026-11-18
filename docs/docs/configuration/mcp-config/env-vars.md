@@ -725,6 +725,13 @@ handles requests, set `KV_STORE_PROVIDER` to `custom` with a backend shared by e
 confirmed call can reach any of them. Otherwise it is rejected unless it lands on the process that
 ran the preview.
 
+Key-value storage is independent of `SESSION_STORE_PROVIDER`, which configures embedded OAuth session
+storage. A custom session provider does not configure mutation proof storage.
+
+Each proof write supplies the preview window as `ttlMs` and stores an expiry that confirmation checks
+independently. Custom providers must implement atomic `consume` across processes and reclaim expired,
+unconsumed records; the embedded expiry prevents stale confirmation but does not reclaim storage.
+
 <hr />
 
 ## `STALE_CONTENT_MIN_AGE_DAYS`

@@ -10,6 +10,7 @@ import {
 import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getKeyValueStore } from '../../../storage/init.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -135,6 +136,8 @@ vi.mock('../../../config.js', () => ({
     keyValueStore: { provider: 'memory' },
   })),
 }));
+
+beforeEach(resetTestKeyValueStore);
 
 describe('deleteContentTool', () => {
   afterEach(() => {

@@ -209,8 +209,8 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
 
               // The task carries no durable taggable state, so this two-phase mutation gates on a
               // server-generated single-use nonce (RegistryEvidence) — the same gate as
-              // delete-extract-refresh-task. The nonce is additionally bound to a fingerprint of the
-              // schedule (see scheduleBinding), so a token minted while previewing schedule A cannot
+              // delete-content for extract refresh tasks. The nonce is also bound to a fingerprint
+              // of the schedule (see scheduleBinding), so a token minted while previewing A cannot
               // confirm an update to schedule B, and a confirm with no prior preview is rejected
               // server-side. The guard audits both the preview and the confirmed update.
               // Enrich the audit target with the underlying content's name/project/owner (AC-3) via

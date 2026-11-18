@@ -8,6 +8,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import { getMockRequestHandlerExtra, MOCK_SITE_LUID } from '../toolContext.mock.js';
 import { auditRecordSchema } from './auditRecord.js';
 import { EvidenceStrategy, NoEvidence, RegistryEvidence, TagEvidence } from './evidence.js';
@@ -58,6 +59,8 @@ function getAuditRecords(): unknown[] {
     .filter((entry) => entry.logger === 'audit')
     .map((entry) => entry.data);
 }
+
+beforeEach(resetTestKeyValueStore);
 
 describe('guardMutation', () => {
   beforeEach(() => {
@@ -208,7 +211,7 @@ describe('guardMutation', () => {
     expect(auditRecordSchema.parse(audits[0]).denyReason).toBe(error.type);
   });
 
-  it('does not label a failed Tableau tag lookup as a session-store outage', async () => {
+  it('does not label a failed Tableau tag lookup as an evidence-store outage', async () => {
     const error = new Error('Tableau tag lookup failed');
     const restApi = {
       ...makeRestApi(),

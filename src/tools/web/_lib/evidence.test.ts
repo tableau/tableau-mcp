@@ -2,6 +2,7 @@ import { afterEach, beforeEach } from 'vitest';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { getKeyValueStore } from '../../../storage/init.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import {
   AllEvidence,
   AppApprovalEvidence,
@@ -48,6 +49,8 @@ function makeCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
     ...overrides,
   };
 }
+
+beforeEach(resetTestKeyValueStore);
 
 describe('TagEvidence', () => {
   beforeEach(() => {
@@ -158,8 +161,7 @@ describe('TagEvidence', () => {
 describe('RegistryEvidence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // The TTL is read once when the cache is lazily created (module-level singleton). Keep the
-    // default; the single-use + miss behaviors below don't depend on the exact TTL value.
+    // Each write reads the TTL. Keep the default unless a test explicitly changes the preview window.
     vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
   });
 
@@ -275,8 +277,7 @@ describe('RegistryEvidence', () => {
       await evidence.establish(ctx);
       const nonce = evidence.getEstablishedNonce()!;
 
-      // The cache TTL defaults to 5 minutes. Advance fake time well past it; ExpiringMap clears the
-      // entry via setTimeout, so the confirm can no longer find the nonce.
+      // The preview window defaults to 5 minutes. Once it expires, confirmation must be rejected.
       await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
 
       await expect(
@@ -463,32 +464,32 @@ describe('AppApprovalEvidence', () => {
   // behavior and, critically, the cross-namespace ISOLATION the refactor exists to provide.
   describe('generalized namespace', () => {
     it('establish(ns) then verify(ns) for the SAME site/user/target succeeds (explicit namespace)', async () => {
-      const establish = new AppApprovalEvidence('delete-datasource');
-      const verify = new AppApprovalEvidence('delete-datasource');
+      const establish = new AppApprovalEvidence('delete-content');
+      const verify = new AppApprovalEvidence('delete-content');
       const ctx = appCtx({ target: { id: 'ns-A-target', kind: 'datasource' } });
       await establish.establish(ctx);
       await expect(verify.verify(ctx)).resolves.toBe(true);
     });
 
-    it('WRONG-NAMESPACE ISOLATION: an approval for delete-datasource does NOT satisfy delete-workbook for the SAME site/user/target', async () => {
+    it('isolates approvals between preview tools for the same site, user, and target', async () => {
       // This is the whole point of the refactor: one tool's human approval must never unlock
       // another tool's confirm, even when site + user + target id are identical. Establish under the
-      // 'delete-datasource' namespace, then attempt to verify under 'delete-workbook' with the same
-      // EvidenceContext → MUST be rejected.
+      // 'delete-content' scope, then verify under 'update-cloud-extract-refresh-task' with the same
+      // EvidenceContext. The other tool must be rejected.
       const sameTargetCtx = appCtx({ target: { id: 'shared-target-id', kind: 'datasource' } });
-      await new AppApprovalEvidence('delete-datasource').establish(sameTargetCtx);
-      await expect(new AppApprovalEvidence('delete-workbook').verify(sameTargetCtx)).resolves.toBe(
-        false,
-      );
-      // And the genuine namespace still verifies (the approval was recorded, just isolated).
+      await new AppApprovalEvidence('delete-content').establish(sameTargetCtx);
       await expect(
-        new AppApprovalEvidence('delete-datasource').verify(sameTargetCtx),
-      ).resolves.toBe(true);
+        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(sameTargetCtx),
+      ).resolves.toBe(false);
+      // And the genuine namespace still verifies (the approval was recorded, just isolated).
+      await expect(new AppApprovalEvidence('delete-content').verify(sameTargetCtx)).resolves.toBe(
+        true,
+      );
     });
 
-    it('isolates every distinct namespace from every other (extract-refresh-task vs update-cloud)', async () => {
+    it('isolates delete-content from schedule updates for the same task', async () => {
       const ctx = appCtx({ target: { id: 'task-shared', kind: 'extract-refresh-task' } });
-      await new AppApprovalEvidence('delete-extract-refresh-task').establish(ctx);
+      await new AppApprovalEvidence('delete-content').establish(ctx);
       // The update tool's confirm must not be satisfied by the delete tool's approval.
       await expect(
         new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(ctx),
@@ -497,7 +498,7 @@ describe('AppApprovalEvidence', () => {
 
     it('namespace key ignores ctx.tool entirely (preview/confirm tool names differ but namespace matches)', async () => {
       // Establish as the preview tool would (ctx.tool = 'delete-content') and verify as the
-      // confirm tool would (ctx.tool = 'delete-content'); the differing ctx.tool must NOT
+      // confirm tool would (ctx.tool = 'confirm-delete-content'); the differing ctx.tool must NOT
       // break the match because the fixed namespace is what keys the entry.
       const target = { id: 'tool-irrelevant', kind: 'datasource' as const };
       await new AppApprovalEvidence('delete-content').establish(
@@ -505,7 +506,7 @@ describe('AppApprovalEvidence', () => {
       );
       await expect(
         new AppApprovalEvidence('delete-content').verify(
-          appCtx({ target, tool: 'delete-content' }),
+          appCtx({ target, tool: 'confirm-delete-content' }),
         ),
       ).resolves.toBe(true);
     });
@@ -569,9 +570,9 @@ describe('AppApprovalEvidence', () => {
       // The DELETEs pass no binding; establish/verify with binding undefined must still match, so
       // folding binding into the key is a no-op for payload-free targets.
       const target = { id: 'ds-nobind', kind: 'datasource' as const };
-      await new AppApprovalEvidence('delete-datasource').establish(appCtx({ target }));
+      await new AppApprovalEvidence('delete-content').establish(appCtx({ target }));
       await expect(
-        new AppApprovalEvidence('delete-datasource').verify(appCtx({ target })),
+        new AppApprovalEvidence('delete-content').verify(appCtx({ target })),
       ).resolves.toBe(true);
     });
   });

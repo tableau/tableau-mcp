@@ -6,16 +6,8 @@ import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
 
-beforeEach(async () => {
+beforeEach(() => {
   stubDefaultEnvVars();
-  // Production initializes the key-value store at startup; give every test a fresh one. Suites that
-  // mock getConfig without a keyValueStore (or the storage module itself) manage their own store.
-  const storage = await import('./storage/init.js');
-  if (vi.isMockFunction(storage.initializeKeyValueStore)) return;
-  const { getConfig } = await import('./config.js');
-  if (vi.isMockFunction(getConfig) && !getConfig()?.keyValueStore) return;
-  storage.resetKeyValueStore();
-  storage.initializeKeyValueStore();
 });
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
