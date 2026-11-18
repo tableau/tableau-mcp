@@ -133,7 +133,7 @@ const SS_BY_REGION_CATEGORY: OracleQuery = {
   fields: [dim('Region'), dim('Category'), sum('Sales'), sum('Profit')],
 };
 const SS_BY_SEGMENT: OracleQuery = {
-  fields: [dim('Segment'), sum('Sales'), countd('Customer Name')],
+  fields: [dim('Segment'), sum('Sales'), countd('Customer ID')],
 };
 const SS_BY_YEAR: OracleQuery = {
   fields: [year('Order Date'), sum('Sales'), countd('Order ID')],
@@ -180,7 +180,7 @@ const WEST_SALES_BY_CATEGORY = [260679.73, 252766.99, 226366.89];
 const SALES_BY_CATEGORY = [839893.28, 754747.76, 731893.31];
 const TOP5_STATE_SALES = [457687.63, 310876.27, 170188.05, 138641.27, 116511.91];
 const SALES_BY_SEGMENT = [1170659.79, 715806.13, 440068.43];
-const CUSTOMERS_BY_SEGMENT = [412, 239, 149];
+const CUSTOMERS_BY_SEGMENT = [416, 239, 149];
 const PAID_BY_PAYER = [
   15710363.18, 13633764.72, 9424678.75, 8075427.95, 7981607.94, 7109685.83, 6666315.94, 4731428.03,
 ];
@@ -287,7 +287,7 @@ const SUPERSTORE_CASES: Array<AbCase> = [
         question: 'How many distinct customers are in each customer segment?',
         expected: {
           numbers: CUSTOMERS_BY_SEGMENT,
-          reference: 'Consumer 412; Corporate 239; Home Office 149.',
+          reference: 'Consumer 416; Corporate 239; Home Office 149.',
         },
         oracle: SS_BY_SEGMENT,
       },
@@ -542,7 +542,7 @@ const SUPERSTORE_CASES: Array<AbCase> = [
         question: 'How many distinct customers are in each of those segments?',
         expected: {
           numbers: CUSTOMERS_BY_SEGMENT,
-          reference: 'Consumer 412; Corporate 239; Home Office 149.',
+          reference: 'Consumer 416; Corporate 239; Home Office 149.',
         },
         oracle: SS_BY_SEGMENT,
       },
