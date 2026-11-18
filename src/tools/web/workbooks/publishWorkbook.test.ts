@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
   mockDeleteObject: vi.fn(),
+  mockTelemetrySend: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
   sessionEvents: [] as string[],
 }));
@@ -74,6 +75,10 @@ vi.mock('../s3Client.js', async (importOriginal) => ({
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
+}));
+
+vi.mock('../../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
+  getProductTelemetry: () => ({ send: mocks.mockTelemetrySend }),
 }));
 
 const validArgs = {
@@ -734,6 +739,46 @@ describe('publishWorkbookTool', () => {
     });
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockDeleteObject).not.toHaveBeenCalled();
+  });
+
+  it('sends the published workbook LUID in the tool_call telemetry parameters', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockTelemetrySend).toHaveBeenCalledExactlyOnceWith(
+      'tool_call',
+      expect.objectContaining({
+        parameters: JSON.stringify({ object_type: 'workbook', object_luid: mockWorkbook.id }),
+      }),
+    );
+  });
+
+  it('sends no workbook LUID in the tool_call telemetry parameters when the workbook is invalid', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      errors: [
+        {
+          severity: 'ERROR',
+          message: 'Missing required closing tag for element',
+          line: 127,
+          column: 5,
+          elementName: 'preferences',
+        },
+      ],
+    });
+
+    await getToolResult(validArgs);
+
+    expect(mocks.mockTelemetrySend).toHaveBeenCalledExactlyOnceWith(
+      'tool_call',
+      expect.objectContaining({ parameters: '' }),
+    );
+    expect(JSON.stringify(mocks.mockTelemetrySend.mock.calls)).not.toContain(mockWorkbook.id);
   });
 
   it('returns an error before validation when the requested project is outside bounded context', async () => {

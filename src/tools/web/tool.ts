@@ -2,7 +2,7 @@ import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/z
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { recordToolCall } from '../../activityLog/init.js';
-import { getActivityLogObject } from '../../activityLog/objects.js';
+import { getActivityLogObject, getToolCallTelemetryParameters } from '../../activityLog/objects.js';
 import {
   ArgsValidationError,
   McpToolError,
@@ -131,6 +131,8 @@ export type WebToolLogAndExecuteParams<
 > = LogAndExecuteParams<T, WebMcpServer, TableauWebRequestHandlerExtra, Args> & {
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
+  // Extra fields for the tool_call `parameters` JSON, read from a successful result
+  getTelemetryExtras?: (result: T) => Record<string, string>;
 };
 
 export class WebTool<
@@ -180,9 +182,11 @@ export class WebTool<
     callback,
     getSuccessResult,
     constrainSuccessResult,
+    getTelemetryExtras,
   }: WebToolLogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
+    let telemetryExtras: Record<string, string> | undefined;
 
     // The OAuth client_id (a CIMD URL) is carried on tableauAuthInfo only for the Bearer auth path.
     // Embedded OAuth normalizes tableauAuthInfo to 'X-Tableau-Auth' (see accessTokenValidator), but
@@ -230,6 +234,11 @@ export class WebTool<
         }
 
         success = true;
+        try {
+          telemetryExtras = getTelemetryExtras?.(constrainedResult.result);
+        } catch {
+          telemetryExtras = undefined;
+        }
         toolResult = getSuccessResult
           ? getSuccessResult(constrainedResult.result)
           : {
@@ -309,6 +318,7 @@ export class WebTool<
     } finally {
       const sanitizedClientId = sanitizeClientIdForTelemetry(oauthClientId);
       const clientName = getClientDisplayName(oauthClientId);
+      const object = getActivityLogObject(this.name, args);
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
@@ -324,6 +334,7 @@ export class WebTool<
         oauth_client_id: sanitizedClientId,
         oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
+        parameters: getToolCallTelemetryParameters(object, telemetryExtras),
       });
       // Read after the callback because sign-in inside it sets the LUIDs. The ZodiosValidationError
       // passthrough isn't a success for telemetry, but the client did get its data.

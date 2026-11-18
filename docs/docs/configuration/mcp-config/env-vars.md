@@ -589,6 +589,7 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 | `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
 | `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
 | `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
+| `parameters`                                   | JSON with `object_type` and `object_luid` of the Tableau object the call acted on, never raw arguments; empty when there is none            | empty                                                                                 |
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
