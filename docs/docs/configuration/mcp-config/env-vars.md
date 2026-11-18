@@ -490,6 +490,9 @@ The provider to use for generic key-value storage. This setting is independent o
     [`KV_STORE_PROVIDER_CONFIG`](#kv_store_provider_config)
 - Unrecognized values fail startup.
 
+The startup readiness log records the selected KV provider. Memory storage is local to each
+process; use a custom provider when callers need shared storage across replicas.
+
 See [Key-value storage](storage.md) for the provider contract and per-write expiration rules.
 
 <hr />
@@ -501,6 +504,7 @@ Configuration for a custom key-value store provider.
 - Required when: [`KV_STORE_PROVIDER`](#kv_store_provider) is `custom`
 - Format: JSON object with a string `module` field and optional provider-specific settings
 - Providing this setting without `KV_STORE_PROVIDER` fails startup.
+- Providing this setting with `KV_STORE_PROVIDER=memory` fails startup, including an empty value.
 
 The `module` field may be a path relative to the server's working directory, an absolute path, or an
 installed npm package name. The module must export a default class or a named `KeyValueStore` class

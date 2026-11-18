@@ -200,6 +200,20 @@ describe('independent KV provider', () => {
     expect(JSON.stringify(vi.mocked(log).mock.calls)).not.toContain(marker);
   });
 
+  it.each(['memory', 'custom'] as const)(
+    'identifies the selected %s provider in the readiness log',
+    async (provider) => {
+      if (provider === 'custom') useCustomProvider();
+      await initializeKeyValueStore();
+      expect(log).toHaveBeenCalledExactlyOnceWith({
+        message: 'Key-value store ready',
+        level: 'info',
+        logger: 'storage',
+        data: { provider },
+      });
+    },
+  );
+
   it('awaits init and shares one provider across concurrent and repeated initialization', async () => {
     const ready = deferred();
     const initHook = vi.fn(() => ready.promise);

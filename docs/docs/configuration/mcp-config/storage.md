@@ -16,9 +16,14 @@ KV_STORE_PROVIDER_CONFIG='{"module":"./my-kv-provider.cjs","table":"mcp-state"}'
 be a path relative to the server's working directory, an absolute path, or an installed npm
 package name. All configuration fields are passed to its constructor.
 
-Providing `KV_STORE_PROVIDER_CONFIG` without `KV_STORE_PROVIDER` fails startup. These
-settings configure generic key-value storage. OAuth session storage has its own
+Providing `KV_STORE_PROVIDER_CONFIG` without `KV_STORE_PROVIDER`, or with
+`KV_STORE_PROVIDER=memory`, fails startup. These settings configure generic key-value storage.
+OAuth session storage has its own
 [provider settings](oauth.md#session_store_provider).
+
+The startup readiness log identifies the selected KV provider as `memory` or `custom`.
+Memory storage is local to each process. Configure a custom KV provider when callers need shared
+storage across replicas; SessionStore settings do not configure KV storage.
 
 Startup awaits `initializeKeyValueStore()` to construct and validate the configured provider, then
 await its optional `init()` hook before accepting requests. The getter returns that exact instance

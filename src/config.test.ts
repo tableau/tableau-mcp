@@ -1314,6 +1314,39 @@ describe('Config', () => {
       expect(new Config().keyValueStore).toEqual({ provider: 'memory' });
     });
 
+    it.each(['', '{}', 'invalid-json'])(
+      'rejects unused configuration for memory KV: %j',
+      (providerConfig) => {
+        vi.stubEnv('KV_STORE_PROVIDER', 'memory');
+        vi.stubEnv('KV_STORE_PROVIDER_CONFIG', providerConfig);
+        expect(() => new Config()).toThrow(
+          'KV_STORE_PROVIDER_CONFIG must not be set when KV_STORE_PROVIDER is "memory"',
+        );
+      },
+    );
+
+    it('does not expose unused memory KV configuration in errors', () => {
+      const privateMarker = 'PRIVATE_UNUSED_KV_CONFIG';
+      vi.stubEnv('KV_STORE_PROVIDER', 'memory');
+      vi.stubEnv(
+        'KV_STORE_PROVIDER_CONFIG',
+        JSON.stringify({ module: './provider.cjs', credential: privateMarker }),
+      );
+      let failure: unknown;
+      try {
+        new Config();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).toHaveProperty(
+        'message',
+        'KV_STORE_PROVIDER_CONFIG must not be set when KV_STORE_PROVIDER is "memory"',
+      );
+      expect(inspect(failure)).not.toContain(privateMarker);
+      expect(failure).not.toHaveProperty('cause');
+    });
+
     it('requires configuration for a custom KV provider', () => {
       vi.stubEnv('KV_STORE_PROVIDER', 'custom');
       vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');

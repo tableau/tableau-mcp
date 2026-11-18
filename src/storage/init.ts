@@ -54,7 +54,12 @@ async function initializeProvider(): Promise<void> {
     );
   }
   state = provider;
-  log({ message: 'Key-value store ready', level: 'info', logger: 'storage' });
+  log({
+    message: 'Key-value store ready',
+    level: 'info',
+    logger: 'storage',
+    data: { provider: storage.provider },
+  });
 }
 
 /** Release the provider once, sharing pending cleanup between callers. */
