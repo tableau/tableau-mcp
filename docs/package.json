@@ -19,7 +19,9 @@
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "pretypecheck": "node scripts/generateSiteData.mjs",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "check:tool-names": "node scripts/check-removed-tool-names.mjs",
+    "test:guard": "node --test scripts/check-removed-tool-names.test.mjs"
   },
   "dependencies": {
     "@docusaurus/core": "^3.9.0",
