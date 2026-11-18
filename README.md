@@ -15,6 +15,9 @@ make it easier for developers to build AI applications that integrate with Table
 
 https://tableau.github.io/tableau-mcp/
 
+For the complete web tool inventory and required user/site roles, see
+[Tool Access Requirements](docs/docs/web-tools/overview.md).
+
 ## Getting Started
 
 ### Hosted Tableau MCP (Recommended for Tableau Cloud)

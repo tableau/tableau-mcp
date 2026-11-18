@@ -12,6 +12,13 @@ Retrieves an image of the specified view in a Tableau workbook. Optional `width`
 pixels control the render size, and optional view filters narrow the data shown. For custom views,
 use [`get-custom-view-image`](get-custom-view-image.md) instead.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 The tool renders the requested view through the Tableau REST API (Tableau Cloud or Server). The

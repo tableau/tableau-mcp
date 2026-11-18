@@ -17,6 +17,15 @@ When flow tools are disabled, `get-flow` (and [`list-flows`](list-flows.md)) are
 their scopes are not advertised.
 :::
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_READ_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-read-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled).
+
 ## APIs called
 
 This tool reads flow metadata through the **Tableau REST API** (Tableau Cloud or Server) — not a

@@ -29,6 +29,15 @@ Compared with the other Pulse insight bundle types:
 | **Ban**       | Current value snapshot             | Banner displays, at-a-glance metrics           |
 | **Breakdown** | Dimension analysis                 | Understanding categorical distributions        |
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Registration conditions:** `RequiresPulse`, `RequiresPulsePremium`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 This tool talks to the Tableau REST API (Tableau Cloud or Server), specifically the Pulse Insights

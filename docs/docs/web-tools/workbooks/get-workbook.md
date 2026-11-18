@@ -12,6 +12,13 @@ Retrieves information about a single workbook, including the views it contains a
 statistics. When Metadata API access is enabled, the result is also enriched with the workbook's
 upstream data-source lineage.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool reads from the Tableau REST API (Tableau Cloud or Server) and, unless disabled, enriches

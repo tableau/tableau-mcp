@@ -10,6 +10,14 @@ sidebar_position: 3
 
 Downloads workbook content as a TWB (application/xml) or TWBX (application/octet-stream) file. The returned file metadata includes Tableau-provided content type and filename when available. If the user asks to open the workbook file locally, derive the full %product_name% application path instead of assuming it is named exactly "%product_name%". If multiple %product_name% versions are installed, select the most recent version by comparing version numbers in the application filename/path.
 
+## Access requirements
+
+- **User/site role:** `Explorer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Explorer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Client access:** Slack clients additionally require `authoring-with-slack`.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

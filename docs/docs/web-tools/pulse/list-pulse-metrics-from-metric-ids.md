@@ -13,6 +13,15 @@ site. Use it to resolve a set of known metric IDs — for example, the `metric_i
 values returned by a Pulse metric subscription — into their full metric records.
 This tool is read-only.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Registration conditions:** `RequiresPulse`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 Talks to the **Tableau REST API** (Tableau Cloud or Server), specifically its

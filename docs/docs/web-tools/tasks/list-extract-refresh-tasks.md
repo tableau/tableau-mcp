@@ -22,6 +22,15 @@ Use it to:
 Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#admin_tools_enabled)`=true`. The tool is restricted to Tableau site administrators, and the caller's site role is verified at request time.
 :::
 
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server). At the MCP layer it is gated on the `tableau:mcp:tasks:read` scope; the underlying REST calls require the `tableau:tasks:read` and `tableau:users:read` OAuth scopes.

@@ -18,6 +18,15 @@ other Pulse tools). The `bundleType` argument selects which bundle shape is gene
 - `detail` — performance over time, a summary visualization of highs, lows, and trends, per-dimension top-contributor breakdowns, and follow-up insights
 - `exploration` — performance trends with BAN, anchor, and follow-up insight groups
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Registration conditions:** `RequiresPulse`.
+  See [site capabilities](../overview.md#site-capabilities) for what is checked.
+
 ## APIs called
 
 Talks to the Tableau REST API (Tableau Cloud or Server) Pulse Insights service. A single call

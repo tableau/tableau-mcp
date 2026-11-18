@@ -10,6 +10,15 @@ sidebar_position: 4
 
 Publishes a TDS or TDSX data source from a staged upload id, or from a local file path when the MCP server runs over stdio, to the specified Tableau project. Use list-projects to discover project IDs. The data source is uploaded and then validated by Tableau as part of publishing.
 
+## Access requirements
+
+- **User/site role:** `ExplorerCanPublish` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Client access:** Slack clients additionally require `authoring-with-slack`.
+- **Availability:** the `datasource-authoring` feature flag must be enabled.
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

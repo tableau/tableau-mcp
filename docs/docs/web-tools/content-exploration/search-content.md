@@ -12,6 +12,13 @@ Searches across all supported content types in a Tableau Site for objects releva
 query, matching against the provided search terms and filters. When results include workbooks or
 views, the tool also enriches them with their upstream published datasources.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool talks to the Tableau REST API (Tableau Cloud or Server). The MCP-layer OAuth gate requires

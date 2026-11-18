@@ -18,6 +18,15 @@ Permanently deletes a workbook, published data source, or extract refresh task. 
 Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#admin_tools_enabled)`=true`. At request time it verifies the caller's site role and rejects anything below `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
 :::
 
+## Access requirements
+
+- **User/site roles:** `SupportUser`, `SiteAdministratorExplorer`,
+  `SiteAdministratorCreator`, or `ServerAdministrator`. The tool checks administrative access
+  at request time, even when registration-time role enforcement is disabled.
+- **Declared registration minimum:** `ExplorerCanPublish`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server) for the read, tag, and delete operations, and to the **Metadata API** (GraphQL) for the data-source dependency check. Because the mutation is two-phase, a preview call only reads (and, for a workbook or data source, tags) the target, while the delete is issued only on a confirmed call — so a preview-phase read needs a read scope, and the confirm-phase delete needs a delete scope. Every request is admin-gated (see the gating admonition above). The MCP-layer OAuth scope for this tool is `tableau:mcp:content:delete`; the union of Tableau API scopes across the resource types is `tableau:content:read`, `tableau:workbook_tags:update`, `tableau:workbooks:delete`, `tableau:datasource_tags:update`, `tableau:datasources:delete`, `tableau:tasks:read`, `tableau:tasks:delete`, `tableau:users:read`, plus `tableau:mcp_site_settings:read` to read per-site MCP configuration overrides when MCP site settings are enabled.

@@ -28,6 +28,13 @@ is `false`. The embedded authorization server does not use the same consent mode
 not registered in that mode.
 :::
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool does **not** call the Tableau REST API. It sends a single request to the configured OAuth

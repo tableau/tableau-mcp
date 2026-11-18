@@ -67,6 +67,15 @@ sidebar_position: 7
   **Note:** Requires Tableau REST API access scope `tableau:flow_tasks:read`. Date-time filter values must be full ISO 8601 (e.g. `2026-05-25T00:00:00Z`). The Tableau REST API does not support server-side filtering or pagination for this endpoint — all tasks are retrieved and filtered/limited client-side by this tool.
   
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_READ_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-read-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled).
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

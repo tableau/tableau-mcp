@@ -15,6 +15,15 @@ description, owner, project, tags, and timestamps.
 Registered only when [`FLOW_READ_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled)`=true`.
 :::
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_READ_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-read-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled).
+
 ## APIs called
 
 This tool lists flows through the **Tableau REST API** (Tableau Cloud or Server) — it is not a local

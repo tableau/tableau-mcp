@@ -21,6 +21,15 @@ sidebar_position: 5
 
   **Note:** Requires Tableau REST API access scope `tableau:flow_tasks:read`. When this server is restricted to specific projects/tags, this tool cannot verify that a task's flow is in the allowed set (a task carries no project/tag) and will refuse — use `get-flow` (by flow id) to inspect a specific flow under that configuration.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+- **Availability:** `FLOW_READ_TOOLS_ENABLED` when explicitly set; otherwise the
+  `flow-read-tools` feature flag. See [flow configuration](../../configuration/mcp-config/env-vars.md#flow_read_tools_enabled).
+
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.

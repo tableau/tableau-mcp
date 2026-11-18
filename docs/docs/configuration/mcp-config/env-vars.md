@@ -713,7 +713,9 @@ including unset, leaves them unregistered.
 
 ## `ADMIN_TOOLS_ENABLED`
 
-Enables admin-only tools that require site administrator permissions.
+Enables tools that check administrative access at request time. The effective enablement is
+`ADMIN_TOOLS_ENABLED=true` **or** the `admin-tools` feature flag, so setting this variable to
+`false` does not disable tools enabled by that flag.
 
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
@@ -721,14 +723,20 @@ Enables admin-only tools that require site administrator permissions.
   - [`update-cloud-extract-refresh-task`](../../web-tools/tasks/update-cloud-extract-refresh-task.md)
   - [`list-jobs`](../../web-tools/jobs/list-jobs.md)
   - [`list-users`](../../web-tools/users/list-users.md)
+  - [`update-user`](../../web-tools/users/update-user.md)
   - [`delete-content`](../../web-tools/content/delete-content.md)
   - [`query-admin-insights`](../../web-tools/admin-insights/query-admin-insights.md)
+- With `mcp-apps` enabled, the corresponding app-only confirmation tools are also available:
+  [`confirm-delete-content`](../../web-tools/content/confirm-delete-content.md) and
+  [`confirm-update-cloud-extract-refresh-task`](../../web-tools/tasks/confirm-update-cloud-extract-refresh-task.md).
 - These tools require the user to have one of the following site roles:
+  - SupportUser
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
   - ServerAdministrator
-- Admin tools perform runtime role verification and will return a 403 error if the user does not
-  have the required permissions.
+- Admin tools perform runtime role verification and reject callers without an accepted role.
+  See [Tool Access Requirements](../../web-tools/overview.md) for the declared registration
+  minimum and effective user requirements for every tool.
 
 <hr />
 

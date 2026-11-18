@@ -13,6 +13,13 @@ name, owner, and the view they are found in. Supports optional filtering via `fi
 expressions (e.g. `viewId:eq:<viewId>`) for precise, flexible custom view discovery. Use this tool
 when a user requests to list, search, or filter Tableau custom views for a workbook.
 
+## Access requirements
+
+- **User/site role:** `Viewer` or higher in the MCP role hierarchy; Tableau content
+  permissions and site capabilities also apply.
+- **Declared registration minimum:** `Viewer`. See [role enforcement](../overview.md#role-enforcement)
+  for when this filters the tool list and which roles qualify.
+
 ## APIs called
 
 This tool talks to the **Tableau REST API** (Tableau Cloud or Server) to look up the workbook and
