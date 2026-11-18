@@ -3,7 +3,7 @@ import { join } from 'path';
 
 import { ExpectedAnswer } from '../cases/dataQuestions.js';
 
-export type ArmId = 'A' | 'B' | 'C';
+export type ArmId = 'A' | 'B' | 'C' | 'D';
 
 /**
  * Client-side token usage, summed over the agent's model responses for one turn.

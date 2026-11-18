@@ -26,6 +26,8 @@ dotenv.config({ path: 'tests/eval/.env' });
  *   turn 1, because the tool descriptions forbid using it otherwise.
  * - Arm C: the full tool set plus Tableau Agent, with plain (no opt-in) prompts. This measures
  *   whether adding the tools changes the existing Q&A path; its CABU usage should be ~0%.
+ * - Arm D: the full tool set plus Tableau Agent, with B's opt-in prompts. This measures whether a
+ *   user who asks for Tableau Agent gets it when the direct query tools are also available.
  *
  * This is a measurement, not a pass/fail gate: wrong answers are recorded, not asserted. Results go
  * to `tests/eval/results/` (gitignored) as JSON plus a markdown summary. Cases come from
@@ -43,7 +45,7 @@ dotenv.config({ path: 'tests/eval/.env' });
 
 const RUN = process.env.RUN_CABU_AB === 'true';
 
-const ARM_IDS: Array<ArmId> = ['A', 'B', 'C'];
+const ARM_IDS: Array<ArmId> = ['A', 'B', 'C', 'D'];
 const QUERY_TOOLS = ['query_datasource', 'get_datasource_metadata'];
 
 const ARM_ENV: Record<ArmId, Record<string, string>> = {
@@ -54,7 +56,10 @@ const ARM_ENV: Record<ArmId, Record<string, string>> = {
     INCLUDE_TOOLS: 'search-content,list-datasources,list-workbooks,list-views,tableau-agent',
   },
   C: { TABLEAU_AGENT_TOOLS_ENABLED: 'true' },
+  D: { TABLEAU_AGENT_TOOLS_ENABLED: 'true' },
 };
+
+const OPT_IN_ARMS: Array<ArmId> = ['B', 'D'];
 
 const agentSystemPrompt = `
   You are an assistant that answers questions about Tableau data.
@@ -82,7 +87,7 @@ async function runCase(
   const model = getModel();
   const agent = await getAgent({ mcpServer, model, systemPrompt: agentSystemPrompt });
   const conversation = await runConversation(agent, abCase, {
-    optIn: arm === 'B',
+    optIn: OPT_IN_ARMS.includes(arm),
     timeoutMs: turnTimeoutMs,
     maxTurns,
   });
@@ -152,7 +157,7 @@ describe.skipIf(!RUN)('Tableau Agent (CABU) A/B eval', () => {
       if (arm === 'A' && hasCabu) {
         throw new Error('Arm A exposes the Tableau Agent tools; expected them off.');
       }
-      if ((arm === 'B' || arm === 'C') && !hasCabu) {
+      if (arm !== 'A' && !hasCabu) {
         throw new Error(
           `Arm ${arm} is missing the Tableau Agent tools. Tools: ${toolNames.join(', ')}`,
         );
