@@ -7,7 +7,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getCabuAskTool } from './cabuAsk.js';
-import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
+import { encodeConversationToken } from './cabuConversationToken.js';
 
 const mocks = vi.hoisted(() => ({
   mockAskUtterance: vi.fn(),
@@ -35,7 +35,8 @@ beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
-const VALID_UTTERANCE_ARGS = encodeUtteranceArgs({
+const VALID_TOKEN = encodeConversationToken({
+  conversationId: 'conversation-1',
   scope: 'tenant-123',
   datasources: [{ datasourceLuid: '11111111-1111-1111-1111-111111111111' }],
   localization: { locale: 'en-US', language: 'en' },
@@ -53,29 +54,27 @@ describe('cabuAskTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     const tool = getCabuAskTool(new WebMcpServer());
-    expect(tool.name).toBe('cabu-ask');
+    expect(tool.name).toBe('tableau-agent-ask');
     expect(tool.paramsSchema).toMatchObject({
-      conversationId: expect.any(Object),
-      utteranceArgs: expect.any(Object),
+      conversationToken: expect.any(Object),
       question: expect.any(Object),
       parentLuid: expect.any(Object),
     });
   });
 
-  it('returns a clear error when utteranceArgs is invalid or corrupted', async () => {
+  it('returns a clear error when conversationToken is invalid or corrupted', async () => {
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: 'not-a-valid-token',
+      conversationToken: 'not-a-valid-token',
       question: 'What were total sales?',
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toMatch(/utteranceArgs.*invalid|corrupt/i);
+    expect(result.content[0].text).toMatch(/conversationToken.*invalid|corrupt/i);
     expect(mocks.mockAskUtterance).not.toHaveBeenCalled();
   });
 
-  it('asks a question and returns the assembled answer, passing only conversationId and the decoded utteranceArgs fields', async () => {
+  it('asks a question and returns the assembled answer, passing the conversationId and fields decoded from the token', async () => {
     mocks.mockAskUtterance.mockResolvedValue({ utteranceId: 'utterance-1' });
     mocks.mockStreamUtterance.mockResolvedValue({
       status: 'complete',
@@ -87,8 +86,7 @@ describe('cabuAskTool', () => {
     });
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'Which region had the highest sales?',
     });
 
@@ -121,8 +119,7 @@ describe('cabuAskTool', () => {
     });
 
     const turn1 = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
     invariant(turn1.content[0].type === 'text');
@@ -145,8 +142,7 @@ describe('cabuAskTool', () => {
     });
 
     const turn2 = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'Now just the West region.',
       parentLuid: turn1Parsed.nextParentLuid,
     });
@@ -173,8 +169,7 @@ describe('cabuAskTool', () => {
     });
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
 
@@ -199,8 +194,7 @@ describe('cabuAskTool', () => {
     }
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
 
@@ -215,8 +209,7 @@ describe('cabuAskTool', () => {
     );
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
 
@@ -230,8 +223,7 @@ describe('cabuAskTool', () => {
     mocks.mockStreamUtterance.mockResolvedValue({ status: 'incomplete' });
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
 
@@ -252,8 +244,7 @@ describe('cabuAskTool', () => {
     });
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
 
@@ -266,8 +257,7 @@ describe('cabuAskTool', () => {
     vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: VALID_UTTERANCE_ARGS,
+      conversationToken: VALID_TOKEN,
       question: 'What were total sales?',
     });
 
@@ -280,7 +270,8 @@ describe('cabuAskTool', () => {
   });
 
   it('returns a datasource-not-allowed error when a decoded datasource entry is missing its datasourceLuid', async () => {
-    const utteranceArgsMissingLuid = encodeUtteranceArgs({
+    const tokenMissingLuid = encodeConversationToken({
+      conversationId: 'conversation-1',
       scope: 'tenant-123',
       datasources: [{}],
       localization: { locale: 'en-US', language: 'en' },
@@ -288,8 +279,7 @@ describe('cabuAskTool', () => {
     });
 
     const result = await getToolResult({
-      conversationId: 'conversation-1',
-      utteranceArgs: utteranceArgsMissingLuid,
+      conversationToken: tokenMissingLuid,
       question: 'What were total sales?',
     });
 

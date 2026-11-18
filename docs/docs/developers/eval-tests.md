@@ -142,8 +142,9 @@ npm run test:eval -- run tests/eval/dashboardApplyScenario.test.ts tests/eval/ba
 
 ## Tableau Agent evals
 
-These evals cover the `cabu-start-conversation` and `cabu-ask` tools. They run against the
-`tableauagent1` site on test-dataplane1, which has Tableau Agent enabled, not the default 10ax site.
+These evals cover the `tableau-agent-start-conversation` and `tableau-agent-ask` tools. They run
+against the `tableauagent1` site on test-dataplane1, which has Tableau Agent enabled, not the
+default 10ax site.
 
 | File                          | What it checks                                                                                                                                                                                                                                         | Model needed |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
@@ -151,7 +152,7 @@ These evals cover the `cabu-start-conversation` and `cabu-ask` tools. They run a
 | `cases/dataQuestions.ts`      | Not a test. About 40 data questions on "Sample - Superstore" and "Medicare-Claims" with known answers, each with the VizQL query that produced them.                                                                                                   | —            |
 | `dataQuestionsOracle.test.ts` | Runs each case's query through `query-datasource` and checks the expected numbers still hold.                                                                                                                                                          | No           |
 | `dataQuestions.test.ts`       | Pass/fail. **plain**: the question as written must use `query-datasource`, not Tableau Agent. **tableau-agent**: only turn 1 says "Ask Tableau Agent:"; every turn must stay in one Tableau Agent conversation. Both modes must get the numbers right. | Yes          |
-| `cabuSelection.test.ts`       | Tool choice only: ordinary prompts avoid Tableau Agent, explicit requests use it, and a follow-up threads through the same conversation.                                                                                                               | Yes          |
+| `cabuSelection.test.ts`       | Tool choice only: ordinary prompts and near-miss wording ("use CABU", "ask an agent") avoid Tableau Agent, asking for it by name ("Ask Tableau Agent", "use Tableau's agent") uses it, and a follow-up threads through the same conversation.          | Yes          |
 | `cabuAb.test.ts`              | A measurement, not a gate: answer accuracy, latency, and client token use with Tableau Agent off, on and opted in, and on with plain prompts. Writes a report to `tests/eval/results/`.                                                                | Yes          |
 
 Prompts name content the way a user would: the data source and its project by name, never by LUID.

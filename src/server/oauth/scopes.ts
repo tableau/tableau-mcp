@@ -574,11 +574,11 @@ const toolScopeMap: Record<
   // Demo/experimental CABU (Tableau Agent) tools -- gated off by default, see
   // isTableauAgentToolsEnabled. `embed_authoring` is required to establish/continue a CABU
   // conversation against a dashboard's datasource; see `.work/specs/W-24280234-cabu-tools.md`.
-  'cabu-start-conversation': {
+  'tableau-agent-start-conversation': {
     mcp: ['tableau:mcp:cabu:converse'],
     api: new Set(['tableau:views:embed_authoring', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
-  'cabu-ask': {
+  'tableau-agent-ask': {
     mcp: ['tableau:mcp:cabu:converse'],
     api: new Set(['tableau:views:embed_authoring', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
@@ -682,8 +682,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   }
 
   if (!tableauAgentToolsEnabled) {
-    enabledTools.delete('cabu-start-conversation');
-    enabledTools.delete('cabu-ask');
+    enabledTools.delete('tableau-agent-start-conversation');
+    enabledTools.delete('tableau-agent-ask');
   }
 
   return enabledTools;

@@ -54,8 +54,8 @@ export const webToolNames = [
   'inspect-knowledge-context',
   'manage-knowledge-context',
   'scaffold-data-app',
-  'cabu-start-conversation',
-  'cabu-ask',
+  'tableau-agent-start-conversation',
+  'tableau-agent-ask',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -136,7 +136,7 @@ export const webToolGroups = {
   content: ['delete-content', 'confirm-delete-content'],
   knowledge: ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
   'data-apps': ['scaffold-data-app'],
-  'tableau-agent': ['cabu-start-conversation', 'cabu-ask'],
+  'tableau-agent': ['tableau-agent-start-conversation', 'tableau-agent-ask'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {

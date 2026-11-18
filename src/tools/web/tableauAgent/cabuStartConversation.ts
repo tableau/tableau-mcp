@@ -19,8 +19,8 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { encodeConversationToken } from './cabuConversationToken.js';
 import { asTableauAgentNotEnabledError } from './cabuErrors.js';
-import { encodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 // CES samples field values in the background using this request's session, which `useRestApi`
 // signs out when the callback returns. Sampling a data source takes about 2 s.
@@ -31,7 +31,7 @@ const paramsSchema = {
   workbookLuid: luidSchema.optional(),
 };
 
-// CABU's utterance endpoint requires a `localization` on every turn, but `cabu-start-conversation`
+// CES's utterance endpoint requires a `localization` on every turn, but `tableau-agent-start-conversation`
 // has no caller-supplied locale to pass through -- see spec Non-goals ("locale negotiation is out
 // of scope for the PDS-only demo"). English is a safe, fixed default for the demo.
 const DEFAULT_LOCALIZATION: Localization = { locale: 'en-US', language: 'en' };
@@ -42,40 +42,37 @@ export const getCabuStartConversationTool = (
   const config = getConfig();
   const cabuStartConversationTool = new WebTool({
     server,
-    name: 'cabu-start-conversation',
+    name: 'tableau-agent-start-conversation',
     disabled: new Provider(async () => !(await isTableauAgentToolsEnabled(config))),
     minRequiredRole: SiteRole.VIEWER,
     description: `
-Starts a new Tableau Agent conversation about one published data source. This tool is part of Tableau Agent: it uses CABU, Tableau Agent's natural-language Q&A service. Use \`search-content\` or \`list-datasources\` first to find the \`datasourceLuid\` of the data source you want to ask about.
+**Call this tool only when the user names Tableau Agent.** The user's message must contain "Ask Tableau Agent", "use Tableau Agent", or "use Tableau's agent" (in any capitalization). "Tableau's agent" means Tableau Agent, so "Use Tableau's agent to find total sales by region" counts: call this tool. A request for an agent that doesn't say "Tableau" does not count, even when the message mentions Tableau data: "Hand this off to an agent: which region had the highest profit?" does not name Tableau Agent. Nor do "a sub-agent", "another agent", "delegate", or "use CABU". Neither does a hard data question, or the fact that this tool is available. In all of those cases, do not call this tool: answer with \`get-datasource-metadata\` and \`query-datasource\` as usual.
 
-**Tableau Agent answers with its own LLM.** Questions asked in this conversation (through \`cabu-ask\`) are sent to Tableau Agent. The LLM that backs Tableau Agent, not you, interprets each question, decides how to query the data, and writes the answer. When you pass an answer on to the user, say that it came from Tableau Agent.
+Tableau Agent is an agent that answers analytical questions about a published data source, server-side. This tool starts a Tableau Agent conversation about one data source; \`tableau-agent-ask\` asks it questions.
 
-**When to use:** only when the user explicitly opts in to Tableau Agent, for example "ask Tableau Agent...", "use Tableau Agent for this", or "use CABU". The user must ask for Tableau Agent by name or clearly ask to hand the question to Tableau's own agent. Never call this tool on your own initiative: a data question, even a complex one, is not an opt-in, and neither is the fact that this tool is available.
+**How it works.** Starting a conversation is like spawning a sub-agent with fresh context: Tableau Agent sees only the questions you send it through \`tableau-agent-ask\`, not your conversation with the user. Its own LLM interprets each question, queries the data, and writes the answer. Tell the user the answer came from Tableau Agent. Each \`tableau-agent-ask\` call blocks until Tableau Agent finishes, which takes noticeably longer than \`query-datasource\`, often 30 seconds or more. Tableau Agent's LLM runs on the Salesforce LLM gateway, not your token budget.
 
-**When NOT to use:**
-- For ordinary questions about the data in a data source (totals, breakdowns, top-N, trends, filters) when the user has not opted in. Answer those with \`get-datasource-metadata\` and \`query-datasource\`; they are the default way to query data.
-- To continue a conversation that is already open. Once the user has opted in and this tool has started a conversation for a data source, send every follow-up question about that data source to \`cabu-ask\` with the same \`conversationId\` and \`utteranceArgs\`. Call this tool again only if the user asks to start over, or explicitly asks Tableau Agent about a different data source.
+**The server keeps no state.** This tool returns one opaque \`conversationToken\`. That token, plus the \`nextParentLuid\` each \`tableau-agent-ask\` call returns, is the only link between turns: the MCP server stores nothing between calls. Pass the token, unmodified, to every \`tableau-agent-ask\` call in this conversation.
 
-Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of these, unmodified, to every \`cabu-ask\` call that continues this conversation -- \`utteranceArgs\` is required on every turn, not just the first.
+**Follow-ups.** Once a conversation is open, send every follow-up question about that data source to \`tableau-agent-ask\`, even when the user doesn't name Tableau Agent again. Call this tool again only if the user asks to start over, or asks Tableau Agent about a different data source.
+
+Use \`search-content\` or \`list-datasources\` first to find the data source's LUID.
 
 **Parameters:**
 
-- \`datasourceLuid\` (required): The LUID of the published data source to start a CABU conversation about.
+- \`datasourceLuid\` (required): The LUID of the published data source to ask Tableau Agent about.
 - \`workbookLuid\` (optional): The LUID of a published workbook that connects to this data source. With it, Tableau Agent sees sample values of the data source's fields, which helps it match names and other values in a question, and applies the workbook's business preferences. Pass it when the user names a workbook or dashboard built on this data source, or when you already know one. \`get-workbook\` lists a workbook's data sources: the one to use has this data source as its \`publishedParent\`. Without a workbook, Tableau Agent sees only the data source's fields.
 `,
     paramsSchema,
     annotations: {
-      title: 'Start CABU Conversation',
+      title: 'Start Tableau Agent Conversation',
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: false,
     },
     callback: async ({ datasourceLuid, workbookLuid }, extra): Promise<CallToolResult> => {
-      return await cabuStartConversationTool.logAndExecute<{
-        conversationId: string;
-        utteranceArgs: string;
-      }>({
+      return await cabuStartConversationTool.logAndExecute<{ conversationToken: string }>({
         extra,
         args: { datasourceLuid, workbookLuid },
         callback: async () => {
@@ -139,7 +136,7 @@ Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of
 
               if (!response.conversationId) {
                 return new UnknownError(
-                  'CABU did not return a conversationId for this conversation.',
+                  'Tableau Agent did not return a conversationId for this conversation.',
                 ).toErr();
               }
 
@@ -150,14 +147,15 @@ Returns a \`conversationId\` and an opaque \`utteranceArgs\` token. Pass BOTH of
                 await waitForSampling(restApi.cabuMethods, response.conversationId);
               }
 
-              const utteranceArgs = encodeUtteranceArgs({
+              const conversationToken = encodeConversationToken({
+                conversationId: response.conversationId,
                 scope: response.scope,
                 datasources: response.datasources ?? [],
                 localization: DEFAULT_LOCALIZATION,
                 embedded: false,
               });
 
-              return new Ok({ conversationId: response.conversationId, utteranceArgs });
+              return new Ok({ conversationToken });
             },
           });
         },
@@ -180,7 +178,7 @@ async function waitForSampling(
       log({
         message: `Tableau Agent field sampling did not finish: ${result.status}`,
         level: 'warning',
-        logger: 'cabu-start-conversation',
+        logger: 'tableau-agent-start-conversation',
         data: { conversationId, status: result.status },
       });
     }
@@ -188,7 +186,7 @@ async function waitForSampling(
     log({
       message: `Tableau Agent field sampling wait failed: ${error instanceof Error ? error.message : String(error)}`,
       level: 'warning',
-      logger: 'cabu-start-conversation',
+      logger: 'tableau-agent-start-conversation',
       data: { conversationId },
     });
   }

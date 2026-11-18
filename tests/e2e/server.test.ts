@@ -102,7 +102,10 @@ describe('server', () => {
       // data-app tools are gated off by default (data-apps feature flag)
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
       // CABU tools follow TABLEAU_AGENT_TOOLS_ENABLED when set, otherwise the tableau-agent-tools flag.
-      const tableauAgentTools: ReadonlyArray<WebToolName> = ['cabu-start-conversation', 'cabu-ask'];
+      const tableauAgentTools: ReadonlyArray<WebToolName> = [
+        'tableau-agent-start-conversation',
+        'tableau-agent-ask',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -308,7 +311,10 @@ describe('server', () => {
       // data-app tools are gated off by default (data-apps feature flag)
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
       // CABU tools follow TABLEAU_AGENT_TOOLS_ENABLED when set, otherwise the tableau-agent-tools flag.
-      const tableauAgentTools: ReadonlyArray<WebToolName> = ['cabu-start-conversation', 'cabu-ask'];
+      const tableauAgentTools: ReadonlyArray<WebToolName> = [
+        'tableau-agent-start-conversation',
+        'tableau-agent-ask',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 

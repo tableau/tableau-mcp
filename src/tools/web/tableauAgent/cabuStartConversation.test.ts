@@ -6,8 +6,8 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { decodeConversationToken } from './cabuConversationToken.js';
 import { getCabuStartConversationTool } from './cabuStartConversation.js';
-import { decodeUtteranceArgs } from './cabuUtteranceArgs.js';
 
 const mocks = vi.hoisted(() => ({
   mockStartConversation: vi.fn(),
@@ -54,13 +54,13 @@ describe('cabuStartConversationTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     const tool = getCabuStartConversationTool(new WebMcpServer());
-    expect(tool.name).toBe('cabu-start-conversation');
+    expect(tool.name).toBe('tableau-agent-start-conversation');
     expect(tool.paramsSchema).toMatchObject({
       datasourceLuid: expect.any(Object),
     });
   });
 
-  it('starts a conversation and returns a conversationId plus an opaque utteranceArgs token', async () => {
+  it('starts a conversation and returns one opaque conversationToken', async () => {
     mocks.mockStartConversation.mockResolvedValue({
       conversationId: 'conversation-1',
       scope: 'tenant-123',
@@ -77,10 +77,10 @@ describe('cabuStartConversationTool', () => {
 
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.conversationId).toBe('conversation-1');
-    expect(typeof parsed.utteranceArgs).toBe('string');
+    expect(Object.keys(parsed)).toEqual(['conversationToken']);
     expect(mocks.mockWaitForSampling).not.toHaveBeenCalled();
-    expect(decodeUtteranceArgs(parsed.utteranceArgs)).toEqual({
+    expect(decodeConversationToken(parsed.conversationToken)).toEqual({
+      conversationId: 'conversation-1',
       scope: 'tenant-123',
       datasources: [{ datasourceLuid: '11111111-1111-1111-1111-111111111111' }],
       localization: { locale: 'en-US', language: 'en' },
@@ -155,7 +155,8 @@ describe('cabuStartConversationTool', () => {
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
-      expect(JSON.parse(result.content[0].text).conversationId).toBe('conversation-1');
+      const { conversationToken } = JSON.parse(result.content[0].text);
+      expect(decodeConversationToken(conversationToken).conversationId).toBe('conversation-1');
     });
 
     it('returns an error and starts no conversation when the workbook does not use the datasource', async () => {

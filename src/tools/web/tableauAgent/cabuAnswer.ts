@@ -1,12 +1,12 @@
 import { CabuDatatable, CabuResponseCompleteEvent } from '../../../sdks/tableau/types/cabu.js';
 
-/** The assembled, caller-facing answer to one `cabu-ask` turn. */
+/** The assembled, caller-facing answer to one `tableau-agent-ask` turn. */
 export interface CabuAnswer {
   response?: string;
   /** Each entry is one datatable, pre-rendered as truncated markdown -- see `renderDatatable`. */
   datatables?: Array<string>;
   dataDetails?: string;
-  /** Thread this into the next `cabu-ask` call's `parentLuid` to continue the conversation. */
+  /** Thread this into the next `tableau-agent-ask` call's `parentLuid` to continue the conversation. */
   nextParentLuid?: string;
 }
 
@@ -14,7 +14,7 @@ const MAX_DATATABLE_ROWS = 20;
 const MAX_JSON_CHARS = 2000;
 
 /**
- * Assembles a `response_complete` SSE event into the answer `cabu-ask` returns. The server has
+ * Assembles a `response_complete` SSE event into the answer `tableau-agent-ask` returns. The server has
  * already parsed WAII's response into ready-to-render fields (see `ResponseNode`/`ResponseFormatter`
  * in `.work/specs/W-24280234-cabu-tools.md`'s implementation notes) -- this only formats them for an
  * MCP client, it does not reinterpret WAII internals. `chatLuid` becomes `nextParentLuid`: the field

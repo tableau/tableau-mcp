@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 /**
  * Zod schemas for the CES CABU REST surface
- * (`/content-exploration/analytics-assistant/cabu/...`), scoped to what the `cabu-start-conversation`
- * and `cabu-ask` tools actually send/consume for a PDS-backed conversation (see
+ * (`/content-exploration/analytics-assistant/cabu/...`), scoped to what the `tableau-agent-start-conversation`
+ * and `tableau-agent-ask` tools actually send/consume for a PDS-backed conversation (see
  * `.work/specs/W-24280234-cabu-tools.md`). Field shapes are read directly from the CES DTOs
  * (`CABUConversationRequestDTO`, `CABUConversationResponseDTO`, `CABUUtteranceRequestDTO`,
  * `CABUUtteranceResponseDTO`, `DatasourceEntry`, `DashboardDatasourceMetadataDTO`,
