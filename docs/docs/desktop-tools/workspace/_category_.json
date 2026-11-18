@@ -1,0 +1,8 @@
+{
+  "label": "Workspace",
+  "position": 18,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for listing and reloading workspace extensions installed in Tableau Studio."
+  }
+}

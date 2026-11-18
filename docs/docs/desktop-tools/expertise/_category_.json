@@ -1,0 +1,8 @@
+{
+  "label": "Expertise",
+  "position": 9,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for searching and reading the authoring guidance library."
+  }
+}
