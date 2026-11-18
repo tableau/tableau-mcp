@@ -65,12 +65,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 
 type RefineOperation =
-  | 'top_n'
-  | 'sort_direction'
-  | 'sort_by_field'
-  | 'mark_type'
-  | 'round_bar'
-  | 'round_stacked_bar';
+  'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type' | 'round_bar' | 'round_stacked_bar';
 
 type ProgrammaticRoundedBarVerification = {
   helperFields: number;

@@ -127,7 +127,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Dense scatter/bubble + categorical color');
     expect(rendered).toContain('overrides terminal bind');
     expect(rendered).toContain(
-      'get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet',
+      'get-xml(kind:worksheet, mode:inline) → list-available-fields → add-field → apply-worksheet',
     );
     expect(rendered).toContain('Replace/supplement with bounded semantic discrete Detail');
     expect(rendered).toContain('finer than Color');
@@ -161,8 +161,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.action).toContain('explicit mark-type changes');
     expect(editInPlace?.action).toContain('Never use shell commands or raw whole-workbook XML');
     expect(editInPlace?.toolSequence).toEqual([
-      'list-worksheets',
-      'list-dashboards',
+      'get-sheets',
       'ask-user',
       'refine-worksheet',
       'set-member-colors',
@@ -188,7 +187,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(roundedCorners?.trigger).toContain('rounded corners');
     expect(roundedCorners?.action).toContain('If the tool refuses, report the reason and stop');
     expect(roundedCorners?.action).toContain(
-      'dashboard or container corners, call list-dashboards, then call format-dashboard-zones',
+      'dashboard or container corners, call get-sheets with kind=dashboard, then call format-dashboard-zones',
     );
     expect(roundedCorners?.action).toContain(
       'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
@@ -196,7 +195,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(roundedCorners?.action).toContain(
       'Never use shell commands, raw whole-workbook XML, or cached XML for this ask',
     );
-    expect(roundedCorners?.toolSequence).toEqual(['list-dashboards', 'format-dashboard-zones']);
+    expect(roundedCorners?.toolSequence).toEqual(['get-sheets', 'format-dashboard-zones']);
     expect(roundedCorners?.requiredEvidence).toEqual([
       'dashboard-zone readback receipt when dashboard corners were requested',
     ]);
@@ -445,15 +444,15 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'an existing dashboard edit the bounded batch cannot express',
     );
     expect(dashboardEdit?.action).toContain(
-      'list-dashboards -> format-worksheets for constituent worksheet properties',
+      'get-sheets(kind:dashboard) -> format-worksheets for constituent worksheet properties',
     );
     expect(dashboardEdit?.action).toContain(
       'reserve cached dashboard editing for dashboard-level properties',
     );
     expect(dashboardEdit?.toolSequence).toEqual([
-      'list-dashboards',
+      'get-sheets',
       'format-worksheets',
-      'get-dashboard-xml',
+      'get-xml',
       'read-cached-xml',
       'write-cached-xml',
       'apply-dashboard',
@@ -474,7 +473,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       trigger: 'an existing story edit',
       toolSequence: [
         'compose-story',
-        'get-storyboard-xml',
+        'get-xml',
         'read-cached-xml',
         'write-cached-xml',
         'apply-storyboard',
@@ -492,7 +491,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(workbookFallback).toMatchObject({
       trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
-      toolSequence: ['get-workbook-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
+      toolSequence: ['get-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
       stopConditions: [
         'use only for datasource definitions or cross-artifact changes',
         'prefer a scoped apply whenever possible',

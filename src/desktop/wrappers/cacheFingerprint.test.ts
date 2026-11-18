@@ -115,7 +115,7 @@ describe('cache fingerprint sidecars', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.message).toContain('get-datasource-xml');
+    expect(result.message).toContain('get-xml (kind=datasource)');
   });
 
   it.each([{ type: 'missing' } as const, { type: 'unreadable' } as const])(
@@ -224,7 +224,7 @@ describe('cache fingerprint sidecars', () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain('Refusing to apply worksheet cache file');
-    expect(result.message).toContain('get-worksheet-xml');
+    expect(result.message).toContain('get-xml');
   });
 
   it('refuses a same-pid cache when Desktop restarted (instanceId changed)', () => {

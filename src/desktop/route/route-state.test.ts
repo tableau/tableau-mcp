@@ -757,4 +757,100 @@ describe('SessionRouteStateStore', () => {
       });
     });
   });
+
+  describe('releaseBindRecoveryReservation after interleaved writes', () => {
+    it('never rolls a terminal phase back when an earlier reservation went terminal in place', () => {
+      const store = new SessionRouteStateStore();
+      const a = store.reserveBindRecoveryAdmission('s1', 'ask', {})!;
+      const b = store.reserveBindRecoveryAdmission('s1', 'ask', {})!;
+      store.recordBindRecoveryTerminal('s1', 'ask', { outcome: 'escalate', reservationId: a });
+      expect(store.getBindRecovery('s1', 'ask')?.phase).toBe('terminal');
+      store.releaseBindRecoveryReservation('s1', 'ask', b);
+      const record = store.getBindRecovery('s1', 'ask');
+      expect(record?.phase).toBe('terminal');
+      expect(record?.attempts.map((attempt) => attempt.outcome)).toEqual(['escalate']);
+    });
+
+    it('keeps the bare-resubmit count and terminal phase written while a reservation was pending', () => {
+      const store = new SessionRouteStateStore();
+      const a = store.reserveBindRecoveryAdmission('s', 'a', {})!;
+      store.recordBindRecoveryAttempt('s', 'a', { outcome: 'propose', reservationId: a });
+      const b = store.reserveBindRecoveryAdmission('s', 'a', {})!;
+      for (let i = 0; i < 5 && store.getBindRecovery('s', 'a')?.phase !== 'terminal'; i++) {
+        store.recordBindRecoveryBareResubmit('s', 'a');
+      }
+      const before = store.getBindRecovery('s', 'a');
+      expect(before?.phase).toBe('terminal');
+      store.releaseBindRecoveryReservation('s', 'a', b);
+      const after = store.getBindRecovery('s', 'a');
+      expect(after?.phase).toBe('terminal');
+      expect(after?.consecutiveBareResubmitCount).toBe(before?.consecutiveBareResubmitCount);
+    });
+
+    it('restores the pre-reservation phase and signature when nothing else touched them', () => {
+      const store = new SessionRouteStateStore();
+      const c1 = store.reserveBindRecoveryAdmission('s', 'a', {})!;
+      store.recordBindRecoveryAttempt('s', 'a', { outcome: 'propose', reservationId: c1 });
+      const before = store.getBindRecovery('s', 'a');
+      const c2 = store.reserveBindRecoveryAdmission('s', 'a', { proposalSignature: 'P' })!;
+      store.releaseBindRecoveryReservation('s', 'a', c2);
+      const after = store.getBindRecovery('s', 'a');
+      expect(after?.phase).toBe(before?.phase);
+      expect(after?.lastProposalSignature).toBeUndefined();
+      expect(after?.attempts).toEqual(before?.attempts);
+    });
+
+    it('drops the reservation bookkeeping from an attempt once its outcome is recorded', () => {
+      const store = new SessionRouteStateStore();
+      const id = store.reserveBindRecoveryAdmission('s', 'a', { proposalSignature: 'P' })!;
+      expect(store.getBindRecovery('s', 'a')?.attempts[0].reserved).toBeDefined();
+      store.recordBindRecoveryAttempt('s', 'a', {
+        outcome: 'escalate',
+        proposalSignature: 'P',
+        reservationId: id,
+      });
+      expect(store.getBindRecovery('s', 'a')?.attempts[0].reserved).toBeUndefined();
+    });
+  });
+
+  describe('large-pie grant borrowing', () => {
+    const grantedStore = (): SessionRouteStateStore => {
+      const store = new SessionRouteStateStore();
+      const c1 = store.reserveBindRecoveryAdmission('s', 'a', {})!;
+      store.recordBindRecoveryAttempt('s', 'a', { outcome: 'propose', reservationId: c1 });
+      const c2 = store.reserveBindRecoveryAdmission('s', 'a', { proposalSignature: 'P' })!;
+      store.recordBindRecoveryAttempt('s', 'a', {
+        outcome: 'escalate',
+        proposalSignature: 'P',
+        reservationId: c2,
+      });
+      store.grantLargePieConfirmation('s', 'a', 'P', 'too many', { datasource: 'federated.a' });
+      return store;
+    };
+
+    it('does not revive a consumed grant when a second admission releases', () => {
+      const store = grantedStore();
+      const a = store.reserveBindRecoveryAdmission('s', 'a', {
+        proposalSignature: 'P',
+        borrowsLargePie: true,
+      })!;
+      const b = store.reserveBindRecoveryAdmission('s', 'a', {})!;
+      store.recordBindRecoveryAttempt('s', 'a', {
+        outcome: 'bound',
+        proposalSignature: 'P',
+        reservationId: a,
+      });
+      store.releaseBindRecoveryReservation('s', 'a', b);
+      expect(store.getBindRecovery('s', 'a')?.largePieConfirmation).toBeUndefined();
+    });
+
+    it('tags the grant only for the admission that says it borrows it', () => {
+      const store = grantedStore();
+      const id = store.reserveBindRecoveryAdmission('s', 'a', {
+        proposalSignature: 'P',
+        borrowsLargePie: true,
+      })!;
+      expect(store.getBindRecovery('s', 'a')?.largePieConfirmation?.reservationId).toBe(id);
+    });
+  });
 });

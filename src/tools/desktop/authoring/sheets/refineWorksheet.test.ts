@@ -1706,12 +1706,7 @@ async function getToolResult({
 }: {
   worksheetName: string;
   operation:
-    | 'top_n'
-    | 'sort_direction'
-    | 'sort_by_field'
-    | 'mark_type'
-    | 'round_bar'
-    | 'round_stacked_bar';
+    'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type' | 'round_bar' | 'round_stacked_bar';
   topN?: { n: number; end?: 'top' | 'bottom' };
   sortDirection?: { direction: 'ASC' | 'DESC' };
   targetField?: string;

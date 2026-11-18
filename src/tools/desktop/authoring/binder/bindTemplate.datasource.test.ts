@@ -111,6 +111,7 @@ async function call(
       datasource: undefined,
       proposal: undefined,
       skip_validation: undefined,
+      keep_large_pie: undefined,
       calcs: undefined,
       auto_apply: args.proposal !== undefined,
       ...args,
@@ -324,5 +325,130 @@ describe('bind-template datasource scope with the real binder', () => {
     expect(result.blockers).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'ambiguous-field' })]),
     );
+  });
+});
+
+describe('keep_large_pie grant is tied to the blocked datasource and target', () => {
+  const PIE_ASK = 'pie chart of Sales by Region';
+  const PIE_PROPOSAL: BindingProposal & { confidence: number } = {
+    template: 'part-to-whole-pie-chart',
+    title: 'Sales by Region',
+    confidence: 1,
+    bindings: [
+      { slot_id: 'field_base_1', field: 'Region' },
+      { slot_id: 'field_base_2', field: 'Sales' },
+    ],
+  };
+  const source = (name: string, caption: string): string => `
+  <datasource name='${name}' caption='${caption}'>
+    <connection><metadata-records>
+      <metadata-record class='column'><local-name>[Region]</local-name><parent-name>[Orders]</parent-name><local-type>string</local-type><remote-name>Region</remote-name><approx-count>49</approx-count></metadata-record>
+      <metadata-record class='column'><local-name>[Sales]</local-name><parent-name>[Orders]</parent-name><local-type>real</local-type><remote-name>Sales</remote-name></metadata-record>
+    </metadata-records></connection>
+  </datasource>`;
+  const PIE_XML = `<?xml version='1.0'?>
+<workbook><datasources>${source('federated.a', 'Alpha')}${source('federated.b', 'Beta')}
+</datasources><worksheets><worksheet name='Sheet 1' /><worksheet name='Sheet 2' /></worksheets></workbook>`;
+  const withAsk = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const callback = await Provider.from(getBindTemplateTool(new DesktopMcpServer()).callback);
+    const extra = getMockRequestHandlerExtra();
+    return callback(
+      {
+        session: '1',
+        ask: PIE_ASK,
+        requireCompleteRequest: undefined,
+        minConfidence: undefined,
+        target_worksheet: undefined,
+        datasource: undefined,
+        proposal: PIE_PROPOSAL,
+        skip_validation: undefined,
+        keep_large_pie: undefined,
+        calcs: undefined,
+        auto_apply: false,
+        ...args,
+      },
+      { ...extra, getExecutor: vi.fn().mockResolvedValue({}) },
+    );
+  };
+
+  beforeEach(() => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(PIE_XML));
+  });
+
+  const blockOn = async (datasource: string): Promise<void> => {
+    const blocked = body(await withAsk({ datasource }));
+    expect(blocked.reason).toBe('pie_slice_limit');
+  };
+
+  it('rejects a keep_large_pie replay that moves the pie to another datasource', async () => {
+    await blockOn('federated.a');
+    const replay = await withAsk({ datasource: 'federated.b', keep_large_pie: true });
+    expect(replay.isError).toBe(true);
+    expect(replay.content[0]).toMatchObject({
+      text: expect.stringContaining('must match the retained'),
+    });
+    const last = vi.mocked(binderModule.bindTemplate).mock.calls.at(-1)?.[0];
+    expect(last).not.toHaveProperty('keepLargePie');
+    const retry = body(await withAsk({ datasource: 'federated.a', keep_large_pie: true }));
+    expect(retry.status, JSON.stringify(retry)).toBe('bound');
+  });
+
+  it('admits a replay naming the blocked datasource by caption', async () => {
+    await blockOn('federated.a');
+    const replay = body(await withAsk({ datasource: 'Alpha', keep_large_pie: true }));
+    expect(replay.status, JSON.stringify(replay)).toBe('bound');
+    expect(replay.args.template_parameters.DATASOURCE).toBe('federated.a');
+  });
+
+  it('binds a replay with no datasource onto the blocked datasource', async () => {
+    await blockOn('federated.a');
+    const replay = body(await withAsk({ keep_large_pie: true }));
+    expect(replay.status, JSON.stringify(replay)).toBe('bound');
+    expect(replay.args.template_parameters.DATASOURCE).toBe('federated.a');
+  });
+
+  it('does not confirm a replay that changes target_worksheet', async () => {
+    const blocked = body(await withAsk({ datasource: 'federated.a', target_worksheet: 'Sheet 1' }));
+    expect(blocked.reason).toBe('pie_slice_limit');
+    const replay = body(
+      await withAsk({
+        datasource: 'federated.a',
+        target_worksheet: 'Sheet 2',
+        keep_large_pie: true,
+      }),
+    );
+    expect(replay.reason).toBe('pie_slice_limit');
+    const same = body(
+      await withAsk({
+        datasource: 'federated.a',
+        target_worksheet: 'Sheet 1',
+        keep_large_pie: true,
+      }),
+    );
+    expect(same.status, JSON.stringify(same)).toBe('bound');
+  });
+
+  it('does not let a paused call on another datasource borrow a grant written meanwhile', async () => {
+    let releaseRead!: (result: ReturnType<typeof Ok<string>>) => void;
+    const pendingRead = new Promise<ReturnType<typeof Ok<string>>>((resolve) => {
+      releaseRead = resolve;
+    });
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReturnValueOnce(pendingRead);
+    const beta = withAsk({ datasource: 'federated.b', keep_large_pie: true });
+    await vi.waitFor(() => expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1));
+    await blockOn('federated.a');
+    releaseRead(Ok(PIE_XML));
+    const betaResult = await beta;
+    expect(betaResult.isError).toBe(true);
+    expect(betaResult.content[0]).toMatchObject({
+      text: expect.stringContaining('must match the retained'),
+    });
+    const betaCalls = vi
+      .mocked(binderModule.bindTemplate)
+      .mock.calls.filter(([args]) => args.datasource === 'federated.b');
+    expect(betaCalls).toHaveLength(0);
+    const alpha = body(await withAsk({ datasource: 'federated.a', keep_large_pie: true }));
+    expect(alpha.status, JSON.stringify(alpha)).toBe('bound');
+    expect(alpha.args.template_parameters.DATASOURCE).toBe('federated.a');
   });
 });

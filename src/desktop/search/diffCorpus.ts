@@ -1,12 +1,11 @@
 import type { DesktopToolName } from '../../tools/desktop/toolName.js';
 
-const WORKBOOK_TOOLS =
-  'get-workbook-xml/apply-workbook' satisfies `${DesktopToolName}/${DesktopToolName}`;
+const WORKBOOK_TOOLS = 'get-xml/apply-workbook' satisfies `${DesktopToolName}/${DesktopToolName}`;
 
 function scopeTools(scope: string | undefined): string {
   return scope === 'dashboard'
-    ? ('get-dashboard-xml/apply-dashboard' satisfies `${DesktopToolName}/${DesktopToolName}`)
-    : ('get-worksheet-xml/apply-worksheet' satisfies `${DesktopToolName}/${DesktopToolName}`);
+    ? ('get-xml/apply-dashboard' satisfies `${DesktopToolName}/${DesktopToolName}`)
+    : ('get-xml/apply-worksheet' satisfies `${DesktopToolName}/${DesktopToolName}`);
 }
 
 export interface CorpusExample {
