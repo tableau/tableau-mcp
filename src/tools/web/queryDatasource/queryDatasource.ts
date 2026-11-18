@@ -305,11 +305,14 @@ function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
       '2025.3.0': {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
+        restrictConditionFilters: true,
       },
       default: {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
         fieldNamesAreUnavailable: true,
+        restrictConditionFilters: true,
+        restrictTableCalculations: true,
       },
     },
   });

@@ -108,7 +108,11 @@ async function validateSetFilter(
   }
 
   const fieldCaption = filter.field.fieldCaption;
-  const filterValues = filter.values.map((v) => String(v));
+  // Null matches the field's null member, which the distinct-values query can't confirm.
+  const filterValues = filter.values.filter((v) => v !== null).map((v) => String(v));
+  if (filterValues.length === 0) {
+    return Ok.EMPTY;
+  }
 
   // Query to get distinct values from the field
   const distinctValuesQuery: Query = {
