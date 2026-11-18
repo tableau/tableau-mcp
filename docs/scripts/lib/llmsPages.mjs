@@ -14,10 +14,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 
 import {
-  INDEX_BASENAMES,
   categoryInfo,
   derivePageProse,
   docPathForRel,
+  INDEX_BASENAMES,
   isPublishablePageName,
   normalizeForAgents,
   readJson,

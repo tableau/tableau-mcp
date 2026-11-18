@@ -42,7 +42,8 @@ export function checkLlmsTxt({ docsDir = DEFAULT_DOCS_DIR, requireBuild = false 
   if (EXT_LINK.test(index)) err('ext:// protocol placeholder survived into the index');
   if (EXT_LINK.test(full)) err('ext:// survived into llms-full.txt');
   if (/^## Related\s*$/m.test(full)) err('llms-full.txt still contains a ## Related section');
-  if (/^## Example results?\s*$/m.test(full)) err('llms-full.txt still contains an example-results section');
+  if (/^## Example results?\s*$/m.test(full))
+    err('llms-full.txt still contains an example-results section');
   if (leftover.length) err(`leftover %variable% text: ${[...new Set(leftover)].join(', ')}`);
   if (corpusBytes < MIN_CORPUS_BYTES) {
     err(`llms-full.txt is ${corpusBytes} bytes; expected at least ${MIN_CORPUS_BYTES}`);
@@ -68,7 +69,8 @@ export function checkLlmsTxt({ docsDir = DEFAULT_DOCS_DIR, requireBuild = false 
     else if (readFileSync(p, 'utf8') !== index) err(`${p} does not match canonical index`);
   }
   if (!existsSync(staticFolderFull)) err(`missing served copy ${staticFolderFull}`);
-  else if (readFileSync(staticFolderFull, 'utf8') !== full) err(`${staticFolderFull} does not match canonical`);
+  else if (readFileSync(staticFolderFull, 'utf8') !== full)
+    err(`${staticFolderFull} does not match canonical`);
   if (existsSync(join(docsDir, 'static/tableau-mcp-llms.txt'))) {
     err('leftover docs/static/tableau-mcp-llms.txt');
   }
@@ -77,7 +79,8 @@ export function checkLlmsTxt({ docsDir = DEFAULT_DOCS_DIR, requireBuild = false 
   const builtIndex = join(buildDir, INDEX_BASENAME);
   if (requireBuild) {
     if (!existsSync(builtIndex)) err(`build is missing ${builtIndex}`);
-    else if (readFileSync(builtIndex, 'utf8') !== index) err('build/llms.txt does not match canonical');
+    else if (readFileSync(builtIndex, 'utf8') !== index)
+      err('build/llms.txt does not match canonical');
     const builtFull = join(buildDir, 'llms', FULL_BASENAME);
     if (!existsSync(builtFull)) err(`build is missing ${builtFull}`);
   }

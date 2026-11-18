@@ -3,6 +3,10 @@ import { describe, it } from 'node:test';
 
 import remarkExtLinks, { parseExtProtocol } from './extLinks.mjs';
 
+/**
+ * @param {object} tree
+ * @returns {object}
+ */
 function apply(tree) {
   remarkExtLinks()(tree);
   return tree;
@@ -60,9 +64,7 @@ describe('remarkExtLinks', () => {
     apply(tree);
     const jsx = tree.children[0];
     assert.equal(jsx.name, 'ExtSiteLink');
-    assert.deepEqual(jsx.attributes, [
-      { type: 'mdxJsxAttribute', name: 'site', value: 'eca' },
-    ]);
+    assert.deepEqual(jsx.attributes, [{ type: 'mdxJsxAttribute', name: 'site', value: 'eca' }]);
   });
 
   it('leaves ordinary https links alone', () => {

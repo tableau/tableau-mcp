@@ -71,11 +71,7 @@ export default function CategoryToolList({ items }: { items: PropSidebarItem[] }
             <Link to={entry.docPath} className={styles.title}>
               {entry.title}
             </Link>
-            {entry.summary && (
-              <span className={styles.summary}>
-                : {entry.summary}
-              </span>
-            )}
+            {entry.summary && <span className={styles.summary}>: {entry.summary}</span>}
           </li>
         ))}
       </ul>

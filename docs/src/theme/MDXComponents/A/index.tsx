@@ -19,9 +19,7 @@ function isExternalHref(href: string | undefined): boolean {
 
 export default function MDXA(props: ComponentProps<'a'>): ReactElement {
   const anchorTargetClassName = useAnchorTargetClassName(props.id);
-  const link = (
-    <Link {...props} className={clsx(anchorTargetClassName, props.className)} />
-  );
+  const link = <Link {...props} className={clsx(anchorTargetClassName, props.className)} />;
 
   if (!isExternalHref(props.href)) {
     return link;

@@ -74,23 +74,20 @@ function isBoilerplateSentence(sentence) {
 }
 
 function stripDesktopApiLede(markdown) {
-  return String(markdown).replace(
-    /^## APIs called\n+([\s\S]*?)(?=^## |\s*$)/gm,
-    (block, body) => {
-      const listAt = body.search(/^- /m);
-      const preamble = listAt === -1 ? body : body.slice(0, listAt);
-      const rest = listAt === -1 ? '' : body.slice(listAt);
-      if (!BOILERPLATE_RE.some((re) => re.test(preamble))) {
-        return block;
-      }
-      const kept = splitSentences(preamble.replace(/\s+/g, ' '))
-        .filter((s) => !isBoilerplateSentence(s))
-        .join(' ')
-        .trim();
-      const next = kept ? `## APIs called\n\n${kept}\n\n${rest}` : `## APIs called\n\n${rest}`;
-      return next;
-    },
-  );
+  return String(markdown).replace(/^## APIs called\n+([\s\S]*?)(?=^## |\s*$)/gm, (block, body) => {
+    const listAt = body.search(/^- /m);
+    const preamble = listAt === -1 ? body : body.slice(0, listAt);
+    const rest = listAt === -1 ? '' : body.slice(listAt);
+    if (!BOILERPLATE_RE.some((re) => re.test(preamble))) {
+      return block;
+    }
+    const kept = splitSentences(preamble.replace(/\s+/g, ' '))
+      .filter((s) => !isBoilerplateSentence(s))
+      .join(' ')
+      .trim();
+    const next = kept ? `## APIs called\n\n${kept}\n\n${rest}` : `## APIs called\n\n${rest}`;
+    return next;
+  });
 }
 
 function compressSession(markdown) {

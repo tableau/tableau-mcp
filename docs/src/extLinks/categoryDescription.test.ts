@@ -11,8 +11,7 @@ describe('splitCategoryDescription', () => {
   });
 
   it('splits an ext://eca home link out of surrounding prose', () => {
-    const html =
-      'Drive Studio via Tableau\'s <a href="ext://eca">External Client API</a>.';
+    const html = 'Drive Studio via Tableau\'s <a href="ext://eca">External Client API</a>.';
     assert.deepEqual(splitCategoryDescription(html), [
       { kind: 'html', html: "Drive Studio via Tableau's " },
       { kind: 'ext', site: 'eca', path: '', text: 'External Client API' },
@@ -21,8 +20,7 @@ describe('splitCategoryDescription', () => {
   });
 
   it('keeps a path on ext://eca/… and ignores other attributes on the tag', () => {
-    const html =
-      '<a href="ext://eca/docs/intro.html" target="_blank" rel="noreferrer">Intro</a>';
+    const html = '<a href="ext://eca/docs/intro.html" target="_blank" rel="noreferrer">Intro</a>';
     assert.deepEqual(splitCategoryDescription(html), [
       { kind: 'ext', site: 'eca', path: 'docs/intro.html', text: 'Intro' },
     ]);

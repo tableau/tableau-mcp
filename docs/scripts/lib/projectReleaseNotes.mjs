@@ -61,7 +61,9 @@ export function projectReleaseNotesMarkdown(entries, siteContent, pageUrl) {
       if (!cats.has(cat)) cats.set(cat, []);
       cats.get(cat).push(e);
     }
-    const types = [...byType.keys()].sort((a, b) => toolTypeRank(a) - toolTypeRank(b) || a.localeCompare(b));
+    const types = [...byType.keys()].sort(
+      (a, b) => toolTypeRank(a) - toolTypeRank(b) || a.localeCompare(b),
+    );
     for (const t of types) {
       lines.push(`### ${t}`, '');
       const cats = [...byType.get(t).keys()].sort((a, b) => a.localeCompare(b));
@@ -73,7 +75,9 @@ export function projectReleaseNotesMarkdown(entries, siteContent, pageUrl) {
             a.title.localeCompare(b.title),
         );
         for (const e of rows) {
-          const summary = substituteVars(e.summary || '').replace(/\s+/g, ' ').trim();
+          const summary = substituteVars(e.summary || '')
+            .replace(/\s+/g, ' ')
+            .trim();
           lines.push(`- ${e.changeType}: **${e.title}** — ${summary}`);
         }
         lines.push('');

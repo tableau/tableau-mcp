@@ -41,10 +41,7 @@ type CategoryGroup = { category: string; description: string; items: ToolEntry[]
  * there is no tool-type facet here — only keyword + category filters.
  */
 export default function ToolCatalog({ toolType }: { toolType: string }): ReactNode {
-  const scoped = useMemo(
-    () => catalog.filter((entry) => entry.toolType === toolType),
-    [toolType],
-  );
+  const scoped = useMemo(() => catalog.filter((entry) => entry.toolType === toolType), [toolType]);
 
   const allCategories = useMemo(
     () => uniqueSorted(scoped.map((entry) => entry.toolCategory)),
@@ -89,10 +86,7 @@ export default function ToolCatalog({ toolType }: { toolType: string }): ReactNo
       });
   }, [scoped, keyword, selectedCategories]);
 
-  const matchCount = useMemo(
-    () => groups.reduce((n, g) => n + g.items.length, 0),
-    [groups],
-  );
+  const matchCount = useMemo(() => groups.reduce((n, g) => n + g.items.length, 0), [groups]);
 
   return (
     <div className={styles.root}>

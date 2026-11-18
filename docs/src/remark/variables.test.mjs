@@ -3,6 +3,10 @@ import { describe, it } from 'node:test';
 
 import remarkVariables, { substituteVariables, VARIABLES } from './variables.mjs';
 
+/**
+ * @param {object} tree
+ * @returns {object}
+ */
 function apply(tree) {
   remarkVariables()(tree);
   return tree;

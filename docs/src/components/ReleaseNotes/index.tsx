@@ -359,51 +359,53 @@ export default function ReleaseNotes(): ReactNode {
           const month = monthByKey.get(monthKey);
           const site = siteByMonth.get(monthKey) ?? [];
           return (
-          <section key={monthKey} className={styles.month}>
-            <h2 className={styles.monthHeading}>{month?.label ?? formatMonthYear(`${monthKey}-01`)}</h2>
-            {site.length > 0 && (
-              <div className={styles.synopsis}>
-                <span className={styles.synopsisLabel}>Highlights</span>
-                {site.length === 1 ? (
-                  <p className={styles.synopsisText}>{site[0].summary}</p>
-                ) : (
-                  <ul className={styles.synopsisList}>
-                    {site.map((entry, i) => (
-                      <li key={i}>{entry.summary}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {(month?.toolTypes ?? []).map((typeGroup) => (
-              <div key={typeGroup.toolType} className={styles.toolTypeGroup}>
-                <h3 className={styles.toolTypeHeading}>{typeGroup.toolType}</h3>
-                <ul className={styles.list}>
-                  {typeGroup.categories.map((group) =>
-                    group.items.length === 1 ? (
-                      <li key={group.category}>
-                        <span className={styles.category}>{group.category}</span>{' '}
-                        <ChangeBadge type={group.items[0].changeType} />{' '}
-                        <TitleAndSummary entry={group.items[0]} />
-                      </li>
-                    ) : (
-                      <li key={group.category}>
-                        <span className={styles.category}>{group.category}</span>
-                        <ul className={styles.sublist}>
-                          {group.items.map((entry) => (
-                            <li key={`${entry.toolName}-${entry.changeType}`}>
-                              <ChangeBadge type={entry.changeType} />{' '}
-                              <TitleAndSummary entry={entry} />
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ),
+            <section key={monthKey} className={styles.month}>
+              <h2 className={styles.monthHeading}>
+                {month?.label ?? formatMonthYear(`${monthKey}-01`)}
+              </h2>
+              {site.length > 0 && (
+                <div className={styles.synopsis}>
+                  <span className={styles.synopsisLabel}>Highlights</span>
+                  {site.length === 1 ? (
+                    <p className={styles.synopsisText}>{site[0].summary}</p>
+                  ) : (
+                    <ul className={styles.synopsisList}>
+                      {site.map((entry, i) => (
+                        <li key={i}>{entry.summary}</li>
+                      ))}
+                    </ul>
                   )}
-                </ul>
-              </div>
-            ))}
-          </section>
+                </div>
+              )}
+              {(month?.toolTypes ?? []).map((typeGroup) => (
+                <div key={typeGroup.toolType} className={styles.toolTypeGroup}>
+                  <h3 className={styles.toolTypeHeading}>{typeGroup.toolType}</h3>
+                  <ul className={styles.list}>
+                    {typeGroup.categories.map((group) =>
+                      group.items.length === 1 ? (
+                        <li key={group.category}>
+                          <span className={styles.category}>{group.category}</span>{' '}
+                          <ChangeBadge type={group.items[0].changeType} />{' '}
+                          <TitleAndSummary entry={group.items[0]} />
+                        </li>
+                      ) : (
+                        <li key={group.category}>
+                          <span className={styles.category}>{group.category}</span>
+                          <ul className={styles.sublist}>
+                            {group.items.map((entry) => (
+                              <li key={`${entry.toolName}-${entry.changeType}`}>
+                                <ChangeBadge type={entry.changeType} />{' '}
+                                <TitleAndSummary entry={entry} />
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              ))}
+            </section>
           );
         })
       )}

@@ -1,30 +1,49 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import {
-  FULL_BASENAME,
-  INDEX_BASENAME,
-  generateLlmsTxt,
-} from './generateLlmsTxt.mjs';
-import { familyIdForRel } from './lib/llmsPages.mjs';
-import { generateToolCatalog } from './generateToolCatalog.mjs';
 import { checkLlmsTxt } from './checkLlmsTxt.mjs';
+import { FULL_BASENAME, generateLlmsTxt, INDEX_BASENAME } from './generateLlmsTxt.mjs';
 import { generateSiteData } from './generateSiteData.mjs';
+import { generateToolCatalog } from './generateToolCatalog.mjs';
+import { familyIdForRel } from './lib/llmsPages.mjs';
 
 const realDocs = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 describe('familyIdForRel', () => {
   it('keeps Web Tools in one family and splits Desktop Tools into three', () => {
-    assert.equal(familyIdForRel('web-tools/pulse/list-all-pulse-metric-definitions.md'), 'web-tools');
-    assert.equal(familyIdForRel('desktop-tools/workbook/list-worksheets.md'), 'desktop-tools-sheets');
-    assert.equal(familyIdForRel('desktop-tools/dashboard/add-dashboard.md'), 'desktop-tools-sheets');
-    assert.equal(familyIdForRel('desktop-tools/data-source/apply-datasource.md'), 'desktop-tools-data');
+    assert.equal(
+      familyIdForRel('web-tools/pulse/list-all-pulse-metric-definitions.md'),
+      'web-tools',
+    );
+    assert.equal(
+      familyIdForRel('desktop-tools/workbook/list-worksheets.md'),
+      'desktop-tools-sheets',
+    );
+    assert.equal(
+      familyIdForRel('desktop-tools/dashboard/add-dashboard.md'),
+      'desktop-tools-sheets',
+    );
+    assert.equal(
+      familyIdForRel('desktop-tools/data-source/apply-datasource.md'),
+      'desktop-tools-data',
+    );
     assert.equal(familyIdForRel('desktop-tools/fields/add-field.md'), 'desktop-tools-data');
-    assert.equal(familyIdForRel('desktop-tools/search/search-workbook-examples.md'), 'desktop-tools-session');
+    assert.equal(
+      familyIdForRel('desktop-tools/search/search-workbook-examples.md'),
+      'desktop-tools-session',
+    );
     assert.equal(familyIdForRel('desktop-tools/session/pin-session.md'), 'desktop-tools-session');
   });
 
@@ -81,9 +100,15 @@ describe('generateLlmsTxt fixture tree', () => {
     assert.match(index, /# Tableau MCP/);
     assert.match(index, /llms-full\.txt/);
     assert.doesNotMatch(index, /## Families/);
-    assert.match(index, /\[Introduction\]\(https:\/\/tableau\.github\.io\/tableau-mcp\/docs\/intro\)/);
+    assert.match(
+      index,
+      /\[Introduction\]\(https:\/\/tableau\.github\.io\/tableau-mcp\/docs\/intro\)/,
+    );
     assert.match(index, /\[Guides\]\(https:\/\/tableau\.github\.io\/tableau-mcp\/docs\/guides\)/);
-    assert.match(index, /\[Hello Tool\]\(https:\/\/tableau\.github\.io\/tableau-mcp\/docs\/guides\/hello\)/);
+    assert.match(
+      index,
+      /\[Hello Tool\]\(https:\/\/tableau\.github\.io\/tableau-mcp\/docs\/guides\/hello\)/,
+    );
     assert.doesNotMatch(index, /abdd5aa26851/);
     assert.doesNotMatch(index, /### Images/);
     assert.equal(result.pageCount, 3);
@@ -120,7 +145,10 @@ describe('generateSiteData against the real docs tree', () => {
 
   it('indexes every published page once', () => {
     assert.ok(llms.pageCount >= 179, `expected >= 179 pages, got ${llms.pageCount}`);
-    assert.ok(llms.llmsFullBytes < 1_000_000, `expected llms-full.txt under 1 MB, got ${llms.llmsFullBytes}`);
+    assert.ok(
+      llms.llmsFullBytes < 1_000_000,
+      `expected llms-full.txt under 1 MB, got ${llms.llmsFullBytes}`,
+    );
     const checked = checkLlmsTxt({ docsDir: realDocs });
     assert.deepEqual(checked.errors, []);
     assert.equal(checked.ok, true);

@@ -10,15 +10,14 @@ import { readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { VARIABLES, substituteVariables } from '../../src/remark/variables.mjs';
-
+import { substituteVariables, VARIABLES } from '../../src/remark/variables.mjs';
 import { NONPUBLISH_RE } from './nonpublishable.mjs';
 
 const EXT_JSON = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../src/data/ext.json'), 'utf8'),
 );
 
-export { VARIABLES, substituteVariables };
+export { substituteVariables, VARIABLES };
 
 export const PAGE_ROOTS = ['web-tools', 'desktop-tools'];
 export const TOOL_TYPE_BY_ROOT = {
@@ -48,8 +47,7 @@ export function readJson(path, fallback) {
 //   <span className="toolAvailability">Available January 2027 and later.</span>
 //   {/* /availability */}
 const AVAILABILITY_LINE_RE = /^_Available\b.*\band later\._$/m;
-const AVAILABILITY_SPAN_RE =
-  /<span\s+className="toolAvailability">[\s\S]*?<\/span>/g;
+const AVAILABILITY_SPAN_RE = /<span\s+className="toolAvailability">[\s\S]*?<\/span>/g;
 const MDX_COMMENT_RE = /\{\/\*[\s\S]*?\*\/\}/g;
 const MDX_COMMENT_OPEN_RE = /^\{\/\*/;
 const MDX_COMMENT_CLOSE_RE = /\*\/\}/;

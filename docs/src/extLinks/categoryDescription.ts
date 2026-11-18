@@ -8,11 +8,10 @@
  * that contract.
  */
 
-import { parseExtProtocol, type ExtSite } from './resolve';
+import { type ExtSite, parseExtProtocol } from './resolve';
 
 export type CategoryDescriptionPart =
-  | { kind: 'html'; html: string }
-  | { kind: 'ext'; site: ExtSite; path: string; text: string };
+  { kind: 'html'; html: string } | { kind: 'ext'; site: ExtSite; path: string; text: string };
 
 const EXT_ANCHOR = /<a\b[^>]*\bhref="(ext:\/\/[^"]+)"[^>]*>(.*?)<\/a>/gi;
 

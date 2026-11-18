@@ -38,10 +38,7 @@ function bakedEnvFromConfig(value: unknown): ExtLinkEnv {
 export default function ExtSiteLink({ site, path = '', children }: Props): ReactElement {
   const { siteConfig } = useDocusaurusContext();
   const bakedEnv = bakedEnvFromConfig(siteConfig.customFields?.extLinkEnv);
-  const model = useMemo(
-    () => buildExtLinkModel(site, path, bakedEnv),
-    [site, path, bakedEnv],
-  );
+  const model = useMemo(() => buildExtLinkModel(site, path, bakedEnv), [site, path, bakedEnv]);
   const dataAttrs = extLinkDataAttributes(model);
 
   const [href, setHref] = useState(model.href);
@@ -50,10 +47,7 @@ export default function ExtSiteLink({ site, path = '', children }: Props): React
   const titleId = useId();
 
   useEffect(() => {
-    const viewer = classifyHostname(
-      window.location.hostname,
-      window.location.pathname,
-    );
+    const viewer = classifyHostname(window.location.hostname, window.location.pathname);
     const next = hrefForViewer(model, viewer);
     setHref(next.href);
     setComing(next.coming);
@@ -69,10 +63,7 @@ export default function ExtSiteLink({ site, path = '', children }: Props): React
   }, [dialogOpen]);
 
   function onClick(event: MouseEvent<HTMLAnchorElement>): void {
-    const viewer = classifyHostname(
-      window.location.hostname,
-      window.location.pathname,
-    );
+    const viewer = classifyHostname(window.location.hostname, window.location.pathname);
     const next = hrefForViewer(model, viewer);
     if (next.coming) {
       event.preventDefault();

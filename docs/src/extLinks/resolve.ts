@@ -42,9 +42,7 @@ export function isExtSite(value: string): value is ExtSite {
 export function getSiteEntry(site: string): SiteBases {
   const entry = registry[site];
   if (!entry) {
-    throw new Error(
-      `Unknown ext site "${site}". Valid sites: ${EXT_SITES.join(', ')}`,
-    );
+    throw new Error(`Unknown ext site "${site}". Valid sites: ${EXT_SITES.join(', ')}`);
   }
   return entry;
 }
@@ -53,16 +51,11 @@ export function getSiteEntry(site: string): SiteBases {
  * Unset / any non-official GITHUB_ORIGIN → stage outbound bases.
  * Only an explicit official origin selects prod (local defaults to stage).
  */
-export function outboundEnvFromGithubOrigin(
-  githubOrigin: string | undefined,
-): ExtLinkEnv {
+export function outboundEnvFromGithubOrigin(githubOrigin: string | undefined): ExtLinkEnv {
   return githubOrigin === OFFICIAL_ORIGIN ? 'prod' : 'stage';
 }
 
-export function classifyHostname(
-  hostname: string,
-  pathname = '',
-): ViewerEnv {
+export function classifyHostname(hostname: string, pathname = ''): ViewerEnv {
   const host = hostname.toLowerCase();
   if (isHelpV0Stage(host, pathname)) return 'stage';
   if (PROD_HOSTS.has(host)) return 'prod';
@@ -87,17 +80,13 @@ export function joinBasePath(base: string, path = ''): string {
   return new URL(trimmed, normalizedBase).href;
 }
 
-export function parseExtProtocol(
-  url: string,
-): { site: ExtSite; path: string } | null {
+export function parseExtProtocol(url: string): { site: ExtSite; path: string } | null {
   const match = EXT_PROTOCOL.exec(url);
   if (!match) return null;
   const site = match[1];
   const path = (match[2] ?? '').replace(/^\/+/, '');
   if (!isExtSite(site)) {
-    throw new Error(
-      `Unknown ext:// site "${site}". Valid sites: ${EXT_SITES.join(', ')}`,
-    );
+    throw new Error(`Unknown ext:// site "${site}". Valid sites: ${EXT_SITES.join(', ')}`);
   }
   return { site, path };
 }
@@ -112,15 +101,9 @@ export type ExtLinkModel = {
   comingRelease: string;
 };
 
-export function buildExtLinkModel(
-  site: string,
-  path: string,
-  bakedEnv: ExtLinkEnv,
-): ExtLinkModel {
+export function buildExtLinkModel(site: string, path: string, bakedEnv: ExtLinkEnv): ExtLinkModel {
   if (!isExtSite(site)) {
-    throw new Error(
-      `Unknown ext site "${site}". Valid sites: ${EXT_SITES.join(', ')}`,
-    );
+    throw new Error(`Unknown ext site "${site}". Valid sites: ${EXT_SITES.join(', ')}`);
   }
   const entry = getSiteEntry(site);
   const prodHref = entry.prod ? joinBasePath(entry.prod, path) : undefined;
@@ -138,9 +121,7 @@ export function buildExtLinkModel(
 }
 
 /** Data attributes for the baked <a>. Prod builds omit data-stage-href. */
-export function extLinkDataAttributes(
-  model: ExtLinkModel,
-): Record<string, string> {
+export function extLinkDataAttributes(model: ExtLinkModel): Record<string, string> {
   const attrs: Record<string, string> = {
     'data-ext-link': model.site,
   };
@@ -160,9 +141,7 @@ export function hrefForViewer(
     return { href: model.prodHref ?? '#', coming: !model.prodHref };
   }
   if (viewer === 'stage') {
-    return model.stageHref
-      ? { href: model.stageHref, coming: false }
-      : { href: '#', coming: true };
+    return model.stageHref ? { href: model.stageHref, coming: false } : { href: '#', coming: true };
   }
   return { href: model.href, coming: model.coming };
 }

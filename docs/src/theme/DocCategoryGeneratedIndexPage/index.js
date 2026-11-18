@@ -21,17 +21,18 @@
  *    stubs had been standing in for. Non-tool parent categories (Developers, Extras,
  *    Configuration, …) use a markdown index with the same list shape.
  */
-import React from 'react';
-import { PageMetadata } from '@docusaurus/theme-common';
 import { useCurrentSidebarCategory } from '@docusaurus/plugin-content-docs/client';
+import { PageMetadata } from '@docusaurus/theme-common';
 import useBaseUrl from '@docusaurus/useBaseUrl';
-import DocVersionBanner from '@theme/DocVersionBanner';
-import DocVersionBadge from '@theme/DocVersionBadge';
-import DocBreadcrumbs from '@theme/DocBreadcrumbs';
-import Heading from '@theme/Heading';
 import CategoryDescription from '@site/src/components/CategoryDescription';
 import CategoryToolList from '@site/src/components/CategoryToolList';
 import ToolCatalog from '@site/src/components/ToolCatalog';
+import DocBreadcrumbs from '@theme/DocBreadcrumbs';
+import DocVersionBadge from '@theme/DocVersionBadge';
+import DocVersionBanner from '@theme/DocVersionBanner';
+import Heading from '@theme/Heading';
+import React from 'react';
+
 import styles from './styles.module.css';
 
 // Category labels whose generated-index home renders the filterable tool catalog
@@ -40,6 +41,7 @@ import styles from './styles.module.css';
 // docs/scripts/generateToolCatalog.mjs.
 const TOOL_HOME_LABELS = new Set(['Web Tools', 'Desktop Tools']);
 
+/** @returns {import('react').JSX.Element} */
 function DocCategoryGeneratedIndexPageMetadata({ categoryGeneratedIndex }) {
   // The visible description may contain inline HTML (e.g. anchors); strip tags for
   // the plain-text SEO <meta description>.
@@ -54,6 +56,7 @@ function DocCategoryGeneratedIndexPageMetadata({ categoryGeneratedIndex }) {
   );
 }
 
+/** @returns {import('react').JSX.Element} */
 function DocCategoryGeneratedIndexPageContent({ categoryGeneratedIndex }) {
   const category = useCurrentSidebarCategory();
   const isToolHome = TOOL_HOME_LABELS.has(category.label);
@@ -81,6 +84,7 @@ function DocCategoryGeneratedIndexPageContent({ categoryGeneratedIndex }) {
   );
 }
 
+/** @returns {import('react').JSX.Element} */
 export default function DocCategoryGeneratedIndexPage(props) {
   return (
     <>

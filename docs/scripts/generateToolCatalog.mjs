@@ -21,11 +21,11 @@ import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  categoryInfo,
+  derivePageProse,
   PAGE_ROOTS,
   SKIP_BASENAMES,
   TOOL_TYPE_ORDER,
-  categoryInfo,
-  derivePageProse,
   toolTypeForRel,
 } from './lib/docsMarkdown.mjs';
 import { NONPUBLISH_RE } from './lib/nonpublishable.mjs';

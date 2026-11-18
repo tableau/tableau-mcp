@@ -30,8 +30,7 @@ export const SITE_SLUG = 'tableau-mcp';
 export const INDEX_BASENAME = 'llms.txt';
 export const FULL_BASENAME = 'llms-full.txt';
 
-const SITE_SUMMARY =
-  "Tableau's official MCP Server. Helping Agents see and understand data.";
+const SITE_SUMMARY = "Tableau's official MCP Server. Helping Agents see and understand data.";
 
 const OFFICIAL_ORIGIN = 'https://tableau.github.io';
 const DEFAULT_BASE_PATH = '/tableau-mcp';
@@ -81,7 +80,9 @@ function renderLlmsTxt(sections, env) {
       lines.push(`${mark} ${section.heading}`, '');
     }
     if (section.description) {
-      const desc = rewriteExtLinks(substituteVars(section.description), env).replace(/\s+/g, ' ').trim();
+      const desc = rewriteExtLinks(substituteVars(section.description), env)
+        .replace(/\s+/g, ' ')
+        .trim();
       if (desc) lines.push(`> ${desc}`, '');
     }
     for (const page of section.pages) {

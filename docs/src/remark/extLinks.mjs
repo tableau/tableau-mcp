@@ -12,19 +12,26 @@
 const EXT_PROTOCOL = /^ext:\/\/([^/]+)(?:\/(.*))?$/;
 const VALID_SITES = new Set(['studio', 'eca', 'extensions', 'packages']);
 
+/**
+ * @param {string} url
+ * @returns {{ site: string, path: string } | null}
+ */
 export function parseExtProtocol(url) {
   const match = EXT_PROTOCOL.exec(url);
   if (!match) return null;
   const site = match[1];
   const path = (match[2] ?? '').replace(/^\/+/, '');
   if (!VALID_SITES.has(site)) {
-    throw new Error(
-      `Unknown ext:// site "${site}". Valid sites: ${[...VALID_SITES].join(', ')}`,
-    );
+    throw new Error(`Unknown ext:// site "${site}". Valid sites: ${[...VALID_SITES].join(', ')}`);
   }
   return { site, path };
 }
 
+/**
+ * @param {{ site: string, path: string }} parsed
+ * @param {Array<object> | undefined} children
+ * @returns {object}
+ */
 function toExtSiteLink(parsed, children) {
   const attributes = [{ type: 'mdxJsxAttribute', name: 'site', value: parsed.site }];
   if (parsed.path) {
@@ -38,6 +45,12 @@ function toExtSiteLink(parsed, children) {
   };
 }
 
+/**
+ * @param {object} node
+ * @param {number | undefined} index
+ * @param {object | undefined} parent
+ * @returns {void}
+ */
 function walk(node, index, parent) {
   if (node.type === 'link' && typeof node.url === 'string') {
     const parsed = parseExtProtocol(node.url);

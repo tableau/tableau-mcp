@@ -15,10 +15,19 @@
 // produced.
 const ALPHA_SORTED_CATEGORY_LABELS = new Set(['Web Tools', 'Desktop Tools']);
 
+/**
+ * @param {{ label?: string }} a
+ * @param {{ label?: string }} b
+ * @returns {number}
+ */
 function byLabel(a, b) {
   return (a.label ?? '').localeCompare(b.label ?? '', 'en', { ignorePunctuation: true });
 }
 
+/**
+ * @param {Array<object>} items
+ * @returns {Array<object>}
+ */
 function sortTargetedCategories(items) {
   return items.map((item) => {
     if (item.type === 'category' && ALPHA_SORTED_CATEGORY_LABELS.has(item.label)) {
@@ -30,6 +39,11 @@ function sortTargetedCategories(items) {
   });
 }
 
+/**
+ * @param {object} args
+ * @param {(args: object) => Promise<Array<object>>} args.defaultSidebarItemsGenerator
+ * @returns {Promise<Array<object>>}
+ */
 export default async function sortToolsSidebar({ defaultSidebarItemsGenerator, ...args }) {
   const items = await defaultSidebarItemsGenerator(args);
   return sortTargetedCategories(items);

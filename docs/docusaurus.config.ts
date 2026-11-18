@@ -179,13 +179,13 @@ const config: Config = {
             aliases.push(existingPath.replace('/docs/web-tools', '/docs/tools'));
           }
           if (existingPath.includes('/docs/desktop-tools')) {
-            aliases.push(existingPath.replace('/docs/desktop-tools', '/docs/external-client-tools'));
+            aliases.push(
+              existingPath.replace('/docs/desktop-tools', '/docs/external-client-tools'),
+            );
           }
           // Preserve bookmarks after renaming mcp-authoring-expertise -> tableau-authoring.
           if (existingPath.includes('/tableau-authoring')) {
-            aliases.push(
-              existingPath.replace('/tableau-authoring', '/mcp-authoring-expertise'),
-            );
+            aliases.push(existingPath.replace('/tableau-authoring', '/mcp-authoring-expertise'));
           }
           return aliases.length ? aliases : undefined;
         },

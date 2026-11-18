@@ -21,13 +21,21 @@ export const VARIABLES = {
 
 const TOKEN = /%([a-zA-Z0-9_]+)%/g;
 
-/** Replace known `%token%` slugs. Unknown tokens are left unchanged. */
+/**
+ * Replace known `%token%` slugs. Unknown tokens are left unchanged.
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function substituteVariables(value) {
   return String(value).replace(TOKEN, (match, key) =>
     Object.prototype.hasOwnProperty.call(VARIABLES, key) ? VARIABLES[key] : match,
   );
 }
 
+/**
+ * @param {object} node
+ * @returns {void}
+ */
 function walk(node) {
   // Prose text nodes (e.g. `%product_name%`).
   if (node.type === 'text' && typeof node.value === 'string') {
@@ -35,10 +43,7 @@ function walk(node) {
   }
   // Inline and fenced code keep the slug as a literal unless we rewrite `value`
   // here — Docusaurus excerpt/meta also strip backticks but keep the inner text.
-  if (
-    (node.type === 'inlineCode' || node.type === 'code') &&
-    typeof node.value === 'string'
-  ) {
+  if ((node.type === 'inlineCode' || node.type === 'code') && typeof node.value === 'string') {
     node.value = substituteVariables(node.value);
   }
   // Link/image URLs are a separate `url` field, not a text child — cover them so a

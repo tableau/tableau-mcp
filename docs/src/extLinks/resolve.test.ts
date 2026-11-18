@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
-  EXT_COMING_RELEASE,
-  OFFICIAL_ORIGIN,
   buildExtLinkModel,
   classifyHostname,
+  EXT_COMING_RELEASE,
   extLinkDataAttributes,
   hrefForViewer,
   joinBasePath,
+  OFFICIAL_ORIGIN,
   outboundEnvFromGithubOrigin,
   parseExtProtocol,
 } from './resolve';
@@ -89,10 +89,7 @@ describe('outboundEnvFromGithubOrigin', () => {
   });
 
   it('selects stage for a non-official origin', () => {
-    assert.equal(
-      outboundEnvFromGithubOrigin('https://preview.example.com'),
-      'stage',
-    );
+    assert.equal(outboundEnvFromGithubOrigin('https://preview.example.com'), 'stage');
   });
 });
 
