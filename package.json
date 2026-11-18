@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "6.5.0",
+  "version": "6.5.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -117,9 +117,9 @@
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
-    "@vitest/coverage-v8": "^3.1.3",
+    "@vitest/coverage-v8": "^5.1.0",
     "archiver": "^8.0.0",
-    "esbuild": "^0.25.5",
+    "esbuild": "^0.28.2",
     "eslint": "^9.25.1",
     "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-prettier": "^5.2.6",
@@ -129,14 +129,15 @@
     "jsdom": "^29.1.1",
     "npm-run-all": "^4.1.5",
     "openai": "^5.23.2",
-    "prettier": "^3.5.3",
+    "prettier": "^3.10.1",
     "probe-image-size": "7.4.0",
     "supertest": "^7.1.4",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1",
+    "vite": "^7.3.8",
     "vite-plugin-singlefile": "^2.3.3",
-    "vitest": "^3.1.3"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=22.7.5"

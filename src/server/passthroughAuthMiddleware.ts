@@ -11,7 +11,7 @@ import { getCookie, getHeader } from './requestUtils';
 export const X_TABLEAU_AUTH_HEADER = 'x-tableau-auth';
 const PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES = 1000;
 const MAX_LOGGED_ERROR_CHARS = 1000;
-const INVALID_TOKEN_BODY = {
+export const INVALID_TOKEN_BODY = {
   error: 'invalid_token',
   error_description: 'Invalid or expired Tableau session token',
 } as const;

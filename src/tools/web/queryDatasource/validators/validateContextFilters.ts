@@ -27,7 +27,7 @@ const QUANTITATIVE_FILTER_TYPES: ReadonlySet<Filter['filterType']> = new Set([
  * context doesn't apply to them.
  */
 function isDimensionFilterMissingContext(f: Filter): boolean {
-  if (f.context === true || f.filterType === 'TOP') {
+  if (f.context === true || f.filterType === 'TOP' || f.filterType === 'CONDITION') {
     return false;
   }
 
@@ -45,8 +45,8 @@ function getFilterName(f: Filter): string {
 }
 
 /**
- * Detects when a query has TOP/BOTTOM filters combined with dimension filters
- * that are missing `context: true`. Without context, the TOP filter may operate
+ * Detects when a query has TOP/BOTTOM or CONDITION filters combined with dimension
+ * filters that are missing `context: true`. Without context, those filters operate
  * on the full dataset rather than the filtered subset, producing unexpected results.
  *
  * This is a non-blocking validator — it returns warnings rather than errors,
@@ -58,7 +58,8 @@ export function validateContextFilters(query: Query): ContextFilterWarning[] {
   }
 
   const hasTopFilter = query.filters.some((f) => f.filterType === 'TOP');
-  if (!hasTopFilter) {
+  const hasConditionFilter = query.filters.some((f) => f.filterType === 'CONDITION');
+  if (!hasTopFilter && !hasConditionFilter) {
     return [];
   }
 
@@ -68,13 +69,25 @@ export function validateContextFilters(query: Query): ContextFilterWarning[] {
   }
 
   const affectedFilters = filtersNeedingContext.map(getFilterName);
+  const warnings: ContextFilterWarning[] = [];
 
-  return [
-    {
+  if (hasTopFilter) {
+    warnings.push({
       type: 'MISSING_CONTEXT_ON_DIMENSION_FILTER',
       severity: 'WARNING',
       message: `This query combines a TOP/BOTTOM filter with dimension filters that are not set as context filters. In Tableau’s query order, TOP filters are evaluated before regular dimension filters. This means the TOP filter selects values from the full dataset first, and the dimension filters are applied afterward. This can produce fewer results than expected (for example, showing only 8 rows when requesting Top 10), because some of the top-ranked values may not exist in the filtered subset. If your intent is to find the Top values *within* the filtered subset, add 'context: true' to one or more of these dimension filters: ${affectedFilters.join(', ')}. If your intent is to find the Top values globally and then filter them, your current query is correct.`,
       affectedFilters,
-    },
-  ];
+    });
+  }
+
+  if (hasConditionFilter) {
+    warnings.push({
+      type: 'MISSING_CONTEXT_ON_DIMENSION_FILTER',
+      severity: 'WARNING',
+      message: `This query combines a CONDITION filter with dimension filters that are not set as context filters. In Tableau’s query order, CONDITION filters are evaluated before regular dimension filters. This means the condition is tested against totals from the full dataset, and the dimension filters are applied afterward. For example, a SUM(Sales) > 1000 condition keeps members whose overall sales exceed 1000, even if their sales within the filtered subset do not. If your intent is to test the condition *within* the filtered subset, add 'context: true' to one or more of these dimension filters: ${affectedFilters.join(', ')}. If your intent is to test the condition globally and then filter, your current query is correct.`,
+      affectedFilters,
+    });
+  }
+
+  return warnings;
 }

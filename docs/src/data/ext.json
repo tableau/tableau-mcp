@@ -1,0 +1,16 @@
+{
+  "studio": {
+    "stage": "https://help.tableau.com/v0.0/api/studio-dev-guide/en-us/",
+    "prod": "https://help.tableau.com/current/api/studio-dev-guide/en-us/"
+  },
+  "eca": {
+    "stage": "https://help.tableau.com/v0.0/api/studio-api-ref/en-us/",
+    "prod": "https://help.tableau.com/current/api/studio-api-ref/en-us/"
+  },
+  "extensions": {
+    "prod": "https://tableau.github.io/extensions-api/"
+  },
+  "packages": {
+    "prod": "https://help.tableau.com/current/api/packages-guide/"
+  }
+}

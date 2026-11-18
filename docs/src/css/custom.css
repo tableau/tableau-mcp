@@ -14,3 +14,84 @@ table th {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* Tool pages carry a ship-availability caption written by
+   update-release-notes --sync-availability. It is authored as a sibling of the title
+   (Docusaurus wraps the h1 in a header) so the document title, sidebar label, and
+   browser tab stay free of it; these rules pull it back onto the title's line. */
+.markdown > header:has(+ .toolAvailability),
+.markdown > header:has(+ .toolAvailability) > h1 {
+  display: inline;
+}
+
+.markdown > .toolAvailability {
+  /* Body font size and italics, matching how the caption read on its own line. Size is
+     inherited: the caption is outside the header, so it is not scaled by the h1. */
+  font-style: italic;
+  margin-left: 0.5rem;
+}
+
+/* The h1 is inline now, so the line break and heading spacing below the title have to
+   come from the caption instead. */
+.markdown > .toolAvailability::after {
+  content: '';
+  display: block;
+  height: var(--ifm-heading-margin-bottom);
+}
+
+/* Previous/Next page cards. The sidebar is the navigation. */
+nav.pagination-nav {
+  display: none;
+}
+
+/* Coming-soon dialog for ext:// sites with no stage base (extensions, packages). */
+.ext-coming-backdrop {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1050;
+}
+
+.ext-coming-dialog {
+  background: var(--ifm-background-surface-color);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  max-width: 360px;
+  padding: 20px 24px;
+  text-align: center;
+}
+
+.ext-coming-message {
+  margin: 0 0 16px;
+  font-size: 16px;
+  color: var(--ifm-font-color-base);
+}
+
+.ext-coming-ok {
+  border: 0;
+  border-radius: 4px;
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-primary-contrast-background, #fff);
+  padding: 8px 20px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ext-coming-ok:hover {
+  background: var(--ifm-color-primary-dark);
+}
+
+/* Wrench icon on the Service Tools and External Client Tools sidebar items. */
+.menu__list-item.sidebar-item-tools > .menu__list-item-collapsible > .menu__link::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.4em;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z'/%3E%3C/svg%3E") center / contain no-repeat;
+}

@@ -175,9 +175,9 @@ export default [
     },
   },
   {
-    // Standalone Node CLI scripts (plain JS): the TS return-type rule is
-    // inapplicable to .mjs, and a CLI legitimately writes to stdout.
-    files: ['docs/scripts/**/*.mjs'],
+    // Plain JS under docs: the TS return-type rule is inapplicable to .mjs
+    // and to the swizzled theme files, and a CLI legitimately writes to stdout.
+    files: ['docs/scripts/**/*.mjs', 'docs/src/**/*.mjs', 'docs/src/theme/**/*.js'],
     rules: {
       'no-console': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
