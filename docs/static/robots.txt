@@ -1,0 +1,6 @@
+# Agent-readable documentation map. Coding agents should start here:
+#   https://tableau.github.io/tableau-mcp/llms.txt
+# Contract full text (under 1 MB):
+#   https://tableau.github.io/tableau-mcp/llms/llms-full.txt
+User-agent: *
+Allow: /

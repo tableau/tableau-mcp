@@ -63,28 +63,9 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         return;
       }
 
-      const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
-      const baseUrl = new URL(resourceUri).origin;
-      const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
-      // This pre-auth challenge advertises what a fresh client may request. The server still
-      // supports the full scope set under subset mode (subset only governs what is accepted, not
-      // what is offered), so advertise the full set here — pass strict=true unconditionally.
-      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body, true);
-      const requiredApiScopes = await getRequiredApiScopesForRequest(
-        req.body,
-        advertiseApiScopes,
-        true,
-      );
-      const scopeParam =
-        enforceScopes && requiredMcpScopes.length > 0
-          ? `, scope="${await formatChallengeScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
-          : '';
       res
         .status(401)
-        .header(
-          'WWW-Authenticate',
-          `Bearer realm="MCP", resource_metadata="${resourceMetadataUrl}"${scopeParam}`,
-        )
+        .header('WWW-Authenticate', await getOAuthChallenge(req.body))
         .json({
           error: 'unauthorized',
           // Keep the WWW-Authenticate challenge (above) intact so the re-auth flow still works, but
@@ -99,12 +80,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     const result = await accessTokenValidator.validate(token);
 
     if (result.isErr()) {
+      const wwwAuthenticate = await getOAuthChallenge(req.body, { invalidToken: true });
       // For SSE requests (GET), provide proper SSE error response
       if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
         res.writeHead(401, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
+          'WWW-Authenticate': wwwAuthenticate,
         });
         res.write('event: error\n');
         res.write(`data: {"error": "invalid_token", "error_description": "${result.error}"}\n\n`);
@@ -118,12 +101,15 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         logger: 'oauth',
         data: result.error,
       });
-      res.status(401).json({
-        error: 'invalid_token',
-        // Same shared guidance for an invalid/expired token so it is not misread as a missing
-        // feature (W-23757363). The underlying validation detail is preserved first.
-        error_description: `${result.error}. ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
-      });
+      res
+        .status(401)
+        .header('WWW-Authenticate', wwwAuthenticate)
+        .json({
+          error: 'invalid_token',
+          // Same shared guidance for an invalid/expired token so it is not misread as a missing
+          // feature (W-23757363). The underlying validation detail is preserved first.
+          error_description: `${result.error}. ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
+        });
       return;
     }
     const authInfo = result.value;
@@ -222,6 +208,34 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     req.auth = authInfo;
     next();
   };
+}
+
+/**
+ * The 401 `WWW-Authenticate` challenge that sends a client through the OAuth flow. Pass
+ * `invalidToken` when the request carried a token that was rejected: RFC 6750 §3 says to name the
+ * error then, and to leave it out when no token was sent.
+ */
+export async function getOAuthChallenge(
+  body: unknown,
+  { invalidToken = false }: { invalidToken?: boolean } = {},
+): Promise<string> {
+  const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
+  const baseUrl = new URL(resourceUri).origin;
+  const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
+  // This challenge advertises what a fresh client may request. The server still supports the full
+  // scope set under subset mode (subset only governs what is accepted, not what is offered), so
+  // advertise the full set here — pass strict=true unconditionally.
+  const requiredMcpScopes = await getRequiredMcpScopesForRequest(body, true);
+  const requiredApiScopes = await getRequiredApiScopesForRequest(body, advertiseApiScopes, true);
+  const scopeParam =
+    enforceScopes && requiredMcpScopes.length > 0
+      ? `, scope="${await formatChallengeScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
+      : '';
+  // A fixed description: header values can't safely carry the validator's free-form error text.
+  const errorParam = invalidToken
+    ? ', error="invalid_token", error_description="The access token is invalid or expired"'
+    : '';
+  return `Bearer realm="MCP", resource_metadata="${resourceMetadataUrl}"${scopeParam}${errorParam}`;
 }
 
 async function formatChallengeScopes(scopes: string[], clientId?: string): Promise<string> {

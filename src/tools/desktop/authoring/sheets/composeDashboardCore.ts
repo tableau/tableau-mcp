@@ -279,7 +279,7 @@ async function createDashboard({
       apply_error: 'Post-apply structural verification did not match the request.',
       verificationIssues: readbackIssues,
       guidance:
-        'Call list-dashboards and get-workbook-inventory to inspect live state before retrying; use activate-sheet to inspect the target dashboard.',
+        'Call get-sheets to inspect live state before retrying; use activate-sheet to inspect the target dashboard.',
     });
     return unknown('readback-verification', error);
   }
@@ -451,7 +451,7 @@ function loadFailureOutcome({
       stage: uncertainStage,
       apply_error: describeApplyError(error),
       guidance:
-        'Call list-dashboards and get-workbook-inventory to inspect live state before retrying; use activate-sheet to inspect the target dashboard.',
+        'Call get-sheets to inspect live state before retrying; use activate-sheet to inspect the target dashboard.',
     }),
   );
 }

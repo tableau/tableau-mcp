@@ -1,0 +1,8 @@
+{
+  "label": "Binder",
+  "position": 10,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for listing, proposing, validating, and binding reusable authoring templates."
+  }
+}

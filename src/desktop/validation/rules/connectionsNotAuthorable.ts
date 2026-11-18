@@ -10,7 +10,7 @@ const TERMINAL_MESSAGE =
 
 const TERMINAL_SUGGESTION =
   'Do not retry with a different connection attribute shape — there is no XML fix. Tell the user ' +
-  "to open Desktop's Connect pane and add/repair the connection there, then call get-workbook-xml " +
+  "to open Desktop's Connect pane and add/repair the connection there, then call get-xml without kind " +
   'again once it is connected.';
 
 function issueFor(xpathHint: string): ValidationIssue {

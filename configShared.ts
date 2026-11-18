@@ -25,7 +25,7 @@ export const configShared = {
     // Bounds afterAll/teardown hooks under load. NOTE: this does NOT govern the
     // `[vitest-worker]: Timeout calling "onTaskUpdate"` unhandled error occasionally seen
     // on saturated machines after every test passes — that is the worker→main birpc
-    // watchdog, which vitest 3.x exposes no config for. Reducing main-process load
+    // watchdog, which vitest exposes no config for. Reducing main-process load
     // (fewer reporters, fewer workers) is the only real lever.
     teardownTimeout: 30_000,
     // No workflow parses junit/unit.xml. Keep passing-test logs off the CI worker channel;

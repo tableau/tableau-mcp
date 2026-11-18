@@ -12,19 +12,26 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
+import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { WebMcpServer } from '../server.web.js';
 import { createSession, getSession, Session } from '../sessions.js';
+import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../utils/authErrorMessage.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest } from './middleware.js';
+import { getOAuthChallenge } from './oauth/authMiddleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { createOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { getSessionBinding } from './oauth/siteBinding.js';
 import { AuthenticatedRequest } from './oauth/types.js';
-import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
+import {
+  INVALID_TOKEN_BODY,
+  passthroughAuthMiddleware,
+  X_TABLEAU_AUTH_HEADER,
+} from './passthroughAuthMiddleware.js';
 import { X_TABLEAU_MCP_CONFIG_HEADER } from './requestUtils.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
@@ -207,11 +214,30 @@ export async function startExpressServer({
         data: error,
       });
       if (!res.headersSent) {
-        res.status(500).json({
+        // A site settings failure carries a curated message and the upstream status, so a Tableau 4xx stays a 4xx.
+        const siteSettingsError =
+          error instanceof McpSiteSettingsUnavailableError ? error : undefined;
+        const status = siteSettingsError?.statusCode ?? 500;
+        if (status === 401) {
+          if (getTableauAuthInfo(req.auth)?.type === 'Passthrough') {
+            res.status(401).json(INVALID_TOKEN_BODY);
+          } else {
+            // Any rejected connection with 401 status code must issue OAuth challenge
+            res
+              .status(401)
+              .header('WWW-Authenticate', await getOAuthChallenge(req.body, { invalidToken: true }))
+              .json({
+                error: 'invalid_token',
+                error_description: `${siteSettingsError?.message} ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
+              });
+          }
+          return;
+        }
+        res.status(status).json({
           jsonrpc: '2.0',
           error: {
-            code: -32603,
-            message: 'Internal server error',
+            code: status < 500 ? -32000 : -32603,
+            message: siteSettingsError?.message ?? 'Internal server error',
           },
           id: null,
         });

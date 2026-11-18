@@ -20,11 +20,7 @@ export interface TemplateArtifactLease {
 }
 
 export type TemplateArtifactUnavailableReason =
-  | 'evicted'
-  | 'consumed'
-  | 'in-use'
-  | 'session-mismatch'
-  | 'unknown';
+  'evicted' | 'consumed' | 'in-use' | 'session-mismatch' | 'unknown';
 
 export type TemplateArtifactReserveResult =
   | { ok: true; artifact: Readonly<TemplateWorksheetArtifact>; lease: TemplateArtifactLease }

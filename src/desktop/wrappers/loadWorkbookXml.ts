@@ -135,7 +135,7 @@ export async function loadWorkbookXml({
           error: {
             type: 'workbook-drift',
             message:
-              'The workbook changed since this cache was read. Re-read it with get-workbook-xml, ' +
+              'The workbook changed since this cache was read. Re-read it with get-xml, ' +
               'reapply your edit to the new cache file, then retry apply-workbook. No changes were sent to Tableau.',
           },
         });
@@ -188,7 +188,7 @@ function sheetCheckFailed(which: 'edited' | 'open'): LoadWorkbookXmlResult {
       message:
         which === 'edited'
           ? 'The sheet check could not read the edited workbook document, so nothing was sent to Tableau. ' +
-            'Re-read the workbook with get-workbook-xml, redo the edit on the new cache file, then retry apply-workbook. ' +
+            'Re-read the workbook with get-xml, redo the edit on the new cache file, then retry apply-workbook. ' +
             'If it fails again, report that instead of retrying.'
           : 'The sheet check could not read the open workbook, so nothing was sent to Tableau. ' +
             'Retrying will not help; report this to the user.',
@@ -219,7 +219,7 @@ function rejectRemovedSheets(xml: string, liveXml: string): LoadWorkbookXmlResul
         `This apply would delete ${names.length} sheet(s) that are in the open workbook: ${listed}${more}. ` +
         'Desktop deletes every sheet the document leaves out, so nothing was sent to Tableau. ' +
         'To rename or delete a sheet, use rename-sheet or delete-sheet if this session has them, or ask the user to do it in Tableau. ' +
-        'For any other edit, re-read the workbook with get-workbook-xml, redo the edit on the new cache file keeping every sheet, and retry apply-workbook.',
+        'For any other edit, re-read the workbook with get-xml, redo the edit on the new cache file keeping every sheet, and retry apply-workbook.',
     },
   });
 }

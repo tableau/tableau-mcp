@@ -735,7 +735,7 @@ export const getRunDashboardBatchTool = (
                 removal = { phase: 'hidden', warnings };
                 return failBatch(
                   'removeExisting',
-                  `Desktop did not remove "${dashboardName}"; it may now be hidden. Nothing was rebuilt. Run undo-workbook to restore it.`,
+                  `Desktop did not remove "${dashboardName}"; it may now be hidden. Nothing was rebuilt. Run undo-redo-workbook with action undo to restore it.`,
                   { applied: false },
                 );
               }
@@ -1127,10 +1127,10 @@ function removalNote(
 ): string | undefined {
   if (phase === 'hidden') return undefined;
   if (phase === 'sent') {
-    return `The delete of the old dashboard "${dashboardName}" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-workbook restores them.`;
+    return `The delete of the old dashboard "${dashboardName}" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-redo-workbook with action undo restores them.`;
   }
   if (phase === 'ready') {
-    return `The old dashboard "${dashboardName}" was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
+    return `The old dashboard "${dashboardName}" was removed and the new one may not have been applied. Check the workbook; undo-redo-workbook with action undo restores the old dashboard and its actions.`;
   }
   const removed = `The old dashboard "${dashboardName}" was removed${
     actionCount === undefined
@@ -1141,9 +1141,9 @@ function removalNote(
   }`;
   if (drifted) {
     // Undo reverses only the latest change, which here is the other author's edit.
-    return `${removed} The workbook changed again after the removal, so undo-workbook would first reverse that newer change. Check with the user before undoing.`;
+    return `${removed} The workbook changed again after the removal, so undo-redo-workbook with action undo would first reverse that newer change. Check with the user before undoing.`;
   }
-  return `${removed} Run undo-workbook to restore ${actionCount === 0 ? 'it' : 'them'}.`;
+  return `${removed} Run undo-redo-workbook with action undo to restore ${actionCount === 0 ? 'it' : 'them'}.`;
 }
 
 function removalWarningLines(warnings: readonly ExecuteCommandWarning[]): string[] {

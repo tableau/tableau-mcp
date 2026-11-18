@@ -6,7 +6,7 @@ sidebar_position: 1
 
 AI agents (such as Claude, ChatGPT, Slackbot or other AI clients) connect to the hosted
 Tableau MCP service through the Tableau routing layer (CloudFront edge location+compute)
-which routes the request to corresponding Tableau Cloud pod. Each cloud pod
+which routes the request to a corresponding Tableau Cloud pod. Each cloud pod
 (e.g. `prod-us-west-c`, `prod-us-east-a`, `eu-west-1a`, ...) runs its own instance of Tableau MCP, which communicates
 with the pod-local VizQL Data Service, Metadata API and other REST APIs.
 

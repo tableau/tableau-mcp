@@ -28,7 +28,7 @@ export const getAddStoryboardTool = (
     minApiVersion: '0.2.6',
     title,
     description:
-      'Add a blank storyboard to the open workbook. It becomes the active sheet; get its id from get-workbook-inventory.',
+      'Add a blank storyboard to the open workbook. It becomes the active sheet; get its id from get-sheets.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

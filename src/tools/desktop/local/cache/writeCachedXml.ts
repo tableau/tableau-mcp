@@ -169,7 +169,7 @@ export const getWriteCachedXmlTool = (
             if (spliced === null) {
               return new ArgsValidationError(
                 `No <${selectorTag} name="${selectorName}"> element found in ${filePath}; nothing was written. ` +
-                  `The selector is the plain ${selectorTag} name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-${selectorTag}s to get exact names.`,
+                  `The selector is the plain ${selectorTag} name (A & B), not the XML-escaped form from the raw file (A &amp; B); use get-sheets to get exact names.`,
               ).toErr();
             }
             contentToWrite = spliced;

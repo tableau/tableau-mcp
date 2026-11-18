@@ -949,7 +949,7 @@ function fieldRemovalError(worksheet: ParsedWorksheet, reason: string): Error {
     `${reason}. No worksheet XML was changed.\n` +
       `Current placements in the selected worksheet XML (encodings are for the first pane): ${JSON.stringify(worksheetFieldPlacements(worksheet))}\n` +
       'Use read-cached-xml with filePath set to the same worksheetFile to confirm the exact columnRef, target, and encodingType before retrying. ' +
-      'For the latest live state, use get-worksheet-xml with mode="file", inspect its returned file with read-cached-xml, and pass that file to remove-field. ' +
+      'For the latest live state, use get-xml with kind="worksheet" and mode="file", inspect its returned file with read-cached-xml, and pass that file to remove-field. ' +
       'A live re-read resets the edit buffer; finish pending edits first. ' +
       'Do not retry removal if the field is absent.',
   );

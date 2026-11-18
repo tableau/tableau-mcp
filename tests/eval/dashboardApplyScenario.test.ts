@@ -13,11 +13,16 @@ import {
 } from './dashboardApplyScenario.js';
 
 const applyArgs = { session: 'eval-session', dashboardName, dashboardFile: draftFile };
-const readbackArgs = { session: 'eval-session', dashboardName, mode: 'inline' };
+const readbackArgs = {
+  session: 'eval-session',
+  kind: 'dashboard',
+  sheetId: dashboardName,
+  mode: 'inline',
+};
 
 async function complete(scenario: DashboardApplyScenario): Promise<void> {
   await scenario.invoke('apply_dashboard', applyArgs);
-  await scenario.invoke('get_dashboard_xml', readbackArgs);
+  await scenario.invoke('get_xml', readbackArgs);
 }
 
 describe('dashboard apply eval fixture and grading (offline)', () => {
@@ -60,7 +65,7 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
       ...applyArgs,
       worksheetNames: ['Sales'],
     });
-    await scenario.invoke('get_dashboard_xml', readbackArgs);
+    await scenario.invoke('get_xml', readbackArgs);
     expect(scenario.grade()).toEqual([]);
     expect(scenario.executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
     expect(scenario.executor.applyWorkbookDocument).not.toHaveBeenCalled();
@@ -126,7 +131,11 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
   it('accepts file-mode readback only after reading the returned cache', async () => {
     const scenario = new DashboardApplyScenario(dashboardApplyCases[0]);
     await scenario.invoke('apply_dashboard', applyArgs);
-    const response = await scenario.invoke('get_dashboard_xml', { dashboardName, mode: 'file' });
+    const response = await scenario.invoke('get_xml', {
+      kind: 'dashboard',
+      sheetId: dashboardName,
+      mode: 'file',
+    });
     expect(scenario.grade()).toContain('Successful apply was not read back');
     await scenario.invoke('read_cached_xml', { filePath: JSON.parse(response.text).file });
     expect(scenario.grade()).toEqual([]);
@@ -215,7 +224,7 @@ describe('dashboard apply eval isolation (offline)', () => {
       'read-cached-xml',
       'write-cached-xml',
       'apply-dashboard',
-      'get-dashboard-xml',
+      'get-xml',
       'apply-workbook',
     ];
     const inputSchema = {
