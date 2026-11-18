@@ -35,7 +35,7 @@ const knownClientDisplayNamesByHost: ReadonlyMap<string, string> = new Map([
  * NOT inject a truncation marker: the emitted value is a bounded, best-effort observability signal,
  * not a re-parsed identifier, so appending text would only add noise.
  */
-const MAX_TELEMETRY_CLIENT_ID_LENGTH = 200;
+export const MAX_TELEMETRY_CLIENT_ID_LENGTH = 200;
 
 /**
  * Bounds an OAuth `client_id` for emission to telemetry. The canonical, unmodified `client_id`

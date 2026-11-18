@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
+import pkg from '../../../package.json';
 import {
   AdminOnlyError,
   DatasourceNotAllowedError,
@@ -640,6 +641,102 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: 'https://claude.ai/.well-known/oauth/client-metadata.json',
           oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
+
+    it('should tag tool_call with the server version and the MCP clientInfo name and version', async () => {
+      const tool = new WebTool({
+        ...mockParams,
+        server: new WebMcpServer({ clientInfo: { name: 'claude-ai', version: '0.1.0' } }),
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          mcp_version: pkg.version,
+          client_name: 'claude-ai',
+          client_version: '0.1.0',
+        }),
+      );
+    });
+
+    it('should send empty client_name and client_version when the client sent no clientInfo', async () => {
+      const server = new WebMcpServer();
+      vi.mocked(server.mcpServer.server.getClientVersion).mockReturnValue(undefined);
+      const tool = new WebTool({ ...mockParams, server });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          mcp_version: pkg.version,
+          client_name: '',
+          client_version: '',
+        }),
+      );
+    });
+
+    it('should cap client_name and client_version at 200 characters', async () => {
+      const tool = new WebTool({
+        ...mockParams,
+        server: new WebMcpServer({
+          clientInfo: { name: 'n'.repeat(500), version: 'v'.repeat(500) },
+        }),
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          client_name: 'n'.repeat(200),
+          client_version: 'v'.repeat(200),
+        }),
+      );
+    });
+
+    it('should still return the tool result when reading clientInfo throws', async () => {
+      const server = new WebMcpServer();
+      Object.defineProperty(server, 'clientInfo', {
+        get: () => {
+          throw new Error('clientInfo unavailable');
+        },
+      });
+      const tool = new WebTool({ ...mockParams, server });
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: true,
+          client_name: '',
+          client_version: '',
         }),
       );
     });

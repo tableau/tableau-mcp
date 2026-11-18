@@ -33,7 +33,7 @@ import {
 import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
-import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { getClientTelemetryFields, LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { RegistrationCondition } from './registrationConditions.js';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
 import { WebToolName } from './toolName.js';
@@ -311,6 +311,7 @@ export class WebTool<
       const clientName = getClientDisplayName(oauthClientId);
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
+        ...getClientTelemetryFields(this.server),
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
         site_luid: extra.getSiteLuid(),
