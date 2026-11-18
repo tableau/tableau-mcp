@@ -10,7 +10,7 @@ import type { AbCase } from './dataQuestions.js';
  *
  * Supra sends the workbook's business preferences (fiscal year starting 1 February, "closed" means
  * ACV, "pipe" means Open Pipe). Tableau Agent loads them from the workbook, so pass the workbook to
- * `cabu-start-conversation`. The plain path doesn't see them, so expect it to miss fiscal and
+ * `tableau-agent-start-conversation`. The plain path doesn't see them, so expect it to miss fiscal and
  * vocabulary questions.
  *
  * Generated from the YAML: `numbers` holds every decimal amount with a K/M/B suffix in the

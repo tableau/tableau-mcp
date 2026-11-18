@@ -30,7 +30,7 @@ dotenv.config({ path: 'tests/eval/.env' });
  * - plain: the question as written. The model must not use Tableau Agent, must call
  *   query-datasource, and must get the numbers right.
  * - tableau-agent: turn 1 opts in with "Ask Tableau Agent:"; later turns are plain. The whole
- *   conversation must run through one Tableau Agent conversation (one start, a cabu-ask every turn,
+ *   conversation must run through one Tableau Agent conversation (one start, a tableau-agent-ask every turn,
  *   parentLuid threaded), never call query-datasource, and get the numbers right.
  *
  * Only `smoke` cases run by default. EVAL_DATA_CASES=all runs every case; a comma-separated list of
@@ -49,7 +49,7 @@ const agentSystemPrompt = `
   Given the user's query, use the tools available to you to answer the question.
   Include the specific numbers from the data in your answer.`;
 
-const startResultSchema = z.object({ conversationId: z.string(), utteranceArgs: z.string() });
+const startResultSchema = z.object({ conversationToken: z.string() });
 const askResultSchema = z.object({ nextParentLuid: z.string() }).passthrough();
 
 function selectCases(): Array<AbCase> {
@@ -99,16 +99,16 @@ function checkTableauAgentTools(turns: Array<ConversationTurn>): Array<string> {
   const problems: Array<string> = [];
   const allExecutions = turns.flatMap((turn) => turn.executions);
 
-  const starts = findCalls(allExecutions, 'cabu_start_conversation');
+  const starts = findCalls(allExecutions, 'tableau_agent_start_conversation');
   if (starts.length !== 1) {
-    return [`expected 1 cabu_start_conversation, got ${starts.length}`];
+    return [`expected 1 tableau_agent_start_conversation, got ${starts.length}`];
   }
-  if (!findCalls(turns[0].executions, 'cabu_start_conversation').length) {
-    problems.push('cabu_start_conversation was not called on turn 1');
+  if (!findCalls(turns[0].executions, 'tableau_agent_start_conversation').length) {
+    problems.push('tableau_agent_start_conversation was not called on turn 1');
   }
   const started = parseToolResult(starts[0], startResultSchema);
   if (!started) {
-    return [...problems, `cabu_start_conversation failed: ${starts[0].output}`];
+    return [...problems, `tableau_agent_start_conversation failed: ${starts[0].output}`];
   }
 
   if (findCalls(allExecutions, 'query_datasource').length) {
@@ -117,18 +117,18 @@ function checkTableauAgentTools(turns: Array<ConversationTurn>): Array<string> {
 
   let lastNextParentLuid: string | undefined;
   turns.forEach((turn, index) => {
-    const asks = findCalls(turn.executions, 'cabu_ask');
+    const asks = findCalls(turn.executions, 'tableau_agent_ask');
     if (!asks.length) {
-      problems.push(`turn ${index + 1} did not call cabu_ask`);
+      problems.push(`turn ${index + 1} did not call tableau_agent_ask`);
     }
     for (const ask of asks) {
-      if (ask.arguments.conversationId !== started.conversationId) {
-        problems.push(`turn ${index + 1} cabu_ask used another conversation`);
+      if (ask.arguments.conversationToken !== started.conversationToken) {
+        problems.push(`turn ${index + 1} tableau_agent_ask used another conversation`);
       }
       // Each ask must continue from the last answered one, within and across turns.
       if (lastNextParentLuid && ask.arguments.parentLuid !== lastNextParentLuid) {
         problems.push(
-          `turn ${index + 1} cabu_ask parentLuid ${ask.arguments.parentLuid} != previous nextParentLuid ${lastNextParentLuid}`,
+          `turn ${index + 1} tableau_agent_ask parentLuid ${ask.arguments.parentLuid} != previous nextParentLuid ${lastNextParentLuid}`,
         );
       }
       lastNextParentLuid =

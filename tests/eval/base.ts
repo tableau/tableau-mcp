@@ -48,6 +48,8 @@ export async function getMcpServer(env?: Record<string, string>): Promise<MCPSer
     // The MCP SDK passes only a safe env whitelist plus this, so the child would default to telemetry on.
     env: { ...env, PRODUCT_TELEMETRY_ENABLED: 'false' },
     cacheToolsList: true,
+    // The MCP SDK cancels tool calls after 60 s by default; a slow tableau-agent-ask can take minutes.
+    timeout: 10 * 60 * 1000,
   });
 
   await mcpServer.connect();

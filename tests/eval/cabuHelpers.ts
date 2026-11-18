@@ -8,15 +8,17 @@ import { AbCase, DATA_QUESTION_CASES, ExpectedAnswer } from './cases/dataQuestio
 
 /** Shared helpers for the Tableau Agent (CABU) evals. */
 
-export const CABU_TOOLS = ['cabu_start_conversation', 'cabu_ask'];
+export const CABU_TOOLS = ['tableau_agent_start_conversation', 'tableau_agent_ask'];
 
 export const TABLEAU_AGENT_PREFIX = 'Ask Tableau Agent: ';
 
 export type ToolExecution = Awaited<ReturnType<typeof getToolExecutions>>[number];
 
-// Tools may be recorded with or without the `tableau_` prefix (see getAgent).
+// Tools may be recorded with or without the `tableau_` prefix (see getAgent). The Tableau Agent
+// tools' own names start with `tableau_agent_`, so only strip the prefix from other names.
 export function normalizeToolName(name: string): string {
-  return name.replace(/^tableau_/, '').replace(/-/g, '_');
+  const normalized = name.replace(/-/g, '_');
+  return normalized.startsWith('tableau_agent_') ? normalized : normalized.replace(/^tableau_/, '');
 }
 
 export function findCalls(
@@ -113,7 +115,7 @@ export function buildCasePrompt(abCase: AbCase, turnIndex: number, optIn: boolea
  */
 export function checkSourceChoice(abCase: AbCase, executions: Array<ToolExecution>): Array<string> {
   const problems: Array<string> = [];
-  for (const toolName of ['query_datasource', 'cabu_start_conversation']) {
+  for (const toolName of ['query_datasource', 'tableau_agent_start_conversation']) {
     for (const call of findCalls(executions, toolName)) {
       if (call.arguments.datasourceLuid !== abCase.datasourceLuid) {
         problems.push(
@@ -124,10 +126,10 @@ export function checkSourceChoice(abCase: AbCase, executions: Array<ToolExecutio
   }
   // Only Tableau Agent uses the workbook: it loads sample values and business preferences from it.
   if (abCase.workbookLuid) {
-    for (const call of findCalls(executions, 'cabu_start_conversation')) {
+    for (const call of findCalls(executions, 'tableau_agent_start_conversation')) {
       if (call.arguments.workbookLuid !== abCase.workbookLuid) {
         problems.push(
-          `cabu_start_conversation used workbook ${String(call.arguments.workbookLuid ?? 'none')}, expected ${abCase.workbookLuid}`,
+          `tableau_agent_start_conversation used workbook ${String(call.arguments.workbookLuid ?? 'none')}, expected ${abCase.workbookLuid}`,
         );
       }
     }

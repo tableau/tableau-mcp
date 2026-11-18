@@ -8,7 +8,7 @@ export type ArmId = 'A' | 'B' | 'C';
 /**
  * Client-side token usage, summed over the agent's model responses for one turn.
  *
- * These counts cover ONLY the client model driving Tableau MCP. When the client calls `cabu-ask`,
+ * These counts cover ONLY the client model driving Tableau MCP. When the client calls `tableau-agent-ask`,
  * Tableau Agent runs its own LLM calls inside CES / the LLM gateway, and those tokens are NOT
  * included here. Arm B (and any arm C run that uses CABU) therefore under-reports total token
  * cost; compare it to arm A only together with server-side token counts.
@@ -168,7 +168,7 @@ export function toMarkdown(
     `Client model: \`${model}\`. Generated ${new Date().toISOString()}.`,
     '',
     '> Token counts are client-side only. They exclude the LLM tokens Tableau Agent spends server-side',
-    '> (CES / LLM gateway) when `cabu-ask` runs, so arms that use CABU under-report total cost.',
+    '> (CES / LLM gateway) when `tableau-agent-ask` runs, so arms that use CABU under-report total cost.',
     '',
     '| Arm | Runs | Case accuracy | Turn accuracy | Latency p50 | Latency p95 | Latency mean | Mean input tok | Mean output tok | Mean total tok | Mean requests | CABU usage | Wrong source | Errors | Timeouts |',
     '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
