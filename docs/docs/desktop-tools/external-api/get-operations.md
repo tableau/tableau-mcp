@@ -25,7 +25,7 @@ Session ID. Optional when a session is pinned or only one %product_name% instanc
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -37,6 +37,11 @@ Operation id, from the operations list. Omit it to list in-flight and recent ope
 
 `"op-42"`
 
+## Notes and caveats
+
+- **Documents are redacted and may be saved to a file.** With `operationId`, datasource credentials in `result.document` are redacted. When the document is over the inline size cap, it is replaced by `documentFile` (a cache file path) and `documentMessage`. Read that file with [`read-cached-xml`](../cache/read-cached-xml.md), using `startByte` and `endByte` to read a slice.
+- **Not read-only.** Writing that cache file is why the tool is not marked read-only.
+
 ## Related
 
-- [`get-diagnostics`](./get-diagnostics.md) — reads diagnostics for the running %product_name% instance.
+- [`get-diagnostics`](./get-diagnostics.md) — reads static diagnostics for the open workbook or a worksheet.

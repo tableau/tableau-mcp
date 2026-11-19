@@ -1,5 +1,11 @@
 # Authoring content pack — milestone-2 remote provider (Lane M6, design + skeleton)
 
+> **Historical note.** This design was not built. The `src/desktop/intelligence/` provider seam, the
+> `propose-template` and `validate-proposal` tools, and the `template-manifests/` resources do not
+> exist. Templates now ship as bookmarks under `src/desktop/data/templates/*.tbm`, slots are
+> inferred by `src/desktop/templates/inferSlots.ts`, and `bind-template` and `list-templates` live
+> under `src/tools/desktop/authoring/binder/`.
+
 Status: **design + skeleton only — NO network I/O.** This document defines the content-pack
 contract and the caching/verification state machine that milestone 2 will run behind the existing
 `AuthoringIntelligenceProvider` seam (`src/desktop/intelligence/provider.ts`). The real fetch

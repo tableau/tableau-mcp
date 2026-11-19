@@ -21,8 +21,8 @@ type ToolEntry = {
 
 const catalog = rawCatalog as ToolEntry[];
 const byDocPath = new Map(catalog.map((entry) => [entry.docPath, entry]));
-// Tool names are globally unique (they key docs/src/data/toolTaxonomy.json), so the
-// last route segment is a safe fallback join when a docPath does not match exactly.
+// Fallback join on the last route segment when a docPath does not match exactly. A name
+// shared by a Web and a Desktop tool resolves through byDocPath, never this fallback.
 const byToolName = new Map(catalog.map((entry) => [entry.toolName, entry]));
 
 type ListEntry = { docPath: string; title: string; summary: string };

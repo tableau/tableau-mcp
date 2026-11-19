@@ -33,7 +33,7 @@ anyone who wants to use the latest changes in between official releases. Develop
 have Git and Node installed.
 
 :::tip[Author in Tableau Studio using your locally built Tableau MCP]
-To get started with using the MCP for authoring in Tableau Studio (Tableau Desktop updated with AI-enabled Tableau Agent), see [Use Tableau Studio Headless](ext://studio/use-tableau-studio-headless.html).
+To get started with using the MCP for authoring in Tableau Studio (Tableau Desktop updated with AI-enabled Tableau Agent), see [Use Tableau Studio Headless](ext://studio/use-tableau-studio-headless.html). To build and run the Desktop authoring server, see [Desktop Authoring Server](desktop.md).
 :::
 
 ### Work with the source code

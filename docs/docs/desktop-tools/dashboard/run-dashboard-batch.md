@@ -8,7 +8,7 @@ sidebar_position: 9
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Applies a queue of prepared worksheets to the workbook open in %product_name% and then composes them into a dashboard, in one ordered pass (apply, then compose). Each queued worksheet is applied in the order you list it; the dashboard is composed last, from those worksheets plus any worksheets already in the workbook that you name. Optional `kpiWorksheetNames` supplies an ordered KPI strip. If a dashboard of that name already exists, the compose is refused unless you pass `replaceExisting: true`. The whole queue is checked against live state before the first write, and the pass stops at the first step that fails, reporting a per-step receipt of what landed.
+Applies a queue of prepared worksheets to the workbook open in %product_name% and then composes them into a dashboard, in one pass. The queued worksheets, in the order you list them, and the dashboard built from them plus any worksheets already in the workbook that you name, are posted together in a single apply. Optional `kpiWorksheetNames` supplies an ordered KPI strip. If a dashboard of that name already exists, the compose is refused unless you pass `replaceExisting: true`. The whole queue is checked against live state before the first write, and the result carries a per-step receipt.
 
 :::warning[Destructive]
 This tool is not read-only and not idempotent. It writes worksheets and a dashboard into the live %product_name% session. Passing `replaceExisting: true` deletes and rebuilds an existing dashboard that shares the name you pass.
@@ -16,14 +16,18 @@ This tool is not read-only and not idempotent. It writes worksheets and a dashbo
 
 ## APIs called
 
-This tool acts on the workbook open in the local %product_name% instance, not on the Tableau Cloud or Tableau Server REST API. Under the hood these are calls to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. There are no OAuth scopes: each call is authorized by the running %product_name% instance's per-session bearer token over the loopback interface. Every write in the batch — each worksheet and the dashboard — is a whole-workbook document apply, and each is preceded by a read and followed by a verifying read.
+This tool acts on the workbook open in the local %product_name% instance, not on the Tableau Cloud or Tableau Server REST API. Under the hood these are calls to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. There are no OAuth scopes: each call is authorized by the running %product_name% instance's per-session bearer token over the loopback interface. All queued worksheets and the dashboard land in one whole-workbook document apply.
 
-- Reads the open workbook document. A single read up front checks the queue against live state; further reads guard each apply against a workbook that changed underneath it and verify each apply afterwards.
+- Reads the open workbook document up front to check the queue against live state.
   - `GET /v<x>/workbook/document` — retrieve the open workbook document. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
-- Applies each queued worksheet in order, then the composed dashboard. Replacing an existing dashboard of the same name (`replaceExisting: true`) costs two applies (one to remove it, one to add its replacement).
+- With `replaceExisting: true` and an existing dashboard of that name, deletes the old dashboard natively, then re-reads the workbook document so the rebuild is checked against it.
+  - `POST /v<x>/workbook/dashboards/{id}:delete` — delete the existing dashboard. [API reference](ext://eca/reference/index.html#tag/Dashboards/operation/deleteDashboard)
+- Posts one document that carries every queued worksheet plus the dashboard, then reads the workbook back to verify it.
   - `POST /v<x>/workbook/document` — replace the open workbook from the posted document (`Content-Type: application/xml`). [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
-- Focuses the sheet each apply produced — the worksheet after a worksheet apply, the dashboard after the compose. This step is best-effort; a failure here does not fail the step that already landed.
-  - `POST /v<x>/workbook:goToSheet` — activate the sheet the apply produced. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/goToSheet)
+- Hides the start page, then focuses the dashboard once. This step is best-effort; a failure here does not fail the apply that already landed.
+  - `POST /v<x>/app:toggleStartPage` — hide the start page. Skipped on API versions before 0.2.11. [API reference](ext://eca/reference/index.html#tag/Application/operation/toggleStartPage)
+  - `GET /v<x>/workbook` — read the sheet inventory to resolve the dashboard id. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbook)
+  - `POST /v<x>/workbook:goToSheet` — activate the dashboard. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/goToSheet)
 - Claims each queued worksheet and checks it before any write: the worksheet content is validated, its name is checked for collisions, and it is confirmed to belong to this session and this %product_name% instance. All in-process; no API call.
 
 ## Required arguments
@@ -32,7 +36,7 @@ This tool acts on the workbook open in the local %product_name% instance, not on
 
 Name of the dashboard to compose once the queued worksheets are applied, 1–255 characters. If a dashboard of this name already exists, the compose is refused unless `replaceExisting` is `true`.
 
-The name must be unique among sheets: it is rejected before any write if it matches a worksheet already in the workbook or the title of a worksheet in the queue.
+The name must be unique among sheets: it is rejected before any write if it matches a worksheet already in the workbook or the title of a worksheet in the queue. A name that matches a story is refused with `"<name>" is a story, not a dashboard. Nothing was changed.` An existing dashboard is matched by normalized name and rebuilt under its existing spelling.
 
 #### Example
 
@@ -47,13 +51,13 @@ Identifier of the target %product_name% session, up to 64 characters. When omitt
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
 ### `artifactIds`
 
-Identifiers of prepared worksheets to apply before the dashboard is composed, in the order given. Up to 6 identifiers, each 1–255 characters. These are the identifiers returned when worksheets are built from templates; omit the argument to compose a dashboard purely from worksheets that are already in the workbook.
+Identifiers of prepared worksheets to apply before the dashboard is composed, in the order given. Up to 7 identifiers, each 1–255 characters. These are the identifiers returned when worksheets are built from templates; omit the argument to compose a dashboard purely from worksheets that are already in the workbook.
 
 The worksheet each identifier carries is named by the prepared worksheet itself — you do not name them here, and their names are appended after the names you pass in `existingWorksheetNames`.
 
@@ -76,7 +80,7 @@ Each prepared worksheet records the state of the workbook it was built against. 
 <hr />
 
 ### `existingWorksheetNames`
-Names of worksheets already in the open workbook to include on the dashboard, up to 6, each 1–255 characters. They are placed ahead of the worksheets that come from `artifactIds`.
+Names of worksheets already in the open workbook to include on the dashboard, up to 7, each 1–255 characters. They are placed ahead of the worksheets that come from `artifactIds`.
 
 Each name must match a worksheet that is present in the workbook and rendered — that is, one that has its own sheet tab. Names that do not resolve are reported before any write, and the message names them.
 
@@ -89,7 +93,7 @@ Each name must match a worksheet that is present in the workbook and rendered �
 <hr />
 
 ### `kpiWorksheetNames`
-Ordered KPI worksheet names to show in a KPI strip, 1–5 names, each 1–255 characters. Optional. Used with the `executive-summary` layout.
+Ordered KPI worksheet names to show in a KPI strip, up to 5 names, each 1–255 characters. Optional. An empty array is treated as omitted. Used with the `executive-summary` layout.
 
 #### Example
 
@@ -98,7 +102,7 @@ Ordered KPI worksheet names to show in a KPI strip, 1–5 names, each 1–255 ch
 ```
 
 :::note
-kpiWorksheetNames requires layoutType "executive-summary". Duplicate KPI worksheet name(s) are refused, and the message names each repeated name. Unknown KPI worksheet name(s) are refused when a name is not one of the worksheets being placed on the dashboard, and the message names each unknown name.
+kpiWorksheetNames requires layoutType "executive-summary". Duplicate KPI worksheet name(s) are refused, and the message names each repeated name. A KPI name that is not among the worksheets being placed is looked up among the live worksheets and added to the dashboard. A name with no live match is refused with `Missing live KPI worksheet name(s): "<name>". Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.`
 :::
 
 <hr />
@@ -165,10 +169,10 @@ Whether to delete and rebuild a dashboard that already has this `dashboardName`.
 
 ## Notes and caveats
 
-- **Combined worksheet budget.** The prepared worksheets and the named existing worksheets together must total between 1 and 6. A queue outside that range, or one whose worksheet names collide with each other, fails in preflight with nothing applied.
+- **Combined worksheet budget.** The prepared worksheets, the named existing worksheets and any KPI worksheets together must total between 1 and 7. A queue outside that range fails in preflight with `A dashboard batch requires 1-7 combined worksheets, including KPI roles.` and nothing applied.
 - Duplicate worksheet name(s) are refused in preflight, and the message names each repeated name. Nothing is applied.
-- **Preflight is all-or-nothing; the writes are not.** Everything checkable is checked before the first write, so a rejected queue leaves the workbook untouched and is safe to retry. Once writing starts, the batch stops at the first failure: the steps that already landed stay landed, the rest are reported as skipped, and the overall `applied` is `"partial"`.
-- **An uncertain step ends the batch.** If a worksheet apply cannot be confirmed — the request may have reached %product_name%, or its verification did not pass — the batch reports `applied: "unknown"` with `retrySafe: false` and does not start the next step. Inspect the live workbook before retrying rather than re-running the call.
+- **Preflight runs before any write.** Everything checkable is checked first, so a rejected queue leaves the workbook untouched, reports `applied: false` with `retrySafe: true`, and is safe to retry. The other steps are skipped with `Preflight failed before any writes.`
+- **A failure before any write is safe to retry; a failure after one is not.** A failure before the first dispatch reports `applied: false` with `retrySafe: true`. Any failure after the first dispatch reports `applied: "unknown"` with `retrySafe: false`. That includes the native delete of a replaced dashboard: if the batch stops after the delete but before the rebuild is sent, the result is still `"unknown"`. Inspect the live workbook before you retry, rather than re-running the call.
 - **Receipts are bounded.** Error text and verification messages in the receipt are truncated at 384 characters, so a long failure message from %product_name% is reported in abbreviated form.
 
 ## Example results
@@ -203,37 +207,29 @@ Whether to delete and rebuild a dashboard that already has this `dashboardName`.
 }
 ```
 
-### Stopped after a later worksheet failed
+### Refused in preflight
 
 ```json
 {
-  "applied": "partial",
-  "retrySafe": false,
+  "applied": false,
+  "retrySafe": true,
   "steps": [
     {
       "index": 0,
       "operation": "worksheet",
       "artifactId": "artifact-1",
-      "state": "applied",
-      "retrySafe": false,
-      "title": "Profit Trend",
-      "verification": { "ok": true, "status": "passed" }
+      "state": "skipped",
+      "retrySafe": true,
+      "reason": "Preflight failed before any writes."
     },
     {
       "index": 1,
-      "operation": "worksheet",
-      "artifactId": "artifact-2",
-      "state": "failed",
-      "retrySafe": true,
-      "error": "Template artifact \"artifact-2\" was already consumed. Build a fresh artifact."
-    },
-    {
-      "index": 2,
       "operation": "dashboard",
       "dashboardName": "Executive Overview",
-      "state": "skipped",
+      "state": "failed",
       "retrySafe": true,
-      "reason": "stopped after task 1 failed"
+      "stage": "existingDashboard",
+      "error": "Dashboard \"Executive Overview\" already exists and will not be rebuilt. replaceExisting is only for an explicit user request to rebuild or replace this dashboard."
     }
   ]
 }

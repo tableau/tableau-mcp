@@ -2,24 +2,32 @@
 sidebar_position: 1
 ---
 
-# Scaffold a Desktop data app
+# Scaffold Data App
 
 {/* availability */}
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as `simple-id`. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.
+Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live through the Extensions API. The workspace holds a workbook plus an extension package with `index.html`, a `src/app.js` starter for your query and visualization, and a `manifest.json`. The tool only scaffolds and names the app. It does not wire a datasource, write query logic, build, publish, or embed data. For the Desktop tool of the same name, see [Scaffold a Desktop data app](../../desktop-tools/worksheet/scaffold-data-app.md).
 
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.
 
-- Prepares a data app package and worksheetFile for an open sheet.
+- Reads the site's external allowed-origins list for extension packages. Requires the `tableau:packages:read` scope. A failed read is an error, not an empty list.
+  - `GET /api/exp/sites/{siteId}/packages/allowed-origins`
+- Returns the template zip: from S3 as a presigned URL when [`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) is set, otherwise as a file path on the server.
 
 ## Required arguments
 
 ### `datappName`
-Display name for the new data app.
+Name for the new data app. Used verbatim as the workspace folder name, the workbook (`.twb`) file name, and the extension display name, and slugified into the extension package id.
+
+1-100 characters: letters, digits, spaces, dot, underscore, or hyphen. It must start and end with a letter or digit and must not contain `..`.
+
+#### Example
+
+`"Sales Demo"`
 
 {/* tool-details */}
 ## Derived values
@@ -152,68 +160,16 @@ client steps.
 
 ## Example result (S3 output)
 
+The S3 result has the same `requestedOrigins` and `postUnzip` as the disk output. Only the transport
+field differs: `s3URL` replaces `filePath`.
+
 ```json
 {
   "datappName": "Sales Demo",
-  "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned...",
+  "s3URL": "https://example-bucket.s3.amazonaws.com/data-app-template.zip?X-Amz-Signature=...",
   "allowedOrigins": [],
-  "requestedOrigins": {
-    "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
-    "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
-  },
-  "postUnzip": {
-    "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
-    "edits": [
-      {
-        "file": "Data App Name/Data App Name.twb",
-        "replacements": [
-          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
-          { "find": "TODO App Name", "replace": "Sales Demo" },
-          { "find": "TODO Sheet Name", "replace": "Sales Demo" },
-          { "find": "TODO-MANIFEST-VERSION", "replace": "1.0.0" }
-        ]
-      },
-      {
-        "file": "Data App Name/Packages/TODO-MANIFEST-ID/extensions/data-app.trex",
-        "replacements": [
-          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
-          { "find": "TODO App Name", "replace": "Sales Demo" },
-          { "find": "TODO-MANIFEST-VERSION", "replace": "1.0.0" },
-          { "find": "TODO Author Name", "replace": "Tableau MCP" }
-        ]
-      },
-      {
-        "file": "Data App Name/Packages/TODO-MANIFEST-ID/manifest.json",
-        "replacements": [
-          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
-          { "find": "TODO App Name", "replace": "Sales Demo" },
-          { "find": "TODO-MANIFEST-VERSION", "replace": "1.0.0" },
-          { "find": "TODO Author Name", "replace": "Tableau MCP" }
-        ]
-      }
-    ],
-    "renames": [
-      { "from": "Data App Name/Packages/TODO-MANIFEST-ID", "to": "Data App Name/Packages/com.tableau.mcp.sales-demo" },
-      { "from": "Data App Name/Data App Name.twb", "to": "Data App Name/Sales Demo.twb" },
-      { "from": "Data App Name", "to": "Sales Demo" }
-    ]
-  }
+  "requestedOrigins": { "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json", "instructions": "..." },
+  "postUnzip": { "instructions": "...", "edits": ["..."], "renames": ["..."] }
 }
 ```
-
-## Arguments no longer accepted
-
-These arguments were described on an earlier page and are not accepted by the current tool.
-
-### `worksheetId`
-
-Stable External API worksheet id; stamped as `simple-id` for apply.
-
-### `datasourceId`
-
-External API datasource id.
-
-### `session`
-
-Session ID; optional if pinned or unique.
 {/* /tool-details */}

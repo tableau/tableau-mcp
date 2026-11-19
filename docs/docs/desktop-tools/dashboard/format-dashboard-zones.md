@@ -110,7 +110,7 @@ Session ID of the target %product_name% session; optional if pinned or unique. T
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -118,6 +118,7 @@ With no `session` given and no %product_name% instance running, or more than one
 
 ## Notes and caveats
 
+- **Requires %product_name% 2026.1 or newer.** On an older version the tool refuses before writing, with `Setting rounded dashboard zones requires Tableau Desktop 2026.1 or newer; this session reports <version>. Upgrade Desktop and retry.`
 - **A dashboard the tool cannot read is refused, not partially edited.** Selecting zones requires making sense of the whole dashboard layout, so a layout the tool cannot parse unambiguously — unbalanced tags, a zone with no id, two zones sharing an id, a zone outside the dashboard, more than one dashboard in the document — is refused with a `Malformed dashboard:` message before anything is written.
 - **A dashboard that changes mid-edit is refused rather than overwritten.** If the dashboard %product_name% reports on the pre-write re-read differs from the one the edit was computed against, the tool reports that the dashboard changed while rounded corners were being applied and asks you to re-read and retry. Nothing is written, so an edit made in %product_name% in the meantime is never clobbered.
 - **Success means the change was read back and matched.** The tool reports success only after re-reading the dashboard and confirming the requested radius on the exact targeted zones with the rest of the layout intact; that is what `verified` in the result records. When %product_name% accepts the write but the targeted zones, the dashboard structure, or its content do not survive the read-back, the tool says so instead of reporting success.

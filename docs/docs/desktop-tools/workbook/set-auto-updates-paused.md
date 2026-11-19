@@ -54,14 +54,37 @@ Session ID. Optional when a session is pinned or only one %product_name% instanc
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 
-- The result includes `sheet` (`id`, `kind`, and `name` as they were before the call) and a `message`. The flag is true only when the pause or resume has completed. When %product_name% accepts the request first, the flag is false and the message says the change is still being applied.
+- The result includes `sheet` (`id`, `kind`, and `name` as they were before the call) and a `message`. It also has a `paused` key when pausing or a `resumed` key when resuming. That key is `true` only when the change has completed. When %product_name% accepts the request first, it is `false` and the message says the change is still being applied. Resuming a dashboard also adds `alsoResumedContainedWorksheets: true`.
 - Pausing a sheet whose automatic updates are already paused, or resuming one that is already running, is safe to repeat. Resuming a dashboard re-enables every worksheet it contains, not only ones paused earlier.
+
+## Example results
+
+### Paused a worksheet
+
+```json
+{
+  "paused": true,
+  "sheet": { "id": "sheet-sales", "kind": "worksheet", "name": "Sales by Region" },
+  "message": "Paused auto-updates for worksheet \"Sales by Region\"."
+}
+```
+
+### Resumed a dashboard
+
+```json
+{
+  "resumed": true,
+  "sheet": { "id": "dash-exec", "kind": "dashboard", "name": "Executive Dashboard" },
+  "alsoResumedContainedWorksheets": true,
+  "message": "Resumed auto-updates for dashboard \"Executive Dashboard\" and every worksheet it contains."
+}
+```
 
 ## Related
 
-- [`refresh-auto-updates`](../tableau-agent/refresh-auto-updates.md) — runs pending automatic updates after a batched edit.
+- [`refresh-auto-updates`](refresh-auto-updates.md) — runs pending automatic updates after a batched edit.
 - [`get-sheets`](../worksheet/get-sheets.md) — lists sheet ids to pass as `sheetId`.

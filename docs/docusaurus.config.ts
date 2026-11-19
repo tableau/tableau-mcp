@@ -164,12 +164,18 @@ const config: Config = {
           { from: '/docs/category/extras', to: '/docs/extras' },
           { from: '/docs/category/service-tools', to: '/docs/category/web-tools' },
           { from: '/docs/category/external-client-tools', to: '/docs/category/desktop-tools' },
-          // The public site still serves this page under tools/workbooks. The workshop
-          // page lives with the other Desktop workbook tools, so the same-path alias
-          // from /docs/tools to /docs/web-tools does not cover it.
+          // Pages that moved to another category.
           {
-            from: '/docs/tools/workbooks/publish-workbook',
-            to: '/docs/desktop-tools/workbook/publish-workbook',
+            from: '/docs/desktop-tools/workbook/publish-workbook',
+            to: '/docs/web-tools/workbooks/publish-workbook',
+          },
+          {
+            from: '/docs/desktop-tools/data-source/get-app-info',
+            to: '/docs/desktop-tools/session/get-app-info',
+          },
+          {
+            from: '/docs/desktop-tools/tableau-agent/refresh-auto-updates',
+            to: '/docs/desktop-tools/workbook/refresh-auto-updates',
           },
         ],
         createRedirects(existingPath: string) {

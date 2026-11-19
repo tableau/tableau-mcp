@@ -11,7 +11,7 @@ sidebar_position: 11
 Renames a worksheet, dashboard, or storyboard in the workbook open in %product_name%, matching the target by name or id. The sheet keeps its id and kind; only the display name changes.
 
 :::note[Not read-only]
-This tool is not read-only and not idempotent. It changes a sheet name in the live %product_name% workbook, so repeating the call is not a no-op: a second call that still uses the previous name is refused because that name is already gone.
+This tool is not read-only and not idempotent. It changes a sheet name in the live %product_name% workbook, so repeating the call is not a no-op: a second call that still uses the previous name is refused because that name is already gone. A repeat by id, or any rename to the sheet's current name, succeeds with a message that the sheet is already named that and nothing was renamed.
 :::
 
 ## APIs called
@@ -44,7 +44,7 @@ Name or id of the worksheet, dashboard, or storyboard to rename. Type: string. T
 
 ### `name`
 
-The new display name for the matched sheet. Type: string. Range: 1 or more characters. An empty string is refused.
+The new display name for the matched sheet. Type: string. Leading and trailing whitespace is trimmed, and the trimmed name must be at least one character, so an empty or whitespace-only name is refused.
 
 #### Example
 
@@ -59,7 +59,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -98,6 +98,16 @@ With no `session` given and no %product_name% instance running, or more than one
   "sheet": { "id": "story-qbr", "kind": "storyboard", "name": "QBR 2026" },
   "previousName": "QBR Story",
   "message": "Renamed storyboard \"QBR Story\" to \"QBR 2026\"."
+}
+```
+
+### Already named (nothing renamed)
+
+```json
+{
+  "sheet": { "id": "sheet-sales", "kind": "worksheet", "name": "Regional Sales" },
+  "previousName": "Regional Sales",
+  "message": "The worksheet is already named \"Regional Sales\"; nothing was renamed."
 }
 ```
 

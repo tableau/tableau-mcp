@@ -133,7 +133,7 @@ End of the byte range to return (exclusive), as a non-negative integer offset in
 
 ## Example result
 
-On success the tool returns a text message with the byte count, the file path, an optional slice label identifying the selected element or byte range, and the XML content:
+On success the tool returns a text message with the character count, the file path, an optional slice label identifying the selected element or byte range, and the XML content:
 
 ```text
 Read 45 bytes from /path/to/cache/worksheet-Sales-abc123.xml (worksheet "Sales")
@@ -141,7 +141,9 @@ Read 45 bytes from /path/to/cache/worksheet-Sales-abc123.xml (worksheet "Sales")
 <worksheet name="Sales"><table><rows>[Sales]</rows></table></worksheet>
 ```
 
-When no selector is given, the slice label is omitted and the byte count reflects the full cached document, whose contents follow.
+When no selector is given, the slice label is omitted and the count reflects the full cached document, whose contents follow.
+
+The message says "bytes", but the number is the length of the returned text in characters. For non-ASCII XML it differs from the UTF-8 byte offsets used by `startByte` and `endByte`.
 
 ## Related
 

@@ -55,8 +55,8 @@ For Docker, building from source, and other self-hosted options, see the [Gettin
 
 ### Tableau Desktop Authoring Server
 
-The npm package is Web-only. The Desktop authoring server is a separate build from this repo; see
-[`docs/README.desktop.md`](docs/README.desktop.md) for the quickstart.
+The npm package is Web-only. The Desktop authoring server is a separate build from this repo; see the
+[Desktop quickstart](https://tableau.github.io/tableau-mcp/docs/getting-started/desktop).
 
 ## Standalone Binaries (SEA)
 

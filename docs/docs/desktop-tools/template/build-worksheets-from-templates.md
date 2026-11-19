@@ -10,7 +10,7 @@ sidebar_position: 3
 
 Builds one finished worksheet from a chart template and the fields of the workbook currently open in %product_name%, without changing anything in that workbook. You name the template, the worksheet title, the live datasource, and which live field fills each of the template's slots; the tool reads the open workbook, binds the template to those fields, and keeps the finished worksheet as an *artifact* — a prepared worksheet held by this MCP server and identified by the `artifactId` it returns.
 
-The artifact is the unit of work that a later step applies. Nothing appears in %product_name% until that `artifactId` is applied: [`apply-worksheet`](../worksheet/apply-worksheet.md) applies a single artifact, and `run-dashboard-batch` applies several artifacts in order and composes them into a dashboard.
+The artifact is the unit of work that a later step applies. Nothing appears in %product_name% until that `artifactId` is applied: [`apply-worksheet`](../worksheet/apply-worksheet.md) applies a single artifact, and [`run-dashboard-batch`](../dashboard/run-dashboard-batch.md) applies several artifacts in order and composes them into a dashboard.
 
 :::note[Read-only]
 Building an artifact reads the open workbook and writes nothing back to it, so the tool is marked read-only. It is not idempotent: each call mints a new artifact with a new id, even for identical arguments.
@@ -33,7 +33,7 @@ This tool reads the workbook open in the local %product_name% instance, communic
 
 ### `templateName`
 
-Identifier of the worksheet template to build from. It must name a template the library can read and one that is eligible for worksheet template application; an unknown, unreadable, or ineligible template is refused before the workbook is touched. Browse the available identifiers with [`list-templates`](../binder/list-templates.md), whose `pass1EligibleOnly` filter narrows the list to the templates this tool accepts.
+Identifier of the worksheet template to build from. It must name a template the library can read and one that is eligible for worksheet template application; an unknown, unreadable, or ineligible template is refused after the workbook read but before anything is built or stored, so no artifact is produced. Browse the available identifiers with [`list-templates`](../binder/list-templates.md), whose `pass1EligibleOnly` filter narrows the list to the templates this tool accepts.
 
 #### Example
 
@@ -75,7 +75,7 @@ Datasource "the name you passed" is not a unique live datasource name or caption
 
 ### `fieldMapping`
 
-An object mapping each of the template's slot identifiers to the exact `column_ref` returned by field resolution. Between 1 and 32 entries; an empty mapping, or one over 32 entries, is refused before anything is read.
+An object mapping each of the template's slot identifiers to the exact `column_ref` returned by field resolution. Between 1 and 32 entries; an empty mapping, or one over 32 entries, is refused after the workbook read but before anything is built or stored, so no artifact is produced.
 
 Field references are the fully qualified form the workbook uses, for example `[Sales Extract].[sum:Revenue:qk]`. A plainer field name or caption is also accepted, but only when it identifies exactly one field: a name that matches several is refused as ambiguous, with the qualified references it matched listed so you can pick one. Every mapping is checked against the schema of the workbook that was read, and any binding problem — a field the workbook does not contain, an ambiguous name, or a field whose role does not suit the slot it was mapped to — is reported per slot with nothing built.
 
@@ -102,19 +102,27 @@ The %product_name% session to build against, given as its process id. Omit it wh
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
 ### `derivationOverrides`
 
-Aggregation by slot.
+An object mapping a slot identifier to the aggregation to use for that slot instead of the template default. Each value is one of `sum`, `avg`, `min`, `max`, `cnt`, `ctd`, `med`, `std`, `stp`, `var`, or `vrp`.
+
+#### Example
+
+```json
+{ "derivationOverrides": { "field_base_2": "avg" } }
+```
 
 :::note
 An aggregation override for a slot cannot be honored when the binding emits a different aggregation than the one requested. The refusal names the requested aggregation, the slot, and the field reference the binding emits. Already aggregated fields retain their existing calculation. Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.
 
-- `Aggregation override '${}' for slot '${}' cannot be honored: the binding emits '${}'. Already aggregated fields retain their existing calculation. Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.`
+- `Aggregation override '<aggregation>' for slot '<slot>' cannot be honored: the binding emits '<field>'. Already aggregated fields retain their existing calculation. Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.`
 :::
+
+<hr />
 
 ### `topN`
 

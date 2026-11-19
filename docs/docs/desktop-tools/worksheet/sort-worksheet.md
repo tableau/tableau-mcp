@@ -8,7 +8,7 @@ sidebar_position: 3
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Applies or clears a sort on a field of a worksheet in the workbook open in %product_name%, without opening the sort dialog. Pass the field as it appears on the worksheet (for example `Sales`). Set `clearSort` to `true` to remove the sort on that field instead of applying one.
+Applies or clears a sort on a field of a worksheet in the workbook open in %product_name%, without opening the sort dialog. Pass a discrete field as it appears on the worksheet (for example `Region`). Measures are refused; to rank a dimension by a measure, use [`refine-worksheet`](refine-worksheet.md) with `sort_by_field`. Set `clearSort` to `true` to remove the sort on that field instead of applying one.
 
 ## APIs called
 
@@ -41,15 +41,12 @@ Name or id of the worksheet to sort. Type: string. The tool matches against the 
 - A name that matches more than one shelf field is refused with `Field "<field>" is ambiguous on worksheet "<worksheet>"'s shelves. Matching canonical fields: <fields>. Use one of those exact tokens. sort-worksheet did not send a request.`
 - A field that is on the shelf but whose type cannot be verified is refused with `Field "<field>" is on the worksheet shelf, but its field type could not be verified. sort-worksheet did not send a request.`
 - A quantitative or continuous shelf field is refused with `Field "<field>" resolves to a quantitative/continuous shelf field, but sort-worksheet only orders members of a discrete shelf field. To rank a dimension by a measure, use refine-worksheet with operation sort_by_field.` Use [`refine-worksheet`](refine-worksheet.md) for that ranking.
-- `Field "${}" is ambiguous on worksheet "${}"'s shelves. Matching canonical fields: ${}. Use one of those exact tokens. sort-worksheet did not send a request.`
-- `Field "${}" is on the worksheet shelf, but its field type could not be verified. sort-worksheet did not send a request.`
-- `Field "${}" resolves to a quantitative/continuous shelf field, but sort-worksheet only orders members of a discrete shelf field. To rank a dimension by a measure, use refine-worksheet with operation sort_by_field.`
 :::
 
 <hr />
 
 ### `fieldName`
-Field to sort by, given as the worksheet field name (for example `Sales`). Type: string. Range: 1 and above.
+Field to sort by, given as the worksheet field name of a discrete field (for example `Region`). Type: string. Range: 1 and above.
 
 #### Shelf match
 
@@ -62,7 +59,7 @@ A field that is not on the worksheet's shelves is refused before anything is sen
 #### Example
 
 ```json
-{ "fieldName": "Sales" }
+{ "fieldName": "Region" }
 ```
 
 ## Optional arguments
@@ -110,7 +107,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -128,8 +125,8 @@ With no `session` given and no %product_name% instance running, or more than one
 ```json
 {
   "worksheet": { "id": "sheet-sales", "name": "Sales by Region" },
-  "fieldName": "[Sample - Superstore].[sum:Sales:qk]",
-  "message": "Sorted worksheet \"Sales by Region\" by \"[Sample - Superstore].[sum:Sales:qk]\"."
+  "fieldName": "[Sample - Superstore].[none:Region:nk]",
+  "message": "Desktop accepted the request to sort worksheet \"Sales by Region\" by \"[Sample - Superstore].[none:Region:nk]\". The result was not independently verified."
 }
 ```
 
@@ -138,8 +135,8 @@ With no `session` given and no %product_name% instance running, or more than one
 ```json
 {
   "worksheet": { "id": "sheet-sales", "name": "Sales by Region" },
-  "fieldName": "[Sample - Superstore].[sum:Sales:qk]",
-  "message": "Cleared the sort on \"[Sample - Superstore].[sum:Sales:qk]\" in worksheet \"Sales by Region\"."
+  "fieldName": "[Sample - Superstore].[none:Region:nk]",
+  "message": "Desktop accepted the request to clear the sort on \"[Sample - Superstore].[none:Region:nk]\" in worksheet \"Sales by Region\". The result was not independently verified."
 }
 ```
 
@@ -148,7 +145,7 @@ With no `session` given and no %product_name% instance running, or more than one
 ```json
 {
   "worksheet": { "id": "sheet-sales", "name": "Sales by Region" },
-  "fieldName": "[Sample - Superstore].[sum:Sales:qk]",
+  "fieldName": "[Sample - Superstore].[none:Region:nk]",
   "message": "Requested sort on worksheet \"Sales by Region\"; Desktop is still applying it."
 }
 ```

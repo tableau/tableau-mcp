@@ -2,7 +2,7 @@
 
 The tool returns a presigned S3 `PUT` URL and an opaque `workbookUploadId`. Upload the raw workbook
 bytes to `uploadUrl` with the given `requiredHeaders` before `expiresAt`, then pass
-`workbookUploadId` to [Publish Workbook](../../desktop-tools/workbook/publish-workbook.md). The upload is not visible to Tableau
+`workbookUploadId` to [Publish Workbook](publish-workbook.md). The upload is not visible to Tableau
 until `publish-workbook` is called — this tool only stages the bytes.
 
 ## Worked example

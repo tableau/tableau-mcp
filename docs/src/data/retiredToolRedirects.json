@@ -1,133 +1,133 @@
 [
   {
     "from": "/docs/desktop-tools/dashboard/get-dashboard-xml",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/get-xml",
     "toolName": "get-dashboard-xml",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/dashboard/refresh-dashboard-auto-updates",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/refresh-auto-updates",
     "toolName": "refresh-dashboard-auto-updates",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/data-source/get-datasource-info",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/data-source/get-datasources",
     "toolName": "get-datasource-info",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/data-source/get-datasource-xml",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/get-xml",
     "toolName": "get-datasource-xml",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/data-source/get-workbook-inventory",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/worksheet/get-sheets",
     "toolName": "get-workbook-inventory",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/data-source/list-workbook-datasources",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/data-source/get-datasources",
     "toolName": "list-workbook-datasources",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/data-source/refresh-datasource-data",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/data-source/refresh-datasource",
     "toolName": "refresh-datasource-data",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/data-source/refresh-datasource-extract",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/data-source/refresh-datasource",
     "toolName": "refresh-datasource-extract",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/external-api/get-operation",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/external-api/get-operations",
     "toolName": "get-operation",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/external-api/list-operations",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/external-api/get-operations",
     "toolName": "list-operations",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/storyboard/get-storyboard-xml",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/get-xml",
     "toolName": "get-storyboard-xml",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/storyboard/list-storyboards",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/worksheet/get-sheets",
     "toolName": "list-storyboards",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/storyboard/refresh-storyboard-auto-updates",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/refresh-auto-updates",
     "toolName": "refresh-storyboard-auto-updates",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/get-workbook-xml",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/get-xml",
     "toolName": "get-workbook-xml",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/list-dashboards",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/worksheet/get-sheets",
     "toolName": "list-dashboards",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/list-worksheets",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/worksheet/get-sheets",
     "toolName": "list-worksheets",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/pause-auto-updates",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/set-auto-updates-paused",
     "toolName": "pause-auto-updates",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/redo-workbook",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/undo-redo-workbook",
     "toolName": "redo-workbook",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/resume-auto-updates",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/set-auto-updates-paused",
     "toolName": "resume-auto-updates",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/workbook/undo-workbook",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/undo-redo-workbook",
     "toolName": "undo-workbook",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/worksheet/get-sheet-info",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/worksheet/get-sheets",
     "toolName": "get-sheet-info",
     "reason": "retired in 2026-11"
   },
   {
     "from": "/docs/desktop-tools/worksheet/get-worksheet-xml",
-    "to": "/docs/release-notes",
+    "to": "/docs/desktop-tools/workbook/get-xml",
     "toolName": "get-worksheet-xml",
     "reason": "retired in 2026-11"
   },

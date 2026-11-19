@@ -1,6 +1,6 @@
 {
   "$schema": "https://tableau.github.io/tableau-mcp/schemas/toolTaxonomy.json",
-  "$comment": "Docs category assignment for every documented tool. This is the single source of truth for where a tool page lives and how its category is labelled; it is deliberately NOT derived from the source tree, so a source reorganization (such as the desktop api/ + authoring/ + local/ restructure) does not move or relabel a single page. Adding a tool here is an editorial decision — the sync tooling proposes a category for a new tool but never invents one.",
+  "$comment": "Docs category assignment for every documented tool. This is the single source of truth for where a tool page lives and how its category is labelled; it is deliberately NOT derived from the source tree, so a source reorganization (such as the desktop api/ + authoring/ + local/ restructure) does not move or relabel a single page. Adding a tool here is an editorial decision — the sync tooling proposes a category for a new tool but never invents one. A tool registered in both sections (same name, different Web and Desktop tools) maps to an array with one placement per section.",
   "version": 1,
   "sections": {
     "web-tools": {
@@ -187,7 +187,7 @@
       "folder": "binder",
       "label": "Binder",
       "position": 10,
-      "description": "Tools for listing, proposing, validating, and binding reusable authoring templates.",
+      "description": "Tools for listing and binding reusable authoring templates.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -226,7 +226,7 @@
       "section": "desktop-tools",
       "folder": "dialogs",
       "label": "Dialogs",
-      "position": 16,
+      "position": 13,
       "description": "Tools for listing modal dialogs in Tableau Studio and invoking a specific dialog action.",
       "collapsed": null,
       "hasOverview": false
@@ -237,7 +237,7 @@
       "folder": "external-api",
       "label": "External API",
       "position": 15,
-      "description": "Passthrough tools that expose the Tableau Studio external API surface (site, dashboard, worksheet, and health info).",
+      "description": "Tools that report the Tableau Studio External API capabilities, diagnostics, and operations.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -267,7 +267,7 @@
       "folder": "session",
       "label": "Session",
       "position": 1,
-      "description": "Tools for discovering local Tableau Studio instances and detecting user-made changes for the current session.",
+      "description": "Tools for discovering local Tableau Studio instances and reading app and session state.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -287,7 +287,7 @@
       "folder": "tableau-agent",
       "label": "Tableau Agent",
       "position": 17,
-      "description": "Tools that control Tableau Agent chrome: refreshing auto-updates and the start-page visibility.",
+      "description": "Tools that control Tableau Agent chrome, such as Start Page visibility.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -297,7 +297,7 @@
       "folder": "template",
       "label": "Templates",
       "position": 11,
-      "description": "Tools for injecting XML templates into the open workbook.",
+      "description": "Tools for building worksheet artifacts from chart templates, to apply later with apply-worksheet or run-dashboard-batch.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -307,7 +307,7 @@
       "folder": "workbook",
       "label": "Workbooks",
       "position": 2,
-      "description": "Tools for reading and applying workbook XML, listing worksheets and dashboards, and activating sheets in the open workbook.",
+      "description": "Tools for reading and applying workbook XML, saving, exporting, and undoing changes, managing auto-updates, and activating sheets in the open workbook.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -460,8 +460,8 @@
       "sidebarPosition": 1
     },
     "get-app-info": {
-      "category": "desktop-tools/data-source",
-      "sidebarPosition": 7
+      "category": "desktop-tools/session",
+      "sidebarPosition": 5
     },
     "get-capabilities": {
       "category": "desktop-tools/external-api",
@@ -664,8 +664,8 @@
       "sidebarPosition": 4
     },
     "publish-workbook": {
-      "category": "desktop-tools/workbook",
-      "sidebarPosition": 18
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 6
     },
     "query-admin-insights": {
       "category": "web-tools/admin-insights",
@@ -692,8 +692,8 @@
       "sidebarPosition": 5
     },
     "refresh-auto-updates": {
-      "category": "desktop-tools/tableau-agent",
-      "sidebarPosition": 1
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 18
     },
     "refresh-datasource": {
       "category": "desktop-tools/data-source",
@@ -755,10 +755,16 @@
       "category": "desktop-tools/workbook",
       "sidebarPosition": 13
     },
-    "scaffold-data-app": {
-      "category": "web-tools/data-apps",
-      "sidebarPosition": 1
-    },
+    "scaffold-data-app": [
+      {
+        "category": "web-tools/data-apps",
+        "sidebarPosition": 1
+      },
+      {
+        "category": "desktop-tools/worksheet",
+        "sidebarPosition": 12
+      }
+    ],
     "search-content": {
       "category": "web-tools/content-exploration",
       "sidebarPosition": 1

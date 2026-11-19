@@ -15,7 +15,7 @@ Closes the current authoring/eval episode for a %product_name% session, recordin
 - `abandoned` — the episode was dropped before completion.
 
 :::note
-The authoring-episode lifecycle tools are registered only when Desktop eval episode logging is enabled on the MCP server. When that logging is off, this tool is not advertised to the MCP client.
+The authoring-episode lifecycle tools are registered only when episode-event recording is enabled on the MCP server — set [`EPISODE_EVENTS`](../../configuration/mcp-config/env-vars.md#episode_events)`=on`. When it is off, this tool is not advertised to the MCP client.
 :::
 
 ## APIs called
@@ -44,18 +44,18 @@ The episode's terminal status. One of `succeeded`, `failed`, or `abandoned`.
 ## Optional arguments
 
 ### `session`
-The %product_name% session (its instance id, e.g. `studio-1`) whose episode should be ended. Optional: when omitted, the pinned session is used if one is set; otherwise the tool auto-resolves to the sole running %product_name% instance.
+The %product_name% session (its instance id, e.g. `77700`) whose episode should be ended. Optional: when omitted, the pinned session is used if one is set; otherwise the tool auto-resolves to the sole running %product_name% instance.
 
 #### Example
 
-`"studio-1"`
+`"77700"`
 
 #### Session resolution
 
 If no `session` is given and there is no pinned session, the tool resolves the session automatically only when exactly one %product_name% instance is running. If none are running, or more than one is, it returns an error asking you to name the session explicitly.
 
 :::note
-If that resolved session has no open episode, the tool refuses: No active episode for session 'studio-1', with the resolved session id in the quotes.
+If that resolved session has no open episode, the tool refuses: No active episode for session '77700', with the resolved session id in the quotes.
 :::
 
 <hr />

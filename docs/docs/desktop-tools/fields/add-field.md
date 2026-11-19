@@ -17,19 +17,22 @@ Places a field on a worksheet shelf in the open %product_name% workbook — the 
 This tool edits a cached copy of the worksheet on the local filesystem and does not apply the change to the open workbook; run [`apply-worksheet`](../worksheet/apply-worksheet.md) to write the edit back.
 
 :::note[Not read-only]
-Although this is a single edit step, it is not read-only: it writes the modified worksheet XML to a local cache file (plus a small companion file recording which %product_name% session produced it). Chain multiple `add-field` edits on the same cache file, then apply them once with [`apply-worksheet`](../worksheet/apply-worksheet.md).
+Although this is a single edit step, it is not read-only: it writes the modified worksheet XML to a local cache file. When it fetches a sheet fresh or reads the workbook live, it also writes a small companion file recording which %product_name% session produced that cache file. Chain multiple `add-field` edits on the same cache file, then apply them once with [`apply-worksheet`](../worksheet/apply-worksheet.md).
 :::
 
 ## APIs called
 
-This tool acts on the worksheet in the open %product_name% workbook, communicating with %product_name% directly rather than calling the Tableau Cloud or Server REST API. Under the hood any calls are to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. These loopback calls carry **no OAuth scopes**; each is authorized by the running %product_name% instance's **per-session bearer token** over the loopback interface. The field edit itself is performed in-process on a local cache file, so the %ecapi_name% is reached only on first use — when you pass a `worksheetName` that has not yet been cached and the sheet must be fetched from the open workbook.
+This tool acts on the worksheet in the open %product_name% workbook, communicating with %product_name% directly rather than calling the Tableau Cloud or Server REST API. Under the hood any calls are to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. These loopback calls carry **no OAuth scopes**; each is authorized by the running %product_name% instance's **per-session bearer token** over the loopback interface. The field edit itself is performed in-process on a local cache file. The %ecapi_name% is reached to resolve `worksheetName`, to fetch a sheet that has no open edit buffer, and to read the live workbook whenever `workbookFile` is omitted.
 
-- Fetches the named worksheet from the open workbook and mints a local cache file for it — only when `worksheetName` is given without a `worksheetFile`. Requires a workbook to be open in the target session, and the name must resolve to exactly one worksheet.
+- Resolves `worksheetName` to a worksheet id — whenever `worksheetName` is given, even alongside `worksheetFile`. Requires a workbook to be open in the target session, and the name must resolve to exactly one worksheet.
   - `GET /v<x>/workbook/worksheets` — list worksheets to resolve the name to an id. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/listWorksheets)
+- Fetches the named worksheet and mints a local cache file for it, with a companion file recording the %product_name% session — only when `worksheetName` is given without `worksheetFile` and the sheet has no open edit buffer.
   - `GET /v<x>/workbook/worksheets/{id}/document` — read that worksheet's XML. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetDocument)
+- Reads the live workbook so the field's datasource and column can be checked — on every call that omits `workbookFile`. The XML is written to a workbook cache file with a companion file recording the %product_name% session.
+  - `GET /v<x>/workbook/document` — read the current workbook XML. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
 - Places the field on the chosen shelf or encoding, checks the result, and saves it — no %ecapi_name% call.
   - Field placement and well-formed-XML validation run in-process (not an API call).
-  - Reading the cached worksheet file (and an optional workbook file) and writing the edited XML back — plus a companion file recording the %product_name% session — are local filesystem operations (no API call).
+  - Reading the cached worksheet file (and an optional workbook file) and writing the edited XML back are local filesystem operations (no API call).
 
 ## Required arguments
 
@@ -51,13 +54,17 @@ When `target` is `encoding`, `encodingType` is required.
 <hr />
 
 ### `columnRef`
-Reference to the field to add, as it appears in the worksheet or workbook XML (for example, a datasource-qualified column reference).
+Datasource-qualified reference to the field to add, in the form `[Datasource].[derivation:Column:type]`. Get the exact value from [`resolve-field`](./resolve-field.md) or [`list-available-fields`](./list-available-fields.md).
 
 #### Example
 
 ```json
 { "columnRef": "[Sample - Superstore].[sum:Profit:qk]" }
 ```
+
+:::note
+Any other form is refused with `columnRef "<value>" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. [Sample - Superstore].[sum:Sales:qk].` followed by `Did you mean: <refs>?` with up to three of the closest references in the workbook, or, when there are none, a pointer to `resolve-field` and `list-available-fields`.
+:::
 
 ## Optional arguments
 
@@ -66,7 +73,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -75,7 +82,7 @@ Display name of the worksheet to edit. Name-only calls reuse the open edit buffe
 
 #### Cached on first use
 
-When you pass `worksheetName` without a `worksheetFile`, the tool reads the sheet from the open workbook (see [APIs called](#apis-called)) and writes it to a new cache file before editing. The result includes that file path, so you can stack more edits by passing it as `worksheetFile` on follow-up calls before a single [`apply-worksheet`](../worksheet/apply-worksheet.md). If both `worksheetName` and `worksheetFile` are given, `worksheetFile` wins and no fetch happens.
+When you pass `worksheetName` without a `worksheetFile`, the tool reads the sheet from the open workbook (see [APIs called](#apis-called)) and writes it to a new cache file before editing. The result includes that file path, so you can stack more edits by passing it as `worksheetFile` on follow-up calls before a single [`apply-worksheet`](../worksheet/apply-worksheet.md). If both `worksheetName` and `worksheetFile` are given, the edit is made to `worksheetFile` and no sheet is fetched, but `worksheetName` is still resolved through `GET /v<x>/workbook/worksheets` and must match a worksheet.
 
 #### Example
 
@@ -123,7 +130,7 @@ Optional position at which to insert the field within the target shelf or encodi
 <hr />
 
 ### `workbookFile`
-Optional filesystem path to a cached workbook XML file returned by field resolution. When omitted, the tool reads the workbook live. If the file is missing or unreadable, the edit proceeds without it.
+Optional filesystem path to a cached workbook XML file returned by field resolution. When omitted, the tool reads the workbook live on every call. If the file is missing or unreadable, the call fails with a file-not-found error and nothing is edited.
 
 #### Example
 

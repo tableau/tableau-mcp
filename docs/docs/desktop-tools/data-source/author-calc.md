@@ -11,7 +11,7 @@ sidebar_position: 3
 Authors a new calculated field — a caption plus a Tableau formula — into a datasource of the workbook open in %product_name%. The field is added to the datasource definition itself, so you can then reference it by caption when building a worksheet or dashboard.
 
 :::note[Not read-only]
-This tool modifies the workbook: it adds a new calculated field to the open %product_name% workbook. It is not read-only and not idempotent — each call authors a new field with a freshly generated internal name.
+This tool modifies the workbook: it adds a new calculated field to the open %product_name% workbook. It is not read-only. A retry with the same caption, formula, role, and datatype returns the existing field without writing; a different definition under an existing caption is refused as a caption collision.
 :::
 
 ## APIs called
@@ -20,7 +20,11 @@ This tool acts on the workbook open in the local %product_name% instance, not on
 
 - Reads the current workbook's XML from the running %product_name% session.
   - `GET /v<x>/workbook/document` — read the open workbook's XML. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
-- Builds the new calculated field and validates the edited document before anything is sent to %product_name% — this includes checking the caption and formula, resolving caption references, choosing the target datasource, and confirming the edit is a legal whole-document change. Done in-process (not an API call).
+- Checks the caption, resolves caption references, chooses the target datasource, and assembles the edited document. Done in-process (not an API call). When an identical field already exists, the tool returns it here and makes no further calls.
+- Lists the workbook's datasources to resolve the target datasource's id.
+  - `GET /v<x>/workbook/datasources` — list the open workbook's datasources. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/listWorkbookDatasources)
+- Validates the formula with %product_name%'s calculated-field validator. An invalid formula is refused with %product_name%'s message, and nothing is applied.
+  - `POST /v<x>/workbook/datasources/{id}:validateCalculatedField` — validate the formula against the target datasource. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/validateDatasourceCalculatedField)
 - Applies the edited workbook document to the open %product_name% workbook, replacing it.
   - `POST /v<x>/workbook/document` — replace the open workbook from the posted document (`Content-Type: application/xml`). [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
 - Reads the workbook back to confirm the new field's internal name and caption are present; if they are not, the tool reports that the load completed but did not apply.
@@ -69,7 +73,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -123,7 +127,7 @@ If the workbook has more than one datasource (excluding the built-in `Parameters
 `"Superstore"`
 
 :::note
-- `Datasource "${}" has no id in Tableau Desktop's datasource list.`
+- `Datasource "Superstore" has no id in Tableau Desktop's datasource list.`
 :::
 
 ## Notes and caveats
@@ -143,7 +147,7 @@ If the workbook has more than one datasource (excluding the built-in `Parameters
   "calcName": "[Calculation_1700000000000]",
   "caption": "Profit Margin",
   "datasource": "Superstore",
-  "hint": "reference it by caption in a bind-template ask (name the caption plus a chart shape), auto_apply: true"
+  "hint": "reference it by caption in a build-worksheets-from-templates fieldMapping (name the caption plus a chart shape)"
 }
 ```
 

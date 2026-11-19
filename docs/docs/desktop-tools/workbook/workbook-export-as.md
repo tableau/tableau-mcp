@@ -83,7 +83,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -115,6 +115,6 @@ With no `session` given and no %product_name% instance running, or more than one
 
 ## Related
 
-- [`save-workbook`](./save-workbook.md) — saves the open workbook in place (or a copy) rather than exporting a separate file.
+- [`save-workbook`](./save-workbook.md) — saves the open workbook in place, or Save As to a new path that becomes the open document, rather than exporting a separate file.
 - [`export-dashboard-image`](../dashboard/export-dashboard-image.md) — renders one dashboard as an image instead of exporting the whole workbook to a file.
 - [`export-worksheet-image`](../worksheet/export-worksheet-image.md) — renders one worksheet as an image instead of exporting the whole workbook to a file.

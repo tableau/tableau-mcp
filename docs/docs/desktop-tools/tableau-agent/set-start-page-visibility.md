@@ -41,7 +41,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -83,5 +83,5 @@ With no `session` given and no %product_name% instance running, or more than one
 
 ## Related
 
-- [`get-app-info`](../data-source/get-app-info.md) — reads application information for the running instance, including whether the Start Page is currently visible.
+- [`get-app-info`](../session/get-app-info.md) — reads application information for the running instance, including whether the Start Page is currently visible.
 - [`list-instances`](../session/list-instances.md) — lists running %product_name% sessions so you can pass a `session` when more than one instance is connected.

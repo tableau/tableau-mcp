@@ -18,6 +18,8 @@ This tool reads from the workbook open in the running %product_name% instance, n
   - `GET /v<x>/workbook/worksheets` — list the worksheets in the open workbook. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/listWorksheets)
 - Reads the aggregated summary data (the rows and columns on the view) for the resolved worksheet, honoring the row cap and optional field selection. Authorized by the session's loopback bearer token.
   - `GET /v<x>/workbook/worksheets/{id}/summaryData` — read the worksheet's summary data. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetSummaryData)
+- When the first read returns no columns, renders the worksheet once to materialize it, then reads the summary again.
+  - `GET /v<x>/workbook/worksheets/{id}/image` — render the worksheet as a PNG. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/exportWorksheetImage)
 
 ## Optional arguments
 
@@ -28,7 +30,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -71,7 +73,7 @@ Maximum number of rows to return. A positive integer. Defaults to `200`, and val
 <hr />
 
 ### `columns`
-List of field names to restrict the returned columns (for example `"Region"`). When omitted, all fields on the view are returned. Use exact column names this worksheet already returns.
+List of field names to restrict the returned columns (for example `"Region"`). When omitted, all fields on the view are returned. Use column names this worksheet already returns.
 
 #### Example
 
@@ -80,16 +82,18 @@ List of field names to restrict the returned columns (for example `"Region"`). W
 ```
 
 :::note
-Each name has to match a column the worksheet returned. A name that matches more than one returned column is refused with `Requested summary column "<name>" matches more than one returned column: <columns>. Available columns: <columns>.` A name that was not returned is refused with `Requested summary column "<name>" was not returned by the worksheet. Available columns: <columns>.`
+Each name has to match a column the worksheet returned. An exact match is tried first, then a case-insensitive match that ignores brackets and an aggregation wrapper, so `Sales` matches `SUM(Sales)`. A name that matches more than one returned column is refused with `Requested summary column "<name>" matches more than one returned column: <columns>. Available columns: <columns>.` A name that was not returned is refused with `Requested summary column "<name>" was not returned by the worksheet. Available columns: <columns>.`
 
-- `Requested summary column "${}" ${}. Available columns: ${}`
-- `Requested summary column "${}" matches more than one returned column: ${}. Available columns: ${}`
+- `Requested summary column "<name>" was not returned by the worksheet. Available columns: <columns>`
+- `Requested summary column "<name>" matches more than one returned column: <columns>. Available columns: <columns>`
 :::
 
 ## Notes and caveats
 
 - **Only fields on the view are carried.** The summary data contains just the fields present on the worksheet; a field that is not on the view (for example, one not yet added to Detail on the marks card) will not appear in the columns or rows. Add the field to the view first, then re-read.
-- **`shape` is a convenience summary.** The result includes a `shape` string such as `"2 rows x 3 columns"` describing the returned `summaryData`; it reflects the rows actually returned after the `maxRows` cap and any `columns` selection are applied.
+- **`shape` is a convenience summary.** The result includes a `shape` string such as `"2 rows x 2 columns"` describing the returned `summaryData`; it reflects the rows actually returned after the `maxRows` cap and any `columns` selection are applied.
+- **Row order is unspecified.** `rowOrder` reports that the rows are usable to read values back, not to verify a visual sort.
+- **Selection is ignored.** `readScope` reports that the read covers the whole worksheet, regardless of which marks are selected.
 
 ## Example result
 
@@ -99,16 +103,21 @@ Each name has to match a column the worksheet returned. A name that matches more
 {
   "worksheet": { "id": "sheet-sales", "name": "Sales by Region" },
   "maxRows": 50,
-  "shape": "2 rows x 3 columns",
+  "shape": "2 rows x 2 columns",
+  "rowOrder": {
+    "status": "unspecified",
+    "usableFor": "value_readback",
+    "notUsableFor": "visual_sort_verification"
+  },
+  "readScope": { "target": "worksheet", "ignoreSelection": true },
   "summaryData": {
     "columns": [
       { "name": "Region", "dataType": "string" },
-      { "name": "Sales", "dataType": "real" },
-      { "name": "Profit", "dataType": "real" }
+      { "name": "Sales", "dataType": "real" }
     ],
     "rows": [
-      ["West", 1200, 240],
-      ["East", 900, 120]
+      ["West", 1200],
+      ["East", 900]
     ]
   }
 }
