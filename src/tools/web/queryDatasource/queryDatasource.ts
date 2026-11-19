@@ -332,13 +332,16 @@ export const getQueryDatasourceTool = (
 // Logged args feed debug logs and activity telemetry, which don't mask passwords. Keep the LUID and
 // workbookDatasourceId of the datasource envelope and redact every other key in it.
 // The result is only logged, so the cast back to T is safe.
-function getLoggableArgs<T extends { datasource?: unknown }>(args: T): T {
+function getLoggableArgs<T extends { datasourceLuid?: unknown; datasource?: unknown }>(args: T): T {
   const { datasource, ...rest } = args;
   if (typeof datasource !== 'object' || datasource === null || Array.isArray(datasource)) {
     return (datasource === undefined ? rest : { ...rest, datasource: '[redacted]' }) as T;
   }
+  const envelopeLuid = 'datasourceLuid' in datasource ? datasource.datasourceLuid : undefined;
   return {
     ...rest,
+    // The activity log reads the top-level datasourceLuid.
+    datasourceLuid: rest.datasourceLuid ?? envelopeLuid,
     datasource: Object.fromEntries(
       Object.entries(datasource).map(([key, value]) => [
         key,

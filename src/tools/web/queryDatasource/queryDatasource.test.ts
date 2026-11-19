@@ -1418,6 +1418,10 @@ describe('queryDatasourceTool', () => {
         expect(calls.length).toBeGreaterThan(0);
         expect(JSON.stringify(calls)).not.toContain(password);
       }
+      // An envelope-only LUID still identifies the datasource in the activity log.
+      expect(recordToolCallSpy.mock.calls[0][0]).toMatchObject({
+        object: { type: 'datasource', luid: datasourceLuid },
+      });
     });
   });
 
