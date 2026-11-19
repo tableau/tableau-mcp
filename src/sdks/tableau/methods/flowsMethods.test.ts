@@ -1,8 +1,62 @@
+import type { AxiosAdapter } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import FlowsMethods from './flowsMethods.js';
 
 describe('FlowsMethods', () => {
+  describe('queryFlowsForSite', () => {
+    it('uses the guarded site-flows route with a single-item page', async () => {
+      const adapter = vi.fn<AxiosAdapter>(async (config) => ({
+        data: { pagination: { pageNumber: 1, pageSize: 1, totalAvailable: 0 }, flows: {} },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }));
+      const methods = new FlowsMethods(
+        'http://test/api/3.30',
+        { type: 'Bearer', token: 'test' },
+        { adapter },
+      );
+
+      await expect(
+        methods.queryFlowsForSite({
+          siteId: 'site-id',
+          pageSize: 1,
+        }),
+      ).resolves.toMatchObject({ flows: [] });
+      expect(adapter.mock.calls[0][0]).toMatchObject({
+        method: 'get',
+        url: '/sites/site-id/flows',
+        params: { pageSize: 1 },
+      });
+    });
+
+    it.each([{ flows: [] }, { flows: [{ id: 'flow-id', name: 'My Flow' }] }])(
+      'queries one page of visible flows and normalizes the response: $flows',
+      async ({ flows }) => {
+        const queryFlowsForSite = vi.fn().mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 1, totalAvailable: flows.length },
+          flows: flows.length ? { flow: flows } : {},
+        });
+        const methods = new FlowsMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+        Object.assign(methods, { _apiClient: { queryFlowsForSite } });
+
+        const result = await methods.queryFlowsForSite({
+          siteId: 'site-id',
+          pageSize: 1,
+        });
+
+        expect(result.flows).toEqual(flows);
+        expect(queryFlowsForSite).toHaveBeenCalledWith({
+          params: { siteId: 'site-id' },
+          queries: { filter: undefined, sort: undefined, pageSize: 1, pageNumber: undefined },
+          headers: { Authorization: 'Bearer test' },
+        });
+      },
+    );
+  });
+
   describe('runFlowNow', () => {
     function makeMethods(apiClient: unknown): FlowsMethods {
       const flowsMethods = new FlowsMethods('http://test', { type: 'Bearer', token: 'test' }, {});

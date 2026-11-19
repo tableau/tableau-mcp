@@ -695,6 +695,37 @@ describe('server', () => {
   ];
   const writeFlowToolNames = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
+  it.each([true, false])(
+    'registers Flow tools only when UserCanViewFlows is met: %s',
+    async (available) => {
+      vi.stubEnv('FLOW_READ_TOOLS_ENABLED', 'true');
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'enforce-registration-conditions',
+      );
+      mocks.mockCheckRegistrationConditions.mockImplementation(async (conditions) =>
+        conditions.includes('UserCanViewFlows') && !available
+          ? { registrationConditionsMet: false, failingCondition: 'UserCanViewFlows' }
+          : { registrationConditionsMet: true },
+      );
+      const server = getServer();
+      await server.registerTools();
+      const names: string[] = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of [...readFlowToolNames, ...writeFlowToolNames]) {
+        expect(names.includes(name)).toBe(available);
+      }
+      expect(names).toContain('list-datasources');
+      expect(
+        mocks.mockCheckRegistrationConditions.mock.calls.filter(([conditions]) =>
+          conditions.includes('UserCanViewFlows'),
+        ),
+      ).toHaveLength(9);
+      if (!available) expect(getInstructions(server)).toContain('access to flows');
+    },
+  );
+
   const flowFlag = (readFlag: boolean, writeFlag: boolean) => (featureName: string) =>
     (featureName === 'flow-read-tools' && readFlag) ||
     (featureName === 'flow-write-tools' && writeFlag);
