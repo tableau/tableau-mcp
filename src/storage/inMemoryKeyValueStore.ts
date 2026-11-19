@@ -6,19 +6,16 @@ const MAX_SIGNED_INT32 = 2 ** 31 - 1;
 const REFRESH_MARGIN_MS = 60_000;
 const CHUNK_MS = MAX_SIGNED_INT32 - REFRESH_MARGIN_MS;
 
-/** In-memory records with per-write expiration and optional capacity bounds. */
+/** In-memory records with per-write expiration. */
 export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
   private readonly map: ExpiringMap<string, V>;
   private readonly refreshTimers = new Map<string, NodeJS.Timeout>();
 
-  constructor(options: { maxSize?: number } = {}) {
+  constructor() {
     this.map = new ExpiringMap<string, V>({
       // Every write supplies its own TTL; this default is never used by set().
       defaultExpirationTimeMs: 1,
-      maxSize: options.maxSize,
-      // Every ExpiringMap removal (natural expiry, maxSize eviction, explicit delete) routes through
-      // delete(), so this hook guarantees the parallel refreshTimers entry is cleared too -- including
-      // maxSize evictions that ExpiringMap initiates internally and this store could not otherwise see.
+      // Clear the long-TTL rearm timer when an entry expires or is explicitly removed.
       onDelete: (key) => this.clearRefreshTimer(key),
     });
   }
