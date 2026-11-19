@@ -37,6 +37,13 @@ The MCP transport type to use for the server.
 
 <hr />
 
+## `HTTP_HOST`
+
+The HTTP bind address. When unset or blank, the web server listens on all interfaces. When the
+Desktop server serves HTTP and the spawner does not set this, it binds to `127.0.0.1`.
+
+<hr />
+
 ## `AUTH`
 
 The method the MCP server uses to authenticate to the Tableau REST APIs.
@@ -319,7 +326,7 @@ This means that:
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
 
 Disables requests that are made to the VizQl Data Service for validating queries in the
-[`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
+[`query-datasource`](../../web-tools/data-qna/query-datasource.md) tool. Does not disable the ability to
 query the datasource. This variable is site and request overridable, see
 [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
@@ -331,21 +338,14 @@ query the datasource. This variable is site and request overridable, see
 
 ## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
 
-Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and replaced by
-`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
-
-Disable validation of SET and MATCH filter values in the
-[`query-datasource`](../../tools/data-qna/query-datasource.md) tool.
-
-- Default: `false`
-- When `true`, skips the validation that checks if filter values exist in the target field.
+Removed; use [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](#disable_query_datasource_validation_requests).
 
 <hr />
 
 ## `DISABLE_METADATA_API_REQUESTS`
 
 Disables `graphql` requests to the Tableau Metadata API in the
-[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool. This variable is
+[`get-datasource-metadata`](../../web-tools/data-qna/get-datasource-metadata.md) tool. This variable is
 site and request overridable, see [Site Settings](site-settings.md) and
 [Request Overrides](request-overrides.md).
 
@@ -353,7 +353,7 @@ site and request overridable, see [Site Settings](site-settings.md) and
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
   metadata.
 - Set this to `true` if you are using the
-  [`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool and the Tableau
+  [`get-datasource-metadata`](../../web-tools/data-qna/get-datasource-metadata.md) tool and the Tableau
   Metadata API is not enabled on your Tableau Server.
 
 <hr />
@@ -462,6 +462,68 @@ FEATURE_GATE_PROVIDER_CONFIG='{"module":"./providers/cloud-feature-gate.js"}'
 
 <hr />
 
+## `ACTIVITY_LOG_PROVIDER`
+
+Selects the activity log provider. `custom` requires
+[`ACTIVITY_LOG_PROVIDER_CONFIG`](#activity_log_provider_config). Any other value, including unset,
+selects the noop provider, which records nothing.
+
+<hr />
+
+## `ACTIVITY_LOG_PROVIDER_CONFIG`
+
+A JSON object, required only when [`ACTIVITY_LOG_PROVIDER`](#activity_log_provider) is `custom`. The
+server throws if it is missing in that case. The object must include a `module` path; other fields
+are passed through.
+
+<hr />
+
+## `KV_STORE_PROVIDER`
+
+The provider to use for generic key-value storage. This setting is independent of
+[OAuth session storage](oauth.md#session_store_provider).
+
+- Default: `memory`
+- Possible values:
+  - `memory` - Store values in memory in the current process
+  - `custom` - Load a custom provider configured through
+    [`KV_STORE_PROVIDER_CONFIG`](#kv_store_provider_config)
+- Unrecognized values fail startup.
+
+The startup readiness log records the selected KV provider. Memory storage is local to each
+process; use a custom provider when callers need shared storage across replicas.
+
+See [Key-value storage](storage.md) for the provider contract and per-write expiration rules.
+
+<hr />
+
+## `KV_STORE_PROVIDER_CONFIG`
+
+Configuration for a custom key-value store provider.
+
+- Required when: [`KV_STORE_PROVIDER`](#kv_store_provider) is `custom`
+- Format: JSON object with a string `module` field and optional provider-specific settings
+- Providing this setting without `KV_STORE_PROVIDER` fails startup.
+- Providing this setting with `KV_STORE_PROVIDER=memory` fails startup, including an empty value.
+
+The `module` field may be a path relative to the server's working directory, an absolute path, or an
+installed npm package name. The module must export a default class or a named `KeyValueStore` class
+implementing the
+[`KeyValueStore`](https://github.com/tableau/tableau-mcp/blob/main/src/storage/keyValueStore.ts)
+interface. All configuration fields are passed to its constructor.
+
+**Example:**
+
+```bash
+KV_STORE_PROVIDER=custom
+KV_STORE_PROVIDER_CONFIG='{"module":"./my-kv-provider.cjs","table":"mcp-state"}'
+```
+
+Invalid configuration or a provider that cannot load or lacks a required operation fails startup.
+See [Key-value storage](storage.md) for implementation details.
+
+<hr />
+
 ## `LATENCY_METRIC_NAME`
 
 The name of the histogram metric used to record HTTP request latency for tool calls.
@@ -536,6 +598,27 @@ well-formed GUID.
 
 <hr />
 
+## `TABLEAU_USER_LUID`
+
+Desktop only. The launcher sets it, and it is sent as `user_luid` on Desktop product telemetry
+events. It is empty if the launcher did not set it.
+
+<hr />
+
+## `TABLEAU_CHAT_ID`
+
+Desktop only. The launcher sets it, and it is sent as `chat_id` on Desktop product telemetry
+events. It is empty if the launcher did not set it.
+
+<hr />
+
+## `TABLEAU_DESKTOP_SESSION_LUID`
+
+Desktop only. The launcher sets it, and it is sent as `session_id` on Desktop product telemetry
+events. It is empty if unset, and ignored unless it is a well-formed GUID.
+
+<hr />
+
 ## Product telemetry fields
 
 Every event also carries `type`, `host_timestamp` (UTC time of the call), `service_name`
@@ -555,8 +638,7 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
-1024 characters), `site_luid`, `user_luid` and `auth_type`. Calling it also sends the usual
-`tool_call` event.
+1024 characters), `site_luid`, `user_luid` and `auth_type`. Calling it also sends the usual `tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
@@ -576,12 +658,12 @@ Controls the read-only Tableau Prep flow tools. They are enabled by default.
 - The mutating flow tools are controlled separately by
   [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled)
 - When enabled, registers:
-  - [`list-flows`](../../tools/flows/list-flows.md)
-  - [`get-flow`](../../tools/flows/get-flow.md)
-  - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
-  - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
-  - [`describe-flow`](../../tools/flows/describe-flow.md)
-  - [`get-flow-task`](../../tools/flows/get-flow-task.md)
+  - [`list-flows`](../../web-tools/flows/list-flows.md)
+  - [`get-flow`](../../web-tools/flows/get-flow.md)
+  - [`list-flow-runs`](../../web-tools/flows/list-flow-runs.md)
+  - [`list-flow-tasks`](../../web-tools/flows/list-flow-tasks.md)
+  - [`describe-flow`](../../web-tools/flows/describe-flow.md)
+  - [`get-flow-task`](../../web-tools/flows/get-flow-task.md)
 - When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is neither
   advertised nor accepted. REST API scopes that an enabled tool still uses stay advertised. For
   example, `run-flow` uses `tableau:flows:read`
@@ -601,9 +683,9 @@ called again with that token, after the user approves the preview.
 - The read-only flow tools are controlled separately by
   [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled)
 - When enabled, registers:
-  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
-  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
-  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
+  - [`run-flow`](../../web-tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
+  - [`run-flow-task`](../../web-tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
+  - [`cancel-flow-run`](../../web-tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
 - When disabled, these tools are not registered, and the `tableau:mcp:flow:run` and
   `tableau:mcp:flow:cancel` scopes are neither advertised nor accepted. Their REST API scopes
   (`tableau:flows:run`, `tableau:flow_tasks:run`, and `tableau:flow_runs:update`) are not advertised
@@ -634,8 +716,8 @@ Controls the read-only Tableau Knowledge tools. They are disabled by default.
   unavailable. If the check fails with a temporary error, they are left out with a warning that the
   error is likely transient
 - When enabled, registers:
-  - [`query-knowledge-context`](../../tools/knowledge/query-knowledge-context.md)
-  - [`inspect-knowledge-context`](../../tools/knowledge/inspect-knowledge-context.md)
+  - [`query-knowledge-context`](../../web-tools/knowledge/query-knowledge-context.md)
+  - [`inspect-knowledge-context`](../../web-tools/knowledge/inspect-knowledge-context.md)
 - When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is
   neither advertised nor accepted
 - The mutating Knowledge tool is controlled by
@@ -655,7 +737,7 @@ shared with everyone and every agent that uses the Knowledge graph.
   read-only Knowledge tools are also enabled (see
   [`KNOWLEDGE_TOOLS_ENABLED`](#knowledge_tools_enabled))
 - When enabled, registers:
-  - [`manage-knowledge-context`](../../tools/knowledge/manage-knowledge-context.md)
+  - [`manage-knowledge-context`](../../web-tools/knowledge/manage-knowledge-context.md)
 - When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is neither
   advertised nor accepted, and the `tableau:knowledge:write` REST API scope is not advertised
 - The tool requires the Creator site role or higher
@@ -668,18 +750,25 @@ shared with everyone and every agent that uses the Knowledge graph.
 
 <hr />
 
+## `INSIGHTS_TOOLS_ENABLED`
+
+Must be exactly `true` to register the insights tools (`generate-insight-cards`). Any other value,
+including unset, leaves them unregistered.
+
+<hr />
+
 ## `ADMIN_TOOLS_ENABLED`
 
 Enables admin-only tools that require site administrator permissions.
 
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
-  - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
-  - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
-  - [`list-jobs`](../../tools/jobs/list-jobs.md)
-  - [`list-users`](../../tools/users/list-users.md)
-  - [`delete-content`](../../tools/content/delete-content.md)
-  - [`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md)
+  - [`list-extract-refresh-tasks`](../../web-tools/tasks/list-extract-refresh-tasks.md)
+  - [`update-cloud-extract-refresh-task`](../../web-tools/tasks/update-cloud-extract-refresh-task.md)
+  - [`list-jobs`](../../web-tools/jobs/list-jobs.md)
+  - [`list-users`](../../web-tools/users/list-users.md)
+  - [`delete-content`](../../web-tools/content/delete-content.md)
+  - [`query-admin-insights`](../../web-tools/admin-insights/query-admin-insights.md)
 - These tools require the user to have one of the following site roles:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
@@ -709,7 +798,7 @@ memory pressure to reduce REST traffic.
 ## `MUTATION_PREVIEW_TTL_MINUTES`
 
 TTL (in minutes) for the single-use confirmation tokens minted by the preview phase of two-phase
-mutation tools (e.g. [`delete-content`](../../tools/content/delete-content.md)).
+mutation tools (e.g. [`delete-content`](../../web-tools/content/delete-content.md)).
 A token must be supplied on the confirmed call before it expires, otherwise the caller must re-run
 the preview.
 
@@ -737,7 +826,7 @@ unconsumed records; the embedded expiry prevents stale confirmation but does not
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
 Default minimum days since last access for content to be considered stale by the
-[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's `kind: "stale-content"` backend. Callers
+[`query-admin-insights`](../../web-tools/admin-insights/query-admin-insights.md) tool's `kind: "stale-content"` backend. Callers
 can pass an explicit `minAgeDays` argument to override per-call.
 
 - Default: `90`
@@ -751,12 +840,12 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 ## `PENDING_DELETION_MAX_AGE_DAYS`
 
-The oldest cleanup batch, in days, that a [`delete-content`](../../tools/content/delete-content.md)
+The oldest cleanup batch, in days, that a [`delete-content`](../../web-tools/content/delete-content.md)
 confirm still accepts for a workbook or data source. A confirm whose `cleanupDate` is older is
 rejected with `cleanup-batch-expired` and nothing is deleted, so a `pending-deletion-YYYY-MM-DD`
 marker left by a crashed or abandoned preview stops authorizing deletes on its own. The marker
 itself is not removed — clear it with
-[`delete-content`](../../tools/content/delete-content.md#pending-deletion-markers) with `action: "remove-pending-tags"`.
+[`delete-content`](../../web-tools/content/delete-content.md#pending-deletion-markers) with `action: "remove-pending-tags"`.
 
 Set it longer than any grace/notification window you use between tagging and deleting.
 
@@ -772,7 +861,7 @@ request.
 ## `STALE_CONTENT_MAX_ROWS`
 
 Maximum number of stale-content rows the
-[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's
+[`query-admin-insights`](../../web-tools/admin-insights/query-admin-insights.md) tool's
 `kind: "stale-content"` backend will return in a single call. This is a server-side safety cap that
 protects the destructive stale-content cleanup flow from acting on an unreviewed mass set.
 
@@ -989,3 +1078,184 @@ used (it is not raised to the minimum). A value above a clamp is lowered to the 
 | `TABLEAU_POD_NAME`, `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID` | none                                                                                                                                                                                                                       |                                          | Product telemetry context. See [`TABLEAU_POD_NAME`](#tableau_pod_name) and [the LUID and chat id variables](#tableau_site_luid-tableau_user_luid-tableau_chat_id-tableau_desktop_session_luid).                                                                                  | spawner     |
 | `TABLEAU_MCP_CACHE_DIR`                                                                                         | `<bundle dir>/../cache`                                                                                                                                                                                                    | absolute path; blank or relative ignored | Directory for cache files (cached XML, exported images) and the only place `read-cached-xml` and `write-cached-xml` accept. Tableau Agent sets a per-session directory so concurrent sessions do not share cache files.                                                          | spawner     |
 | `PRODUCT_TELEMETRY_ENABLED`, `PRODUCT_TELEMETRY_ENDPOINT`, `IS_HYPERFORCE`                                      |                                                                                                                                                                                                                            |                                          | See [`PRODUCT_TELEMETRY_ENABLED`](#product_telemetry_enabled), [`PRODUCT_TELEMETRY_ENDPOINT`](#product_telemetry_endpoint) and [`IS_HYPERFORCE`](#is_hyperforce).                                                                                                                | spawner     |
+
+<hr />
+
+## `EPISODE_EVENTS`
+
+Writes episode events as JSON lines (`episodes-<timestamp>.jsonl`) to
+[`EPISODE_EVENTS_DIR`](#episode_events_dir). It stays off unless the value is exactly `on`.
+
+<hr />
+
+## `EPISODE_EVENTS_DIR`
+
+The directory for the episode event files. It defaults to
+[`FILE_LOGGER_DIRECTORY`](#file_logger_directory). The server never deletes these files; use a
+directory you clean up yourself.
+
+<hr />
+
+## `INLINE_XML_MAX_BYTES`
+
+The largest XML returned inline by any get-XML tool (workbook, worksheet, dashboard, datasource, or
+storyboard). The default is `16384` and the minimum is `1`. Above that cap, the tool responds in
+file mode.
+
+<hr />
+
+## `INLINE_IMAGE_MAX_BYTES`
+
+The largest image returned inline by the export-image tools and `capture-window-screenshot`. The
+default is `1048576` (1 MiB) and the minimum is `1`. SVG counts about twice its decoded size,
+because it is sent as both text and an image block; above the cap, the tool writes a cache file and
+returns its path.
+
+<hr />
+
+## `IMAGE_EXPORT_TIMEOUT_MS`
+
+The deadline, in milliseconds, for the image-render call. The default is `30000`, the minimum is
+`1`, and values are clamped to `2147483647`. It bounds a hang when Desktop is showing a blocking
+dialog.
+
+<hr />
+
+## `TABLEAU_DESKTOP_CALL_TIMEOUT_MS`
+
+The wall-clock ceiling, in milliseconds, on one Desktop tool call. The default is `60000`; a value
+under `40000` is ignored and `60000` is used, and values are clamped to `2147483647`. Past the
+ceiling the call aborts and the agent is told Desktop stopped answering.
+
+<hr />
+
+## `TABLEAU_DESKTOP_SESSION_ID`
+
+It pins the Desktop instance that session-scoped tools default to. It must be digits only (a
+Desktop pid); anything else is ignored. The agent can still target another open Desktop.
+
+<hr />
+
+## `TABLEAU_USER_AGENT_PREFIX`
+
+The product token the launcher puts at the front of the External Client API `User-Agent`, ahead of
+`tableau-desktop-mcp/<version>`. It must be a single `name/version` token; anything else is
+ignored. Desktop attributes each call to the leading token, and Tableau Agent sets
+`tableau-agent/<version>`.
+
+<hr />
+
+## `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`
+
+The directory searched for running Desktop instances. When set, it is the only directory searched.
+Otherwise the server searches `<root>/Tableau/Tableau/ExternalApi`, then `<root>/Tableau/ExternalApi`,
+under the OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if unset),
+`~/Library/Application Support` on macOS, or `$XDG_DATA_HOME` (else `~/.local/share`) on Linux.
+
+<hr />
+
+## `TABLEAU_EXPERTISE_DIR`
+
+These are the authoring expertise roots served as `expertise://` resources. When unset, the
+expertise corpus is empty. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows);
+earlier roots win on a name collision.
+
+<hr />
+
+## `TEMPLATES_DIR`
+
+It replaces the whole template catalog with this directory. When unset, the bundled `templates`
+directory is used.
+
+<hr />
+
+## `TABLEAU_REPOSITORY_DIR`
+
+Adds three external template folders under this directory, in order:
+`Tableau Agent/templates/.vendored/overridable`, `Bookmarks`, then `Tableau Agent/templates`. A
+later folder overrides a bundled or earlier template with the same name. It is ignored when
+[`TEMPLATES_DIR`](#templates_dir) is set.
+
+<hr />
+
+## `TEMPLATE_CONTENT_PACK_VERSION`
+
+The version stamp for the offline script `src/scripts/buildTemplateContentPack.ts`. A `--version`
+argument wins, then this variable, then `package.json`. The running server does not read it, and the
+value must be SemVer without build metadata.
+
+<hr />
+
+## `WORKBOOK_XSD_PATH`
+
+The workbook XSD file for the search library. It defaults to the bundled workbook XSD. No registered
+tool reads it now.
+
+<hr />
+
+## `TWB_INDEX_PATH`
+
+The JSON index of example workbooks for the search library. It defaults to the bundled index, and a
+path that does not exist gives an empty index. No registered tool reads it now.
+
+<hr />
+
+## `TWB_SOURCE_PATH`
+
+The input path for the offline script `src/scripts/trimTwbExampleIndex.ts` (see
+[`TWB_INDEX_OUT_PATH`](#twb_index_out_path)). The running server does not read it. The default is
+`src/desktop/data-source/twb-example-index.source.json.gz` from the working directory, and `--in`
+overrides it.
+
+<hr />
+
+## `TWB_INDEX_OUT_PATH`
+
+The output path for the offline script `src/scripts/trimTwbExampleIndex.ts` (see
+[`TWB_SOURCE_PATH`](#twb_source_path)). The running server does not read it. The default is
+`src/desktop/data/twb-example-index.json` from the working directory, and `--out` overrides it.
+
+<hr />
+
+## `EXAMPLES_DIR`
+
+The directory of `.json` and `.md` examples for the search library. It defaults to the bundled
+`examples`, and no registered tool reads it now. When set, even to an empty string, only this
+directory is read and the bundled examples are not used; an empty string or a missing directory
+gives no examples.
+
+<hr />
+
+## `SYSTEM_PROMPT_VERSION`
+
+It is sent as `system_prompt_version` on the episode-begin event only. The default is
+`mcp-server@<server version>`.
+
+<hr />
+
+## `LANGSMITH_RUN_ID`
+
+It is sent as `langsmith_run_id` on the episode-begin event only. It wins over
+[`LANGSMITH_TRACE_ID`](#langsmith_trace_id) when both are set.
+
+<hr />
+
+## `LANGSMITH_TRACE_ID`
+
+It is sent as `langsmith_run_id` on the episode-begin event only when
+[`LANGSMITH_RUN_ID`](#langsmith_run_id) is unset.
+
+<hr />
+
+## `ENABLE_FILTER_GUARDRAIL`
+
+When set to exactly `true`, it blocks a proposal with more than 5 categorical filter controls. Any
+other value, including `false`, `0` and `1`, leaves it off.
+
+<hr />
+
+## `TABLEAU_MCP_CACHE_DIR`
+
+The directory for cache files (cached XML and exported images) and the only place `read-cached-xml`
+and `write-cached-xml` accept. The default is `<bundle dir>/../cache`; a blank or relative path is
+ignored. Tableau Agent sets a per-session directory so concurrent sessions do not share cache files.

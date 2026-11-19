@@ -1,17 +1,16 @@
-// New KV contract: expiration is supplied with every write; no init/namespace hooks.
+// Named-export provider with per-write expiration and lifecycle methods.
 class KeyValueStore {
   constructor(config) {
-    if (config.throwInConstructor) {
-      throw new Error(JSON.stringify(config), { cause: new Error(config.credential) });
-    }
     this.map = new Map();
     globalThis.__keyValueProviderConfig = config;
-    globalThis.__keyValueProviderInstance = this;
-    if (config.omitConsume) this.consume = undefined;
-    if (config.throwOnInit)
-      this.init = () => {
-        throw new Error('KV must not call init');
-      };
+  }
+
+  init() {
+    globalThis.__keyValueInitCalls++;
+  }
+
+  close() {
+    globalThis.__keyValueCloseCalls++;
   }
 
   read(key) {

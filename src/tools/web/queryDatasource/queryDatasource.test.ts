@@ -274,6 +274,103 @@ describe('queryDatasourceTool', () => {
     },
   );
 
+  describe('version-gated query features', () => {
+    const productVersion2025_2 = { value: '2025.2.9', build: '20252.25.1001.1200' };
+    const tableCalcQuery: Query = {
+      fields: [
+        { fieldCaption: 'Category' },
+        {
+          fieldCaption: 'Sales',
+          function: 'SUM',
+          tableCalculation: { tableCalcType: 'RANK', dimensions: [{ fieldCaption: 'Category' }] },
+        },
+      ],
+    };
+    const conditionQuery: Query = {
+      fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Sales', function: 'SUM' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Category' },
+          filterType: 'CONDITION',
+          condition: { fieldCaption: 'Sales', function: 'SUM', comparison: '>', value: 1000 },
+        },
+      ],
+    };
+    const setFilterWithFunctionQuery: Query = {
+      fields: [{ fieldCaption: 'Category' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Order Date', function: 'YEAR' },
+          filterType: 'SET',
+          values: [2024],
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      mocks.mockReadMetadata.mockResolvedValue(
+        Ok({
+          data: [
+            { fieldCaption: 'Category', fieldName: 'Category', dataType: 'STRING' },
+            { fieldCaption: 'Sales', fieldName: 'Sales', dataType: 'REAL' },
+            { fieldCaption: 'Order Date', fieldName: 'Order Date', dataType: 'DATE' },
+          ],
+        }),
+      );
+      mocks.mockQueryDatasource.mockResolvedValue(Ok(mockVdsResponses.success));
+    });
+
+    it.each([
+      {
+        feature: 'table calculations',
+        query: tableCalcQuery,
+        version: productVersion2025_2,
+        message: 'Tableau 2025.3 or later',
+      },
+      {
+        feature: 'CONDITION filters',
+        query: conditionQuery,
+        version: productVersion2025_2,
+        message: 'Tableau 2026.1 or later',
+      },
+      {
+        feature: 'CONDITION filters',
+        query: conditionQuery,
+        version: testProductVersion2025_3,
+        message: 'Tableau 2026.1 or later',
+      },
+      {
+        feature: 'functions in SET filters',
+        query: setFilterWithFunctionQuery,
+        version: testProductVersion2025_3,
+        message: 'must not include Set Filters, Match Filters, or Relative Date Filters',
+      },
+    ])('rejects $feature on $version.value', async ({ query, version, message }) => {
+      const result = await getToolResult({ query, productVersion: version });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(message);
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { feature: 'table calculations', query: tableCalcQuery, version: testProductVersion2025_3 },
+      { feature: 'table calculations', query: tableCalcQuery, version: testProductVersion },
+      { feature: 'CONDITION filters', query: conditionQuery, version: testProductVersion },
+      {
+        feature: 'functions in SET filters',
+        query: setFilterWithFunctionQuery,
+        version: testProductVersion,
+      },
+    ])('sends $feature to VDS on $version.value', async ({ query, version }) => {
+      const result = await getToolResult({ query, productVersion: version });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(expect.objectContaining({ query }));
+    });
+  });
+
   describe('field-name queries on Tableau 2025.2', () => {
     const productVersion = { value: '2025.2.9', build: '20252.25.1001.1200' };
 

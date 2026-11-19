@@ -1314,6 +1314,39 @@ describe('Config', () => {
       expect(new Config().keyValueStore).toEqual({ provider: 'memory' });
     });
 
+    it.each(['', '{}', 'invalid-json'])(
+      'rejects unused configuration for memory KV: %j',
+      (providerConfig) => {
+        vi.stubEnv('KV_STORE_PROVIDER', 'memory');
+        vi.stubEnv('KV_STORE_PROVIDER_CONFIG', providerConfig);
+        expect(() => new Config()).toThrow(
+          'KV_STORE_PROVIDER_CONFIG must not be set when KV_STORE_PROVIDER is "memory"',
+        );
+      },
+    );
+
+    it('does not expose unused memory KV configuration in errors', () => {
+      const privateMarker = 'PRIVATE_UNUSED_KV_CONFIG';
+      vi.stubEnv('KV_STORE_PROVIDER', 'memory');
+      vi.stubEnv(
+        'KV_STORE_PROVIDER_CONFIG',
+        JSON.stringify({ module: './provider.cjs', credential: privateMarker }),
+      );
+      let failure: unknown;
+      try {
+        new Config();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).toHaveProperty(
+        'message',
+        'KV_STORE_PROVIDER_CONFIG must not be set when KV_STORE_PROVIDER is "memory"',
+      );
+      expect(inspect(failure)).not.toContain(privateMarker);
+      expect(failure).not.toHaveProperty('cause');
+    });
+
     it('requires configuration for a custom KV provider', () => {
       vi.stubEnv('KV_STORE_PROVIDER', 'custom');
       vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
@@ -1344,25 +1377,25 @@ describe('Config', () => {
       },
     );
 
-    it.each(['KV_STORE_PROVIDER'] as const)(
-      'does not expose malformed JSON from %s_CONFIG in errors',
-      async (variable) => {
-        const privateMarker = 'PRIVATE_KV_CONFIG_TEST_MARKER';
-        vi.stubEnv(variable, 'custom');
-        vi.stubEnv(`${variable}_CONFIG`, `${privateMarker}{"module":"./provider.cjs"}`);
+    it('does not expose malformed JSON from KV_STORE_PROVIDER_CONFIG in errors', () => {
+      const privateMarker = 'PRIVATE_KV_CONFIG_TEST_MARKER';
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', `${privateMarker}{"module":"./provider.cjs"}`);
 
-        const error = await Promise.resolve()
-          .then(() => new Config())
-          .catch((error: unknown) => error);
-
-        expect(error).toBeInstanceOf(Error);
-        expect(error).toHaveProperty('message', `${variable}_CONFIG is not valid JSON`);
-        expect(inspect(error)).not.toContain(privateMarker);
-        expect(error).not.toHaveProperty('cause');
-      },
-    );
+      let failure: unknown;
+      try {
+        new Config();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).toHaveProperty('message', 'KV_STORE_PROVIDER_CONFIG is not valid JSON');
+      expect(inspect(failure)).not.toContain(privateMarker);
+      expect(failure).not.toHaveProperty('cause');
+    });
 
     it('defaults to memory for an unrecognized session provider', () => {
+      // Existing deployments can start with this fallback. Rejecting the value would break startup on upgrade.
       vi.stubEnv('SESSION_STORE_PROVIDER', 'invalid');
       expect(new Config().sessionStore).toEqual({ provider: 'memory' });
     });

@@ -1,0 +1,9 @@
+{
+  "label": "Desktop Tools",
+  "position": 5,
+  "className": "sidebar-item-tools",
+  "link": {
+    "type": "generated-index",
+    "description": "Reference documentation for tools exposed by the Tableau MCP desktop variant, which drive a local Tableau Studio instance via Tableau's <a href=\"ext://eca\">External Client API</a>."
+  }
+}

@@ -234,6 +234,7 @@ Key variables (see `env.example.list` and `.env`):
 
 ### Unit Tests (`vitest.config.ts`)
 - Located in `src/` alongside source files
+- Mocks of classes called with `new` must use `function`, not an arrow (vitest 4+). This also applies to `tests/`, which the unit run does not load.
 - Coverage excludes: scripts, SDKs, server
 - Run with `npx vitest run --config ./vitest.config.ts` (`npm test` watches in an interactive terminal)
 

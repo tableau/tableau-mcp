@@ -109,6 +109,7 @@ vi.mock('./server/express.js', () => ({
 
 vi.mock('./storage/init.js', () => ({
   initializeKeyValueStore: vi.fn(),
+  closeKeyValueStore: vi.fn(),
 }));
 
 vi.mock('./sessionStore/init.js', () => ({

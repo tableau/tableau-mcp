@@ -1,5 +1,6 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Err, Ok } from 'ts-results-es';
+import type { Mock } from 'vitest';
 
 import * as loggerModule from '../../logging/logger.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
@@ -103,6 +104,71 @@ describe('authMiddleware auth-error wording (W-23757363)', () => {
     // Underlying validation detail is preserved, followed by the shared guidance.
     expect(res.body.error_description).toContain('token expired');
     expect(res.body.error_description).toContain(OAUTH_AUTH_CHALLENGE_GUIDANCE);
+  });
+});
+
+describe('authMiddleware WWW-Authenticate challenge (RFC 6750 §3)', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('names no error when the request carried no token', async () => {
+    const middleware = authMiddleware(makeValidator(new Err('unused')));
+    const req = { headers: {}, method: 'POST', body: {} } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.headers['WWW-Authenticate']).toContain('resource_metadata="');
+    expect(res.headers['WWW-Authenticate']).not.toContain('error=');
+  });
+
+  it('challenges with invalid_token and the metadata URL when the token is rejected', async () => {
+    const middleware = authMiddleware(makeValidator(new Err('token "expired"\nat 12:00')));
+    const req = {
+      headers: { authorization: 'Bearer bad-token' },
+      method: 'POST',
+      body: {},
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(401);
+    const header = res.headers['WWW-Authenticate'] as string;
+    expect(header).toMatch(
+      /^Bearer realm="MCP", resource_metadata="[^"]+\/\.well-known\/oauth-protected-resource"/,
+    );
+    expect(header).toContain(
+      'error="invalid_token", error_description="The access token is invalid or expired"',
+    );
+    // The validator's text stays in the body: it may hold characters a header value can't carry.
+    expect(header).not.toContain('expired"\n');
+    expect(res.body.error_description).toContain('token "expired"');
+  });
+
+  it('sends the same challenge on an SSE request with a rejected token', async () => {
+    const middleware = authMiddleware(makeValidator(new Err('token expired')));
+    const req = {
+      headers: { authorization: 'Bearer bad-token', accept: 'text/event-stream' },
+      method: 'GET',
+      body: {},
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+
+    await middleware(req, res, vi.fn());
+
+    expect(res.writeHead).toHaveBeenCalledWith(
+      401,
+      expect.objectContaining({
+        'WWW-Authenticate': expect.stringContaining('error="invalid_token"'),
+      }),
+    );
   });
 });
 
@@ -586,7 +652,7 @@ describe('strict vs. subset scope matching', () => {
   function initializeReq(scopes: string[]): {
     req: AuthenticatedRequest;
     res: any;
-    next: ReturnType<typeof vi.fn>;
+    next: Mock<() => void>;
     authInfo: { scopes: string[]; clientId: string };
     middleware: ReturnType<typeof authMiddleware>;
   } {
@@ -607,7 +673,7 @@ describe('strict vs. subset scope matching', () => {
       },
     } as unknown as AuthenticatedRequest;
     const res = makeRes();
-    const next = vi.fn();
+    const next = vi.fn<() => void>();
     return { req, res, next, authInfo, middleware };
   }
 

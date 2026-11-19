@@ -19,8 +19,7 @@ import { MAX_PAGE_SIZE, paginate } from '../../utils/paginate.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
-  | { allowed: true; content?: T }
-  | { allowed: false; message: string };
+  { allowed: true; content?: T } | { allowed: false; message: string };
 
 /**
  * The flow detail returned by "Query Flow" — surfaced as the `content` of an

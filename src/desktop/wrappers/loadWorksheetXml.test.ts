@@ -46,8 +46,7 @@ it('does not skip session-fatal worksheet readback or attempt field verification
 });
 const sheetUpsertMock = vi.hoisted(() => ({
   upsertSheetIntoWorkbook: undefined as
-    | undefined
-    | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
+    undefined | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
 }));
 
 vi.mock('../metadata/sheets.js', async (importOriginal) => {

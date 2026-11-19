@@ -62,8 +62,7 @@ export interface RoundStackedBarBaseline {
 }
 
 type BaselineResult =
-  | { ok: true; baseline: RoundStackedBarBaseline }
-  | { ok: false; reason: string };
+  { ok: true; baseline: RoundStackedBarBaseline } | { ok: false; reason: string };
 
 interface ParsedPoint {
   frame: number;
@@ -1175,9 +1174,7 @@ function clipName(name: string): string {
 }
 
 type ActionVerdict =
-  | { kind: 'safe' }
-  | { kind: 'unsafe' }
-  | { kind: 'reaches-target'; name: string };
+  { kind: 'safe' } | { kind: 'unsafe' } | { kind: 'reaches-target'; name: string };
 
 function judgeFilterAction(
   action: Element,

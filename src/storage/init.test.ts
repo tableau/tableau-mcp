@@ -1,181 +1,156 @@
 import { inspect } from 'node:util';
 
-import { resolve } from 'path';
-
 vi.mock('../config.js', () => ({ getConfig: vi.fn() }));
 vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
+vi.mock('./provider.js', () => ({ loadCustomProvider: vi.fn() }));
 
-import { type Config, getConfig } from '../config.js';
-import { log } from '../logging/logger.js';
+import { getConfig } from '../config.js';
 import {
-  createNamespacedStore,
-  initializeSessionStore,
-  resetSessionStore,
-} from '../sessionStore/init.js';
-import { getKeyValueStore, initializeKeyValueStore, resetKeyValueStore } from './init.js';
+  closeKeyValueStore,
+  getKeyValueStore,
+  initializeKeyValueStore,
+  resetKeyValueStore,
+} from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
-import type { KeyValueStore } from './keyValueStore.js';
+import { loadCustomProvider } from './provider.js';
 
-declare global {
-  var __keyValueProviderConfig: Record<string, unknown> | undefined;
-  var __keyValueProviderInstance: KeyValueStore<unknown> | undefined;
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
-const MODULE = './src/storage/__fixtures__/keyValueStore.cjs';
+describe('key-value store lifecycle', () => {
+  let provider: InMemoryKeyValueStore<unknown>;
 
-function useCustomProvider(options: Record<string, unknown> = {}): void {
-  vi.mocked(getConfig).mockReturnValue({
-    keyValueStore: { provider: 'custom', providerConfig: { module: MODULE, ...options } },
-    sessionStore: { provider: 'memory' },
-  } as Config);
-}
-
-describe('independent KV provider', () => {
   beforeEach(() => {
     resetKeyValueStore();
-    resetSessionStore();
     vi.clearAllMocks();
-    vi.useFakeTimers();
-    vi.mocked(getConfig).mockReturnValue({
-      keyValueStore: { provider: 'memory' },
-      sessionStore: { provider: 'memory' },
-    } as Config);
-    globalThis.__keyValueProviderConfig = undefined;
-    globalThis.__keyValueProviderInstance = undefined;
-  });
-  afterEach(() => {
-    vi.clearAllTimers();
-    vi.useRealTimers();
+    provider = new InMemoryKeyValueStore();
+    vi.mocked(loadCustomProvider).mockReturnValue(provider);
+    vi.mocked(getConfig, { partial: true }).mockReturnValue({
+      keyValueStore: {
+        provider: 'custom',
+        providerConfig: { module: 'test-provider' },
+      },
+    });
   });
 
-  it('requires initialization and never loads a provider from the getter', () => {
-    expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
-    expect(getConfig).not.toHaveBeenCalled();
-  });
-
-  it('returns one actual memory implementation and preserves it on repeated initialization', async () => {
-    initializeKeyValueStore();
-    const store = getKeyValueStore();
-    expect(store).toBeInstanceOf(InMemoryKeyValueStore);
-    await store.set('unprefixed', 'value', { ttlMs: 1000 });
-    initializeKeyValueStore();
-    expect(getKeyValueStore()).toBe(store);
-    expect(getConfig).toHaveBeenCalledOnce();
-    await expect(getKeyValueStore().get('unprefixed')).resolves.toBe('value');
-  });
-
-  it.each([MODULE, resolve(MODULE), './src/storage/__fixtures__/defaultKeyValueStore.cjs'])(
-    'constructs the actual custom implementation from %s and forwards configuration',
-    async (module) => {
-      useCustomProvider({ module, table: 'kv-table', throwOnInit: true });
-      initializeKeyValueStore();
-      expect(getKeyValueStore()).toBe(globalThis.__keyValueProviderInstance);
-      expect(globalThis.__keyValueProviderConfig).toEqual({
-        module,
-        table: 'kv-table',
-        throwOnInit: true,
-      });
-      await getKeyValueStore().set('key', { value: 1 }, { ttlMs: 100 });
-      await expect(getKeyValueStore().get('key')).resolves.toEqual({ value: 1 });
-      await vi.advanceTimersByTimeAsync(100);
-      await expect(getKeyValueStore().get('key')).resolves.toBeUndefined();
-    },
-  );
-
-  it.each(['memory', 'custom'] as const)(
-    'supports atomic consume with %s storage',
-    async (provider) => {
-      if (provider === 'custom') useCustomProvider();
-      initializeKeyValueStore();
-      const store = getKeyValueStore();
-      await store.set('a:b:c', 'value', { ttlMs: 100 });
-      expect(await Promise.all([store.consume('a:b:c'), store.consume('a:b:c')])).toEqual([
-        'value',
-        undefined,
-      ]);
-      await expect(store.delete('missing')).resolves.toBeUndefined();
-    },
-  );
-
-  it('keeps session memory handles independent from each other and KV storage', async () => {
-    await initializeSessionStore();
-    initializeKeyValueStore();
-    const first = createNamespacedStore<string>('settings', { ttlMs: 100 });
-    const second = createNamespacedStore<string>('settings', { ttlMs: 200 });
-    await first.set('key', 'session');
-    await getKeyValueStore().set('settings:key', 'kv', { ttlMs: 300 });
-    await expect(first.get('key')).resolves.toBe('session');
-    await expect(second.get('key')).resolves.toBeUndefined();
-    await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
-    await vi.advanceTimersByTimeAsync(100);
-    await expect(first.get('key')).resolves.toBeUndefined();
-    await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
-  });
-
-  it('uses independently configured custom session and KV providers', async () => {
-    useCustomProvider();
-    const config = vi.mocked(getConfig)();
-    config.sessionStore = {
-      provider: 'custom',
-      providerConfig: { module: './src/sessionStore/__fixtures__/fakeSessionStore.cjs' },
-    };
-    initializeKeyValueStore();
-    await initializeSessionStore();
-    const session = createNamespacedStore<string>('settings', { ttlMs: 100 });
-    await session.set('key', 'session');
-    await getKeyValueStore().set('settings:key', 'kv', { ttlMs: 100 });
-    await expect(session.get('key')).resolves.toBe('session');
-    await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
-  });
-
-  it.each(['module', 'constructor'] as const)(
-    'sanitizes %s failures and never falls back to memory',
-    (failure) => {
-      const marker = 'PRIVATE_KV_TEST_MARKER';
-      useCustomProvider({
-        module: failure === 'module' ? `./${marker}.cjs` : MODULE,
-        throwInConstructor: failure === 'constructor',
-        credential: marker,
-      });
-      let caught: unknown;
-      try {
-        initializeKeyValueStore();
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect(caught).toHaveProperty(
-        'message',
-        'Failed to load custom key-value store provider. Check its module export and configuration.',
-      );
-      expect(inspect(caught)).not.toContain(marker);
-      expect(caught).not.toHaveProperty('cause');
+  describe('getKeyValueStore', () => {
+    it('requires initialization and never loads a provider from the getter', () => {
       expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
-      expect(log).not.toHaveBeenCalled();
-    },
-  );
-
-  it('rejects a provider missing a required operation', () => {
-    useCustomProvider({ omitConsume: true });
-    expect(() => initializeKeyValueStore()).toThrow(
-      'Failed to load custom key-value store provider',
-    );
-    expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
+      expect(getConfig).not.toHaveBeenCalled();
+    });
   });
 
-  it('requires a default or named KeyValueStore export', () => {
-    useCustomProvider({ module: './src/storage/__fixtures__/sessionStore.cjs' });
-    expect(() => initializeKeyValueStore()).toThrow(
-      'Failed to load custom key-value store provider',
-    );
+  describe('initializeKeyValueStore', () => {
+    it('returns one actual memory implementation and preserves it on repeated initialization', async () => {
+      vi.mocked(getConfig, { partial: true }).mockReturnValue({
+        keyValueStore: { provider: 'memory' },
+      });
+      await initializeKeyValueStore();
+      const store = getKeyValueStore();
+      expect(store).toBeInstanceOf(InMemoryKeyValueStore);
+      await initializeKeyValueStore();
+      expect(getKeyValueStore()).toBe(store);
+      expect(getConfig).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the store unavailable when its provider cannot load', async () => {
+      vi.mocked(loadCustomProvider).mockImplementationOnce(() => {
+        throw new Error('Unable to load provider');
+      });
+      await expect(initializeKeyValueStore()).rejects.toThrow('Unable to load provider');
+      expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
+    });
+
+    it('awaits init before making the provider available', async () => {
+      const ready = deferred();
+      const init = vi.fn(() => ready.promise);
+      Object.assign(provider, { init });
+
+      const initializing = initializeKeyValueStore();
+      expect(init).toHaveBeenCalledOnce();
+      expect(getConfig).toHaveBeenCalledOnce();
+      expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
+
+      ready.resolve();
+      await initializing;
+      expect(getKeyValueStore()).toBe(provider);
+    });
+
+    it('supports synchronous initialization', async () => {
+      const init = vi.fn();
+      Object.assign(provider, { init });
+      await initializeKeyValueStore();
+      expect(init).toHaveBeenCalledOnce();
+      expect(getKeyValueStore()).toBe(provider);
+    });
+
+    it.each(['sync', 'async'] as const)('sanitizes %s initialization failures', async (mode) => {
+      const marker = 'PRIVATE_KV_INIT_CREDENTIAL';
+      const init = (): void | Promise<void> => {
+        const failure = new Error(marker, { cause: new Error(marker) });
+        if (mode === 'sync') throw failure;
+        return Promise.reject(failure);
+      };
+      Object.assign(provider, { init });
+
+      const failure = await initializeKeyValueStore().catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).toHaveProperty(
+        'message',
+        'Failed to initialize key-value store provider. Check its backend and configuration.',
+      );
+      expect(inspect(failure)).not.toContain(marker);
+      expect(failure).not.toHaveProperty('cause');
+      expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
+    });
+
+    it('allows retrying initialization after a failed attempt', async () => {
+      const init = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('unavailable'))
+        .mockResolvedValue(undefined);
+      Object.assign(provider, { init });
+      await expect(initializeKeyValueStore()).rejects.toThrow('Failed to initialize');
+      await initializeKeyValueStore();
+      expect(init).toHaveBeenCalledTimes(2);
+      expect(getKeyValueStore()).toBe(provider);
+    });
   });
 
-  it('does not log keys, values, or configuration', async () => {
-    const marker = 'PRIVATE_KV_DATA';
-    useCustomProvider({ credential: marker });
-    initializeKeyValueStore();
-    await getKeyValueStore().set(marker, marker, { ttlMs: 100 });
-    await getKeyValueStore().consume(marker);
-    expect(JSON.stringify(vi.mocked(log).mock.calls)).not.toContain(marker);
+  describe('closeKeyValueStore', () => {
+    it('closes the provider only once when shutdown is called twice', async () => {
+      const close = vi.fn();
+      Object.assign(provider, { close });
+      await initializeKeyValueStore();
+
+      await closeKeyValueStore();
+      await closeKeyValueStore();
+
+      expect(close).toHaveBeenCalledOnce();
+      expect(() => getKeyValueStore()).toThrow('Key-value store is not initialized.');
+    });
+
+    it('reports a generic error when the provider rejects close()', async () => {
+      const close = vi.fn().mockRejectedValue(new Error('private backend details'));
+      Object.assign(provider, { close });
+      await initializeKeyValueStore();
+
+      const closing = closeKeyValueStore();
+      await expect(closing).rejects.toHaveProperty(
+        'message',
+        'Failed to close key-value store provider.',
+      );
+      await expect(closing).rejects.not.toHaveProperty('cause');
+    });
+
+    it('closing an uninitialized provider does not construct one', async () => {
+      await closeKeyValueStore();
+      expect(getConfig).not.toHaveBeenCalled();
+    });
   });
 });

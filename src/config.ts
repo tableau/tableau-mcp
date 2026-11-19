@@ -395,6 +395,11 @@ export class Config extends BaseConfig {
     if (keyValueStoreProvider !== undefined && !isKeyValueStoreProvider(keyValueStoreProvider)) {
       throw new Error('KV_STORE_PROVIDER must be "memory" or "custom"');
     }
+    if (keyValueStoreProvider === 'memory' && keyValueStoreProviderConfig !== undefined) {
+      throw new Error(
+        'KV_STORE_PROVIDER_CONFIG must not be set when KV_STORE_PROVIDER is "memory"',
+      );
+    }
     this.keyValueStore =
       keyValueStoreProvider === 'custom'
         ? {

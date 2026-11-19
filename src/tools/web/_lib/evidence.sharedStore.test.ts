@@ -29,7 +29,7 @@ type EvidenceModule = typeof import('./evidence.js');
 async function startReplica(): Promise<EvidenceModule> {
   vi.resetModules();
   const { initializeKeyValueStore } = await import('../../../storage/init.js');
-  initializeKeyValueStore();
+  await initializeKeyValueStore();
   return import('./evidence.js');
 }
 
@@ -408,7 +408,7 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
       provider: 'custom',
       providerConfig: { module: './src/storage/__fixtures__/sharedBackendKeyValueStore.cjs' },
     };
-    initializeKeyValueStore();
+    await initializeKeyValueStore();
     await new a.RegistryEvidence().establish(makeCtx());
     expect(globalThis.__sharedKvBackend!.size).toBe(1);
   });

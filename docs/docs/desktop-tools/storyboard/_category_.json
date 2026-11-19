@@ -1,0 +1,8 @@
+{
+  "label": "Storyboards",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for listing, inspecting, applying, and exporting storyboards in the open workbook."
+  }
+}
