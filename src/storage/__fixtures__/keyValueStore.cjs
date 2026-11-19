@@ -6,7 +6,6 @@ class KeyValueStore {
     }
     this.map = new Map();
     globalThis.__keyValueProviderConfig = config;
-    globalThis.__keyValueProviderInstance = this;
     if (config.omitConsume) this.consume = undefined;
   }
 
