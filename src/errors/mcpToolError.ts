@@ -327,6 +327,12 @@ export class ZodiosValidationError extends McpToolError {
   }
 }
 
+export class McpSiteSettingsUnavailableError extends McpToolError {
+  constructor(message: string, statusCode: number) {
+    super({ type: 'mcp-site-settings-unavailable', message, statusCode });
+  }
+}
+
 export class ServiceUnavailableError extends McpToolError {
   constructor(message: string) {
     super({ type: 'service-unavailable', message, statusCode: 503 });

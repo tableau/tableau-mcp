@@ -1,3 +1,4 @@
+import { AxiosError } from 'axios';
 import express from 'express';
 import http from 'http';
 import { Ok } from 'ts-results-es';
@@ -577,6 +578,81 @@ describe('OAuth', () => {
     expect(lines[0]).toBe('event: message');
     const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
+  });
+
+  describe('when Tableau rejects the caller token while reading site settings', () => {
+    const initializeBody = {
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'tableau-mcp-tests', version: '1.0.0' },
+      },
+      jsonrpc: '2.0',
+      id: 0,
+    };
+
+    beforeEach(() => {
+      const defaultRestApi = vi.mocked(RestApi).getMockImplementation()!;
+      vi.mocked(RestApi).mockImplementation(function (this: unknown, ...args) {
+        const restApi: RestApi = Reflect.apply(defaultRestApi, this, args);
+        restApi.mcpSettingsMethods.getMcpSiteSettings = vi
+          .fn()
+          .mockRejectedValue(
+            new AxiosError('Unauthorized', '401', undefined, undefined, { status: 401 } as never),
+          );
+        return restApi;
+      });
+      onTestFinished(() => {
+        vi.mocked(RestApi).mockImplementation(defaultRestApi);
+      });
+    });
+
+    it('answers 401 with the OAuth challenge, so the client signs in again', async () => {
+      const { app } = await startServer();
+
+      mocks.mockGetTokenResult.mockResolvedValue({
+        // A site part of its own, so settings cached by earlier tests don't answer.
+        accessToken: 'part0|part1|site-settings-401|part3',
+        refreshToken: 'test-refresh-token',
+        expiresInSeconds: 3600,
+        originHost: '10ax.online.tableau.com',
+      });
+
+      const { access_token } = await exchangeAuthzCodeForAccessToken(app);
+
+      const response = await request(app)
+        .post(`/${serverName}`)
+        .set('Authorization', `Bearer ${access_token}`)
+        .set('Content-Type', 'application/json')
+        .set('Accept', 'application/json, text/event-stream')
+        .send(initializeBody);
+
+      expect(response.status).toBe(401);
+      expect(response.headers['www-authenticate']).toMatch(
+        /^Bearer realm="MCP", resource_metadata="http:\/\/127\.0\.0\.1:(\d+)\/.well-known\/oauth-protected-resource"/,
+      );
+      expect(response.body).toMatchObject({ error: 'invalid_token' });
+    });
+
+    it('answers 401 with the passthrough invalid-token body', async () => {
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .post(`/${serverName}`)
+        .set('X-Tableau-Auth', 'part0|part1|passthrough-401|part3')
+        .set('Content-Type', 'application/json')
+        .set('Accept', 'application/json, text/event-stream')
+        .send(initializeBody);
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        error: 'invalid_token',
+        error_description: 'Invalid or expired Tableau session token',
+      });
+    });
   });
 
   it('should reject token exchange when redirect_uri does not match authorization request', async () => {

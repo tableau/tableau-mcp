@@ -1,0 +1,9 @@
+{
+  "label": "Web Tools",
+  "position": 4,
+  "className": "sidebar-item-tools",
+  "link": {
+    "type": "generated-index",
+    "description": "Reference documentation for each Tableau service-facing tool exposed by Tableau MCP over the web (HTTP/stdio) transports. These tools may depend on the calls to <a href=\"https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api.htm\" target=\"_blank\" rel=\"noreferrer\">Tableau REST API</a>, the <a href=\"https://help.tableau.com/current/api/vizql-data-service/en-us/index.html\" target=\"_blank\" rel=\"noreferrer\">Tableau VizQL Data Service (VDS API)</a>, or the <a href=\"https://help.tableau.com/current/api/metadata_api/en-us/index.html\" target=\"_blank\" rel=\"noreferrer\">Metadata API</a>."
+  }
+}
