@@ -27,6 +27,8 @@ export async function validateQueryAgainstDatasourceMetadata(
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
   interpretFieldCaptionsAsFieldNames = false,
+  // A caller bypassing a stale cache to reach a new field would otherwise fail validation here.
+  bypassMetadataCache?: boolean,
 ): Promise<Result<void, QueryValidationError[]>> {
   const validationErrors: QueryValidationError[] = [];
 
@@ -35,6 +37,7 @@ export async function validateQueryAgainstDatasourceMetadata(
       datasource: {
         datasourceLuid: datasource.datasourceLuid,
       },
+      ...(bypassMetadataCache !== undefined && { options: { bypassMetadataCache } }),
     });
 
     if (readMetadataResult.isErr() || !readMetadataResult.value.data) {
