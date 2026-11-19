@@ -157,11 +157,12 @@ change anything.
                 switch (args.action) {
                   case 'status': {
                     const graphs = await methods.listGraphs();
+                    const returnedGraphs = graphs.slice(0, limit);
                     return {
                       action: args.action,
-                      graphs: graphs.slice(0, limit),
+                      graphs: returnedGraphs,
                       primaryGraph: graphs.find((graph) => graph.is_primary) ?? null,
-                      resultInfo: listResultInfo('Graph', graphs.length, limit),
+                      resultInfo: listResultInfo('Graph', graphs.length, returnedGraphs.length),
                     };
                   }
                   case 'list': {
@@ -187,15 +188,20 @@ change anything.
                       type: args.suggestionType,
                       limit,
                     });
+                    const suggestions = report.suggestions.slice(0, limit);
                     return {
                       action: args.action,
                       healthScore: report.health_score ?? null,
                       stats: report.stats,
                       metrics: report.metrics.slice(0, limit),
                       summary: report.summary,
-                      suggestions: report.suggestions.slice(0, limit),
+                      suggestions,
                       errors: report.errors.slice(0, limit),
-                      resultInfo: listResultInfo('Suggestion', report.suggestions.length, limit),
+                      resultInfo: listResultInfo(
+                        'Suggestion',
+                        report.summary.total,
+                        suggestions.length,
+                      ),
                     };
                   }
                 }
@@ -214,11 +220,11 @@ change anything.
 function listResultInfo(
   label: string,
   original: number,
-  limit: number,
+  returned: number,
 ): Record<string, number | boolean> {
   return {
     [`original${label}Count`]: original,
-    [`returned${label}Count`]: Math.min(original, limit),
-    truncated: original > limit,
+    [`returned${label}Count`]: returned,
+    truncated: original > returned,
   };
 }
