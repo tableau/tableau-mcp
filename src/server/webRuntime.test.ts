@@ -290,6 +290,30 @@ describe('initializeWebRuntime', () => {
     expect(processOnceSpy).not.toHaveBeenCalled();
   });
 
+  it('warns when stateless HTTP runs on the memory key-value store', async () => {
+    await initializeWebRuntime({
+      ...config,
+      disableSessionManagement: true,
+      keyValueStore: { provider: 'memory' },
+    } as Config);
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logger: 'startup',
+        level: 'warning',
+        message: expect.stringMatching(/KV_STORE_PROVIDER is memory/),
+      }),
+    );
+  });
+
+  it('does not warn when stateless HTTP has a custom key-value store', async () => {
+    await initializeWebRuntime({
+      ...config,
+      disableSessionManagement: true,
+      keyValueStore: { provider: 'custom', providerConfig: { module: 'x' } },
+    } as Config);
+    expect(log).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+  });
+
   it('waits for KV initialization before fetching server info or registering shutdown handlers', async () => {
     const ready = deferred<void>();
     runtimeState.keyValueInitPromise = ready.promise;

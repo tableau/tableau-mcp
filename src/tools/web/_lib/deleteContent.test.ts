@@ -2,16 +2,23 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
-import { ContentNotStaleError, StalenessUnverifiedError } from '../../../errors/mcpToolError.js';
+import {
+  ContentNotStaleError,
+  EvidenceStoreUnavailableError,
+  StalenessUnverifiedError,
+} from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getKeyValueStore } from '../../../storage/init.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from '../workbooks/mockWorkbook.js';
 import { auditRecordSchema } from './auditRecord.js';
+import { getConfirmDeleteContentTool } from './confirmDeleteContent.js';
 import { getDeleteContentTool } from './deleteContent.js';
-import { AppApprovalEvidence } from './evidence.js';
+import { AppApprovalEvidence, RegistryEvidence } from './evidence.js';
 import { checkContentStillStale } from './stalenessCheck.js';
 
 // Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
@@ -126,8 +133,11 @@ vi.mock('../../../config.js', () => ({
     pendingDeletionMaxAgeDays: 30,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    keyValueStore: { provider: 'memory' },
   })),
 }));
+
+beforeEach(resetTestKeyValueStore);
 
 describe('deleteContentTool', () => {
   afterEach(() => {
@@ -1065,6 +1075,111 @@ describe('deleteContentTool', () => {
       const payload = JSON.parse(result.content[0].text);
       expect(payload.data.kind).toBe('delete-extract-refresh-task-confirm');
       expect(payload.data.taskId).toBe(validTaskId);
+    });
+
+    describe('when the evidence store is unavailable', () => {
+      beforeEach(() => {
+        vi.spyOn(AppApprovalEvidence.prototype, 'establish').mockRejectedValue(
+          new EvidenceStoreUnavailableError(),
+        );
+      });
+      afterEach(() => vi.mocked(AppApprovalEvidence.prototype.establish).mockRestore());
+
+      it.each([
+        ['workbook', 'wb-app', mocks.mockAddTagsToWorkbook],
+        ['datasource', 'ds-app', mocks.mockAddTagsToDatasource],
+        ['extract-refresh-task', validTaskId, null],
+      ] as const)(
+        '%s preview is denied once and writes no tag',
+        async (resourceType, resourceId, addTags) => {
+          const result = await getToolResult({
+            resourceType,
+            resourceId,
+            mcpAppToolsRenderable: true,
+          });
+
+          expect(result.isError).toBe(true);
+          invariant(result.content[0].type === 'text');
+          expect(result.content[0].text).toContain('confirmation store is unavailable');
+          const audits = getAuditRecords();
+          expect(audits).toHaveLength(1);
+          expect(audits[0]).toMatchObject({
+            result: 'denied',
+            denyReason: 'evidence-store-unavailable',
+          });
+          if (addTags) {
+            expect(addTags).not.toHaveBeenCalled();
+          }
+        },
+      );
+    });
+
+    it('leaves no app approval behind when the extract-refresh nonce write fails', async () => {
+      vi.spyOn(RegistryEvidence.prototype, 'establish').mockRejectedValue(
+        new EvidenceStoreUnavailableError(),
+      );
+      const approvalSpy = vi.spyOn(AppApprovalEvidence.prototype, 'establish');
+      try {
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          mcpAppToolsRenderable: true,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(approvalSpy).not.toHaveBeenCalled();
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+      } finally {
+        vi.mocked(RegistryEvidence.prototype.establish).mockRestore();
+        approvalSpy.mockRestore();
+      }
+    });
+
+    it('denies app confirm after an approval write commits then reports failure', async () => {
+      const store = getKeyValueStore();
+      const originalSet = store.set.bind(store);
+      const set = vi.spyOn(store, 'set').mockImplementation(async (key, value, options) => {
+        await originalSet(key, value, options);
+        if (key.startsWith('mutation-app-approvals-v1:')) {
+          throw new Error('write committed before timeout');
+        }
+      });
+      try {
+        const preview = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          mcpAppToolsRenderable: true,
+        });
+        expect(preview.isError).toBe(true);
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+        const tool = getConfirmDeleteContentTool(new WebMcpServer());
+        const callback = await Provider.from(tool.callback);
+        const confirm = await callback(
+          {
+            resourceType: 'extract-refresh-task',
+            resourceId: validTaskId,
+            cleanupDate: undefined,
+            minAgeDays: undefined,
+          },
+          getMockRequestHandlerExtra(),
+        );
+        expect(confirm.isError).toBe(true);
+        invariant(confirm.content[0].type === 'text');
+        expect(confirm.content[0].text).toContain('could not verify');
+        expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+      } finally {
+        set.mockRestore();
+      }
     });
 
     it('rejects model-driven confirm:true with a PreviewNotRun error (no self-confirm)', async () => {
