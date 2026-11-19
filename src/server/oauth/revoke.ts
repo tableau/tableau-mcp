@@ -2,7 +2,7 @@ import { KeyObject } from 'crypto';
 import express from 'express';
 import { compactDecrypt } from 'jose';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error/v4';
 
 import { log } from '../../logging/logger.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';

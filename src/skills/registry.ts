@@ -3,7 +3,7 @@ import { type Dirent, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
 import { lookup } from 'mime-types';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error/v4';
 
 import { log } from '../logging/logger.js';
 import { decodeCursor, encodeCursor } from './cursor.js';

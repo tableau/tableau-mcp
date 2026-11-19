@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import express from 'express';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error/v4';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';

@@ -1,6 +1,6 @@
 import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error/v4';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from './externalApiAccess.js';

@@ -128,7 +128,7 @@ describe('DesktopTool episode telemetry', () => {
 
         await makeTool().logAndExecute({
           extra,
-          args,
+          args: args as { session: string },
           callback: async () => {
             if (fails) throw new Error('boom');
             return new Ok({ ok: true });

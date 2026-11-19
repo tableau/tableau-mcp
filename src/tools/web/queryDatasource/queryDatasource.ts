@@ -79,7 +79,6 @@ const captionParamsSchema = fieldNameParamsSchema
   .passthrough();
 type QueryDatasourceParamsSchema = z.ZodType<
   z.output<typeof fieldNameParamsSchema>,
-  z.ZodTypeDef,
   z.input<typeof fieldNameParamsSchema>
 >;
 

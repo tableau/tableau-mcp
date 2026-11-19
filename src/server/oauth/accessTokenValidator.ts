@@ -9,7 +9,7 @@ import {
   JWTVerifyGetKey,
 } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error/v4';
 
 import { Config, getConfig } from '../../config.js';
 import { AUDIT_LOGGER, log } from '../../logging/logger.js';

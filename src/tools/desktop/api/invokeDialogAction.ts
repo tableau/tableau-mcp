@@ -20,11 +20,12 @@ import { DesktopTool } from '../tool.js';
 // validation during argument parsing while advertising compact object inputs.
 function compactObjectSchema<Output>(
   schema: z.ZodType<Output>,
-): z.ZodEffects<z.ZodRecord<z.ZodString, z.ZodUnknown>, Output> {
-  return z.record(z.unknown()).transform((value, context) => {
+): z.ZodPipe<z.ZodRecord<z.ZodString, z.ZodUnknown>, z.ZodTransform<Output>> {
+  return z.record(z.string(), z.unknown()).transform((value, context) => {
     const parsed = schema.safeParse(value);
     if (!parsed.success) {
-      for (const issue of parsed.error.issues) context.addIssue(issue);
+      for (const issue of parsed.error.issues)
+        context.issues.push({ ...issue, input: value } as never);
       return z.NEVER;
     }
     return parsed.data;

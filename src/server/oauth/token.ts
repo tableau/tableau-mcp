@@ -2,7 +2,7 @@ import { KeyObject, randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { CompactEncrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error/v4';
 
 import { getConfig } from '../../config.js';
 import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';

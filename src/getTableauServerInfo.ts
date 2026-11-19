@@ -1,5 +1,5 @@
 import { ZodiosError } from '@zodios/core';
-import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
+import { fromError, isZodErrorLike } from 'zod-validation-error/v4';
 
 import { getConfig } from './config.js';
 import { RestApi } from './sdks/tableau/restApi.js';

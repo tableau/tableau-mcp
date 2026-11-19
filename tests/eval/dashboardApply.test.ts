@@ -33,7 +33,9 @@ describe('dashboard apply and recovery W-24366364 (eval)', () => {
       const scenario = new DashboardApplyScenario(testCase);
       const prompt = await scenario.getPrompt();
       const agent = await getDashboardApplyEvalAgent(mcpServer, getModel(), scenario);
-      agent.on('agent_tool_start', (_context, _tool, { toolCall }) => {
+      agent.on('agent_tool_start', (_context, _tool, details) => {
+        // ToolCallItem resolves to unknown under zod 4.
+        const toolCall = details.toolCall as { type?: string; callId?: string; name?: string };
         if (toolCall.type === 'function_call') {
           log(
             JSON.stringify({ case: testCase.name, callId: toolCall.callId, name: toolCall.name }),
