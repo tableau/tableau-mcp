@@ -55,7 +55,7 @@ describe('session and KV environment configuration', () => {
     vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
     vi.stubEnv(
       'SESSION_STORE_PROVIDER_CONFIG',
-      JSON.stringify({ module: './src/storage/__fixtures__/sessionStore.cjs' }),
+      JSON.stringify({ module: './src/sessionStore/__fixtures__/fakeSessionStore.cjs' }),
     );
     await connectSessionStore();
     await initializeKeyValueStore();
