@@ -26,12 +26,12 @@ This tool does **not** call the `%product_name%` `%ecapi_name%`, and it does not
 ## Optional arguments
 
 ### `session`
-Session ID identifying which `%product_name%` instance the episode belongs to (for example, `studio-1`). When omitted, the server targets the session pinned at launch, or — if none is pinned — the single running `%product_name%` instance. If several instances are running and no `session` is given, the call is rejected and asks you to name one.
+Session ID identifying which `%product_name%` instance the episode belongs to (for example, `77700`). When omitted, the server targets the session pinned at launch, or — if none is pinned — the single running `%product_name%` instance. If several instances are running and no `session` is given, the call is rejected and asks you to name one.
 
 #### Example
 
 ```json
-{ "session": "studio-1" }
+{ "session": "77700" }
 ```
 
 <hr />

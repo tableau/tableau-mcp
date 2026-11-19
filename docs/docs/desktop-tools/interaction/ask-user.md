@@ -18,7 +18,7 @@ The `urgency` argument controls how the agent should treat the pause:
 
 ## APIs called
 
-This tool does not call the %product_name% %ecapi_name%. It is a client-side interaction (elicitation): it formats the question and hands it back to the human user through the MCP client, then waits for their response. Because nothing is sent to the running %product_name% instance, there is no loopback route and no per-session bearer token involved — the question never leaves the MCP client. Formatting the prompt is an in-process step, not an API call.
+This tool does not call the %product_name% %ecapi_name%. It is a client-side interaction: it formats the question and hands it back to the human user through the MCP client. Because nothing is sent to the running %product_name% instance, there is no loopback route and no per-session bearer token involved — the question never leaves the MCP client. Formatting the prompt is an in-process step, not an API call.
 
 ## Required arguments
 
