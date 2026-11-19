@@ -35,6 +35,10 @@ configured custom provider is never silently replaced with memory. Malformed JSO
 constructor, and lifecycle-hook errors do not echo configuration values. Providers must also keep
 keys, values, and credentials out of their own errors and logs.
 
+Server-generated validation errors identify missing exports and missing required methods.
+These use `KeyValueStoreProviderValidationError`, a subclass of `McpToolError`. Other load-time
+exceptions are sanitized, including errors from property getters.
+
 ## Provider contract
 
 Implement the public, dependency-free interface:

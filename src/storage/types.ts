@@ -29,6 +29,8 @@ export const providerConfigSchema = z
   })
   .passthrough();
 
+export type KeyValueStoreProviderConfig = z.infer<typeof providerConfigSchema>;
+
 /**
  * Schema for custom key-value store config
  *

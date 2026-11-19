@@ -1,3 +1,5 @@
+import { resolve } from 'path';
+
 import {
   connectSessionStore,
   createNamespacedStore,
@@ -12,6 +14,8 @@ import {
   resetKeyValueStore,
 } from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
+
+const MODULE = './src/storage/__fixtures__/keyValueStore.cjs';
 
 // Real Config/env parsing and real module loaders; no mocked storage wiring.
 describe('session and KV environment configuration', () => {
@@ -31,6 +35,8 @@ describe('session and KV environment configuration', () => {
     globalThis.__closeCalls = 0;
     globalThis.__keyValueInitCalls = 0;
     globalThis.__keyValueCloseCalls = 0;
+    globalThis.__keyValueProviderConfig = undefined;
+    globalThis.__keyValueProviderInstance = undefined;
   });
   afterEach(async () => {
     await disconnectSessionStore();
@@ -86,5 +92,73 @@ describe('session and KV environment configuration', () => {
     expect(globalThis.__keyValueCloseCalls).toBe(1);
     // Avoid closing the same session fixture twice in afterEach.
     resetSessionStore();
+  });
+
+  it.each([MODULE, resolve(MODULE), './src/storage/__fixtures__/defaultKeyValueStore.cjs'])(
+    'constructs the actual custom implementation from %s and forwards configuration',
+    async (module) => {
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', JSON.stringify({ module, table: 'kv-table' }));
+      await initializeKeyValueStore();
+      expect(getKeyValueStore()).toBe(globalThis.__keyValueProviderInstance);
+      expect(globalThis.__keyValueProviderConfig).toEqual({
+        module,
+        table: 'kv-table',
+      });
+      await getKeyValueStore().set('key', { value: 1 }, { ttlMs: 100 });
+      await expect(getKeyValueStore().get('key')).resolves.toEqual({ value: 1 });
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(getKeyValueStore().get('key')).resolves.toBeUndefined();
+    },
+  );
+
+  it.each(['memory', 'custom'] as const)(
+    'supports atomic consume with %s storage',
+    async (provider) => {
+      vi.stubEnv('KV_STORE_PROVIDER', provider);
+      if (provider === 'custom') {
+        vi.stubEnv('KV_STORE_PROVIDER_CONFIG', JSON.stringify({ module: MODULE }));
+      }
+      await initializeKeyValueStore();
+      const store = getKeyValueStore();
+      await store.set('a:b:c', 'value', { ttlMs: 100 });
+      expect(await Promise.all([store.consume('a:b:c'), store.consume('a:b:c')])).toEqual([
+        'value',
+        undefined,
+      ]);
+      await expect(store.delete('missing')).resolves.toBeUndefined();
+    },
+  );
+
+  it('keeps session memory handles independent from each other and KV storage', async () => {
+    await connectSessionStore();
+    await initializeKeyValueStore();
+    const first = createNamespacedStore<string>('settings', { ttlMs: 100 });
+    const second = createNamespacedStore<string>('settings', { ttlMs: 200 });
+    await first.set('key', 'session');
+    await getKeyValueStore().set('settings:key', 'kv', { ttlMs: 300 });
+    await expect(first.get('key')).resolves.toBe('session');
+    await expect(second.get('key')).resolves.toBeUndefined();
+    await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(first.get('key')).resolves.toBeUndefined();
+    await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
+  });
+
+  it('uses independently configured custom session and KV providers', async () => {
+    vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+    vi.stubEnv('KV_STORE_PROVIDER_CONFIG', JSON.stringify({ module: MODULE }));
+    vi.stubEnv('SESSION_STORE_PROVIDER', 'custom');
+    vi.stubEnv(
+      'SESSION_STORE_PROVIDER_CONFIG',
+      JSON.stringify({ module: './src/sessionStore/__fixtures__/fakeSessionStore.cjs' }),
+    );
+    await initializeKeyValueStore();
+    await connectSessionStore();
+    const session = createNamespacedStore<string>('settings', { ttlMs: 100 });
+    await session.set('key', 'session');
+    await getKeyValueStore().set('settings:key', 'kv', { ttlMs: 100 });
+    await expect(session.get('key')).resolves.toBe('session');
+    await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
   });
 });
