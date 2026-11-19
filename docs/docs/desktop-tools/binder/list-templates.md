@@ -8,10 +8,14 @@ sidebar_position: 3
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Searches the chart templates on this machine and returns a page of compact summaries. Each
-summary gives the template's id and source, whether it passes validation (and what blocks it),
-the mark and shelf channels it provides, same-field groups, and the signature of the slots it
-expects fields bound to. Use it to find a template before binding one to the open workbook.
+Searches the worksheet chart templates available to the MCP server on this machine — the set
+that ships in-package, plus any additional templates and saved bookmarks found in the local
+%product_name% repository — and returns a page of compact summaries. Each summary reports the
+template's id, where it came from, whether it currently passes worksheet-template validation
+(and, if not, what blocks it), the visible mark and shelf channels it provides, any
+same-field groups, and a signature of the structural slots it expects fields to be bound to
+(required and optional). Use it to find a template before binding one against the open
+%product_name% workbook.
 
 Every argument is optional: with none supplied the tool returns the first page of the whole
 catalog, ordered by template id. Results are **paginated** — one page per call, with a
@@ -22,14 +26,22 @@ slots in full.
 
 ## APIs called
 
-This tool makes **no** %ecapi_name% call and needs no session. It reads the template library
-on the local machine in-process:
+This tool makes **no** %ecapi_name% call. It reads the template library on the local machine
+and returns the matching summaries entirely in-process — it does not contact the open
+%product_name% instance, the %ecapi_name%, or the Tableau Cloud/Server REST API, and it
+requires no session. Because there is no external call, there are no OAuth scopes and no
+per-session loopback bearer token involved.
 
-- Lists the templates that ship in-package plus any templates and saved bookmarks in the local
-  %product_name% repository. A higher-precedence source shadows a same-named template from a
-  lower one, and the surviving entry is flagged.
-- Converts each template the page examines to derive its slot signature and validation status.
-- Reports each template that was found but could not be used as a diagnostic entry.
+- Lists the template catalog available on this machine: the templates that ship in-package,
+  plus any templates and saved bookmarks in the local %product_name% repository. A template id
+  supplied by a higher-precedence source shadows a same-named one from a lower-precedence
+  source, and the surviving entry is flagged as having done so. Local filesystem; no
+  %ecapi_name% endpoint is called.
+- Reads and converts each template the requested page examines, deriving that template's
+  structural slot signature and its current worksheet-template validation status. Performed
+  in-process (not an %ecapi_name% call).
+- Reports every template that was found but could not be used as a diagnostic entry rather
+  than dropping it silently. Assembled in-process; no %ecapi_name% endpoint is called.
 
 ## Optional arguments
 
@@ -39,23 +51,18 @@ Search text matched against template **ids** — not against descriptions, keywo
 template's contents. Trimmed, `1`–`256` characters. When omitted, every template in the
 catalog is a candidate and the page is ordered by id.
 
-Matching runs in one of three modes, checked in this order:
+Matching runs in one of two modes, chosen automatically:
 
-- **Exact id** — when the query equals a template id (case-insensitive), only that template
-  matches
-- **Token** — otherwise, when at least one template id shares a token with the query, token
-  matching is used. The query is split on non-alphanumeric characters and matched against the
-  tokens of each template id; a template matches when it shares at least one token. Plural
+- **Substring** — when at least one template id contains the query as a case-insensitive
+  substring, only those templates match, ordered by id
+- **Token** — otherwise the query is split on non-alphanumeric characters and matched against
+  the tokens of each template id; a template matches when it shares at least one token. Plural
   and participle forms fold together, so `ranked`, `ranking`, and `ranks` all match `rank`, and
   `bars`, `columns`, `maps`, `charts`, `rates`, and `ratios` match their singular form.
   Orientation and styling words count as synonyms of the shape that has them: `horizontal`
   matches a `bar` template, `vertical` a `column` template, and `filled` a `choropleth`
   template. Matches are ranked by score — an orientation match counts most, then `rank`, then
-  any other shared token. Ties go to the template preferred for a chart noun (for example
-  `ranking-ordered-bar` for `bar`), then, when `includeSlots` is `true`, to templates that pass
-  validation (`pass1_eligible`), then to the shorter id, then to id order
-- **Substring** — only when no template shares a token, the templates whose id contains the
-  query as a case-insensitive substring match, ordered by id
+  any other shared token — with a shorter id breaking a tie and id order breaking the rest
 
 #### Specialized variants
 
@@ -89,8 +96,10 @@ past the current page, and `null` once the last candidate has been examined. So:
 without `cursor`; while `nextCursor` is non-null, call again passing it as `cursor`; stop when
 `nextCursor` is `null`.
 
-With `pass1EligibleOnly`, a page can be empty (`count: 0`) while `nextCursor` is non-null. Keep
-paging until `nextCursor` is `null`.
+A page can be legitimately empty — `count: 0` and `templates: []` — while still returning a
+non-null `nextCursor`, because `pass1EligibleOnly` filters the examined candidates after the
+page has been cut. Keep paging until `nextCursor` is `null` rather than stopping at the first
+empty page.
 
 :::note[Page with the filters that produced the cursor]
 A cursor is only meaningful for the filters it came from, since those filters decide the
@@ -123,6 +132,10 @@ limit you asked for, and `nextCursor` picks up from the last candidate that surv
 single template's summary is over the budget, the call fails rather than returning a truncated
 page.
 
+:::note
+If the metadata for the page cannot fit, the tool refuses: template catalog metadata exceeds the 16384-byte response limit for a compact page, or the 12288-byte response limit when `includeSlots` is true.
+:::
+
 #### Example
 
 ```json
@@ -145,7 +158,9 @@ aggregation the template applies at that position, such as `none` or `sum`), the
 (`binding_usage`) and which channels a calculation on it feeds (`calculation_channels`), and —
 when the template declares them — its `semantic_role`, `communicative_role`, and `purpose`.
 
-Any `limit` other than `1` is refused with `includeSlots requires limit=1 so one bounded structural descriptor is returned.` A detail
+Detail is deliberately one template at a time: `includeSlots` requires `limit` to be `1`.
+Omitting `limit` satisfies that (it defaults to `1` in this mode); any other value is refused
+with `includeSlots requires limit=1 so one bounded structural descriptor is returned.` A detail
 response is held to a `12,288`-byte budget and, unlike a compact page, is not trimmed to fit —
 a descriptor over the budget fails rather than coming back partial.
 
@@ -168,8 +183,12 @@ template is ineligible when converting it leaves an unresolved reference behind,
 converted sheet already fails validation with an error that binding fields cannot fix. Each
 blocker is reported as a short reason code with the offending detail appended.
 
-The filter runs after the page is cut, so `count` can be lower than `scanned` and a page can be
-empty while `nextCursor` is non-null. See [How to page through results](#how-to-page-through-results).
+:::note[The filter runs after the page is cut]
+`pass1EligibleOnly` is applied to the candidates the page examined, not to the candidate list
+that pagination walks. `count` can therefore be lower than `scanned`, and a page can come back
+empty while `nextCursor` still points at more candidates — keep paging until `nextCursor` is
+`null`.
+:::
 
 #### Example
 
@@ -208,20 +227,35 @@ A template is kept only when it provides **every** listed channel. Combine with 
 
 ## Example results
 
-### A search, first page (`query: "bar"`, `limit: 1`)
+### A search, first page (`query: "bar"`, `limit: 2`)
 
-`nextCursor` is non-null, so more candidates remain past this page. `ranking-ordered-bar` comes
-first because it is the preferred template for the `bar` noun.
+`nextCursor` is non-null, so more candidates remain past this page.
 
 ```json
 {
-  "total": 137,
-  "candidateCount": 8,
-  "scanned": 1,
-  "count": 1,
+  "total": 39,
+  "candidateCount": 3,
+  "scanned": 2,
+  "count": 2,
   "nextCursor": "ranking-ordered-bar",
   "diagnostics": { "count": 0, "returned": 0, "truncated": false, "templates": [] },
   "templates": [
+    {
+      "template": "magnitude-horizontal-bar",
+      "provenance": "protected",
+      "overridesLowerPrecedence": false,
+      "pass1_eligible": true,
+      "pass1_blockers": [],
+      "slot_signature": {
+        "total": 2,
+        "required": 2,
+        "kinds": ["categorical", "quantitative"],
+        "required_slots": [
+          { "slot_id": "field_base_1", "kind": "categorical" },
+          { "slot_id": "field_base_2", "kind": "quantitative" }
+        ]
+      }
+    },
     {
       "template": "ranking-ordered-bar",
       "provenance": "protected",
@@ -233,108 +267,44 @@ first because it is the preferred template for the `bar` noun.
         "required": 2,
         "kinds": ["categorical", "quantitative"],
         "required_slots": [
-          {
-            "slot_id": "field_base_1",
-            "kind": "categorical",
-            "derivation": "none",
-            "role": ["rows"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_2",
-            "kind": "quantitative",
-            "derivation": "sum",
-            "role": ["cols"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          }
-        ],
-        "optional_slots": []
-      },
-      "visible_channels": {
-        "direct": ["rows", "cols"],
-        "calculated": []
-      },
-      "same_field_groups": []
+          { "slot_id": "field_base_1", "kind": "categorical" },
+          { "slot_id": "field_base_2", "kind": "quantitative" }
+        ]
+      }
     }
   ]
 }
 ```
 
-### The last page
+### The last page (`cursor` from the previous page)
 
-Called as `{ "query": "bar", "limit": 1, "cursor": "part-to-whole-stacked-bar-chart" }`, where
-the cursor is the `nextCursor` from the seventh page. `nextCursor` is `null`, so this is the end
-of the results.
+Called as `{ "query": "bar", "limit": 2, "cursor": "ranking-ordered-bar" }`. `nextCursor` is
+`null`, so this is the end of the results.
 
 ```json
 {
-  "total": 137,
-  "candidateCount": 8,
+  "total": 39,
+  "candidateCount": 3,
   "scanned": 1,
   "count": 1,
   "nextCursor": null,
   "diagnostics": { "count": 0, "returned": 0, "truncated": false, "templates": [] },
   "templates": [
     {
-      "template": "part-to-whole-proportional-stacked-bar",
+      "template": "ranking-stacked-bar",
       "provenance": "protected",
       "overridesLowerPrecedence": false,
       "pass1_eligible": true,
       "pass1_blockers": [],
       "slot_signature": {
-        "total": 4,
-        "required": 4,
+        "total": 3,
+        "required": 2,
         "kinds": ["categorical", "quantitative"],
         "required_slots": [
-          {
-            "slot_id": "field_base_1",
-            "kind": "categorical",
-            "derivation": "none",
-            "role": ["rows"],
-            "binding_usage": "both",
-            "calculation_channels": ["size"]
-          },
-          {
-            "slot_id": "field_base_2_sum",
-            "kind": "quantitative",
-            "derivation": "sum",
-            "role": ["cols"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_3",
-            "kind": "categorical",
-            "derivation": "none",
-            "role": ["color"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_2_none",
-            "kind": "quantitative",
-            "derivation": "none",
-            "role": [],
-            "binding_usage": "calculation-input",
-            "calculation_channels": ["size"]
-          }
-        ],
-        "optional_slots": []
-      },
-      "visible_channels": {
-        "direct": ["rows", "cols", "color"],
-        "calculated": [
-          {
-            "channel": "size",
-            "dependency_slot_ids": ["field_base_1", "field_base_2_none"]
-          }
+          { "slot_id": "field_base_1", "kind": "categorical" },
+          { "slot_id": "field_base_2", "kind": "quantitative" }
         ]
-      },
-      "same_field_groups": [
-        ["field_base_2_sum", "field_base_2_none"]
-      ]
+      }
     }
   ]
 }
@@ -347,7 +317,7 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
 
 ```json
 {
-  "total": 137,
+  "total": 39,
   "candidateCount": 1,
   "scanned": 1,
   "count": 1,
@@ -365,30 +335,10 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
         "required": 2,
         "kinds": ["categorical", "quantitative"],
         "required_slots": [
-          {
-            "slot_id": "field_base_1",
-            "kind": "categorical",
-            "derivation": "none",
-            "role": ["rows"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_2",
-            "kind": "quantitative",
-            "derivation": "sum",
-            "role": ["cols"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          }
-        ],
-        "optional_slots": []
+          { "slot_id": "field_base_1", "kind": "categorical" },
+          { "slot_id": "field_base_2", "kind": "quantitative" }
+        ]
       },
-      "visible_channels": {
-        "direct": ["rows", "cols"],
-        "calculated": []
-      },
-      "same_field_groups": [],
       "slots": [
         {
           "slot_id": "field_base_1",
@@ -396,11 +346,7 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
           "required": true,
           "bindable": true,
           "derivation": "none",
-          "role": ["rows"],
-          "binding_usage": "direct",
-          "calculation_channels": [],
-          "communicative_role": "axis-partition",
-          "purpose": "Categorical dimension that partitions rows (one mark group per member)."
+          "role": ["rows"]
         },
         {
           "slot_id": "field_base_2",
@@ -408,11 +354,7 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
           "required": true,
           "bindable": true,
           "derivation": "sum",
-          "role": ["cols"],
-          "binding_usage": "direct",
-          "calculation_channels": [],
-          "communicative_role": "measure-value",
-          "purpose": "Continuous measure that drives the primary quantitative axis (bar length / position)."
+          "role": ["cols"]
         }
       ]
     }
@@ -426,7 +368,7 @@ An ineligible template is still returned by default, with the reasons it cannot 
 
 ```json
 {
-  "total": 137,
+  "total": 39,
   "candidateCount": 1,
   "scanned": 1,
   "count": 1,
@@ -434,67 +376,20 @@ An ineligible template is still returned by default, with the reasons it cannot 
   "diagnostics": { "count": 0, "returned": 0, "truncated": false, "templates": [] },
   "templates": [
     {
-      "template": "ranking-bump-chart",
+      "template": "trend-indexed-growth",
       "provenance": "protected",
       "overridesLowerPrecedence": false,
       "pass1_eligible": false,
-      "pass1_blockers": ["unresolved-table-calc-bareRefs: {{field_base_2}}"],
+      "pass1_blockers": ["unresolved-table-calc-bareRefs: [Sales]"],
       "slot_signature": {
-        "total": 4,
-        "required": 4,
-        "kinds": ["categorical", "quantitative", "temporal"],
+        "total": 2,
+        "required": 2,
+        "kinds": ["quantitative", "temporal"],
         "required_slots": [
-          {
-            "slot_id": "field_base_1_yr",
-            "kind": "temporal",
-            "derivation": "yr",
-            "role": ["cols", "filter"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_1_mn",
-            "kind": "temporal",
-            "derivation": "mn",
-            "role": ["cols"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_2",
-            "kind": "categorical",
-            "derivation": "none",
-            "role": ["color"],
-            "binding_usage": "direct",
-            "calculation_channels": []
-          },
-          {
-            "slot_id": "field_base_3",
-            "kind": "quantitative",
-            "derivation": "none",
-            "role": [],
-            "binding_usage": "calculation-input",
-            "calculation_channels": ["rows", "text"]
-          }
-        ],
-        "optional_slots": []
-      },
-      "visible_channels": {
-        "direct": ["cols", "color"],
-        "calculated": [
-          {
-            "channel": "rows",
-            "dependency_slot_ids": ["field_base_3"]
-          },
-          {
-            "channel": "text",
-            "dependency_slot_ids": ["field_base_3"]
-          }
+          { "slot_id": "field_base_1", "kind": "temporal" },
+          { "slot_id": "field_base_2", "kind": "quantitative" }
         ]
-      },
-      "same_field_groups": [
-        ["field_base_1_yr", "field_base_1_mn"]
-      ]
+      }
     }
   ]
 }

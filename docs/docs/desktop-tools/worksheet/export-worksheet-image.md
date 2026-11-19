@@ -69,7 +69,7 @@ When `filePath` is omitted, the rendered image rides back inline only while it f
 <hr />
 
 ### `mimeType`
-Image MIME type to render: `image/png` or `image/svg+xml`. When omitted, no format is sent and %product_name% renders PNG.
+Image MIME type to render: `image/png` or `image/svg+xml`. Defaults to `image/png`. Omitting it requests no particular format, and %product_name% renders its own default.
 
 This argument states the format you are asking for, not the one you are guaranteed to get. The result is labelled from the format %product_name% reports it actually rendered, so a request for SVG that %product_name% serves as PNG comes back labelled `image/png`. An SVG result is returned twice in the same response — once as text carrying the markup, and once as an image block — so clients that cannot render an SVG image block still receive the markup.
 
@@ -84,7 +84,7 @@ The %product_name% session to render from. Omit it when the session is unambiguo
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 ## Notes and caveats
 
@@ -130,7 +130,7 @@ The %product_name% session to render from. Omit it when the session is unambiguo
   "content": [
     {
       "type": "text",
-      "text": "Worksheet image is 2097152 bytes, over the 1048576-byte inline cap. Written to a file instead of returned inline to keep large images out of the conversation.\n\nImage file: /Users/me/.tableau-mcp/cache/worksheet-image-abc123.png\n\nOpen the file to view the image. This local cache file remains until manually removed. To get a smaller inline image next time, request a worksheet instead of a whole dashboard, or pass a filePath to have Tableau write the image directly to a location of your choosing."
+      "text": "Worksheet image is 2097152 bytes, over the 1048576-byte inline cap. Written to a file instead of returned inline to keep large images out of the conversation.\n\nImage file: /Users/me/.tableau-mcp/cache/worksheet-image-abc123.png"
     }
   ]
 }

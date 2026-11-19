@@ -3,6 +3,6 @@
   "position": 2,
   "link": {
     "type": "generated-index",
-    "description": "Tools for reading and applying workbook XML, saving, exporting, and undoing changes, managing auto-updates, and activating sheets in the open workbook."
+    "description": "Tools for reading and applying workbook XML, listing worksheets and dashboards, and activating sheets in the open workbook."
   }
 }

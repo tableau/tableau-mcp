@@ -11,7 +11,7 @@ sidebar_position: 3
 Begins a new authoring/eval episode for a `%product_name%` session and returns a generated `episode_id` that groups the telemetry recorded until the episode ends. The episode is tracked in the MCP server's in-process, per-session state, and — when episode-event recording is enabled — an `episode_begin` event is appended to the server's local episode-events log. If an episode is already open for the resolved session, it is automatically closed (with status `abandoned`) before the new one begins.
 
 :::note[Availability]
-The begin- and end-episode tools are registered only when episode-event recording is enabled on the MCP server — set [`EPISODE_EVENTS`](../../configuration/mcp-config/env-vars.md#episode_events)`=on`. When it is off, neither tool is available.
+The begin- and end-episode tools are registered only when episode-event recording is enabled on the MCP server — set [`EPISODE_EVENTS`](../../configuration/mcp-config/env-vars.md)`=on`. When it is off, neither tool is available.
 :::
 
 ## APIs called
@@ -20,18 +20,18 @@ This tool does **not** call the `%product_name%` `%ecapi_name%`, and it does not
 
 - Records the new episode in the MCP server's in-process, per-session episode state and returns its generated `episode_id`. In-process session state; no API call.
   - If an episode is already open for the resolved session, that episode is first closed with status `abandoned` before the new one is recorded. In-process; no API call.
-- When episode-event recording is enabled, appends an `episode_begin` event to the server's local episode-events log. Local filesystem; no `%ecapi_name%` call. The log is written to [`EPISODE_EVENTS_DIR`](../../configuration/mcp-config/env-vars.md#episode_events_dir), which defaults to [`FILE_LOGGER_DIRECTORY`](../../configuration/mcp-config/env-vars.md#file_logger_directory).
+- When episode-event recording is enabled, appends an `episode_begin` event to the server's local episode-events log. Local filesystem; no `%ecapi_name%` call. The log directory defaults to the server's file-logger directory — [`FILE_LOGGER_DIRECTORY`](../../configuration/mcp-config/env-vars.md#file_logger_directory).
 - Resolves which `%product_name%` session the episode belongs to. When `session` is omitted, this reads the local instance-discovery files written by `%product_name%` to find the running instance. Local filesystem; no `%ecapi_name%` call.
 
 ## Optional arguments
 
 ### `session`
-Session ID identifying which `%product_name%` instance the episode belongs to (for example, `77700`). When omitted, the server targets the session pinned at launch, or — if none is pinned — the single running `%product_name%` instance. If several instances are running and no `session` is given, the call is rejected and asks you to name one.
+Session ID identifying which `%product_name%` instance the episode belongs to (for example, `studio-1`). When omitted, the server targets the session pinned at launch, or — if none is pinned — the single running `%product_name%` instance. If several instances are running and no `session` is given, the call is rejected and asks you to name one.
 
 #### Example
 
 ```json
-{ "session": "77700" }
+{ "session": "studio-1" }
 ```
 
 <hr />

@@ -424,10 +424,10 @@
     "summary": "Reports application information about the Tableau instance that is currently running.",
     "date": "2026-09-01",
     "changeType": "ADD",
-    "toolCategory": "Session",
+    "toolCategory": "Data Sources",
     "toolType": "Desktop Tools",
     "toolName": "get-app-info",
-    "docPath": "/docs/desktop-tools/session/get-app-info"
+    "docPath": "/docs/desktop-tools/data-source/get-app-info"
   },
   {
     "title": "Get Summary Data",
@@ -940,14 +940,14 @@
   },
   {
     "title": "Publish Workbook",
-    "summary": "Publishes a TWB or TWBX workbook from a local file path or staged upload id to a Tableau project.",
+    "summary": "Opens the Publish Workbook dialog for the open workbook. Success means the dialog launched, not that a publish landed.",
     "date": "2026-11-01",
     "changeType": "ADD",
     "toolCategory": "Workbooks",
-    "toolType": "Web Tools",
+    "toolType": "Desktop Tools",
     "toolName": "publish-workbook",
-    "docPath": "/docs/web-tools/workbooks/publish-workbook",
-    "sourceCommit": "c5e4bb24d02e"
+    "docPath": "/docs/desktop-tools/workbook/publish-workbook",
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Search Workbook Fields",
@@ -958,7 +958,7 @@
     "toolType": "Desktop Tools",
     "toolName": "search-workbook-fields",
     "docPath": "/docs/desktop-tools/fields/search-workbook-fields",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Author Parameter",
@@ -969,18 +969,18 @@
     "toolType": "Desktop Tools",
     "toolName": "author-parameter",
     "docPath": "/docs/desktop-tools/data-source/author-parameter",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Get App Info",
     "summary": "Also returns live UI state: Start Page visibility, whether the Data Source page is active, and presentation mode, alongside build identification.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
-    "toolCategory": "Session",
+    "toolCategory": "Data Sources",
     "toolType": "Desktop Tools",
     "toolName": "get-app-info",
-    "docPath": "/docs/desktop-tools/session/get-app-info",
-    "sourceCommit": "c5e4bb24d02e"
+    "docPath": "/docs/desktop-tools/data-source/get-app-info",
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "List Available Fields",
@@ -991,7 +991,7 @@
     "toolType": "Desktop Tools",
     "toolName": "list-available-fields",
     "docPath": "/docs/desktop-tools/fields/list-available-fields",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Refine Worksheet",
@@ -1002,7 +1002,7 @@
     "toolType": "Desktop Tools",
     "toolName": "refine-worksheet",
     "docPath": "/docs/desktop-tools/worksheet/refine-worksheet",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Apply Worksheets and Compose Dashboard",
@@ -1013,7 +1013,7 @@
     "toolType": "Desktop Tools",
     "toolName": "run-dashboard-batch",
     "docPath": "/docs/desktop-tools/dashboard/run-dashboard-batch",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Sort Worksheet",
@@ -1024,7 +1024,7 @@
     "toolType": "Desktop Tools",
     "toolName": "sort-worksheet",
     "docPath": "/docs/desktop-tools/worksheet/sort-worksheet",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Compose Story",
@@ -1094,13 +1094,13 @@
   },
   {
     "title": "Refresh Auto Updates",
-    "summary": "Runs pending automatic updates for one worksheet, dashboard, or storyboard now. Use after batching edits with set-auto-updates-paused.",
+    "summary": "Runs pending automatic updates for one worksheet now. Use after batching edits with pause-auto-updates.",
     "date": "2026-11-01",
     "changeType": "ADD",
-    "toolCategory": "Workbooks",
+    "toolCategory": "Tableau Agent",
     "toolType": "Desktop Tools",
     "toolName": "refresh-auto-updates",
-    "docPath": "/docs/desktop-tools/workbook/refresh-auto-updates",
+    "docPath": "/docs/desktop-tools/tableau-agent/refresh-auto-updates",
     "sourceCommit": "20adccf8fa79"
   },
   {
@@ -1407,24 +1407,14 @@
     "docPath": "/docs/web-tools/flows/run-flow-task"
   },
   {
-    "title": "Scaffold Data App",
-    "summary": "Scaffolds a new Tableau data app workspace: a starter viz extension that queries a published datasource live through the Extensions API.",
+    "title": "Scaffold a Desktop data app",
+    "summary": "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as simple-id. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.",
     "date": "2026-11-01",
     "changeType": "ADD",
     "toolCategory": "Data Apps",
     "toolType": "Web Tools",
     "toolName": "scaffold-data-app",
     "docPath": "/docs/web-tools/data-apps/scaffold-data-app"
-  },
-  {
-    "title": "Scaffold a Desktop data app",
-    "summary": "Prepares a data app package and a worksheet file for a worksheet in the open workbook. Apply it with apply-worksheet.",
-    "date": "2026-11-01",
-    "changeType": "ADD",
-    "toolCategory": "Worksheets",
-    "toolType": "Desktop Tools",
-    "toolName": "scaffold-data-app",
-    "docPath": "/docs/desktop-tools/worksheet/scaffold-data-app"
   },
   {
     "title": "Set Data Source Page Active",
@@ -1642,7 +1632,7 @@
     "toolType": "Desktop Tools",
     "toolName": "refresh-datasource-data",
     "docPath": "/docs/release-notes",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Refresh Datasource Extract",
@@ -1653,7 +1643,7 @@
     "toolType": "Desktop Tools",
     "toolName": "refresh-datasource-extract",
     "docPath": "/docs/release-notes",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "List Workbook Datasources",
@@ -1664,7 +1654,7 @@
     "toolType": "Desktop Tools",
     "toolName": "list-workbook-datasources",
     "docPath": "/docs/release-notes",
-    "sourceCommit": "c5e4bb24d02e"
+    "sourceCommit": "0da0f3336b33"
   },
   {
     "title": "Get Datasource Info",

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 6
 ---
 
 # Search Workbook Fields
@@ -36,7 +36,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 <hr />
 
@@ -68,7 +68,7 @@ Maximum number of matches to return. Type: integer. Range: 1–100. Default: `20
       "datasource": "Sample - Superstore",
       "caption": "Sales",
       "localName": "Sales",
-      "columnRef": "[Sample - Superstore].[sum:Sales:qk]",
+      "columnRef": "[Sample - Superstore].[Sales]",
       "role": "measure",
       "datatype": "real",
       "matchedOn": ["caption", "localName"],

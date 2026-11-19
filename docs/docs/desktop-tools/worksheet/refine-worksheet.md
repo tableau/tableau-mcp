@@ -31,13 +31,9 @@ This tool acts on the workbook open in the local %product_name% instance, commun
   - `GET /v<x>/workbook/worksheets` — list worksheets to resolve the name to an id. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/listWorksheets)
   - `GET /v<x>/workbook/worksheets/{id}/document` — read that worksheet's XML. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetDocument)
 - Validates the planned change before anything is sent to %product_name% — validated in-process (not an API call). An error-severity issue is a refusal; nothing is applied.
-- Applies the change once to that worksheet only.
-  - `POST /v<x>/workbook/worksheets/{id}/document` (`Content-Type: application/xml`) — replace that worksheet with the refined document. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/applyWorksheetDocument)
-- `round_bar` and `round_stacked_bar` also read the data behind the bars, before and after the apply, to build and check the rounded geometry.
-  - `GET /v<x>/workbook/worksheets/{id}/summaryData` — read the worksheet's summary data. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetSummaryData)
-  - `GET /v<x>/workbook/worksheets/{id}/logicalTables` — list the worksheet's logical tables. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/listWorksheetLogicalTables)
-  - `GET /v<x>/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data` — read the logical table's underlying data. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetUnderlyingData)
-  - `GET /v<x>/workbook/document` — read the open workbook document. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
+- Applies the change once as a single whole-workbook write: reads the current workbook, splices in the one changed sheet, and posts the whole document back (the %ecapi_name% has no per-sheet apply route).
+  - `GET /v<x>/workbook/document` — read the current workbook XML to splice the change into. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
+  - `POST /v<x>/workbook/document` (`Content-Type: application/xml`) — apply the updated workbook XML. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
 - Re-reads the worksheet up to 8 times, 250 ms apart, to confirm the change actually took effect.
   - `GET /v<x>/workbook/worksheets` — re-resolve the worksheet id. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/listWorksheets)
   - `GET /v<x>/workbook/worksheets/{id}/document` — re-read the worksheet to confirm. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetDocument)
@@ -78,7 +74,7 @@ Flips the direction of the worksheet's existing sort. Requires [`sortDirection`]
 
 #### `sort_by_field`
 
-Sorts a categorical axis by a measure. Requires [`sortByField`](#sortbyfield); optionally set [`targetField`](#targetfield) (the axis) and [`direction`](#direction). When `targetField` is omitted, the sort applies to the innermost dimension on the one shelf that holds dimensions. It is refused when both Rows and Columns hold dimensions.
+Sorts a categorical axis by a measure. Requires [`sortByField`](#sortbyfield); optionally set [`targetField`](#targetfield) (the axis) and [`direction`](#direction). When `targetField` is omitted, the axis is auto-detected only if the worksheet has exactly one categorical axis.
 
 #### `mark_type`
 
@@ -98,7 +94,7 @@ Rebuilds the worksheet as subtle rounded stacked bars. Requires [`preset`](#pres
 
 ## Optional arguments
 
-Each operation has a matching argument below (enforced by the tool, not the JSON schema). Arguments that belong to a different operation are ignored, with one exception: `sort_by_field` reads `sortDirection.direction` when [`direction`](#direction) is omitted.
+Each operation has a matching argument below (enforced by the tool, not the JSON schema). Arguments that belong to a different operation are ignored.
 
 ### `topN`
 
@@ -153,13 +149,13 @@ Omitting `sortByField` when `operation` is `sort_by_field` is refused with `sort
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 <hr />
 
 ### `targetField`
 
-Used only when `operation` is `sort_by_field`: the axis to sort. Omit to sort the innermost dimension on the one shelf that holds dimensions; refused when both Rows and Columns hold dimensions.
+Used only when `operation` is `sort_by_field`: the axis to sort. Omit to auto-detect the categorical axis when the worksheet has exactly one.
 
 #### Example
 
@@ -169,7 +165,7 @@ Used only when `operation` is `sort_by_field`: the axis to sort. Omit to sort th
 
 ### `direction`
 
-Used only when `operation` is `sort_by_field`: `"asc"` or `"desc"`. Defaults to `asc`; for numeric fields `desc` is largest first. When omitted, `sort_by_field` falls back to `sortDirection.direction` (`"ASC"` or `"DESC"`). When both are given, `direction` wins.
+Used only when `operation` is `sort_by_field`: `"asc"` or `"desc"`. Defaults to `asc`; for numeric fields `desc` is largest first.
 
 #### Example
 
@@ -205,9 +201,9 @@ Used only when `operation` is `sort_by_field`: `"asc"` or `"desc"`. Defaults to 
 
 ## Notes and caveats
 
-- **Refusals are not errors.** When the request is something this tool can't do (for example, no existing sort to flip, dimensions on both Rows and Columns with no `targetField`, or the change fails validation), the tool returns `refined: false` with a precise `reason` and applies nothing.
-- **No retry.** The change is applied at most once.
-- **An unconfirmed write is an error, not a refusal.** If the readback cannot confirm the change, or for `sort_by_field` shows a different direction than requested, the tool returns an error with `applied: true`, `retrySafe: false` and `stage: "readback"`. The change was sent, so inspect the worksheet and do not retry blindly.
+- **Refusals are not errors.** When the request is something this tool can't do (for example, no existing sort to flip, no single categorical axis to auto-detect, or the change fails validation), the tool returns `refined: false` with a precise `reason` and applies nothing.
+- **No retry.** The change is applied at most once; if it is not confirmed within the re-read attempts, the tool refuses and hands back to the full authoring path (`get-xml` + `apply-worksheet`).
+- **Direction mismatch is reported precisely.** For `sort_by_field`, if the sort is applied but %product_name% uses a different direction than requested, the tool refuses with a direction-mismatch reason rather than reporting success.
 
 ## Example results
 
@@ -216,12 +212,9 @@ Used only when `operation` is `sort_by_field`: `"asc"` or `"desc"`. Defaults to 
 ```json
 {
   "refined": true,
-  "applied": true,
-  "retrySafe": false,
   "operation": "top_n",
   "worksheetName": "Sales by Region",
-  "message": "Applied top_n to worksheet \"Sales by Region\" and confirmed the Top-N filter (function=\"end\") on [Region] on readback.",
-  "verification": { "ok": true, "status": "passed" }
+  "message": "Applied top_n to worksheet \"Sales by Region\" and confirmed the Top-N filter (function=\"end\") on [Region] on readback."
 }
 ```
 

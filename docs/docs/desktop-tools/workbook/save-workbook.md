@@ -8,7 +8,7 @@ sidebar_position: 13
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Saves the workbook currently open in %product_name%. Omit `filePath` to write it in place at the path it already has, or pass an absolute `.twb` or `.twbx` path to Save As: the workbook is written there and becomes the open document. To write a copy without changing the open document, use [`workbook-export-as`](./workbook-export-as.md). When the workbook has no writable path — it was never saved, its file cannot be written, or it was recovered from an autosave draft — omitting `filePath` opens the Save As dialog and blocks until a person responds. Pass `filePath` to save it headlessly.
+Saves the workbook currently open in %product_name%. Omit `filePath` to write it in place at the path it already has, or pass an absolute `.twb` or `.twbx` path to save a copy there. A workbook that has never been saved has no path, so omitting `filePath` then opens the Save As dialog and blocks until a person responds — pass `filePath` to save it headlessly.
 
 :::note[Not read-only]
 This tool is not read-only, but it is idempotent. It writes the open workbook to disk in the live %product_name% session; repeating the call after a successful save is a no-op.
@@ -19,9 +19,9 @@ This tool is not read-only, but it is idempotent. It writes the open workbook to
 This tool acts on the workbook open in the running %product_name% instance, not on the Tableau Cloud or Tableau Server REST API. Under the hood these are calls to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. There are no OAuth scopes: each call is authorized by the running %product_name% instance's per-session bearer token over the loopback interface.
 
 - Settles on which %product_name% session to target before anything is sent. Resolved in-process (not an API call).
-- Asks %product_name% to save the open workbook. When `filePath` is omitted the request body is an empty JSON object, which saves in place at the workbook's current path; when `filePath` is supplied the body is `{ "filePath": "..." }`, which saves the workbook as that file and makes it the open document. Requires a connected %product_name% session with an open workbook; authorized by that session's loopback bearer token.
-  - `POST /v<x>/workbook:save` — save the open workbook in place, or Save As to `filePath`. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/saveWorkbook)
-- After an in-place save that has finished, reads whether the workbook still has unsaved changes. A finished save can still be a no-op — for example when the Save As dialog was dismissed — so the tool confirms the write this way rather than trusting the save status alone. This read is skipped when `filePath` is supplied or the save is still being applied. Requires a connected %product_name% session; authorized by that session's loopback bearer token.
+- Asks %product_name% to save the open workbook. When `filePath` is omitted the request body is an empty JSON object, which saves in place at the workbook's current path; when `filePath` is supplied the body is `{ "filePath": "..." }`, which writes a copy there. Requires a connected %product_name% session with an open workbook; authorized by that session's loopback bearer token.
+  - `POST /v<x>/workbook:save` — save the open workbook in place, or save a copy to `filePath`. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/saveWorkbook)
+- After a save that has finished, reads whether the workbook still has unsaved changes. A finished save can still be a no-op — for example when the Save As dialog was dismissed — so the tool confirms the write this way rather than trusting the save status alone. This read is skipped when the save is still being applied. Requires a connected %product_name% session; authorized by that session's loopback bearer token.
   - `GET /v<x>/workbook` — read the open workbook's metadata, including whether it still has unsaved changes. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbook)
 
 ## Optional arguments
@@ -31,7 +31,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -40,16 +40,16 @@ With no `session` given and no %product_name% instance running, or more than one
 <hr />
 
 ### `filePath`
-Absolute path to Save As. Type: string. After the save, the open workbook points at this file. Minimum length: 1. The path must end in `.twb` or `.twbx`; %product_name% writes workbook content as-is without converting, so any other extension is rejected rather than writing a mislabeled file. Omit this argument to save in place at the workbook's current path.
+Absolute path to save a copy of the open workbook to. Type: string. Minimum length: 1. The path must end in `.twb` or `.twbx`; %product_name% writes workbook content as-is without converting, so any other extension is rejected rather than writing a mislabeled file. Omit this argument to save in place at the workbook's current path.
 
 #### Example
 
 `"/Users/me/Copy.twbx"`
 
-:::note[A workbook with no writable path blocks on Save As]
-Omitting `filePath` opens %product_name%'s native Save As dialog, and the call blocks until a person responds, when the workbook was never saved, its file cannot be written, or it was recovered from an autosave draft. Saving a workbook from an older version may also show an upgrade prompt. Pass `filePath` to save headlessly.
+:::note[Never-saved workbooks block on Save As]
+A workbook that has never been saved has no current path. Omitting `filePath` in that case leaves nowhere to write, so %product_name% opens its native Save As dialog and the call blocks until a person responds. Pass `filePath` to save that workbook headlessly.
 
-If the person dismisses the dialog, %product_name% can still report the save as complete. For an in-place save, the tool then reads whether the workbook still has unsaved changes; when it does, it returns an error result instead of claiming success.
+If the person dismisses the dialog without choosing a path, %product_name% can still report the save as complete. The tool then reads whether the workbook still has unsaved changes; when it does, the result says the workbook was not saved rather than claiming success.
 :::
 
 ## Notes and caveats
@@ -64,10 +64,10 @@ If the person dismisses the dialog, %product_name% can still report the save as 
 { "message": "Saved the open workbook." }
 ```
 
-### Saved as a new file (`filePath` supplied)
+### Saved a copy (`filePath` supplied)
 
 ```json
-{ "message": "Saved the workbook as \"/Users/me/Copy.twbx\"; it is now the open document." }
+{ "message": "Saved a copy to \"/Users/me/Copy.twbx\"." }
 ```
 
 ### Accepted, still being applied
@@ -76,16 +76,14 @@ If the person dismisses the dialog, %product_name% can still report the save as 
 { "message": "Requested saving the workbook; Desktop is still applying it." }
 ```
 
-### Save dialog dismissed (`filePath` omitted, unsaved changes remain)
+### Save As dismissed (unsaved changes remain)
 
-This case is an error result, checked only for an in-place save:
-
-```text
-The save did not complete: Desktop reported it finished, but the workbook still has unsaved changes. A Save dialog may have been dismissed. Do not retry without filePath unless the user is at the machine, because a retry reopens a dialog that blocks until a person answers.
+```json
+{ "message": "Tableau reported the save as complete, but the workbook still has unsaved changes, so it was not saved (the Save As dialog was likely dismissed)." }
 ```
 
 ## Related
 
 - [`open-file`](./open-file.md) — opens a local workbook or datasource file in %product_name%.
-- [`workbook-export-as`](./workbook-export-as.md) — writes a PDF, PowerPoint, packaged, or prior-version copy without changing the open document. Use it instead of `filePath` when you want a copy.
+- [`workbook-export-as`](./workbook-export-as.md) — writes a PDF, PowerPoint, packaged, or prior-version copy without changing the open document.
 - `undo-redo-workbook` — reverses the most recent change to the open workbook.

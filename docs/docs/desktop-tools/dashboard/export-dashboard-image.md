@@ -61,7 +61,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 <hr />
 
@@ -110,7 +110,7 @@ Dashboard image is 2097152 bytes, over the 1048576-byte inline cap. Written to a
 
 Image file: /Users/me/.tableau-mcp/cache/dashboard-image-abc123.png
 
-Open the file to view the image. This local cache file remains until manually removed. To get a smaller inline image next time, request a worksheet instead of a whole dashboard, or pass a filePath to have Tableau write the image directly to a location of your choosing.
+Open the file to view the image. To get a smaller inline image next time, request a worksheet instead of a whole dashboard, or pass a filePath to have Tableau write the image directly to a location of your choosing.
 ```
 
 ## Related

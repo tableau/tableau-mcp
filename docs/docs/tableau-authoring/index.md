@@ -36,7 +36,7 @@ a model to invent a decision path, and it moves on to involving the model rather
 | Recognizable single-view chart | [`bind-template`](../desktop-tools/binder/bind-template.md). One call can bind and apply. |
 | Calculated metric, no chart named (margin %, ratio, growth) | Create the calculation first ([`author-calc`](../desktop-tools/data-source/author-calc.md)), then follow the chart path above. [`bind-template`](../desktop-tools/binder/bind-template.md) can also author those fields in the same call via `calcs`. |
 | Unfamiliar, calculation-heavy, or "which chart?" | Search the expertise library ([Expertise tools](../desktop-tools/expertise/search-expertise.md)) *before* building |
-| Dashboard | Finish each worksheet, then assemble with [`run-dashboard-batch`](../desktop-tools/dashboard/run-dashboard-batch.md). Pass `existingWorksheetNames`/`kpiWorksheetNames` for sheets that are already live, or `artifactIds` for staged built artifacts |
+| Dashboard | Finish each worksheet, then assemble (`compose-dashboard` when the sheets are already live, or [`run-dashboard-batch`](../desktop-tools/dashboard/run-dashboard-batch.md) when applying a queue of built artifacts) |
 | Change to an existing sheet | Edit in place: [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) (top-N / sort) or [`add-field`](../desktop-tools/fields/add-field.md). New sheets only if asked |
 | Number or data question against an existing sheet | Read that worksheet's summary rows ([`get-summary-data`](../desktop-tools/data-source/get-summary-data.md)). This is not a general datasource-query tool, and the row order it returns does not prove the chart's visual order |
 
@@ -126,7 +126,7 @@ Drop to the smaller tools — [`author-calc`](../desktop-tools/data-source/autho
 [`author-parameter`](../desktop-tools/data-source/author-parameter.md),
 [`author-set`](../desktop-tools/data-source/author-set.md),
 [`author-action`](../desktop-tools/data-source/author-action.md),
-[`format-worksheets`](../desktop-tools/worksheet/format-worksheets.md) — then the template
+`format-labels` — then the template
 path. Small in-place edits (top-N, sort) have a narrow
 [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) fast lane;
 anything outside that lane should be **refused, not attempted**. Asks the binder has no fast
@@ -144,9 +144,10 @@ Whether a write is checked afterward depends on the tool, not the size or comple
 The single-worksheet paths and the smaller tools re-read what they wrote to confirm it stuck.
 Worksheet apply paths that advertise host verification —
 [`apply-worksheet`](../desktop-tools/worksheet/apply-worksheet.md),
+`build-and-apply-worksheet`,
 [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) — re-read the
 affected sheet and treat a failed readback as a failure, not a success.
-The smaller
+`compose-dashboard` and the smaller
 authoring tools (`author-calc`, `author-parameter`, `author-set`, `author-action`) also verify
 the write on readback.
 
@@ -181,7 +182,7 @@ guarantee that the current build enforces them. See also
 
 ### Local templates win (overriding shipped templates)
 
-_coming in %coming_release% release_
+_coming in %coming-release% release_
 
 If you have a template with the same name in your local %product_name% repository, that one
 wins over the bundled one. [`list-templates`](../desktop-tools/binder/list-templates.md)
@@ -207,7 +208,10 @@ Where the corpus informs judgment, these assets are consumed directly by the aut
 | Asset | What it is | Surfaced through |
 | --- | --- | --- |
 | **Chart templates** | Reusable worksheet structure. Each template's chart *family*, intent keywords, and field *slots* are available to the tools at bind time. | [`list-templates`](../desktop-tools/binder/list-templates.md), [`bind-template`](../desktop-tools/binder/bind-template.md), [`build-worksheets-from-templates`](../desktop-tools/template/build-worksheets-from-templates.md) |
-| **Dashboard guide** | Guidance on the dashboard zone tree, coordinate system, and layout patterns. | MCP resource `tableau://docs/dashboard-xml-guide` |
+| **Curated examples + diff corpus** | Named feature examples (calcs, LOD, dual-axis, parameters, …) and a corpus of before/after XML diffs for common transformations. | `search-examples`, `search-workbook-examples` |
+| **Commands reference** | The catalog of %product_name% commands, marked by whether an agent may invoke them. Loaded from the live %ecapi_name% registry, not a snapshot bundled into the MCP server. | `search-commands` |
+| **Workbook schema reference** | The TWB element/enum reference for raw XML authoring. | `lookup-workbook-schema` |
+| **Dashboard guide** | Guidance on the dashboard zone tree, coordinate system, and layout patterns. | `get-dashboard-guide` |
 
 Chart templates are grouped into a small **family taxonomy** — `time-series`, `ranking`,
 `part-to-whole`, `correlation`, `distribution`, `deviation`, `magnitude`, `spatial`, `kpi`, and
@@ -259,7 +263,8 @@ Template and corpus layout, for local forks and reviewers.
 | --- | --- |
 | Chart template bookmarks | `src/desktop/data/templates/*.tbm` |
 | Curated examples + diff corpus | `src/desktop/data/examples/` and `src/desktop/data/corpus.json` |
-| Workbook schema | `src/desktop/data/twb_2026.2.0.xsd` |
+| Commands reference | Live registry at `TABLEAU_COMMANDS_REGISTRY_DIR` (`command_param_registry.json`) |
+| Workbook schema reference | `src/desktop/data/workbook-schema-reference.json` |
 | Dashboard guide | `resources/desktop/dashboard-xml-guide.md` |
 | Validation rule registry | `src/desktop/validation/registry.ts`; individual rules under `src/desktop/validation/rules/` |
 
@@ -286,7 +291,7 @@ sheets placed on a dashboard with real data. | _What skills do:_ Do not call
 dashboard-bound sheets. Use [`list-available-fields`](../desktop-tools/fields/list-available-fields.md)
 formula text plus dashboard XML hints as the fallback (Logic Explainer HC#7).
 
-**Worksheet applies ([`apply-worksheet`](../desktop-tools/worksheet/apply-worksheet.md), `bind-template` with `auto_apply`) can corrupt parameter-referencing calcs**  Formula text reads back
+**`build-and-apply-worksheet` corrupts parameter-referencing calcs**  Formula text reads back
 unchanged while live behavior is broken. Readback cannot detect this. | _What skills do:_
 Hard-stop on any worksheet-shelf-mutating tool call when the data source contains
 parameter-referencing calcs. Calc Translator and Data Scribe already enforce this.
@@ -317,9 +322,8 @@ Spellcheck, i18n Scanner). Deliver findings, let the user apply them.
 product behavior, not an MCP bug. | _What skills do:_ For testing, use runtime-error calcs
 (division by zero, DATEPARSE with bad input) instead of broken-field references.
 
-**Missing lifecycle commands**  No `calc-delete`, `parameter-delete`, `set-delete`, or
-`hierarchy-delete` tools exist. Delete worksheets, dashboards and stories with
-[`delete-sheet`](../desktop-tools/workbook/delete-sheet.md). | _What skills do:_ Advise the user on
+**Missing lifecycle commands**  No `calc-delete`, `parameter-delete`, `worksheet-delete`,
+`set-delete`, or `hierarchy-delete` tools exist. | _What skills do:_ Advise the user on
 cleanup manually. Do not promise deletion.
 
 

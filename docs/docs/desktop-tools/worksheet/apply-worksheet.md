@@ -41,11 +41,11 @@ This tool acts on the worksheet in the workbook open in the local %product_name%
 
 ## Optional arguments
 
-Every argument is optional in the schema, but the three supply paths each have their own requirements: a template-plan apply needs `templatePlan`, an artifact apply needs `artifactId`, and a cached-file apply needs `worksheetFile` (`worksheetName` is optional and can be inferred from the cached fragment). `worksheetName` with no `artifactId` or `templatePlan` selects the cached-file apply. A call that supplies none of those paths, or more than one, is refused.
+Every argument is optional in the schema, but the three supply paths each have their own requirements: a template-plan apply needs `templatePlan` alone, an artifact apply needs `artifactId` alone, and a cached-file apply needs `worksheetFile` (`worksheetName` is optional and can be inferred from the cached fragment). A call that supplies none of those paths, or more than one, is refused.
 
 ### `artifactId`
 
-Identifier of a prepared worksheet artifact held by this MCP server, as returned by [`build-worksheets-from-templates`](../template/build-worksheets-from-templates.md). Omit it for a direct template plan or a cached-file apply. Supplying it selects the artifact apply. It cannot be combined with `templatePlan` or `worksheetFile`; the call is refused rather than guessing which content you meant. `worksheetName` may be passed with it and must equal the artifact title. Range: 1-255 characters.
+Identifier of a prepared worksheet artifact held by this MCP server, as returned by [`build-worksheets-from-templates`](../template/build-worksheets-from-templates.md). Omit it for a direct template plan or a cached-file apply. Supplying it selects the artifact apply, and it must be supplied **on its own** — combined with `templatePlan`, `worksheetName`, or `worksheetFile` the call is refused rather than guessing which content you meant. Range: 1-255 characters.
 
 #### Artifact availability
 
@@ -59,13 +59,12 @@ An artifact is single-use and belongs to the %product_name% session it was built
 
 ### `templatePlan`
 
-Exact template binding to build and apply in this call (_available September 2026 and later_). Supplying it selects the template-plan apply. It cannot be combined with `artifactId` or `worksheetFile`. `worksheetName` may be passed with it and must equal `templatePlan.title`. Nested fields:
+Exact template binding to build and apply in this call (_available September 2026 and later_). Supplying it selects the template-plan apply, and it must be supplied **on its own**. Nested fields:
 
 - `templateName` — worksheet template id. Range: 1-128 characters.
 - `title` — worksheet name to create. Range: 1-255 characters.
 - `datasource` — live datasource name. Range: 1-255 characters.
 - `fieldMapping` — object mapping each template slot id to a live field reference.
-- `derivationOverrides` — optional object mapping a template slot id to a count derivation, `cnt` or `ctd`.
 
 #### Example
 
@@ -91,7 +90,7 @@ Template "the template name" is not available. Template "the template name" coul
 
 ### `worksheetName`
 
-Existing worksheet id or name to update (_available September 2026 and later_ for matching by id). **Optional for a cached-file apply** — when omitted, the name is inferred from the cached fragment — and **optional for an artifact or template-plan apply**, where it must match the artifact or plan title. When supplied, this must match the `name` attribute on the top-level `<worksheet>` element in the XML you supply. Range: 1-255 characters.
+Existing worksheet id or name to update (_available September 2026 and later_ for matching by id). **Optional for a cached-file apply** — when omitted, the name is inferred from the cached fragment — and **omitted for an artifact apply or a template-plan apply**, where the artifact or plan supplies its own title. When supplied, this must match the `name` attribute on the top-level `<worksheet>` element in the XML you supply. Range: 1-255 characters.
 
 #### Name match gate
 
@@ -136,7 +135,7 @@ In a cached-file apply, the resolved session must match the session that produce
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 ## Notes and caveats
 
@@ -150,11 +149,7 @@ In a cached-file apply, the resolved session must match the session that produce
 
 ```json
 {
-  "message": "Successfully applied worksheet update for \"Sales by Region\". The worksheet has been updated.\n\nHOST VERIFICATION — verified: preflight clean · apply completed · readback clean. No host evidence of any workbook problem beyond the findings listed above — do not report unlisted issues.",
-  "title": "Sales by Region",
-  "applied": true,
-  "retrySafe": false,
-  "verification": { "ok": true, "status": "passed" }
+  "message": "Successfully applied worksheet update for \"Sales by Region\". The worksheet has been updated.\n\nHOST VERIFICATION — verified: preflight clean · apply completed · readback clean. No host evidence of any workbook problem beyond the findings listed above — do not report unlisted issues."
 }
 ```
 
@@ -162,15 +157,7 @@ In a cached-file apply, the resolved session must match the session that produce
 
 ```json
 {
-  "message": "Successfully applied worksheet update for \"Sales by Region\". The worksheet has been updated.\n\nHOST VERIFICATION — unverified: preflight clean · apply completed · readback unavailable. Do not claim the change is confirmed; report only the evidence above.",
-  "title": "Sales by Region",
-  "applied": true,
-  "retrySafe": false,
-  "verification": {
-    "ok": true,
-    "status": "skipped",
-    "message": "Post-apply verification was unavailable."
-  }
+  "message": "Successfully applied worksheet update for \"Sales by Region\". The worksheet has been updated.\n\nHOST VERIFICATION — unverified: preflight clean · apply completed · readback unavailable. Do not claim the change is confirmed; report only the evidence above."
 }
 ```
 
@@ -184,48 +171,7 @@ An artifact apply reports the artifact it consumed and the readback outcome inst
   "title": "Revenue by Segment",
   "applied": true,
   "retrySafe": false,
-  "verification": { "ok": true, "status": "passed" },
-  "nextAction": {
-    "kind": "done",
-    "label": "Artifact apply dispatched — see verification",
-    "receipt": {
-      "did": [
-        "Desktop accepted the artifact apply for worksheet \"Revenue by Segment\"",
-        "read back the applied worksheet — verification status \"passed\""
-      ],
-      "didNot": [],
-      "unverified": [
-        "whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering"
-      ]
-    }
-  }
-}
-```
-
-### Template-plan apply
-
-A template-plan apply returns the same shape as an artifact apply, without `artifactId`, since no artifact is held.
-
-```json
-{
-  "title": "Sales by Region",
-  "applied": true,
-  "retrySafe": false,
-  "verification": { "ok": true, "status": "passed" },
-  "nextAction": {
-    "kind": "done",
-    "label": "Direct template apply dispatched — see verification",
-    "receipt": {
-      "did": [
-        "Desktop accepted the direct template apply for worksheet \"Sales by Region\"",
-        "read back the applied worksheet — verification status \"passed\""
-      ],
-      "didNot": [],
-      "unverified": [
-        "whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering"
-      ]
-    }
-  }
+  "verification": { "ok": true, "status": "passed" }
 }
 ```
 

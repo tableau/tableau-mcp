@@ -3,6 +3,6 @@
   "position": 15,
   "link": {
     "type": "generated-index",
-    "description": "Tools that report the Tableau Studio External API capabilities, diagnostics, and operations."
+    "description": "Passthrough tools that expose the Tableau Studio external API surface (site, dashboard, worksheet, and health info)."
   }
 }

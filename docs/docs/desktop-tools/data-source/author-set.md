@@ -181,7 +181,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 ## Notes and caveats
 

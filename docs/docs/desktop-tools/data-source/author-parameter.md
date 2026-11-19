@@ -43,7 +43,7 @@ An empty caption is refused with `caption empty`. A caption that matches a param
 
 ### `value`
 
-The parameter's current value, given as a string. This seeds both the parameter's current value and its calculation formula. For `string` parameters the value is quoted. For `date` it is written as a `#...#` date literal (an existing `#...#` wrapper is kept). For `integer`, `real`, and `boolean` it is used as-is.
+The parameter's current value, given as a string. This seeds both the parameter's current value and its calculation formula. For `string` and `date` parameters the value is quoted automatically; for `integer`, `real`, and `boolean` parameters it is used as-is.
 
 #### Example
 
@@ -56,8 +56,7 @@ The parameter's current value, given as a string. This seeds both the parameter'
 The parameter's data type. One of `integer`, `real`, `string`, `boolean`, or `date`. Defaults to `integer`.
 
 - `integer`, `real`, `boolean` — the value is used unquoted; `integer` parameters are additionally marked as customized.
-- `string` — the value (and any `members`) are quoted.
-- `date` — the value (and any `members`) are written as `#...#` date literals.
+- `string`, `date` — the value (and any `members`) are quoted.
 
 #### Example
 
@@ -67,7 +66,7 @@ The parameter's data type. One of `integer`, `real`, `string`, `boolean`, or `da
 
 ### `members`
 
-An optional list of allowable values for the parameter. When one or more members are supplied, the parameter is created as a list parameter, so only those values are selectable; when omitted, the parameter accepts any value of its data type. Members follow the same rules as `value`: quoted for `string`, written as `#...#` literals for `date`.
+An optional list of allowable values for the parameter. When one or more members are supplied, the parameter is created as a list parameter, so only those values are selectable; when omitted, the parameter accepts any value of its data type. Members follow the same quoting as `value` (quoted for `string` and `date`).
 
 #### Example
 
@@ -78,7 +77,7 @@ An optional list of allowable values for the parameter. When one or more members
 <hr />
 
 ### `datasource`
-Internal datasource name or unique caption of the host datasource that should carry the Parameters dependency block. When omitted, the tool selects a host datasource from the open workbook.
+Host datasource id or name that should carry the Parameters dependency block. When omitted, the tool selects a host datasource from the open workbook.
 
 #### Example
 
@@ -100,7 +99,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 ## Notes and caveats
 

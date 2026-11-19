@@ -8,7 +8,7 @@ sidebar_position: 9
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Opens a local file in %product_name% by absolute path: a `.twb`/`.twbx` opens as a workbook, while a datasource file (Excel, `.tds`, extract, and the like) attaches to the open workbook. A workbook replaces the open one if that one is empty and unsaved, and opening the file that is already open reloads it after a save prompt. Any other workbook opens in a new window, and this session stays bound to the original — reads keep reporting the first workbook, not the newly opened one. If a datasource does not appear, check [`get-active-dialogs`](../dialogs/get-active-dialogs.md).
+Opens a local file in %product_name% by absolute path: a `.twb`/`.twbx` opens as a workbook, while a datasource file (Excel, `.tds`, extract, and the like) attaches to the open workbook. Opening a workbook while one is already open launches a new window, but this session stays bound to the original — reads keep reporting the first workbook, not the newly opened one.
 
 :::note[Not read-only]
 This tool is not read-only and not idempotent. It opens a file in the live %product_name% session, so repeating the call is not a no-op.
@@ -25,7 +25,7 @@ This tool acts on the running %product_name% instance, not on the Tableau Cloud 
 ## Required arguments
 
 ### `filePath`
-Absolute path of the local file to open. Type: string. Must contain at least one character. A `.twb` or `.twbx` opens as a workbook. A datasource file (Excel, text, spatial, extract, `.tds`, and the like) attaches to the workbook already open in the session, and %product_name% creates a workbook first if none is open. The tool sends the path as-is; %product_name% itself rejects a file type it cannot open.
+Absolute path of the local file to open. Type: string. Must contain at least one character. A `.twb` or `.twbx` opens as a workbook. A datasource file (Excel, text, spatial, extract, `.tds`, and the like) attaches to the workbook already open in the session, and %product_name% creates a workbook first if none is open. A file type %product_name% cannot open is refused before the file is dispatched.
 
 #### Example
 
@@ -34,13 +34,7 @@ Absolute path of the local file to open. Type: string. Must contain at least one
 ```
 
 :::note[New window vs this session]
-When `filePath` points at a `.twb` or `.twbx` and a workbook is already open, one of three things happens:
-
-- If the open workbook is empty and unsaved, the new workbook replaces it.
-- If `filePath` is the file already open, %product_name% reloads it after a save prompt.
-- Otherwise %product_name% opens the file in a new window. This session stays bound to the original workbook: later reads still describe the first workbook, not the one just opened.
-
-Opening a datasource file does not start a new window — it attaches to the workbook this session already has.
+When `filePath` points at a `.twb` or `.twbx` and a workbook is already open, %product_name% launches that file in a new window. This session stays bound to the original workbook: later reads still describe the first workbook, not the one just opened. Opening a datasource file does not start a new window — it attaches to the workbook this session already has.
 :::
 
 ## Optional arguments
@@ -50,7 +44,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -76,6 +70,6 @@ With no `session` given and no %product_name% instance running, or more than one
 
 ## Related
 
-- [`save-workbook`](./save-workbook.md) — saves the session-bound open workbook in place, or Save As to an absolute path, which becomes the open document.
+- [`save-workbook`](./save-workbook.md) — saves the session-bound open workbook in place, or a copy to an absolute path.
 - `get-sheets` — lists worksheets in the workbook this session is bound to, which remains the original workbook if `open-file` launched a second window.
 - `get-xml` — reads the structure of that same session-bound workbook.

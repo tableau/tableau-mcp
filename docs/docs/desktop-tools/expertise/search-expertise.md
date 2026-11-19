@@ -88,11 +88,11 @@ When there are no keyword hits, `nearestMatches` is capped at 5 modules, and at 
 
 ## Example results
 
-The tool returns this JSON as pretty-printed text. Every hit includes `score`, a number from 0 to 1 (higher is closer). The first example shows it. The later examples leave it out.
+The tool returns this JSON as pretty-printed text. Every hit includes `score`, a number from 0 to 1 (higher is closer). The first example shows one. The later examples leave it out.
 
 ### No module text (`query`: "pie chart of countries", `limit`: 3)
 
-`topHitBody` is omitted when the top hit is not confident, so read `mustReadUri`. Here the top two scores differ by less than 0.15, so the chart-selection hit is not confident. Its `sections` list is the module's level-1 and level-2 heading slugs; the next example shows that field.
+`topHitBody` is omitted when the top hit is not confident, so read `mustReadUri`. The hit below is a chart-selection match in that situation. Its `sections` list is the module's level-1 and level-2 heading slugs; the next example shows that field.
 
 ```json
 {
@@ -106,14 +106,6 @@ The tool returns this JSON as pretty-printed text. Every hit includes `score`, a
       "match": "keyword",
       "mustReadUri": "expertise://tableau/strategy/viz-design/chart-selection",
       "instruction": "snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module"
-    },
-    {
-      "uri": "expertise://tableau/tactics/viz/marks-and-encodings",
-      "slug": "tactics/viz/marks-and-encodings",
-      "title": "Marks and Encodings",
-      "score": 0.88,
-      "snippet": "Pick the mark type and encodings for each field.",
-      "match": "keyword"
     }
   ]
 }

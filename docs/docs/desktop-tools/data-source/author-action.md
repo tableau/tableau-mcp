@@ -8,15 +8,13 @@ sidebar_position: 2
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Authors an action in the workbook currently open in %product_name%. An action wires a mark interaction on a source worksheet (or, in `url`, `filter`, and `highlight` modes, a source dashboard) to a target elsewhere in the workbook: when the reader interacts with marks on the source, the action fires and updates that target. The new action is added to the workbook and the change is verified before the tool reports success.
+Authors an action in the workbook currently open in %product_name%. An action wires a mark interaction on a source worksheet (or, in `url` mode, a source dashboard) to a target elsewhere in the workbook: when the reader interacts with marks on the source, the action fires and updates that target. The new action is added to the workbook and the change is verified before the tool reports success.
 
 The `mode` argument selects which kind of action is authored:
 
 - `parameter` (default) — sets a target parameter from a field on the source worksheet.
 - `set` — changes the membership of a target set from the marks selected on the source worksheet.
 - `url` — opens a URL, optionally inserting field values from the selected marks.
-- `filter` — filters a target worksheet or dashboard by the marks selected on the source.
-- `highlight` — highlights related marks on a target worksheet or dashboard.
 
 ## APIs called
 
@@ -28,7 +26,7 @@ This tool acts on the workbook open in the local %product_name% instance, not on
 - Builds the action for the chosen mode, splices it into the workbook-level actions block, and validates the edited document. Assembled and validated in-process (not an API call).
 - Applies the edited workbook document, replacing the open workbook.
   - `POST /v<x>/workbook/document` (`Content-Type: application/xml`) — apply the edited workbook XML. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
-- Re-reads the workbook XML to confirm the new action landed with its target link intact (the target parameter, the target set, the URL, or, for `filter` and `highlight` actions, the target sheet, fields, source scope, and behavior); if the apply completed but the link is not present, the tool reports a failure rather than success.
+- Re-reads the workbook XML to confirm the new action landed with its target link intact (the target parameter, the target set, or the URL); if the apply completed but the link is not present, the tool reports a failure rather than success.
   - `GET /v<x>/workbook/document` — read the workbook back to verify the action. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
 
 ## Required arguments
@@ -42,7 +40,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 ### `operation`
 
@@ -59,7 +57,7 @@ edit/delete: internal name.
 :::
 
 ### `mode`
-Which kind of action to author. One of `parameter`, `set`, `url`, `filter`, or `highlight`. Defaults to `parameter`.
+Which kind of action to author. One of `parameter`, `set`, or `url`. Defaults to `parameter`.
 
 This argument decides which of the target arguments are required and which are refused, so supplying an argument that belongs to another mode fails before anything is applied.
 
@@ -74,14 +72,6 @@ Authors a set-change action. `targetSet` is required and `targetParameter` must 
 #### `url` mode
 
 Authors a URL action. `url` is required; `targetParameter` and `targetSet` must not be supplied. Set `sourceWorksheet`, `sourceDashboard`, or both. `sourceField` has no effect — field values are inserted into the URL with `<[Field Name]>` placeholders.
-
-#### `filter` mode
-
-Authors a filter action. `targetSheet` is required; `targetParameter`, `targetSet`, and `url` must not be supplied. Set `sourceWorksheet`, `sourceDashboard`, or both. Pass `filterFields` to filter on specific fields; `datasource`, `clearSelection`, and `singleSelect` shape the action.
-
-#### `highlight` mode
-
-Authors a highlight action. `targetSheet` is required. Set `sourceWorksheet`, `sourceDashboard`, or both. Pass `highlightFields` or `highlightBy`, not both; omit both to highlight on all fields. Parameter, set, filter, and URL options are refused.
 
 #### Example
 
@@ -119,10 +109,10 @@ The caption must not match that of an action already in the workbook — paramet
 
 ### `sourceWorksheet`
 
-The worksheet whose mark interaction triggers the action. In `parameter` and `set` modes it must be non-empty and name a worksheet in the open workbook. In `url`, `filter` and `highlight` modes it may be empty when `sourceDashboard` supplies the source instead.
+The worksheet whose mark interaction triggers the action. In `parameter` and `set` modes it must be non-empty and name a worksheet in the open workbook. In `url` mode it may be empty when `sourceDashboard` supplies the source instead.
 
 :::note
-In `parameter` mode the source worksheet must expose `sourceField`. In `set` mode it must show marks whose members belong to the target set's dimension. In `url`, `filter` and `highlight` modes the source can be this worksheet, a dashboard (`sourceDashboard`), or both — do not pass a dashboard name here.
+In `parameter` mode the source worksheet must expose `sourceField`. In `set` mode it must show marks whose members belong to the target set's dimension. In `url` mode the source can be this worksheet, a dashboard (`sourceDashboard`), or both — do not pass a dashboard name here.
 :::
 
 :::note
@@ -152,7 +142,7 @@ A dashboard name in `sourceWorksheet` is refused: pass it as `sourceDashboard` a
 
 The field on the source worksheet whose value drives the target parameter when the action fires.
 
-**Required in `parameter` mode**, where it must be non-empty. An omitted or blank value is refused with `sourceField is required in parameter mode. Available fields: ...`. Has no effect in other modes.
+**Required in `parameter` mode.** The argument must be present, but an empty string is accepted — when empty, the action is authored with no source-field binding. Has no effect in `set` or `url` mode.
 
 #### Example
 
@@ -222,13 +212,7 @@ The value is matched against both the name and the caption of every set in the s
 
 ### `targetSheet`
 
-The worksheet or dashboard the filter or highlight action acts on. Required in `filter` and `highlight` mode.
-
-#### Example
-
-```json
-{ "targetSheet": "Sales by Region" }
-```
+filter/highlight.
 
 :::note
 - targetSheet is required in filter mode.
@@ -239,23 +223,11 @@ The worksheet or dashboard the filter or highlight action acts on. Required in `
 
 ### `filterFields`
 
-Field captions for a filter on specific fields. Used in `filter` mode. When omitted, the action filters on all fields.
-
-#### Example
-
-```json
-{ "filterFields": ["Region", "Category"] }
-```
+The filterFields argument.
 
 ### `highlightFields`
 
-Field captions to highlight on. Used in `highlight` mode. Omit it to highlight on all fields.
-
-#### Example
-
-```json
-{ "highlightFields": ["Category"] }
-```
+Captions.
 
 :::note
 - highlightFields and highlightBy are mutually exclusive.
@@ -266,15 +238,11 @@ Field captions to highlight on. Used in `highlight` mode. Omit it to highlight o
 
 ### `highlightBy`
 
-Which fields the highlight action matches on when `highlightFields` is omitted. One of `all-fields` (default) or `dates-and-times`. Used in `highlight` mode; refused together with `highlightFields`.
-
-#### Example
-
-`"dates-and-times"`
+Omit with highlightFields.
 
 ### `datasource`
 
-A datasource matched against its internal name or a caption that is unique among datasources. Used in `set` mode to narrow the `targetSet` search (when omitted, every datasource in the open workbook is searched), and in `filter` and `highlight` mode to resolve `filterFields` and `highlightFields`. A value that matches no datasource is refused, and the error lists the candidate datasources so you can correct the name. In `parameter` and `url` mode the value is not used.
+Restricts the search for `targetSet` to one datasource, matched against the datasource's internal name or a caption that is unique among datasources. Used only in `set` mode; when omitted, every datasource in the open workbook is searched. A value that matches no datasource is refused, and the error lists the sets the tool did find so you can correct the name.
 
 :::note
 If the caption you pass is shared by more than one datasource, the tool refuses and asks for the internal datasource name instead.
@@ -311,11 +279,11 @@ What the action does to the target set's membership when it fires. One of `assig
 
 ### `clearSelection`
 
-What happens when the reader clears the selection on the source. One of `do-nothing`, `show-all`, or `exclude-all`. Applies in `set` and `filter` mode, where it defaults to `do-nothing`. In `highlight` mode it defaults to `show-all`, and that is the only value accepted.
+What happens to the target set when the reader clears the selection on the source worksheet. One of `do-nothing`, `show-all`, or `exclude-all`. Defaults to `do-nothing`. Applies only in `set` mode.
 
-- `do-nothing` (default) — in `set` mode, the set keeps the members it had. In `filter` mode, the filter stays in place.
-- `show-all` — in `set` mode, every member is put into the set. In `filter` mode, the filter is cleared and all values show.
-- `exclude-all` — in `set` mode, every member is taken out of the set. In `filter` mode, all values are excluded.
+- `do-nothing` (default) — the set keeps whatever members it had
+- `show-all` — every member is put into the set
+- `exclude-all` — every member is taken out of the set
 
 #### Example
 
@@ -350,7 +318,7 @@ Reset on clear; no datetime.
 
 ### `singleSelect`
 
-Whether the action is limited to a single selected mark at a time. Applies in `set` and `filter` mode. When omitted, no single-select setting is written into the action at all and %product_name% applies its own default, so pass this only when you want to pin the behavior explicitly.
+Whether the action is limited to a single selected mark at a time. Applies only in `set` mode. When omitted, no single-select setting is written into the action at all and %product_name% applies its own default, so pass this only when you want to pin the behavior explicitly.
 
 #### Example
 
@@ -398,7 +366,7 @@ url must not start with 'tsl:' — that prefix classifies the action as a sheet-
 
 ### `sourceDashboard`
 
-The dashboard whose mark interaction triggers the action. Used in `url`, `filter`, and `highlight` mode. May be combined with `sourceWorksheet` to scope the action to a worksheet inside that dashboard, or used alone for a dashboard-wide source.
+The dashboard whose mark interaction triggers the URL action. Used in `url` mode. May be combined with `sourceWorksheet` to scope the action to a worksheet inside that dashboard, or used alone for a dashboard-wide source.
 
 :::note
 Pass a dashboard name here, not a worksheet name. See [`sourceWorksheet`](#sourceworksheet) for the mix-up refusals.
@@ -418,13 +386,7 @@ sourceDashboard " " was not found. Available dashboards: the dashboard names in 
 
 ### `excludeSourceSheets`
 
-Dashboard worksheets to leave out of a dashboard-only source, so marks on them do not fire the action. Used in `url`, `filter`, and `highlight` mode.
-
-#### Example
-
-```json
-{ "excludeSourceSheets": ["Sales", "OTE"] }
-```
+The excludeSourceSheets argument.
 
 :::note
 - excludeSourceSheets is only allowed in url, filter, or highlight mode.
@@ -436,13 +398,7 @@ Dashboard worksheets to leave out of a dashboard-only source, so marks on them d
 
 ### `excludeTargetSheets`
 
-Dashboard worksheets to leave out of a dashboard target, so the action does not change them. Used in `filter` and `highlight` mode.
-
-#### Example
-
-```json
-{ "excludeTargetSheets": ["Sales"] }
-```
+The excludeTargetSheets argument.
 
 :::note
 - excludeTargetSheets is only allowed in filter or highlight mode.
@@ -504,7 +460,7 @@ Whether to URL-encode field values inserted into the URL. Used in `url` mode. Wh
 ## Notes and caveats
 
 - **Whole-workbook replace.** The new action is spliced into a workbook-level actions block (created between the datasources and worksheets if the workbook has none yet), and the entire workbook document is re-posted to apply it. The apply replaces the open workbook.
-- **Readback-verified apply.** After applying, the tool re-reads the workbook and confirms the action is present with the target link for its mode — the target set in `set` mode, the target parameter in `parameter` mode, the URL in `url` mode, or the target sheet, fields, source scope, and behavior in `filter` and `highlight` mode. If %product_name% accepts the apply but the link does not appear on readback, the tool reports a failure instead of success.
+- **Readback-verified apply.** After applying, the tool re-reads the workbook and confirms the action is present with the target link for its mode — the target set in `set` mode, the target parameter in `parameter` mode, or the URL in `url` mode. If %product_name% accepts the apply but the link does not appear on readback, the tool reports a failure instead of success.
 - **Not idempotent.** Each successful call adds a new action with a fresh generated name; re-running with the same caption is rejected by the uniqueness check rather than silently repeated.
 
 :::note

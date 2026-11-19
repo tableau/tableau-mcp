@@ -13,21 +13,14 @@ Disambiguates a field name to its exact column reference (`column_ref`) — the
 than one underlying column. It matches the name against the fields in a local
 `%product_name%` workbook snapshot; with `workbookFile` omitted it takes that
 snapshot itself, reading the workbook open in the running `%product_name%`
-instance. It reports one of four outcomes in `resolution.kind`:
+instance. It reports one of three outcomes:
 
 - `exact` — the name resolves to a single column; the `column_ref` is returned
-- `rewritten` — the name resolves after a rewrite, for example `sum of Profit`
-  applied as an aggregation to the base field; the `column_ref` is returned with
-  `rewrites` and any `notes`
 - `ambiguous` — the name matches more than one column; the candidates are returned so the caller can choose
-- `not_found` — no column matches the name exactly; up to 5 did-you-mean
-  `candidates` may be returned
+- `not_found` — no column matches the name
 
-Only `exact` maps to `status: "resolved"`. `ambiguous`, `not_found`, and
-`rewritten` are reported with `isError: true` in the result body (the tool call
-itself still succeeds); a `rewritten` resolution currently reports
-`status: "not_found"` even though it carries a `column_ref`. It does not trigger
-the self-heal refresh.
+`ambiguous` and `not_found` are reported with `isError: true` in the result body
+(the tool call itself still succeeds).
 
 ## APIs called
 
@@ -115,7 +108,7 @@ all datasources in the workbook are searched.
 <hr />
 
 ### `session`
-The `%product_name%` session id (for example, `12345`) identifying the running
+The `%product_name%` session id (for example, `studio-1`) identifying the running
 instance to read from. String. When omitted, the session is resolved
 automatically — the pinned instance, or the only one running — so a live read
 still happens without naming one; it fails only when no instance is running or
@@ -161,28 +154,6 @@ mirror of `status`: it is `true` for anything other than `resolved`.
 }
 ```
 
-### Rewritten match (`kind: "rewritten"`)
-
-The aggregation in the query was applied to the base field. `status` is
-`not_found` because only `exact` maps to `resolved`; use the returned
-`column_ref`.
-
-```json
-{
-  "resolution": {
-    "kind": "rewritten",
-    "query": "sum of Profit",
-    "column_ref": "[Sample - Superstore].[sum:Profit:qk]",
-    "datasource": "Sample - Superstore",
-    "reason": "applied aggregation \"sum\" to base field \"Profit\"",
-    "rewrites": ["parsed-aggregation-prefix"]
-  },
-  "status": "not_found",
-  "workbookFile": "/Users/me/.tableau-mcp/cache/workbook-abc123.xml",
-  "isError": true
-}
-```
-
 ### Ambiguous match (`kind: "ambiguous"`)
 
 ```json
@@ -206,7 +177,7 @@ The aggregation in the query was applied to the base field. `status` is
         "is_aggregated": false
       }
     ],
-    "reason": "\"Profit\" matches 2 fields. Disambiguate with options.datasource or by picking a column_ref."
+    "reason": "Multiple matches"
   },
   "status": "ambiguous",
   "workbookFile": "/Users/me/.tableau-mcp/cache/workbook-abc123.xml",
@@ -225,7 +196,7 @@ plainly:
     "kind": "not_found",
     "query": "NonExistent",
     "candidates": [],
-    "reason": "no match for \"NonExistent\"."
+    "reason": "No match"
   },
   "status": "not_found",
   "workbookFile": "/Users/me/.tableau-mcp/cache/workbook-abc123.xml",
@@ -245,7 +216,7 @@ reported as possibly stale rather than as an error:
     "kind": "not_found",
     "query": "Profit",
     "candidates": [],
-    "reason": "no match for \"Profit\"."
+    "reason": "No match"
   },
   "status": "stale_not_found",
   "workbookFile": "/Users/me/.tableau-mcp/cache/workbook-abc123.xml",

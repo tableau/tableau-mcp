@@ -22,6 +22,7 @@ This tool does **not** call the Tableau Cloud or Tableau Server REST API, and it
 - Validates that the supplied XML is well-formed before writing — validated in-process (not an API call). If validation fails, nothing is written.
 - Writes (or splices) the XML to the target file. Local filesystem; no API call. The path comes from `filePath` and nothing else, and must resolve within the server's configured cache directory: a path outside it — including a sibling that merely shares the directory's name as a prefix — is rejected before any write.
   - The `worksheetName` / `dashboardName` selectors are **not** part of that path. They are never appended to a directory, joined into a filename, or otherwise used to locate a file; they name the element to replace, and are matched against the `name` attribute of elements inside the file that `filePath` already selected.
+- Records which %product_name% session produced the file in a small companion fingerprint file next to it. Local filesystem; no API call. This lets a later `apply-*` call reject a cache file produced by a different (or restarted) %product_name% instance.
 
 ## Required arguments
 
@@ -64,11 +65,11 @@ Splice target mismatch: the selector is the worksheet or dashboard name you pass
 ## Optional arguments
 
 ### `session`
-Identifier of the target %product_name% session. The tool only checks it: if it names a session that is not a running %product_name% instance, the write is rejected and nothing is written. When omitted, the session is resolved automatically (for example, when exactly one %product_name% instance is connected). The tool writes no fingerprint, so an in-place edit leaves the `.meta.json` sidecar from an earlier `get-xml` read as it was.
+Identifier of the target %product_name% session, used to stamp the file's companion fingerprint. When omitted, the session is resolved automatically (for example, when exactly one %product_name% instance is connected). If a session is named that does not correspond to a running %product_name% instance, the write is rejected and no file or fingerprint is written.
 
 #### Example
 
-`"77700"`
+`"studio-1"`
 
 <hr />
 
@@ -126,7 +127,7 @@ Deprecated alias of `dashboardName`, with the same conflict rule: pass one or th
 - **Pass at most one splice selector.** Supplying both a worksheet name and a dashboard name is rejected — the tool names both offending selectors and writes nothing, so the target element is never ambiguous. A `*Name` argument and its deprecated alias count as one selector when they agree.
 - **A missing element writes nothing.** When no `<worksheet>` or `<dashboard>` element with that name is found, nothing is written. The selector is the plain worksheet or dashboard name (A & B), not the XML-escaped form from the raw file (A &amp; B); use `get-sheets` to get exact names.
 - **Every rejection happens before the file is touched.** A path outside the cache directory, malformed XML, a splice target that is missing or does not match the selector, and an unresolvable session are all caught up front, so a failed call never leaves a partially-written or corrupted file.
-- **The result reports a character count, not a UTF-8 byte count.** The number in the message is the length of the written text in characters. For non-ASCII XML it differs from the UTF-8 byte offsets that `read-cached-xml` uses for `startByte` and `endByte`. A full write reports the length of the whole file; a splice reports the length of the resulting spliced file, which includes the untouched siblings, not just the replaced fragment.
+- **The result reports the byte count written.** A full write reports the bytes written to the file; a splice reports the byte count of the resulting spliced file, which includes the untouched siblings, not just the replaced fragment.
 
 ## Example results
 

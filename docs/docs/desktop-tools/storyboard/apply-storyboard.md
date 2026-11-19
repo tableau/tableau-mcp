@@ -26,7 +26,6 @@ This tool acts on the workbook open in the running %product_name% instance, not 
   - `POST /v<x>/workbook/storyboards/{id}/document` — replace one storyboard from the posted document (`Content-Type: application/xml`). [API reference](ext://eca/reference/index.html#tag/Storyboards/operation/applyStoryboardDocument)
 - Brings the updated storyboard to the foreground afterwards. Best-effort by construction: the apply has already landed, so navigation that does not take is recorded in the logs and never turns a successful apply into a failure.
   - `GET /v<x>/workbook/document` — re-read the workbook to confirm the target name before navigating. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
-  - `GET /v<x>/workbook` — read the sheet inventory to resolve the storyboard id for navigation. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbook)
   - `POST /v<x>/workbook:goToSheet` — bring the updated storyboard to the foreground. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/goToSheet)
 
 ## Required arguments
@@ -78,11 +77,11 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"12345"`
+`"studio-1"`
 
 ## Notes and caveats
 
-- **Stale cache is refused.** If the storyboard changed in %product_name% after the cache was read, the apply is refused with `The storyboard changed since this cache was read. Re-read it with get-xml (kind=storyboard), reapply your edit to the new cache file, then retry apply-storyboard. No changes were sent to Tableau.` Renaming the target storyboard while the apply is in flight makes the apply fail instead.
+- **Last writer wins.** The apply carries no precondition check, so it overwrites an edit someone else made to the same storyboard in the meantime. Renaming the target storyboard while the apply is in flight makes the apply fail instead.
 - **The apply is not re-verified.** A storyboard apply has no structural readback, so the result carries an honest verification receipt that lists the applied structure as unverified. %product_name% accepting the document and the preflight warning count are observed; whether the storyboard kept the structure you intended is not. Read the storyboard back if you need to confirm it.
 - **Rejections from %product_name% surface as failures.** When %product_name% takes the request but reports that the document load itself failed, the tool reports that as an error rather than a success message.
 

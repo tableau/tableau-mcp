@@ -8,17 +8,17 @@ sidebar_position: 2
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Formats a clarifying question for the user, so the agent asks instead of guessing. Use it when a request is ambiguous. The tool returns the question to the agent right away as text, prefixed with `[BLOCKING]` or `[SOFT]`, with any choices numbered under `Options:`. It does not wait for an answer: the agent is expected to put the question to the user and act on the urgency.
+Pauses to ask the human user a clarifying question instead of guessing, and stops to wait for their answer. Use it when a request is ambiguous — the tool formats the question (optionally with a short list of choices) and returns it to the MCP client so the person can respond before the agent continues.
 
 The `urgency` argument controls how the agent should treat the pause:
 
-- `blocking` (default) — the agent asks the user and stops until they answer.
-- `soft` — the agent asks the user and states the default it will use if they do not reply.
+- `blocking` (default) — wait for the user's answer before doing anything else.
+- `soft` — state a sensible default the agent will use if the user does not reply.
 
 
 ## APIs called
 
-This tool does not call the %product_name% %ecapi_name%. It formats the question in-process and returns it as a plain text result. It sends no MCP elicitation request and does not wait for the user's answer; any pause is up to the agent. Because nothing is sent to the running %product_name% instance, there is no loopback route and no per-session bearer token involved.
+This tool does not call the %product_name% %ecapi_name%. It is a client-side interaction (elicitation): it formats the question and hands it back to the human user through the MCP client, then waits for their response. Because nothing is sent to the running %product_name% instance, there is no loopback route and no per-session bearer token involved — the question never leaves the MCP client. Formatting the prompt is an in-process step, not an API call.
 
 ## Required arguments
 
@@ -36,10 +36,10 @@ The question to put to the user, as a non-empty string. An empty string is rejec
 
 ### `urgency`
 
-How the agent should treat the question. One of `blocking` or `soft`. Defaults to `blocking`. The chosen value is rendered as an uppercase prefix on the returned prompt (for example `[BLOCKING]` or `[SOFT]`).
+How the agent should treat the pause while waiting for an answer. One of `blocking` or `soft`. Defaults to `blocking`. The chosen value is rendered as an uppercase prefix on the returned prompt (for example `[BLOCKING]` or `[SOFT]`).
 
-- `blocking` — the agent stops until the user answers.
-- `soft` — the agent states a default and can go on with it if the user does not answer.
+- `blocking` — wait for the user's answer before proceeding.
+- `soft` — proceed with a stated default if the user does not respond.
 
 #### Example
 

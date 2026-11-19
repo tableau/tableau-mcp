@@ -1,12 +1,5 @@
 # Authoring migration — binder drift sync + canonical tool exemplar (Lane M2, day 2)
 
-> **Historical note.** This is a point-in-time port log. Since then `src/desktop/binder/manifest.ts`,
-> `src/desktop/data/template-manifests/`, the `src/desktop/intelligence/` provider seam, and the
-> `propose-template` and `validate-proposal` tools have been removed. Templates now ship as bookmarks
-> under `src/desktop/data/templates/*.tbm`, with slots inferred by `src/desktop/templates/inferSlots.ts`.
-> `bind-template` lives at `src/tools/desktop/authoring/binder/bindTemplate.ts`, and the workbook XML
-> tool is `get-xml`. Line numbers below are from the original port.
-
 Migration source of truth: the source implementation (**snapshot S1**) — a read-only, local-only
 snapshot workspace (git-excluded), taken 2026-07-05. It is untracked and **never** imported at build
 time. Day-1 port baseline = `src/desktop/binder/` @ commit `ecc843cf`.
@@ -90,9 +83,9 @@ emoji text, hand-built `isError`).
 
 **Files**
 
-- `src/tools/desktop/authoring/binder/bindTemplate.ts` — factory `getBindTemplateTool(server)` (`:130`), zod
+- `src/tools/desktop/binder/bindTemplate.ts` — factory `getBindTemplateTool(server)` (`:130`), zod
   `paramsSchema` (`:48`), `logAndExecute` funnel (`:151`).
-- `src/tools/desktop/authoring/binder/bindTemplate.test.ts` — 7 colocated cases, mocked executor + mocked binder core
+- `src/tools/desktop/binder/bindTemplate.test.ts` — 7 colocated cases, mocked executor + mocked binder core
   (`Provider.from(tool.callback)` + `getMockRequestHandlerExtra()`).
 - Registered in `src/tools/desktop/toolName.ts` (`'bind-template'`) and `src/tools/desktop/tools.ts`
   (`getBindTemplateTool` in `desktopToolFactories`). Registration is auto-covered by the data-driven
@@ -101,7 +94,7 @@ emoji text, hand-built `isError`).
 **Adapter flow** (thin — no new command layer): `extra.getExecutor(session)` → reuse existing
 `getWorkbookXml` command (`bindTemplate.ts:156`) → `loadManifests()` (`:161`) → pure `bindTemplate(...)`
 (`:162`) → `Ok({ ...binderResult, guidance })`. A pure reference-library + passthrough tool legitimately has
-no new command layer (AGENTS.md); the only Agent-API call reuses the existing `get-xml` command.
+no new command layer (AGENTS.md); the only Agent-API call reuses the existing `get-workbook-xml` command.
 
 **Two-call protocol** (server is model-free): Call 1 `{ session, ask }` → `bound` | `propose`; Call 2
 `{ session, ask, proposal }` → `bound` | `escalate`.
@@ -207,5 +200,5 @@ base, verify:
   reintroduce repo/branch/SHA or personal-name provenance.
 - **Local ignore still needed.** Confirm the local, git-excluded snapshot workspace still exists; if the
   base branch dropped it, remove the now-dead ignore entry for the local migration-snapshot dir (git-excluded) too.
-- **Green gate.** Re-run `scripts/agent-check` (lint + `tsc --noEmit` + `vitest run`) post-rebase; the
-  binder tools (`bind-template`, `list-templates`) must all pass.
+- **Green gate.** Re-run `scripts/agent-check` (lint + `tsc --noEmit` + `vitest run`) post-rebase; the four
+  binder tools (`bind-template`, `propose-template`, `validate-proposal`, `list-templates`) must all pass.
