@@ -222,7 +222,10 @@ async function withStore<T>(
     return await run();
   } catch (error) {
     log({
-      message: 'Preview evidence store operation failed',
+      message:
+        operation === 'delete'
+          ? 'Preview evidence rollback failed; proof may remain until expiry'
+          : 'Preview evidence store operation failed',
       level: 'error',
       logger: 'mutation-guard',
       data: {

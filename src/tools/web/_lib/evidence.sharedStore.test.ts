@@ -232,6 +232,46 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
     await expect(new b.AppApprovalEvidence('delete-content').verify(ctx)).resolves.toBe(false);
   });
 
+  it('logs a failed proof rollback and still revokes the other proof', async () => {
+    const a = await startReplica();
+    const { getKeyValueStore } = await import('../../../storage/init.js');
+    const store = getKeyValueStore();
+    const deleteKey = store.delete.bind(store);
+    const approvalNamespace = 'mutation-app-approvals-v1';
+    vi.spyOn(store, 'delete').mockImplementation(async (key) => {
+      if (key.startsWith(`${approvalNamespace}:`)) {
+        throw Object.assign(new Error('test rollback failure with private backend details'), {
+          code: 'ETIMEDOUT',
+        });
+      }
+      await deleteKey(key);
+    });
+
+    globalThis.__sharedKvFailAfterSetPrefix = `${approvalNamespace}:`;
+    const ctx = makeCtx({ tool: 'delete-content' });
+    const evidence = new a.AllEvidence([
+      new a.RegistryEvidence(),
+      new a.AppApprovalEvidence('delete-content'),
+    ]);
+
+    await expect(evidence.establish(ctx)).rejects.toThrow('confirmation store is unavailable');
+    expect([...globalThis.__sharedKvBackend!.keys()]).toEqual([
+      expect.stringMatching(/^mutation-app-approvals-v1:/),
+    ]);
+    expect(mocks.log).toHaveBeenCalledWith({
+      message: 'Preview evidence rollback failed; proof may remain until expiry',
+      level: 'error',
+      logger: 'mutation-guard',
+      data: {
+        namespace: approvalNamespace,
+        operation: 'delete',
+        errorName: 'Error',
+        errorCode: 'ETIMEDOUT',
+      },
+    });
+    expect(JSON.stringify(mocks.log.mock.calls)).not.toContain('private backend details');
+  });
+
   it('confirms a RegistryEvidence nonce on a different replica, exactly once', async () => {
     const a = await startReplica();
     const b = await startReplica();
