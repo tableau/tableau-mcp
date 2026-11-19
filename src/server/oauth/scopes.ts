@@ -34,6 +34,7 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
+  | 'tableau:mcp:flow:write'
   | 'tableau:mcp:flow:run'
   | 'tableau:mcp:flow:cancel'
   | 'tableau:mcp:pulse:read'
@@ -55,6 +56,7 @@ export type TableauApiScope =
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:flows:read'
+  | 'tableau:flows:update'
   | 'tableau:flows:download'
   | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
@@ -328,6 +330,10 @@ const toolScopeMap: Record<
   'list-flows': {
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'move-flow': {
+    mcp: ['tableau:mcp:flow:write'],
+    api: new Set(['tableau:flows:update', ...RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES]),
   },
   'get-flow': {
     mcp: ['tableau:mcp:flow:read'],
@@ -627,6 +633,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
+    enabledTools.delete('move-flow');
     enabledTools.delete('run-flow-task');
     enabledTools.delete('cancel-flow-run');
   }
