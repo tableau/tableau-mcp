@@ -440,8 +440,7 @@ spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 The session store provider to use for the embedded OAuth authorization server's session state
 (pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
-Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
-enabled (the default; see [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above).
+Also stores [flow confirmation state](env-vars.md#mutation_preview_ttl_minutes) in every authentication mode.
 
 - Default: `memory`
 - Possible values:
@@ -466,6 +465,12 @@ implements the [`SessionStore`](https://github.com/tableau/tableau-mcp/blob/main
 interface. `consume` must be implemented as a truly atomic operation against the backing store
 (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
 Redis, or a transaction for a relational store).
+
+For confirms to work across replicas, the provider also needs to:
+
+- Point every replica at the same backend
+- Apply the TTL passed to `configureNamespace`, or expire keys on its own, so unconfirmed previews don't pile up
+- Allow keys under the `flow-mutation-confirmations-v1:` prefix
 
 :::
 
