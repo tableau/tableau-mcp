@@ -23,6 +23,7 @@ export const webToolNames = [
   'move-workbook',
   'get-view',
   'get-flow',
+  'update-flow-connection',
   'list-flow-runs',
   'list-flow-tasks',
   'describe-flow',
@@ -101,6 +102,7 @@ export const webToolGroups = {
   flow: [
     'list-flows',
     'get-flow',
+    'update-flow-connection',
     'list-flow-runs',
     'list-flow-tasks',
     'describe-flow',

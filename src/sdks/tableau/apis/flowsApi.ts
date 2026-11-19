@@ -8,6 +8,7 @@ import {
   flowRunSchema,
   flowSchema,
 } from '../types/flow.js';
+import { flowConnectionUpdateSchema } from '../types/flowConnectionUpdate.js';
 import { runFlowJobResponseSchema } from '../types/job.js';
 import { paginationSchema } from '../types/pagination.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -176,7 +177,22 @@ const cancelFlowRunEndpoint = makeEndpoint({
   response: cancelFlowRunResponseSchema,
 });
 
+const updateFlowConnectionEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/flows/:flowId/connections/:connectionId',
+  alias: 'updateFlowConnection',
+  description: 'Updates non-secret endpoint attributes of a flow connection.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('flowId'),
+    pathParam('connectionId'),
+    { name: 'body', type: 'Body', schema: z.object({ connection: flowConnectionUpdateSchema }) },
+  ],
+  response: z.object({ connection: flowConnectionSchema }),
+});
+
 const flowsApi = makeApi([
+  updateFlowConnectionEndpoint,
   queryFlowsForSiteEndpoint,
   queryFlowEndpoint,
   queryFlowConnectionsEndpoint,

@@ -4,6 +4,7 @@ import { flowsApis } from '../apis/flowsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { TableauRestError } from '../tableauRestError.js';
 import { Flow, FlowConnection, FlowOutputStep, FlowRun } from '../types/flow.js';
+import { FlowConnectionUpdate, flowConnectionUpdateSchema } from '../types/flowConnectionUpdate.js';
 import { RunFlowJob } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -19,6 +20,28 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }
+
+  /** Updates only non-secret fields on one flow connection.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#update_flow_connection
+   */
+  updateFlowConnection = async ({
+    siteId,
+    flowId,
+    connectionId,
+    updates,
+  }: {
+    siteId: string;
+    flowId: string;
+    connectionId: string;
+    updates: FlowConnectionUpdate;
+  }): Promise<FlowConnection> => {
+    const connection = flowConnectionUpdateSchema.parse(updates);
+    const response = await this._apiClient.updateFlowConnection(
+      { connection },
+      { params: { siteId, flowId, connectionId }, ...this.authHeader },
+    );
+    return response.connection;
+  };
 
   /**
    * Returns the flows on a site.
