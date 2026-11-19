@@ -14,6 +14,7 @@ import {
   resetKeyValueStore,
 } from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
+import { setupTestKeyValueStore } from './testUtils.js';
 
 const MODULE = './src/storage/__fixtures__/keyValueStore.cjs';
 
@@ -119,7 +120,7 @@ describe('session and KV environment configuration', () => {
       if (provider === 'custom') {
         vi.stubEnv('KV_STORE_PROVIDER_CONFIG', JSON.stringify({ module: MODULE }));
       }
-      await initializeKeyValueStore();
+      await setupTestKeyValueStore();
       const store = getKeyValueStore();
       await store.set('a:b:c', 'value', { ttlMs: 100 });
       expect(await Promise.all([store.consume('a:b:c'), store.consume('a:b:c')])).toEqual([
@@ -132,7 +133,7 @@ describe('session and KV environment configuration', () => {
 
   it('keeps session memory handles independent from each other and KV storage', async () => {
     await connectSessionStore();
-    await initializeKeyValueStore();
+    await setupTestKeyValueStore();
     const first = createNamespacedStore<string>('settings', { ttlMs: 100 });
     const second = createNamespacedStore<string>('settings', { ttlMs: 200 });
     await first.set('key', 'session');
@@ -143,6 +144,17 @@ describe('session and KV environment configuration', () => {
     await vi.advanceTimersByTimeAsync(100);
     await expect(first.get('key')).resolves.toBeUndefined();
     await expect(getKeyValueStore().get('settings:key')).resolves.toBe('kv');
+  });
+
+  it('starts repeated test setup with a fresh, empty memory store', async () => {
+    await setupTestKeyValueStore();
+    const previous = getKeyValueStore();
+    await previous.set('key', 'previous test', { ttlMs: 100 });
+
+    await setupTestKeyValueStore();
+
+    expect(getKeyValueStore()).not.toBe(previous);
+    await expect(getKeyValueStore().get('key')).resolves.toBeUndefined();
   });
 
   it('uses independently configured custom session and KV providers', async () => {

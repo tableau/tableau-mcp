@@ -68,7 +68,10 @@ async function closeProvider(): Promise<void> {
   }
 }
 
-/** Return the configured implementation without constructing or wrapping it. */
+/**
+ * Return the configured implementation without constructing or wrapping it.
+ * Values are unknown because callers share the store; validate get()/consume() results before use.
+ */
 export function getKeyValueStore(): KeyValueStore<unknown> {
   if (state === null) throw new Error('Key-value store is not initialized.');
   return state;

@@ -72,6 +72,43 @@ Operations return promises and backend errors reject. For shared backends, `cons
 atomic across replicas; separate read and delete requests are insufficient. Providers own
 serialization and must reject values that cannot be encoded faithfully or exceed backend limits.
 
+## Reading values
+
+`getKeyValueStore()` returns `KeyValueStore<unknown>` because the shared store may contain different
+value types. Both `get()` and `consume()` return `undefined` for absent or expired keys. Otherwise,
+callers must validate the returned value before using it, for example with a Zod schema:
+
+```typescript
+import { z } from 'zod';
+
+const personSchema = z.object({ name: z.string() });
+const value = await getKeyValueStore().get('person');
+if (value !== undefined) {
+  const person = personSchema.parse(value); // Throws if the stored value has the wrong shape.
+  console.log(person.name);
+}
+```
+
+Use the same validation for values returned by `consume()`. A TypeScript assertion such as
+`value as Person` does not validate the stored data at runtime.
+
+## Test setup
+
+Repository tests can import `setupTestKeyValueStore()` from `src/storage/testUtils.ts` to reset
+and initialize a fresh provider instance. Set up the test's configuration before calling it;
+the helper uses the configured provider. For example, after configuring the memory provider:
+
+```typescript
+beforeEach(async () => {
+  await setupTestKeyValueStore();
+});
+```
+
+Keep provider cleanup in `afterEach` with `await closeKeyValueStore()` and clear any fake timers
+used by the test. The setup helper resets selection; it does not close the previous provider.
+Custom providers that persist data also need their own test data cleanup.
+Production code must still initialize the store before calling `getKeyValueStore()`.
+
 ## In-memory object references
 
 The memory provider stores and returns objects and arrays by reference. It does not make copies.
