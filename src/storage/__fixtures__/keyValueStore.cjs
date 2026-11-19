@@ -1,12 +1,8 @@
 // Named-export provider with per-write expiration and lifecycle methods.
 class KeyValueStore {
   constructor(config) {
-    if (config.throwInConstructor) {
-      throw new Error(JSON.stringify(config), { cause: new Error(config.credential) });
-    }
     this.map = new Map();
     globalThis.__keyValueProviderConfig = config;
-    if (config.omitConsume) this.consume = undefined;
   }
 
   init() {

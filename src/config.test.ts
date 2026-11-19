@@ -1377,25 +1377,25 @@ describe('Config', () => {
       },
     );
 
-    it.each(['KV_STORE_PROVIDER'] as const)(
-      'does not expose malformed JSON from %s_CONFIG in errors',
-      async (variable) => {
-        const privateMarker = 'PRIVATE_KV_CONFIG_TEST_MARKER';
-        vi.stubEnv(variable, 'custom');
-        vi.stubEnv(`${variable}_CONFIG`, `${privateMarker}{"module":"./provider.cjs"}`);
+    it('does not expose malformed JSON from KV_STORE_PROVIDER_CONFIG in errors', () => {
+      const privateMarker = 'PRIVATE_KV_CONFIG_TEST_MARKER';
+      vi.stubEnv('KV_STORE_PROVIDER', 'custom');
+      vi.stubEnv('KV_STORE_PROVIDER_CONFIG', `${privateMarker}{"module":"./provider.cjs"}`);
 
-        const error = await Promise.resolve()
-          .then(() => new Config())
-          .catch((error: unknown) => error);
-
-        expect(error).toBeInstanceOf(Error);
-        expect(error).toHaveProperty('message', `${variable}_CONFIG is not valid JSON`);
-        expect(inspect(error)).not.toContain(privateMarker);
-        expect(error).not.toHaveProperty('cause');
-      },
-    );
+      let failure: unknown;
+      try {
+        new Config();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).toHaveProperty('message', 'KV_STORE_PROVIDER_CONFIG is not valid JSON');
+      expect(inspect(failure)).not.toContain(privateMarker);
+      expect(failure).not.toHaveProperty('cause');
+    });
 
     it('defaults to memory for an unrecognized session provider', () => {
+      // Existing deployments can start with this fallback. Rejecting the value would break startup on upgrade.
       vi.stubEnv('SESSION_STORE_PROVIDER', 'invalid');
       expect(new Config().sessionStore).toEqual({ provider: 'memory' });
     });
