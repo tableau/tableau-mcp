@@ -126,7 +126,7 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
       expect(mocks.log).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Preview evidence store operation failed',
-          data: expect.objectContaining({ operation: 'set', errorCode: undefined }),
+          data: expect.objectContaining({ operation: 'set', errorCode: '<redacted>' }),
         }),
       );
       expect(JSON.stringify(mocks.log.mock.calls)).not.toContain(code);
@@ -155,9 +155,10 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
     ['S3ServiceException', '23505'],
     ['Http2Error', 503],
     ['ResourceNotFoundException', 'ECONNREFUSED'],
-    ['DynamoDBV2InternalFault', 'EAI_AGAIN'],
+    ['InternalServerError', 'EAI_AGAIN'],
+    ['Throttling', 'ERR_HTTP2_STREAM_ERROR'],
     ['Error', 'NOSCRIPT'],
-  ])('logs structurally safe labels (%s, %s)', async (name, code) => {
+  ])('logs allowlisted labels (%s, %s)', async (name, code) => {
     const a = await startReplica();
     const { getKeyValueStore } = await import('../../../storage/init.js');
     vi.spyOn(getKeyValueStore(), 'set').mockRejectedValueOnce({ name, code });
@@ -172,11 +173,13 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
   });
 
   it.each([
+    ['SecretTokenAbc123Error', 'ESECRET123'],
+    ['Secret123Error', '12345'],
     ['SECRET_ACCESS_KEYError', 'SECRET_ACCESS_KEY_ABC123'],
     ['password=hunter2', 'AKIAIOSFODNN7EXAMPLE'],
     ['Error: host=10.0.0.1:8000', 'secret123'],
     ['arn:aws:dynamodb:table/SECRET', 99999999],
-  ])('drops labels that could carry free text (%s, %s)', async (name, code) => {
+  ])('redacts unknown labels (%s, %s)', async (name, code) => {
     const a = await startReplica();
     const { getKeyValueStore } = await import('../../../storage/init.js');
     vi.spyOn(getKeyValueStore(), 'set').mockRejectedValueOnce({ name, code });
@@ -185,10 +188,12 @@ describe('preview evidence across replicas sharing a custom key-value store', ()
     );
     expect(mocks.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ errorName: undefined, errorCode: undefined }),
+        data: expect.objectContaining({ errorName: '<redacted>', errorCode: '<redacted>' }),
       }),
     );
-    expect(JSON.stringify(mocks.log.mock.calls)).not.toMatch(/SECRET|hunter2|AKIA|10\.0\.0\.1/);
+    const logCalls = JSON.stringify(mocks.log.mock.calls);
+    expect(logCalls).not.toContain(name);
+    expect(logCalls).not.toContain(String(code));
   });
 
   it('fails closed when the store was never initialized', async () => {

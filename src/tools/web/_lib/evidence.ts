@@ -167,25 +167,45 @@ function sha256(fields: ReadonlyArray<string>): string {
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 
-// Only labels that are structurally class names or status codes may leave the provider boundary,
-// so a future SDK error type needs no edit here but a credential or message cannot pass as a label.
-// Reads can throw (getters, Proxy), so they run inside safeErrorLabels' try.
-const SAFE_ERROR_NAME = /^(?:[A-Z][A-Za-z0-9]{0,62})?(?:Error|Exception|Fault)$/;
-const SAFE_ERROR_CODE_STRING = /^(?:E[A-Z0-9]{1,15}(?:_[A-Z0-9]{1,15})?|NOSCRIPT|\d{3}|\d{5})$/; // errno, Redis, HTTP, SQLSTATE
-
-function isSafeErrorCode(code: unknown): code is string | number {
-  if (typeof code === 'number') {
-    return Number.isInteger(code) && code >= 100 && code <= 599;
-  }
-  return typeof code === 'string' && SAFE_ERROR_CODE_STRING.test(code);
-}
+// Provider exceptions may contain secrets in any field, including name and code. Log only known
+// literal labels. Property reads can still throw, so keep them inside the try below.
+const SAFE_ERROR_NAMES = new Set([
+  'Error',
+  'Http2Error',
+  'InternalServerError',
+  'ProvisionedThroughputExceededException',
+  'ResourceNotFoundException',
+  'S3ServiceException',
+  'Throttling',
+  'ThrottlingException',
+  'TimeoutError',
+]);
+const SAFE_ERROR_CODES = new Set<string | number>([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'ERR_HTTP2_STREAM_ERROR',
+  'ETIMEDOUT',
+  'NOSCRIPT',
+  '23505',
+  '503',
+  429,
+  500,
+  502,
+  503,
+  504,
+]);
 
 function safeErrorLabels(error: unknown): { errorName?: string; errorCode?: string | number } {
   try {
     const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
     return {
-      errorName: typeof name === 'string' && SAFE_ERROR_NAME.test(name) ? name : undefined,
-      errorCode: isSafeErrorCode(code) ? code : undefined,
+      errorName: typeof name === 'string' && SAFE_ERROR_NAMES.has(name) ? name : '<redacted>',
+      errorCode:
+        (typeof code === 'string' || typeof code === 'number') && SAFE_ERROR_CODES.has(code)
+          ? code
+          : '<redacted>',
     };
   } catch {
     return {};
