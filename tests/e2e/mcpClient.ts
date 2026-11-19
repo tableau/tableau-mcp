@@ -1,6 +1,10 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { ErrorCode, Implementation, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import {
+  Client,
+  Implementation,
+  ProtocolError,
+  ProtocolErrorCode,
+} from '@modelcontextprotocol/client';
 import { z } from 'zod';
 
 import { Variant } from '../../src/scripts/variants.js';
@@ -72,7 +76,7 @@ export class McpClient {
     } catch (error) {
       // -32601 (Method not found) means no prompts are registered, so the
       // prompts capability is not advertised. Surface that as an empty list.
-      if (error instanceof McpError && error.code === ErrorCode.MethodNotFound) {
+      if (error instanceof ProtocolError && error.code === ProtocolErrorCode.MethodNotFound) {
         return [];
       }
       throw error;

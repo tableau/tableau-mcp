@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { randomUUID } from 'crypto';
 import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
@@ -191,6 +191,7 @@ export const getApplyWorksheetTool = (
                 resolvedSession,
                 extra,
               });
+              /* @mcp-codemod-error This object looks like a v1 handler-context mock (sessionId, signal). v2 nests the context — reshape it (signal → mcpReq.signal; sessionId stays top-level), e.g. { sendRequest: fn } → { mcpReq: { send: fn } }. Passed as-is to a migrated handler that reads ctx.mcpReq.*, the v1 shape throws "Cannot read properties of undefined". */
               const outcome = await applyWorksheetArtifact({
                 store: artifactStore,
                 artifactId,

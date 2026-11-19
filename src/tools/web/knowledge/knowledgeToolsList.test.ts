@@ -1,6 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getInspectKnowledgeContextTool } from './inspectKnowledgeContext.js';
@@ -21,7 +19,7 @@ type AdvertisedSchema = {
 async function listKnowledgeTools(): Promise<Map<string, AdvertisedSchema>> {
   const { McpServer } = await vi.importActual<
     typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/sdk/server/mcp.js');
+  >('@modelcontextprotocol/server');
   const mcpServer = new McpServer({ name: 'test', version: '0.0.0' });
   const server = new WebMcpServer();
   const tools = [
@@ -30,6 +28,7 @@ async function listKnowledgeTools(): Promise<Map<string, AdvertisedSchema>> {
     getManageKnowledgeContextTool(server),
   ];
   for (const tool of tools) {
+    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     mcpServer.registerTool(
       tool.name,
       {

@@ -5,8 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-
+import { CallToolResultSchema } from '@modelcontextprotocol/core';
 import {
   desktopStateSchema,
   type DialogAction,
@@ -40,6 +39,7 @@ const dialogIdentity = {
   sessionId: 'headless-dialog-session',
   revision: 1,
 };
+/* @mcp-codemod-error This object looks like a v1 handler-context mock (sessionId, requestId). v2 nests the context — reshape it (requestId → mcpReq.id; sessionId stays top-level), e.g. { sendRequest: fn } → { mcpReq: { send: fn } }. Passed as-is to a migrated handler that reads ctx.mcpReq.*, the v1 shape throws "Cannot read properties of undefined". */
 const completedDialogStatus = {
   sessionId: dialogIdentity.sessionId,
   revision: dialogIdentity.revision,
@@ -683,7 +683,6 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     try {
       await requireClient().client.callTool(
         { name: 'get-desktop-state', arguments: { session: SESSION } },
-        undefined,
         { timeout: 100 },
       );
     } catch (error) {
@@ -705,7 +704,6 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     try {
       await requireClient().client.callTool(
         { name: 'get-desktop-state', arguments: { session: SESSION } },
-        undefined,
         { signal: controller.signal, timeout: 5000 },
       );
     } catch (error) {

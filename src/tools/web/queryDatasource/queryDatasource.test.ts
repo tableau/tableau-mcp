@@ -1,6 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
@@ -205,10 +203,11 @@ describe('queryDatasourceTool', () => {
     async (productVersion, supported) => {
       const { McpServer } = await vi.importActual<
         typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-      >('@modelcontextprotocol/sdk/server/mcp.js');
+      >('@modelcontextprotocol/server');
       const server = new McpServer({ name: 'test', version: '0.0.0' });
       const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
       const callback = await Provider.from(tool.callback);
+      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       server.registerTool(
         tool.name,
         { inputSchema: await Provider.from(tool.paramsSchema) },

@@ -1,12 +1,6 @@
+/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/experimental. Manual migration required. */
 import { BaseToolCallback } from '@modelcontextprotocol/sdk/experimental';
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import {
-  CallToolResult,
-  ServerNotification,
-  ServerRequest,
-} from '@modelcontextprotocol/sdk/types.js';
-
+import { CallToolResult, ServerContext } from '@modelcontextprotocol/server';
 import { Config } from '../../config.desktop.js';
 import { CallDeadline } from '../../desktop/callDeadline.js';
 import { ExternalApiToolExecutor } from '../../desktop/externalApi/externalApiToolExecutor.js';
@@ -26,8 +20,7 @@ export type TableauDesktopToolContext = TableauToolContext<DesktopMcpServer> & {
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauDesktopToolContext
-export type TableauDesktopRequestHandlerExtra = TableauDesktopToolContext &
-  RequestHandlerExtra<ServerRequest, ServerNotification>;
+export type TableauDesktopRequestHandlerExtra = TableauDesktopToolContext & ServerContext;
 
 // An extension of ToolCallback that includes additional context in the extra parameter
 export type TableauDesktopToolCallback<

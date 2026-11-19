@@ -1,5 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

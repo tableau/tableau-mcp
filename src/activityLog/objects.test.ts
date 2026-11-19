@@ -1,5 +1,3 @@
-import { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-
 import { WebMcpServer } from '../server.web.js';
 import { testProductVersion } from '../testShared.js';
 import { webToolNames } from '../tools/web/toolName.js';

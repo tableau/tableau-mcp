@@ -1,5 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { WORKSPACE_EXTENSIONS_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { WorkspaceExtensionList } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';

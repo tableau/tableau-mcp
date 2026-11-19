@@ -1,5 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { formatDesktopWarnings } from '../../../desktop/validation/promise-check.js';
 import {

@@ -1,16 +1,14 @@
-import { McpServer, ResourceTemplate, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-  ServerNotification,
-  ServerRequest,
+  McpServer,
+  ResourceTemplate,
+  ToolCallback,
+  ProtocolError,
   Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
-
+  ProtocolErrorCode,
+  ServerContext,
+} from '@modelcontextprotocol/server';
+/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/server/zod-json-schema-compat.js. Manual migration required. */
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import {
@@ -311,12 +309,12 @@ export class DesktopMcpServer extends Server {
     for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
-        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+        extra: ServerContext,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
         // One clock per tool call, composed into extra.signal so the socket really aborts.
         const deadline = createCallDeadline({
-          clientSignal: extra.signal,
+          clientSignal: extra.mcpReq.signal,
           budgetMs: config.desktopCallTimeoutMs,
         });
 
@@ -338,6 +336,7 @@ export class DesktopMcpServer extends Server {
         }
       };
 
+      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       this.mcpServer.registerTool(
         name,
         {
@@ -368,7 +367,7 @@ export class DesktopMcpServer extends Server {
     // McpServer. On the combined variant's shared server, overriding tools/list
     // would hide the web half's tools (including ones combined-lean registers late).
     if (this.ownsMcpServer) {
-      this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      this.mcpServer.server.setRequestHandler('tools/list', async () => ({
         tools: listedTools,
       }));
     }
@@ -424,12 +423,15 @@ export class DesktopMcpServer extends Server {
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];
         if (typeof slug !== 'string' || !slug) {
-          throw new McpError(ErrorCode.InvalidParams, 'Missing expertise slug in URI.');
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
+            'Missing expertise slug in URI.',
+          );
         }
         const text = readExpertiseResource(`expertise://tableau/${slug}`);
         if (!text) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
             `Unknown expertise resource: expertise://tableau/${slug}`,
           );
         }
@@ -441,7 +443,10 @@ export class DesktopMcpServer extends Server {
   private _registerDashboardXmlGuide = async (): Promise<void> => {
     const text = readResourceAsset('dashboard-xml-guide.md');
     if (text === null) {
-      throw new McpError(ErrorCode.InternalError, 'Dashboard layout guide asset not found.');
+      throw new ProtocolError(
+        ProtocolErrorCode.InternalError,
+        'Dashboard layout guide asset not found.',
+      );
     }
     this.registerResource({
       name: 'dashboard-xml-guide',

@@ -9,8 +9,8 @@ import { cpSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync } from
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { Client } from '@modelcontextprotocol/client';
 
 type ToolText = { isError: boolean; text: string };
 

@@ -1,6 +1,4 @@
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
-
+import { CallToolResult, RequestId } from '@modelcontextprotocol/server';
 import { recordToolCall } from '../../activityLog/init.js';
 import { getActivityLogObject } from '../../activityLog/objects.js';
 import {

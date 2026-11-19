@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { createHash } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
 import type { Mock } from 'vitest';
@@ -9856,6 +9856,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         undefined,
     );
 
+    /* @mcp-codemod-error This object looks like a v1 handler-context mock (sendNotification). v2 nests the context — reshape it (sendNotification → mcpReq.notify), e.g. { sendRequest: fn } → { mcpReq: { send: fn } }. Passed as-is to a migrated handler that reads ctx.mcpReq.*, the v1 shape throws "Cannot read properties of undefined". */
     await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',

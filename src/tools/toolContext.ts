@@ -1,12 +1,4 @@
-import { BaseToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import {
-  CallToolResult,
-  ServerNotification,
-  ServerRequest,
-} from '@modelcontextprotocol/sdk/types.js';
-
+import { BaseToolCallback, CallToolResult, ServerContext } from '@modelcontextprotocol/server';
 import { Server } from '../server.js';
 
 // Additional context available to all tool callbacks
@@ -16,7 +8,7 @@ export type TableauToolContext<TServer extends Server> = {
 
 // An extension of the RequestHandlerExtra type that includes the TableauToolContext
 export type TableauRequestHandlerExtra<TServer extends Server> = TableauToolContext<TServer> &
-  RequestHandlerExtra<ServerRequest, ServerNotification>;
+  ServerContext;
 
 // An extension of ToolCallback that includes additional context in the extra parameter
 export type TableauToolCallback<

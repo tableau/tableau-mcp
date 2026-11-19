@@ -1,4 +1,4 @@
-import { type ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ReadResourceResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { Config, getConfig } from '../config.js';
@@ -78,6 +78,7 @@ export const registerPrompts = async (server: WebMcpServer): Promise<void> => {
   registeredServer.add(mcp);
 
   for (const prompt of await getEnabledWebPrompts(server)) {
+    /* @mcp-codemod-error Could not verify `argsSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     mcp.registerPrompt(
       prompt.name,
       {

@@ -1,5 +1,4 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-
+import { AuthInfo } from '@modelcontextprotocol/server';
 import { TableauAuthInfo, tableauAuthInfoSchema } from './schemas.js';
 
 export const getTableauAuthInfo = (authInfo: AuthInfo | undefined): TableauAuthInfo | undefined => {

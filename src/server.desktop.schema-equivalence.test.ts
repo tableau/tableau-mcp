@@ -1,8 +1,6 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+import type { Tool } from '@modelcontextprotocol/server';
+import { Client } from '@modelcontextprotocol/client';
 import { getDesktopConfig } from './config.desktop.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import * as loggerModule from './logging/logger.js';
@@ -17,7 +15,7 @@ import type { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
-vi.unmock('@modelcontextprotocol/sdk/server/mcp.js');
+vi.unmock('@modelcontextprotocol/server');
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: vi.fn(() => false) })),
 }));
@@ -49,6 +47,7 @@ describe('getDesktopToolListEntry SDK schema equivalence', () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
     for (const tool of tools) {
+      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       sdkServer.registerTool(
         tool.name,
         {

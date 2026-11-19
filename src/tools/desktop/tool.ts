@@ -1,5 +1,4 @@
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, RequestId } from '@modelcontextprotocol/server';
 import { createHash } from 'crypto';
 import { ZodRawShape } from 'zod';
 

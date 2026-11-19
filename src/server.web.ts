@@ -3,14 +3,13 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
-import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
+  McpServer,
+  ToolCallback,
   CallToolResult,
   ReadResourceResult,
-  ServerNotification,
-  ServerRequest,
-} from '@modelcontextprotocol/sdk/types.js';
+  ServerContext,
+} from '@modelcontextprotocol/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { z } from 'zod';
@@ -328,6 +327,7 @@ export class WebMcpServer extends Server {
     );
 
   private _registerLoadWebToolsTool = (): void => {
+    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     this.mcpServer.registerTool(
       LOAD_WEB_TOOLS_TOOL_NAME,
       {
@@ -344,7 +344,7 @@ export class WebMcpServer extends Server {
       },
       async (
         args: { group: LoadableWebToolGroupName },
-        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+        ctx: ServerContext,
       ): Promise<CallToolResult> => {
         const config = getConfig();
         if (config.breakGlassDisableGlobally) {
@@ -354,8 +354,8 @@ export class WebMcpServer extends Server {
         }
         const result = await this.loadWebTools(
           args.group,
-          getTableauAuthInfo(extra.authInfo),
-          extra.authInfo?.scopes,
+          getTableauAuthInfo(ctx.http?.authInfo),
+          ctx.http?.authInfo?.scopes,
         );
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       },
@@ -373,7 +373,7 @@ export class WebMcpServer extends Server {
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
       args: typeof tool.paramsSchema,
-      extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+      extra: ServerContext,
     ) => {
       if (config.breakGlassDisableGlobally) {
         throw new ServiceUnavailableError(
@@ -382,7 +382,7 @@ export class WebMcpServer extends Server {
       }
 
       const requestOverridesHeader =
-        extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
+        extra.http?.req?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
       const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
       const tableauToolCallback = await Provider.from(tool.callback);
       const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
@@ -390,13 +390,15 @@ export class WebMcpServer extends Server {
         config,
         server: this,
         get tableauAuthInfo() {
-          return getTableauAuthInfo(extra.authInfo);
+          return getTableauAuthInfo(extra.http?.authInfo);
         },
         _userLuid: undefined,
         _siteLuid: undefined,
         getUserLuid() {
           return (
-            tableauRequestHandlerExtra._userLuid ?? getTableauAuthInfo(extra.authInfo)?.userId ?? ''
+            tableauRequestHandlerExtra._userLuid ??
+            getTableauAuthInfo(extra.http?.authInfo)?.userId ??
+            ''
           );
         },
         setUserLuid(userLuid: string) {
@@ -404,14 +406,16 @@ export class WebMcpServer extends Server {
         },
         getSiteLuid() {
           return (
-            tableauRequestHandlerExtra._siteLuid ?? getTableauAuthInfo(extra.authInfo)?.siteId ?? ''
+            tableauRequestHandlerExtra._siteLuid ??
+            getTableauAuthInfo(extra.http?.authInfo)?.siteId ??
+            ''
           );
         },
         setSiteLuid(siteLuid: string) {
           tableauRequestHandlerExtra._siteLuid = siteLuid;
         },
         getSiteName() {
-          return getTableauAuthInfo(extra.authInfo)?.siteName ?? config.siteName;
+          return getTableauAuthInfo(extra.http?.authInfo)?.siteName ?? config.siteName;
         },
         getConfigWithOverrides: async () =>
           getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
@@ -666,6 +670,7 @@ export class WebMcpServer extends Server {
     tool: WebTool<any>,
     toolCallback: ToolCallback<typeof tool.paramsSchema>,
   ): Promise<void> => {
+    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     this.mcpServer.registerTool(
       tool.name,
       {

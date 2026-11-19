@@ -14,8 +14,8 @@
  *   4. authoritative audit JSON lines land on the child's stderr
  *   5. list-extract-refresh-tasks before/after count cross-check (ground-truth discipline)
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { Client } from '@modelcontextprotocol/client';
 
 const PASS = '✓';
 const FAIL = '✗';

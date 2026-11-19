@@ -1,4 +1,4 @@
-import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -242,10 +242,10 @@ describe('registerSkills', () => {
     it('throws a not-found McpError without the absolute path when the file is missing', async () => {
       const error = (await readSingleFile(MARKDOWN_FILE, fsError('ENOENT')).catch(
         (e: unknown) => e,
-      )) as McpError;
+      )) as ProtocolError;
 
-      expect(error).toBeInstanceOf(McpError);
-      expect(error.code).toBe(ErrorCode.InvalidParams);
+      expect(error).toBeInstanceOf(ProtocolError);
+      expect(error.code).toBe(ProtocolErrorCode.InvalidParams);
       expect(error.message).toContain(`Resource ${MARKDOWN_FILE.uri} not found`);
       expect(error.message).not.toContain(MARKDOWN_FILE.path);
       expect(mocks.mockLog).toHaveBeenCalledWith(
@@ -259,10 +259,10 @@ describe('registerSkills', () => {
     it('throws an internal McpError for other read failures', async () => {
       const error = (await readSingleFile(MARKDOWN_FILE, fsError('EACCES')).catch(
         (e: unknown) => e,
-      )) as McpError;
+      )) as ProtocolError;
 
-      expect(error).toBeInstanceOf(McpError);
-      expect(error.code).toBe(ErrorCode.InternalError);
+      expect(error).toBeInstanceOf(ProtocolError);
+      expect(error.code).toBe(ProtocolErrorCode.InternalError);
       expect(error.message).toContain(`Failed to read skill resource ${MARKDOWN_FILE.uri}`);
       expect(error.message).not.toContain(MARKDOWN_FILE.path);
       expect(mocks.mockLog).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));

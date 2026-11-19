@@ -2,9 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ErrorCode, type Result } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport, ProtocolErrorCode } from '@modelcontextprotocol/client';
+import type { Result } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../logging/logger.js', () => ({
@@ -50,7 +49,7 @@ async function requestSkills(
 ): Promise<Result> {
   const { McpServer } = await vi.importActual<
     typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/sdk/server/mcp.js');
+  >('@modelcontextprotocol/server');
   const mcpServer = new McpServer({ name: 'test', version: '0.0.0' });
   registerSkillMethodHandlers(mcpServer, registry);
 
@@ -224,7 +223,7 @@ describe('skills/list pagination', () => {
   ])('returns InvalidParams for a %s cursor without echoing it', async (_label, cursor) => {
     const error = await listSkills(realRegistry(N + 1), { cursor }).catch((e) => e);
 
-    expect(error).toMatchObject({ code: ErrorCode.InvalidParams });
+    expect(error).toMatchObject({ code: ProtocolErrorCode.InvalidParams });
     if (typeof cursor === 'string' && cursor.length > 0) {
       expect(error.message).not.toContain(cursor);
     }
@@ -232,7 +231,7 @@ describe('skills/list pagination', () => {
 
   it('returns the generic params error over MCP for a non-string cursor', async () => {
     await expect(listSkills(makeRegistry([]), { cursor: 42 })).rejects.toMatchObject({
-      code: ErrorCode.InvalidParams,
+      code: ProtocolErrorCode.InvalidParams,
       message: expect.stringContaining('Invalid skills/list params'),
     });
   });
@@ -250,7 +249,7 @@ describe('skills/list pagination', () => {
       await expect(
         handler({ method: 'skills/list', params } as never, {} as never),
       ).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Invalid skills/list params'),
       });
     },
@@ -266,7 +265,7 @@ describe('skills/list pagination', () => {
 
     const error = await listSkills(registry, {}).catch((e) => e);
 
-    expect(error).toMatchObject({ code: ErrorCode.InternalError });
+    expect(error).toMatchObject({ code: ProtocolErrorCode.InternalError });
   });
 });
 
@@ -317,7 +316,7 @@ describe('skills/get', () => {
   ])('returns InvalidParams for an unserved skill URI: %s', async (uri) => {
     await expect(requestSkills(makeRegistry([SKILL]), 'skills/get', { uri })).rejects.toMatchObject(
       {
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
       },
     );
   });
@@ -325,7 +324,7 @@ describe('skills/get', () => {
   it('returns InvalidParams when the registry is empty', async () => {
     await expect(
       requestSkills(makeRegistry([]), 'skills/get', { uri: SKILL.uri }),
-    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+    ).rejects.toMatchObject({ code: ProtocolErrorCode.InvalidParams });
   });
 
   it.each([undefined, {}, { uri: 42 }, { uri: null }])(
@@ -334,7 +333,7 @@ describe('skills/get', () => {
       await expect(
         requestSkills(makeRegistry([SKILL]), 'skills/get', params),
       ).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
       });
     },
   );

@@ -1,9 +1,4 @@
-import {
-  AnySchema,
-  SchemaOutput,
-  ZodRawShapeCompat,
-} from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/server';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape } from 'zod';
 

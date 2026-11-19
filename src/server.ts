@@ -2,8 +2,10 @@ import {
   McpServer,
   ReadResourceTemplateCallback,
   ResourceTemplate,
-} from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ErrorCode, InitializeRequest, McpError } from '@modelcontextprotocol/sdk/types.js';
+  InitializeRequest,
+  ProtocolError,
+  ProtocolErrorCode,
+} from '@modelcontextprotocol/server';
 import { existsSync, readFileSync } from 'fs';
 
 import { getFeatureGate } from './features/init.js';
@@ -194,7 +196,7 @@ export abstract class Server {
     } else if ('path' in args) {
       const { name, title, description, uri, path, mimeType } = args;
       if (!existsSync(path)) {
-        throw new McpError(ErrorCode.InternalError, `File not found: ${path}`);
+        throw new ProtocolError(ProtocolErrorCode.InternalError, `File not found: ${path}`);
       }
       const text = readFileSync(path, 'utf-8');
       this.mcpServer.registerResource(name, uri, { title, description, mimeType }, (uri) => {

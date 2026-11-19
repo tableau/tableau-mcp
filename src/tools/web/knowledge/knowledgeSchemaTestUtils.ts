@@ -1,4 +1,4 @@
-import { objectFromShape, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/server/zod-json-schema-compat.js. Manual migration required. */
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 
 /**

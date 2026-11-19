@@ -1,6 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
 import { AxiosError } from 'axios';
 
 import * as loggerModule from '../../../logging/logger.js';
@@ -160,10 +158,11 @@ describe('publishWorkbookTool', () => {
       );
       const { McpServer } = await vi.importActual<
         typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-      >('@modelcontextprotocol/sdk/server/mcp.js');
+      >('@modelcontextprotocol/server');
       const server = new McpServer({ name: 'test', version: '0.0.0' });
       const tool = getPublishWorkbookTool(new WebMcpServer());
       const schema = await Provider.from(tool.paramsSchema);
+      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       server.registerTool(
         tool.name,
         {

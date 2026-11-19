@@ -1,5 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { WorkbookExtensionList } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';

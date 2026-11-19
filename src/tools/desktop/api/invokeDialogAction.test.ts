@@ -1,6 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -223,12 +221,13 @@ describe('invoke-dialog-action tool', () => {
     const tool = getInvokeDialogActionTool(new DesktopMcpServer());
     const { McpServer: RealMcpServer } = await vi.importActual<
       typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-    >('@modelcontextprotocol/sdk/server/mcp.js');
+    >('@modelcontextprotocol/server');
     const sdkServer = new RealMcpServer({ name: 'dialog-validation-test', version: '1.0.0' });
     const client = new Client({ name: 'dialog-validation-client', version: '1.0.0' });
     const dispatch = vi.fn(async (_args: unknown) => ({
       content: [{ type: 'text' as const, text: 'accepted' }],
     }));
+    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     sdkServer.registerTool(
       tool.name,
       { inputSchema: tool.paramsSchema as z.ZodRawShape },

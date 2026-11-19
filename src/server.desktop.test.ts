@@ -1,12 +1,7 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/core';
+import { McpServer, CallToolResult, Tool as McpTool } from '@modelcontextprotocol/server';
+/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/server/zod-json-schema-compat.js. Manual migration required. */
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import {
-  CallToolResult,
-  ListToolsRequestSchema,
-  Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
-
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
@@ -121,6 +116,7 @@ describe('DesktopMcpServer', () => {
 
     const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
     const listToolsCall = setRequestHandler.mock.calls.find(
+      /* @mcp-codemod-error ListToolsRequestSchema is no longer the setRequestHandler/setNotificationHandler key in v2 — handlers register by the method string 'tools/list'. Update registration assertions/lookups (e.g. against a setRequestHandler mock) to compare against 'tools/list'. */
       ([requestSchema]) => requestSchema === ListToolsRequestSchema,
     );
     expect(listToolsCall).toBeDefined();
