@@ -72,6 +72,28 @@ Operations return promises and backend errors reject. For shared backends, `cons
 atomic across replicas; separate read and delete requests are insufficient. Providers own
 serialization and must reject values that cannot be encoded faithfully or exceed backend limits.
 
+## In-memory object references
+
+The memory provider stores and returns objects and arrays by reference. It does not make copies.
+Changing an object after storing it, or changing an object returned by `get()`, changes the stored
+value without another `set()` call.
+
+For example, with memory storage:
+
+```typescript
+const person = { name: 'Alice' };
+await store.set('person', person, { ttlMs: 60_000 });
+await store.get('person'); // returns { name: 'Alice' }
+
+person.name = 'Bob';
+await store.get('person'); // returns { name: 'Bob' }
+```
+
+A custom provider that serializes values may return an independent copy instead. To keep behavior
+consistent across providers, treat stored objects and objects returned by `get()` as immutable.
+Create an updated value and call `set()` again to save changes. Values must also be supported by
+the selected provider's serialization rules.
+
 ## Per-write expiration
 
 ```typescript

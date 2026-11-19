@@ -6,7 +6,10 @@ const MAX_SIGNED_INT32 = 2 ** 31 - 1;
 const REFRESH_MARGIN_MS = 60_000;
 const CHUNK_MS = MAX_SIGNED_INT32 - REFRESH_MARGIN_MS;
 
-/** In-memory records with per-write expiration. */
+/**
+ * In-memory records with per-write expiration.
+ * Objects are stored and returned by reference; mutations are visible without another set().
+ */
 export class InMemoryKeyValueStore<V> implements KeyValueStore<V> {
   private readonly map: ExpiringMap<string, V>;
   private readonly refreshTimers = new Map<string, NodeJS.Timeout>();
