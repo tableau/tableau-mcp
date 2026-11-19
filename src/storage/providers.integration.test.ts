@@ -14,9 +14,21 @@ import {
   resetKeyValueStore,
 } from './init.js';
 import { InMemoryKeyValueStore } from './inMemoryKeyValueStore.js';
-import { setupTestKeyValueStore } from './testUtils.js';
+import type { KeyValueStore } from './keyValueStore.js';
+
+declare global {
+  var __keyValueProviderConfig: Record<string, unknown> | undefined;
+  var __keyValueProviderInstance: KeyValueStore<unknown> | undefined;
+  var __keyValueInitCalls: number;
+  var __keyValueCloseCalls: number;
+}
 
 const MODULE = './src/storage/__fixtures__/keyValueStore.cjs';
+
+async function setupTestKeyValueStore(): Promise<void> {
+  resetKeyValueStore();
+  await initializeKeyValueStore();
+}
 
 // Real Config/env parsing and real module loaders; no mocked storage wiring.
 describe('session and KV environment configuration', () => {
@@ -72,10 +84,7 @@ describe('session and KV environment configuration', () => {
       JSON.stringify({ module: './src/sessionStore/__fixtures__/lifecycleSessionStore.cjs' }),
     );
     vi.stubEnv('KV_STORE_PROVIDER', 'custom');
-    vi.stubEnv(
-      'KV_STORE_PROVIDER_CONFIG',
-      JSON.stringify({ module: './src/storage/__fixtures__/keyValueStore.cjs', lifecycle: true }),
-    );
+    vi.stubEnv('KV_STORE_PROVIDER_CONFIG', JSON.stringify({ module: MODULE }));
     await connectSessionStore();
     await initializeKeyValueStore();
     expect(globalThis.__initCalls).toBe(1);

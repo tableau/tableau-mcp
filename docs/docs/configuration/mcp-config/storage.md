@@ -27,8 +27,8 @@ storage across replicas; SessionStore settings do not configure KV storage.
 
 Startup awaits `initializeKeyValueStore()` to construct and validate the configured provider, then
 await its optional `init()` hook before accepting requests. The getter returns that exact instance
-after initialization succeeds and does not initialize it lazily. Concurrent initialization calls
-share the same initialization attempt.
+after initialization succeeds and does not initialize it lazily. Callers must await initialization
+before using the store or closing it, and await cleanup before initializing a replacement.
 
 Invalid configuration, module-loading failures, and missing operations fail startup. An explicitly
 configured custom provider is never silently replaced with memory. Malformed JSON, module-loading,
@@ -91,23 +91,6 @@ if (value !== undefined) {
 
 Use the same validation for values returned by `consume()`. A TypeScript assertion such as
 `value as Person` does not validate the stored data at runtime.
-
-## Test setup
-
-Repository tests can import `setupTestKeyValueStore()` from `src/storage/testUtils.ts` to reset
-and initialize a fresh provider instance. Set up the test's configuration before calling it;
-the helper uses the configured provider. For example, after configuring the memory provider:
-
-```typescript
-beforeEach(async () => {
-  await setupTestKeyValueStore();
-});
-```
-
-Keep provider cleanup in `afterEach` with `await closeKeyValueStore()` and clear any fake timers
-used by the test. The setup helper resets selection; it does not close the previous provider.
-Custom providers that persist data also need their own test data cleanup.
-Production code must still initialize the store before calling `getKeyValueStore()`.
 
 ## In-memory object references
 

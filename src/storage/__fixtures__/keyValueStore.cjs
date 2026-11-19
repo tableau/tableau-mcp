@@ -1,4 +1,4 @@
-// Per-write expiration; optional lifecycle hooks are enabled only for lifecycle tests.
+// Named-export provider with per-write expiration and lifecycle methods.
 class KeyValueStore {
   constructor(config) {
     if (config.throwInConstructor) {
@@ -8,20 +8,14 @@ class KeyValueStore {
     globalThis.__keyValueProviderConfig = config;
     globalThis.__keyValueProviderInstance = this;
     if (config.omitConsume) this.consume = undefined;
-    if (config.lifecycle) {
-      this.init =
-        config.initHook ??
-        (() => {
-          globalThis.__keyValueInitCalls++;
-          return Promise.resolve();
-        });
-      this.close =
-        config.closeHook ??
-        (() => {
-          globalThis.__keyValueCloseCalls++;
-          return Promise.resolve();
-        });
-    }
+  }
+
+  init() {
+    globalThis.__keyValueInitCalls++;
+  }
+
+  close() {
+    globalThis.__keyValueCloseCalls++;
   }
 
   read(key) {

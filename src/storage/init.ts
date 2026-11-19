@@ -6,21 +6,10 @@ import type { KeyValueStore } from './keyValueStore.js';
 import { loadCustomProvider } from './provider.js';
 
 let state: KeyValueStore<unknown> | null = null;
-let initialization: Promise<void> | null = null;
-let closing: Promise<void> | null = null;
 
-/** Construct and initialize one provider, sharing pending initialization between callers. */
-export function initializeKeyValueStore(): Promise<void> {
-  if (closing !== null) return closing.then(() => initializeKeyValueStore());
-  if (initialization !== null) return initialization;
-  if (state !== null) return Promise.resolve();
-  initialization = initializeProvider().finally(() => {
-    initialization = null;
-  });
-  return initialization;
-}
-
-async function initializeProvider(): Promise<void> {
+/** Construct the configured provider and await its optional init hook. */
+export async function initializeKeyValueStore(): Promise<void> {
+  if (state !== null) return;
   const storage = getConfig().keyValueStore;
   const provider: KeyValueStore<unknown> =
     storage.provider === 'custom'
@@ -43,22 +32,8 @@ async function initializeProvider(): Promise<void> {
   });
 }
 
-/** Release the provider once, sharing pending cleanup between callers. */
-export function closeKeyValueStore(): Promise<void> {
-  if (closing !== null) return closing;
-  closing = closeProvider().finally(() => {
-    closing = null;
-  });
-  return closing;
-}
-
-async function closeProvider(): Promise<void> {
-  try {
-    await initialization;
-  } catch {
-    // Initialization failed without exposing a provider; its error is reported by startup.
-    return;
-  }
+/** Release the current provider and await its optional close hook. */
+export async function closeKeyValueStore(): Promise<void> {
   const provider = state;
   state = null;
   try {
@@ -80,6 +55,4 @@ export function getKeyValueStore(): KeyValueStore<unknown> {
 /** Reset provider selection for tests. */
 export function resetKeyValueStore(): void {
   state = null;
-  initialization = null;
-  closing = null;
 }
