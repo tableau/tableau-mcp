@@ -6,6 +6,7 @@ export const activityLogObjectTypes = [
   'flow-run',
   'flow-task',
   'pulse-metric-definition',
+  'subscription',
   'user',
   'view',
   'workbook',

@@ -1,4 +1,8 @@
 export const webToolNames = [
+  'list-subscriptions',
+  'create-subscription',
+  'suspend-subscription',
+  'resume-subscription',
   'list-datasources',
   'list-extract-refresh-tasks',
   'update-cloud-extract-refresh-task',
@@ -58,6 +62,7 @@ export const webToolNames = [
 export type WebToolName = (typeof webToolNames)[number];
 
 export const webToolGroupNames = [
+  'subscriptions',
   'datasource',
   'workbook',
   'authoring',
@@ -80,6 +85,12 @@ export const webToolGroupNames = [
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
+  subscriptions: [
+    'list-subscriptions',
+    'create-subscription',
+    'suspend-subscription',
+    'resume-subscription',
+  ],
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook', 'download-workbook', 'move-workbook'],
   authoring: [
