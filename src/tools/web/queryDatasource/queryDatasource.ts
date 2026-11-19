@@ -40,6 +40,12 @@ import { queryDatasourceToolDescription } from './descriptions/queryDescription.
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import {
+  datasourceEnvelopeSchema,
+  IgnoredRequestPropertyWarning,
+  queryOptionsArgSchema,
+  resolveQueryRequestArgs,
+} from './resolveQueryRequestArgs.js';
+import {
   ContextFilterWarning,
   validateContextFilters,
 } from './validators/validateContextFilters.js';
@@ -47,7 +53,9 @@ import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
 const paramsSchema = {
-  datasourceLuid: luidSchema,
+  datasourceLuid: luidSchema
+    .optional()
+    .describe('The data source LUID. Required unless datasource.datasourceLuid is given.'),
   workbookLuid: luidSchema
     .optional()
     .describe(
@@ -70,10 +78,21 @@ const paramsSchema = {
     .describe(
       "Max rows to return. When a row limit applies (this or a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason 'admin-cap' means a server cap cut them — narrow filters or aggregate.",
     ),
+  datasource: datasourceEnvelopeSchema
+    .optional()
+    .describe(
+      'The datasource object of a VDS QueryRequest, accepted as-is. Only datasourceLuid is used. connections is ignored: credentials come from the server configuration.',
+    ),
+  options: queryOptionsArgSchema
+    .optional()
+    .describe(
+      'The options object of a VDS QueryRequest, accepted as-is. rowLimit acts like limit (the smaller wins). The tool always sets returnFormat, debug, and returnServerSentEvents itself.',
+    ),
 };
 
-const fieldNameParamsSchema = z.object(paramsSchema);
-// Preserve hidden arguments so unsupported calls reach the runtime version guard.
+// Passthrough keeps unknown keys so resolveQueryRequestArgs can name them in one error, and so
+// hidden arguments on the caption tier reach the runtime version guard.
+const fieldNameParamsSchema = z.object(paramsSchema).passthrough();
 const captionParamsSchema = fieldNameParamsSchema
   .omit({ interpretFieldCaptionsAsFieldNames: true })
   .passthrough();
@@ -85,7 +104,7 @@ type QueryDatasourceParamsSchema = z.ZodType<
 
 type QueryDatasourceResult = QueryOutput & {
   mcp?: {
-    warnings?: ContextFilterWarning[];
+    warnings?: Array<ContextFilterWarning | IgnoredRequestPropertyWarning>;
     resultInfo?: {
       returnedCount: number;
       truncated: boolean;
@@ -124,15 +143,25 @@ export const getQueryDatasourceTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { datasourceLuid, workbookLuid, query, limit, interpretFieldCaptionsAsFieldNames },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async (args, extra): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
+      const { workbookLuid, query } = args;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: { datasourceLuid, workbookLuid, query, interpretFieldCaptionsAsFieldNames },
+        args: getLoggableArgs(args),
         callback: async () => {
+          const resolvedArgs = resolveQueryRequestArgs(args, rules);
+          if (resolvedArgs.isErr()) {
+            return new ArgsValidationError(resolvedArgs.error).toErr();
+          }
+          const {
+            datasourceLuid,
+            limit,
+            interpretFieldCaptionsAsFieldNames,
+            forwardedOptions,
+            warnings: ignoredPropertyWarnings,
+          } = resolvedArgs.value;
+
           if (interpretFieldCaptionsAsFieldNames && rules.fieldNamesAreUnavailable) {
             return new ArgsValidationError(
               'Querying by internal field names requires Tableau 2025.3 or later. Omit interpretFieldCaptionsAsFieldNames or set it to false and use display captions on this server.',
@@ -155,6 +184,7 @@ export const getQueryDatasourceTool = (
             return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
           }
 
+          // Built from the resolved LUID only; the caller's datasource object is never forwarded.
           const datasource: Datasource = { datasourceLuid };
           const maxResultLimit = configWithOverrides.getMaxResultLimit(queryDatasourceTool.name);
           const rowLimit = maxResultLimit
@@ -165,7 +195,8 @@ export const getQueryDatasourceTool = (
           const options: QueryRequest['options'] = {
             returnFormat: 'OBJECTS',
             debug: true,
-            disaggregate: false,
+            ...forwardedOptions,
+            disaggregate: forwardedOptions.disaggregate ?? false,
             ...(interpretFieldCaptionsAsFieldNames
               ? { interpretFieldCaptionsAsFieldNames: true }
               : {}),
@@ -196,6 +227,7 @@ export const getQueryDatasourceTool = (
                   restApi.vizqlDataServiceMethods,
                   datasource,
                   interpretFieldCaptionsAsFieldNames,
+                  forwardedOptions.bypassMetadataCache,
                 );
 
                 if (metadataValidationResult.isErr()) {
@@ -220,7 +252,7 @@ export const getQueryDatasourceTool = (
                 }
               }
 
-              const contextWarnings = validateContextFilters(query);
+              const warnings = [...ignoredPropertyWarnings, ...validateContextFilters(query)];
 
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
@@ -270,11 +302,11 @@ export const getQueryDatasourceTool = (
                 };
               }
 
-              if (contextWarnings.length > 0 || resultInfo) {
+              if (warnings.length > 0 || resultInfo) {
                 return new Ok({
                   ...result.value,
                   mcp: {
-                    ...(contextWarnings.length > 0 && { warnings: contextWarnings }),
+                    ...(warnings.length > 0 && { warnings }),
                     ...(resultInfo && { resultInfo }),
                   },
                 });
@@ -297,15 +329,41 @@ export const getQueryDatasourceTool = (
   return queryDatasourceTool;
 };
 
+// Logged args feed debug logs and activity telemetry, which don't mask passwords. Keep the LUID and
+// workbookDatasourceId of the datasource envelope and redact every other key in it.
+// The result is only logged, so the cast back to T is safe.
+function getLoggableArgs<T extends { datasourceLuid?: unknown; datasource?: unknown }>(args: T): T {
+  const { datasource, ...rest } = args;
+  if (typeof datasource !== 'object' || datasource === null || Array.isArray(datasource)) {
+    return (datasource === undefined ? rest : { ...rest, datasource: '[redacted]' }) as T;
+  }
+  const envelopeLuid = 'datasourceLuid' in datasource ? datasource.datasourceLuid : undefined;
+  return {
+    ...rest,
+    // The activity log reads the top-level datasourceLuid.
+    datasourceLuid: rest.datasourceLuid ?? envelopeLuid,
+    datasource: Object.fromEntries(
+      Object.entries(datasource).map(([key, value]) => [
+        key,
+        key === 'datasourceLuid' || key === 'workbookDatasourceId' ? value : '[redacted]',
+      ]),
+    ),
+  } as T;
+}
+
 function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
   return getResultForTableauVersion<ToolRules>({
     productVersion,
     mappings: {
-      '2026.1.0': {},
+      '2026.2.0': {},
+      '2026.1.0': {
+        restrictWithNewSession: true,
+      },
       '2025.3.0': {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
         restrictConditionFilters: true,
+        restrictWithNewSession: true,
       },
       default: {
         dontSpecifyRowLimits: true,
@@ -313,6 +371,8 @@ function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
         fieldNamesAreUnavailable: true,
         restrictConditionFilters: true,
         restrictTableCalculations: true,
+        restrictBypassMetadataCache: true,
+        restrictWithNewSession: true,
       },
     },
   });
