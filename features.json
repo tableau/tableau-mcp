@@ -18,5 +18,6 @@
   "authoring-with-slack": false,
   "activity-log": false,
   "admin-tools": false,
+  "tableau-agent-tools": false,
   "disable-strict-scope-match": false
 }

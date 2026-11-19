@@ -396,6 +396,21 @@ describe('Config', () => {
     },
   );
 
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the tableau agent tools environment override only when TABLEAU_AGENT_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
+      vi.stubEnv('TABLEAU_AGENT_TOOLS_ENABLED', value);
+
+      expect(new Config().tableauAgentToolsEnabled).toBe(expected);
+    },
+  );
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

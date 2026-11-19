@@ -20,6 +20,8 @@ let knowledgeReadExpected: boolean;
 let knowledgeWriteExpected: boolean;
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
+const tableauAgentToolsFlagEnabled = Boolean(features['tableau-agent-tools']);
+let tableauAgentToolsExpected: boolean;
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
@@ -31,6 +33,7 @@ describe('server', () => {
     knowledgeReadExpected = config.knowledgeToolsEnabled ?? knowledgeToolsEnabled;
     knowledgeWriteExpected =
       knowledgeReadExpected && (config.knowledgeWriteToolsEnabled ?? knowledgeWriteToolsEnabled);
+    tableauAgentToolsExpected = config.tableauAgentToolsEnabled ?? tableauAgentToolsFlagEnabled;
   });
   afterAll(resetEnv);
 
@@ -98,6 +101,11 @@ describe('server', () => {
       ];
       // data-app tools are gated off by default (data-apps feature flag)
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
+      // CABU tools follow TABLEAU_AGENT_TOOLS_ENABLED when set, otherwise the tableau-agent-tools flag.
+      const tableauAgentTools: ReadonlyArray<WebToolName> = [
+        'tableau-agent-start-conversation',
+        'tableau-agent-ask',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -146,6 +154,10 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
+
+      if (!tableauAgentToolsExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => !tableauAgentTools.includes(name));
+      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -298,6 +310,11 @@ describe('server', () => {
       ];
       // data-app tools are gated off by default (data-apps feature flag)
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
+      // CABU tools follow TABLEAU_AGENT_TOOLS_ENABLED when set, otherwise the tableau-agent-tools flag.
+      const tableauAgentTools: ReadonlyArray<WebToolName> = [
+        'tableau-agent-start-conversation',
+        'tableau-agent-ask',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -356,6 +373,12 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
+
+      if (!tableauAgentToolsExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !tableauAgentTools.includes(name),
+        );
+      }
 
       const expectedDesktopToolNames = desktopToolNames.filter((name) =>
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
