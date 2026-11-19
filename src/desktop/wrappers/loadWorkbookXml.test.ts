@@ -86,6 +86,27 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(validXml, mockSignal, undefined);
   });
 
+  it('drops auto-generated device-layout zones for sheets removed from the main layout', async () => {
+    const { executor, appliedXml } = dispatchingExecutor();
+    const dashboard = (phoneZones: string): string =>
+      '<dashboards><dashboard name="D"><zones><zone id="1" name="Sheet 1"/></zones>' +
+      `<devicelayouts><devicelayout auto-generated="true" name="Phone"><zones>${phoneZones}</zones></devicelayout></devicelayouts>` +
+      '</dashboard></dashboards>';
+    const withPhone = (phoneZones: string): string =>
+      validXml.replace('</worksheets>', `</worksheets>${dashboard(phoneZones)}`);
+
+    const result = await loadWorkbookXml({
+      xml: withPhone('<zone id="2" name="Sheet 1"/><zone id="3" name="Sheet 2"/>'),
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedXml).toHaveLength(1);
+    expect(appliedXml[0]).toContain(dashboard('<zone id="2" name="Sheet 1"/>'));
+  });
+
   it('forwards transactional apply options to the whole-document POST', async () => {
     const { executor } = dispatchingExecutor();
     const onDispatch = vi.fn();
