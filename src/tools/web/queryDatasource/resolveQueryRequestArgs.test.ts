@@ -1,5 +1,6 @@
 import { Result } from 'ts-results-es';
 
+import { ToolRules } from '../tool.js';
 import {
   collectUnknownKeys,
   datasourceEnvelopeSchema,
@@ -13,18 +14,21 @@ const luid = '71db762b-6201-466b-93da-57cc0aec8ed9';
 const otherLuid = '2d7a3b9e-3f1c-4b8e-9a5d-6c1e2f3a4b5c';
 const query = { fields: [{ fieldCaption: 'Category' }] };
 
-function resolve(args: QueryRequestEnvelopeArgs): Result<ResolvedQueryRequestArgs, string> {
-  return resolveQueryRequestArgs({ query, ...args });
+function resolve(
+  args: QueryRequestEnvelopeArgs,
+  rules: ToolRules = {},
+): Result<ResolvedQueryRequestArgs, string> {
+  return resolveQueryRequestArgs({ query, ...args }, rules);
 }
 
-function resolveOk(args: QueryRequestEnvelopeArgs): ResolvedQueryRequestArgs {
-  const result = resolve(args);
+function resolveOk(args: QueryRequestEnvelopeArgs, rules?: ToolRules): ResolvedQueryRequestArgs {
+  const result = resolve(args, rules);
   if (result.isErr()) throw new Error(`expected Ok, got Err: ${result.error}`);
   return result.value;
 }
 
-function resolveErr(args: QueryRequestEnvelopeArgs): string {
-  const result = resolve(args);
+function resolveErr(args: QueryRequestEnvelopeArgs, rules?: ToolRules): string {
+  const result = resolve(args, rules);
   if (result.isOk()) throw new Error('expected Err, got Ok');
   return result.error;
 }
@@ -150,6 +154,35 @@ describe('resolveQueryRequestArgs', () => {
 
     it('returns an empty object when no options are given', () => {
       expect(resolveOk({ datasourceLuid: luid }).forwardedOptions).toEqual({});
+    });
+  });
+
+  describe('version-gated options', () => {
+    it.each([
+      { key: 'bypassMetadataCache', rule: 'restrictBypassMetadataCache', version: '2025.3' },
+      { key: 'withNewSession', rule: 'restrictWithNewSession', version: '2026.2' },
+    ])('$key: drops false and rejects true when $rule is set', ({ key, rule, version }) => {
+      const rules = { [rule]: true };
+      expect(
+        resolveOk({ datasourceLuid: luid, options: { [key]: false } }, rules).forwardedOptions,
+      ).toEqual({});
+      expect(resolveErr({ datasourceLuid: luid, options: { [key]: true } }, rules)).toBe(
+        `options.${key} requires Tableau ${version} or later. Remove it or set it to false on this server.`,
+      );
+    });
+
+    it('names every unsupported option in one error', () => {
+      const error = resolveErr(
+        { datasourceLuid: luid, options: { bypassMetadataCache: true, withNewSession: true } },
+        { restrictBypassMetadataCache: true, restrictWithNewSession: true },
+      );
+      expect(error).toContain('options.bypassMetadataCache requires Tableau 2025.3');
+      expect(error).toContain('options.withNewSession requires Tableau 2026.2');
+    });
+
+    it('leaves options alone when no rule restricts them', () => {
+      const options = { disaggregate: true, bypassMetadataCache: true, withNewSession: false };
+      expect(resolveOk({ datasourceLuid: luid, options }).forwardedOptions).toEqual(options);
     });
   });
 

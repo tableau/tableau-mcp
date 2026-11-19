@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MAX_INT32 } from '../_lib/truncation.js';
+import { ToolRules } from '../tool.js';
 
 export type IgnoredRequestPropertyWarning = {
   type: 'IGNORED_REQUEST_PROPERTY';
@@ -82,6 +83,17 @@ const KNOWN_DATASOURCE_KEYS: ReadonlySet<string> = new Set([
 
 const FORWARDED_OPTION_KEYS = ['disaggregate', 'bypassMetadataCache', 'withNewSession'] as const;
 
+// On a server that predates an option, false (its VDS default) is dropped since it does nothing
+// where supported; true is an error naming the minimum version.
+const VERSION_GATED_OPTIONS = [
+  { key: 'bypassMetadataCache', rule: 'restrictBypassMetadataCache', minVersion: '2025.3' },
+  { key: 'withNewSession', rule: 'restrictWithNewSession', minVersion: '2026.2' },
+] as const satisfies ReadonlyArray<{
+  key: (typeof FORWARDED_OPTION_KEYS)[number];
+  rule: string;
+  minVersion: string;
+}>;
+
 // The tool always sends its own values for these.
 const OVERRIDDEN_OPTION_KEYS = ['returnFormat', 'debug', 'returnServerSentEvents'] as const;
 
@@ -126,6 +138,7 @@ export function shouldWarnOverriddenOption(
 
 export function resolveQueryRequestArgs(
   args: QueryRequestEnvelopeArgs,
+  rules: ToolRules,
 ): Result<ResolvedQueryRequestArgs, string> {
   const unknownKeys = collectUnknownKeys(args);
   if (unknownKeys.length > 0) {
@@ -169,6 +182,20 @@ export function resolveQueryRequestArgs(
   const forwardedOptions: ForwardedQueryOptions = {};
   for (const key of FORWARDED_OPTION_KEYS) {
     if (options[key] !== undefined) forwardedOptions[key] = options[key];
+  }
+
+  const unsupported: string[] = [];
+  for (const { key, rule, minVersion } of VERSION_GATED_OPTIONS) {
+    if (!rules[rule] || forwardedOptions[key] === undefined) continue;
+    if (forwardedOptions[key]) {
+      unsupported.push(
+        `options.${key} requires Tableau ${minVersion} or later. Remove it or set it to false on this server.`,
+      );
+    }
+    delete forwardedOptions[key];
+  }
+  if (unsupported.length > 0) {
+    return Err(unsupported.join(' '));
   }
 
   return Ok({

@@ -150,7 +150,7 @@ export const getQueryDatasourceTool = (
         extra,
         args: getLoggableArgs(args),
         callback: async () => {
-          const resolvedArgs = resolveQueryRequestArgs(args);
+          const resolvedArgs = resolveQueryRequestArgs(args, rules);
           if (resolvedArgs.isErr()) {
             return new ArgsValidationError(resolvedArgs.error).toErr();
           }
@@ -352,11 +352,15 @@ function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
   return getResultForTableauVersion<ToolRules>({
     productVersion,
     mappings: {
-      '2026.1.0': {},
+      '2026.2.0': {},
+      '2026.1.0': {
+        restrictWithNewSession: true,
+      },
       '2025.3.0': {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
         restrictConditionFilters: true,
+        restrictWithNewSession: true,
       },
       default: {
         dontSpecifyRowLimits: true,
@@ -364,6 +368,8 @@ function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
         fieldNamesAreUnavailable: true,
         restrictConditionFilters: true,
         restrictTableCalculations: true,
+        restrictBypassMetadataCache: true,
+        restrictWithNewSession: true,
       },
     },
   });

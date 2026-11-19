@@ -1068,6 +1068,7 @@ describe('queryDatasourceTool', () => {
 
   describe('VDS QueryRequest envelope', () => {
     const datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9';
+    const productVersion2026_2 = { value: '2026.2.0', build: '20262.26.0512.0900' };
     const query: Query = {
       fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Profit', function: 'SUM' }],
     };
@@ -1109,6 +1110,7 @@ describe('queryDatasourceTool', () => {
     it('forwards the caller options it supports and keeps its own returnFormat and debug', async () => {
       const parsed = await getParsed({
         query,
+        productVersion: productVersion2026_2,
         extraArgs: {
           options: {
             disaggregate: true,
@@ -1143,6 +1145,7 @@ describe('queryDatasourceTool', () => {
     it('sends bypassMetadataCache to the metadata read but not withNewSession', async () => {
       await getParsed({
         query,
+        productVersion: productVersion2026_2,
         extraArgs: { options: { bypassMetadataCache: true, withNewSession: true } },
       });
 
@@ -1293,6 +1296,91 @@ describe('queryDatasourceTool', () => {
         `Querying the datasource with LUID ${datasourceLuid} is not allowed.`,
       );
       expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    describe('option version matrix', () => {
+      // Each tier restates every flag, so check every tier for every gated option.
+      const tiers = [
+        { value: '2025.2.9', build: '20252.25.1001.1200' },
+        testProductVersion2025_3,
+        testProductVersion,
+        productVersion2026_2,
+      ];
+      const minVersions = { bypassMetadataCache: '2025.3', withNewSession: '2026.2' } as const;
+      const isSupported = (version: string, minVersion: string): boolean =>
+        version.localeCompare(minVersion, undefined, { numeric: true }) >= 0;
+
+      const cases = tiers.flatMap((productVersion) =>
+        Object.entries(minVersions).map(([key, minVersion]) => ({
+          key,
+          minVersion,
+          productVersion,
+          supported: isSupported(productVersion.value, minVersion),
+        })),
+      );
+
+      it.each(cases)(
+        '$key: false on $productVersion.value is forwarded only where supported',
+        async ({ key, productVersion, supported }) => {
+          await getParsed({ query, productVersion, extraArgs: { options: { [key]: false } } });
+
+          const sent = mocks.mockQueryDatasource.mock.calls[0][0].options;
+          if (supported) {
+            expect(sent[key]).toBe(false);
+          } else {
+            expect(sent).not.toHaveProperty(key);
+          }
+        },
+      );
+
+      it.each(cases)(
+        '$key: true on $productVersion.value is forwarded or names the minimum version',
+        async ({ key, minVersion, productVersion, supported }) => {
+          const result = await getToolResult({
+            query,
+            productVersion,
+            extraArgs: { options: { [key]: true } },
+          });
+          invariant(result.content[0].type === 'text');
+
+          if (supported) {
+            expect(result.isError, result.content[0].text).toBe(false);
+            expect(mocks.mockQueryDatasource.mock.calls[0][0].options[key]).toBe(true);
+          } else {
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain(
+              `options.${key} requires Tableau ${minVersion} or later`,
+            );
+            expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+          }
+        },
+      );
+
+      it.each(tiers)('forwards disaggregate: true on $value', async (productVersion) => {
+        await getParsed({ query, productVersion, extraArgs: { options: { disaggregate: true } } });
+        expect(mocks.mockQueryDatasource.mock.calls[0][0].options.disaggregate).toBe(true);
+      });
+
+      it.each(tiers)(
+        'warns on, and never forwards, the read-metadata options on $value',
+        async (productVersion) => {
+          const options = {
+            includeHiddenFields: true,
+            includeGroupFormulas: true,
+            includeRemoteDatabaseNames: true,
+          };
+          const parsed = await getParsed({ query, productVersion, extraArgs: { options } });
+
+          expect(parsed.mcp.warnings).toEqual([
+            expect.objectContaining({
+              type: 'IGNORED_REQUEST_PROPERTY',
+              affectedProperties: Object.keys(options).map((key) => `options.${key}`),
+            }),
+          ]);
+          const sent = mocks.mockQueryDatasource.mock.calls[0][0].options;
+          for (const key of Object.keys(options)) expect(sent).not.toHaveProperty(key);
+        },
+      );
     });
 
     it('never logs or forwards caller-supplied connection credentials', async () => {
