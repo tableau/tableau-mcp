@@ -51,6 +51,19 @@ function normalizeDateTimeValue(field: string, value: string): string {
 // filters on a bare field of that name.
 const defaultDateTimeFields = ['createdAt', 'updatedAt', 'startedAt', 'completedAt'];
 
+// Zod 4 enum errors no longer echo the rejected value, so name it ourselves.
+export function parseFilterPart<T extends z.ZodType>(
+  kind: string,
+  schema: T,
+  raw: string,
+): z.output<T> {
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(`Invalid filter ${kind} '${raw}': ${result.error.issues[0].message}`);
+  }
+  return result.data;
+}
+
 /**
  * Reject filter strings whose `[...]` brackets are unbalanced before any
  * splitting happens. Two cases are caught:
@@ -124,7 +137,7 @@ export function splitTopLevel(s: string, sep: string): string[] {
  * @param filterFieldSchema - A schema for the filter field
  * @param dateTimeFields - Optional filter fields whose values should be normalized/validated as date-times
  * @returns validated filter string
- * @throws ZodError or custom error for invalid operators
+ * @throws Error for invalid fields or operators
  */
 export function parseAndValidateFilterString<
   TFilterField extends string,
@@ -165,8 +178,8 @@ export function parseAndValidateFilterString<
 
     let value = valueParts.join(':');
 
-    const field = filterFieldSchema.parse(fieldRaw);
-    const operator = FilterOperatorSchema.parse(operatorRaw);
+    const field = parseFilterPart('field', filterFieldSchema, fieldRaw);
+    const operator = parseFilterPart('operator', FilterOperatorSchema, operatorRaw);
 
     if (!isOperatorAllowed(field, operator)) {
       throw new Error(
