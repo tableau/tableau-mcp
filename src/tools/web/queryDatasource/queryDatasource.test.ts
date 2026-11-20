@@ -1248,11 +1248,6 @@ describe('queryDatasourceTool', () => {
         message: 'Unrecognized arguments: `baz`, `options.foo`',
       },
       {
-        name: 'workbookDatasourceId',
-        extraArgs: { datasource: { workbookDatasourceId: 'Sample - Superstore' } },
-        message: 'datasource.workbookDatasourceId is not supported',
-      },
-      {
         name: 'conflicting LUIDs',
         extraArgs: { datasource: { datasourceLuid: '2d7a3b9e-3f1c-4b8e-9a5d-6c1e2f3a4b5c' } },
         message: 'differ',
@@ -1280,6 +1275,56 @@ describe('queryDatasourceTool', () => {
         });
       },
     );
+
+    it('ignores workbookDatasourceId, never forwards it, and queries the LUID', async () => {
+      const parsed = await getParsed({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { datasourceLuid, workbookDatasourceId: 'Sample - Superstore' } },
+      });
+
+      expect(parsed.mcp.warnings).toEqual([
+        expect.objectContaining({
+          type: 'IGNORED_REQUEST_PROPERTY',
+          affectedProperties: ['datasource.workbookDatasourceId'],
+        }),
+      ]);
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].datasource).toEqual({ datasourceLuid });
+      expect(JSON.stringify(mocks.mockReadMetadata.mock.calls)).not.toContain(
+        'Sample - Superstore',
+      );
+    });
+
+    it('rejects workbookDatasourceId without a LUID before any network call', async () => {
+      const result = await getToolResult({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { workbookDatasourceId: 'Sample - Superstore' } },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        "datasource.workbookDatasourceId isn't used by this tool",
+      );
+      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it('checks the allow-list against the LUID even when workbookDatasourceId is given', async () => {
+      vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+      const result = await getToolResult({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { datasourceLuid, workbookDatasourceId: 'Sample - Superstore' } },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`LUID ${datasourceLuid} is not allowed`);
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
 
     it('rejects an envelope LUID outside the datasource allow-list', async () => {
       vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');

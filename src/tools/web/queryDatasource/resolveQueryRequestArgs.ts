@@ -12,8 +12,8 @@ export type IgnoredRequestPropertyWarning = {
   affectedProperties: string[];
 };
 
-// datasourceLuid is optional here so a caller passing only workbookDatasourceId reaches the
-// runtime check that explains it, instead of a schema error.
+// datasourceLuid is optional here so a caller passing only workbookDatasourceId gets the runtime
+// error that explains it, instead of a schema error.
 export const datasourceEnvelopeSchema = z
   .object({
     datasourceLuid: luidSchema.optional(),
@@ -149,13 +149,6 @@ export function resolveQueryRequestArgs(
 
   const { datasource, options = {} } = args;
 
-  // Checked before the LUID so a caller passing only workbookDatasourceId gets this explanation.
-  if (datasource?.workbookDatasourceId !== undefined) {
-    return Err(
-      'datasource.workbookDatasourceId is not supported. To query an embedded data source, pass its LUID in datasourceLuid and the LUID of its workbook in workbookLuid.',
-    );
-  }
-
   const flatLuid = args.datasourceLuid;
   const envelopeLuid = datasource?.datasourceLuid;
   if (flatLuid !== undefined && envelopeLuid !== undefined && flatLuid !== envelopeLuid) {
@@ -165,7 +158,11 @@ export function resolveQueryRequestArgs(
   }
   const datasourceLuid = flatLuid ?? envelopeLuid;
   if (datasourceLuid === undefined) {
-    return Err('A data source is required. Pass datasourceLuid or datasource.datasourceLuid.');
+    return Err(
+      datasource?.workbookDatasourceId !== undefined
+        ? "datasource.workbookDatasourceId isn't used by this tool. Pass the embedded data source's LUID in datasourceLuid and its workbook's LUID in workbookLuid."
+        : 'A data source is required. Pass datasourceLuid or datasource.datasourceLuid.',
+    );
   }
 
   const topLevelNames = args.interpretFieldCaptionsAsFieldNames;
@@ -203,12 +200,13 @@ export function resolveQueryRequestArgs(
     limit,
     interpretFieldCaptionsAsFieldNames: topLevelNames ?? optionNames,
     forwardedOptions,
-    warnings: buildIgnoredPropertyWarnings(args),
+    warnings: buildIgnoredPropertyWarnings(args, datasourceLuid),
   });
 }
 
 function buildIgnoredPropertyWarnings(
   args: QueryRequestEnvelopeArgs,
+  datasourceLuid: string,
 ): IgnoredRequestPropertyWarning[] {
   const options = args.options ?? {};
   const warnings: IgnoredRequestPropertyWarning[] = [];
@@ -236,6 +234,17 @@ function buildIgnoredPropertyWarnings(
       severity: 'WARNING',
       message: 'These options only affect read-metadata requests, so they were ignored.',
       affectedProperties: readMetadataOnly.map((key) => `options.${key}`),
+    });
+  }
+
+  // Never forwarded: it's a name, so the datasource allow-list can't check it. Naming the queried
+  // LUID lets the caller spot a request whose two keys point at different datasources.
+  if (args.datasource?.workbookDatasourceId !== undefined) {
+    warnings.push({
+      type: 'IGNORED_REQUEST_PROPERTY',
+      severity: 'WARNING',
+      message: `datasource.workbookDatasourceId was ignored; results come from datasourceLuid ${datasourceLuid}.`,
+      affectedProperties: ['datasource.workbookDatasourceId'],
     });
   }
 

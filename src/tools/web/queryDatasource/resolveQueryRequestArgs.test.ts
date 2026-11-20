@@ -58,14 +58,37 @@ describe('resolveQueryRequestArgs', () => {
   });
 
   describe('workbookDatasourceId', () => {
-    it.each([
-      { name: 'with a LUID', datasource: { datasourceLuid: luid, workbookDatasourceId: 'ds1' } },
-      { name: 'without a LUID', datasource: { workbookDatasourceId: 'ds1' } },
-    ])('errors $name and points at datasourceLuid + workbookLuid', ({ datasource }) => {
-      const error = resolveErr({ datasource });
-      expect(error).toContain('datasource.workbookDatasourceId is not supported');
-      expect(error).toContain('datasourceLuid');
-      expect(error).toContain('workbookLuid');
+    it('is ignored with a warning naming the LUID that is queried', () => {
+      const resolved = resolveOk({
+        datasource: { datasourceLuid: luid, workbookDatasourceId: 'ds1' },
+      });
+
+      expect(resolved.datasourceLuid).toBe(luid);
+      expect(resolved.warnings).toEqual([
+        {
+          type: 'IGNORED_REQUEST_PROPERTY',
+          severity: 'WARNING',
+          message: `datasource.workbookDatasourceId was ignored; results come from datasourceLuid ${luid}.`,
+          affectedProperties: ['datasource.workbookDatasourceId'],
+        },
+      ]);
+      expect(JSON.stringify(resolved)).not.toContain('ds1');
+    });
+
+    it('is ignored alongside a flat datasourceLuid', () => {
+      const resolved = resolveOk({
+        datasourceLuid: luid,
+        datasource: { workbookDatasourceId: 'ds1' },
+      });
+      expect(resolved.warnings).toEqual([
+        expect.objectContaining({ affectedProperties: ['datasource.workbookDatasourceId'] }),
+      ]);
+    });
+
+    it('errors without a LUID and points at datasourceLuid + workbookLuid', () => {
+      expect(resolveErr({ datasource: { workbookDatasourceId: 'ds1' } })).toBe(
+        "datasource.workbookDatasourceId isn't used by this tool. Pass the embedded data source's LUID in datasourceLuid and its workbook's LUID in workbookLuid.",
+      );
     });
   });
 
