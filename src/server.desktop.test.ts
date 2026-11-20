@@ -27,6 +27,7 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
+  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -307,6 +308,47 @@ describe('desktop tools/list Tableau vocabulary', () => {
   });
 });
 
+describe('stripEmptySchemaNoise', () => {
+  it('drops empty descriptions and string-only propertyNames at any depth', () => {
+    const schema = {
+      type: 'object',
+      description: '',
+      properties: {
+        caption: { type: 'string', description: '' },
+        filters: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string', description: '' }] },
+      },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      properties: {
+        caption: { type: 'string' },
+        filters: { type: 'object', additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string' }] },
+      },
+    });
+  });
+
+  it('keeps real descriptions and constrained propertyNames', () => {
+    const schema = {
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    });
+  });
+});
+
 describe('desktop tools/list per-tool byte accounting', () => {
   // Tool search owns aggregate discovery. Keep each individual tool bounded so a
   // schema cannot grow without its own measured, reviewable ratchet change.
@@ -322,16 +364,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2651], // raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
-    ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
-    ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
-    ['run-dashboard-batch', 1302], // remeasured after accepting an empty KPI list
-    ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
-    // Approved with the tool-search transition: the per-sheet schema prevents partial
-    // cross-field bulk edits; preserve that contract instead of compressing its names.
-    ['format-worksheets', 1097],
+    ['bind-template', 2620], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
+    ['add-field', 1367], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
+    ['apply-worksheet', 1489], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
+    ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
+    ['author-action', 2546], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

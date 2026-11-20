@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "6.5.3",
+  "version": "6.5.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -93,7 +93,7 @@
     "ts-results-es": "^7.1.0",
     "uuid": "^14.0.1",
     "xpath": "^0.0.34",
-    "zod": "^3.24.3",
+    "zod": "^4.2.0",
     "zod-validation-error": "^4.0.1"
   },
   "devDependencies": {
@@ -138,5 +138,22 @@
   },
   "engines": {
     "node": ">=22.7.5"
+  },
+  "overrides": {
+    "@zodios/core": {
+      "zod": "$zod"
+    },
+    "@openai/agents": {
+      "zod": "$zod"
+    },
+    "@openai/agents-core": {
+      "zod": "$zod"
+    },
+    "@openai/agents-openai": {
+      "zod": "$zod"
+    },
+    "openai": {
+      "zod": "$zod"
+    }
   }
 }

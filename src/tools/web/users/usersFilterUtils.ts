@@ -5,6 +5,7 @@ import {
   FilterOperator,
   FilterOperatorSchema,
   parseAndValidateFilterString,
+  parseFilterPart,
 } from '../../../utils/parseAndValidateFilterString.js';
 
 // === Field and Operator Definitions ===
@@ -76,8 +77,8 @@ export function buildUserFilterPredicate(
 
   const filters = expressions.map((expr) => {
     const [fieldRaw, operatorRaw, ...valueParts] = expr.split(':');
-    const field = FilterFieldSchema.parse(fieldRaw);
-    const operator = FilterOperatorSchema.parse(operatorRaw);
+    const field = parseFilterPart('field', FilterFieldSchema, fieldRaw);
+    const operator = parseFilterPart('operator', FilterOperatorSchema, operatorRaw);
 
     if (!allowedOperatorsByField[field].includes(operator)) {
       throw new Error(

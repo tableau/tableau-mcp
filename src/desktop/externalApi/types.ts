@@ -591,7 +591,7 @@ export const apiRootSchema = z
   .object({
     apiVersion: z.string().optional(),
     applicationVersion: z.string().optional(),
-    links: z.record(z.string()).optional(),
+    links: z.record(z.string(), z.string()).optional(),
   })
   .passthrough();
 export type ApiRoot = z.infer<typeof apiRootSchema>;
@@ -1335,7 +1335,7 @@ export type StartPageVisibility = z.infer<typeof startPageVisibilitySchema>;
 /** Per-operation availability returned by `GET /v0/capabilities`, keyed on operationId. */
 export const capabilityMatrixSchema = z
   .object({
-    capabilities: z.record(z.object({ requiresServer: z.boolean() }).passthrough()),
+    capabilities: z.record(z.string(), z.object({ requiresServer: z.boolean() }).passthrough()),
   })
   .passthrough();
 export type CapabilityMatrix = z.infer<typeof capabilityMatrixSchema>;

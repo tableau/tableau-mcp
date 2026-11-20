@@ -251,7 +251,7 @@ describe('usersFilterUtils', () => {
       expect(() => applyUserFilters(users, 'locale:eq:en_US')).toThrow(/locale/);
       // Rejection also flows through the shared parse/validate entrypoint.
       expect(() => parseAndValidateUsersFilterString('authSetting:eq:SAML')).toThrow(
-        /Invalid enum value/,
+        /Invalid option/,
       );
     });
 
