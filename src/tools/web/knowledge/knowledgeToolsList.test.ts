@@ -1,6 +1,8 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import { getInspectKnowledgeContextTool } from './inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './queryKnowledgeContext.js';
@@ -17,9 +19,9 @@ type AdvertisedSchema = {
 // testSetup.ts globally mocks McpServer; the real one is needed to exercise the SDK's own
 // tools/list schema conversion, which is where the empty `properties: {}` came from.
 async function listKnowledgeTools(): Promise<Map<string, AdvertisedSchema>> {
-  const { McpServer } = await vi.importActual<
-    typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/server');
+  const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+    '@modelcontextprotocol/server',
+  );
   const mcpServer = new McpServer({ name: 'test', version: '0.0.0' });
   const server = new WebMcpServer();
   const tools = [
@@ -28,12 +30,11 @@ async function listKnowledgeTools(): Promise<Map<string, AdvertisedSchema>> {
     getManageKnowledgeContextTool(server),
   ];
   for (const tool of tools) {
-    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     mcpServer.registerTool(
       tool.name,
       {
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
       },
       async () => ({ content: [] }),
     );

@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { DesktopState } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';

@@ -1,4 +1,4 @@
-import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
+import { CallToolResult, Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
@@ -15,6 +15,7 @@ import {
 } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import {
   getEmbeddedDatasourceVersionHint,
   getVizqlDataServiceDisabledError,
@@ -201,17 +202,16 @@ describe('queryDatasourceTool', () => {
   ] as const)(
     'advertises name mode according to version %s over MCP',
     async (productVersion, supported) => {
-      const { McpServer } = await vi.importActual<
-        typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-      >('@modelcontextprotocol/server');
+      const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+        '@modelcontextprotocol/server',
+      );
       const server = new McpServer({ name: 'test', version: '0.0.0' });
       const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
       const callback = await Provider.from(tool.callback);
-      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       server.registerTool(
         tool.name,
-        { inputSchema: await Provider.from(tool.paramsSchema) },
-        (args) => callback(args, getMockRequestHandlerExtra()),
+        { inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)) },
+        (args) => callback(args as never, getMockRequestHandlerExtra()),
       );
       const client = new Client({ name: 'test-client', version: '0.0.0' });
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

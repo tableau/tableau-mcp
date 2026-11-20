@@ -1,10 +1,10 @@
 import {
-  McpServer,
-  ReadResourceTemplateCallback,
-  ResourceTemplate,
   InitializeRequest,
+  McpServer,
   ProtocolError,
   ProtocolErrorCode,
+  ReadResourceTemplateCallback,
+  ResourceTemplate,
 } from '@modelcontextprotocol/server';
 import { existsSync, readFileSync } from 'fs';
 

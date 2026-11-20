@@ -78,13 +78,12 @@ export const registerPrompts = async (server: WebMcpServer): Promise<void> => {
   registeredServer.add(mcp);
 
   for (const prompt of await getEnabledWebPrompts(server)) {
-    /* @mcp-codemod-error Could not verify `argsSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     mcp.registerPrompt(
       prompt.name,
       {
         title: prompt.title,
         description: prompt.description,
-        argsSchema: prompt.argsSchema,
+        argsSchema: prompt.argsSchema ? z.object(prompt.argsSchema) : undefined,
       },
       // The MCP SDK's PromptCallback type discriminates on whether argsSchema is provided.
       // Our registration always provides one for argument-bearing prompts; cast through any

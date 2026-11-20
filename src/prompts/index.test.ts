@@ -1,6 +1,11 @@
-import { InMemoryTransport, UriTemplate, ProtocolErrorCode } from '@modelcontextprotocol/server';
-import type { McpServer as McpServerType } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
+import {
+  InMemoryTransport,
+  type McpServer as McpServerType,
+  ProtocolErrorCode,
+  UriTemplate,
+} from '@modelcontextprotocol/server';
+
 import { WebMcpServer } from '../server.web.js';
 import { stubDefaultEnvVars } from '../testShared.js';
 import {
@@ -30,9 +35,9 @@ const adminPromptNames = [
 // testSetup.ts globally mocks McpServer; these tests need the real SDK so resources/list and
 // resources/read go through the SDK's actual request handlers.
 async function getRealMcpServer(): Promise<McpServerType> {
-  const { McpServer } = await vi.importActual<
-    typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/server');
+  const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+    '@modelcontextprotocol/server',
+  );
   return new McpServer({ name: 'test', version: '0.0.0' });
 }
 

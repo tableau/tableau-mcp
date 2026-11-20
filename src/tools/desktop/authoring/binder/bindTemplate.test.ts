@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/server';
+import { CallToolResult as SdkCallToolResult } from '@modelcontextprotocol/server';
 import { createHash } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
 import type { Mock } from 'vitest';
@@ -51,6 +51,11 @@ import { proposalSignature } from './proposalSignature.js';
 // DERIVATION_* exports used to build the zod schema stay intact while only
 // bindTemplate is stubbed. The runtime catalog is built from the real bundled TBMs;
 // static manifests are intentionally absent.
+// The SDK types `structuredContent` as `{}`; these tests read named fields from it.
+type CallToolResult = SdkCallToolResult & {
+  structuredContent?: Record<string, any>;
+};
+
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js', async (importOriginal) => {
   const actual =
@@ -4426,7 +4431,7 @@ async function getToolResult({
     ...(customSignal && { signal: customSignal }),
   };
 
-  return await callback(
+  return (await callback(
     {
       session,
       ask,
@@ -4441,7 +4446,7 @@ async function getToolResult({
       keep_large_pie,
     } as any,
     extra,
-  );
+  )) as CallToolResult;
 }
 
 function datasourceBlock(xml: string, datasourceName: string): string {
@@ -9856,7 +9861,6 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         undefined,
     );
 
-    /* @mcp-codemod-error This object looks like a v1 handler-context mock (sendNotification). v2 nests the context — reshape it (sendNotification → mcpReq.notify), e.g. { sendRequest: fn } → { mcpReq: { send: fn } }. Passed as-is to a migrated handler that reads ctx.mcpReq.*, the v1 shape throws "Cannot read properties of undefined". */
     await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',

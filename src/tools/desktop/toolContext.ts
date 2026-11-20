@@ -1,11 +1,13 @@
-/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/experimental. Manual migration required. */
-import { BaseToolCallback } from '@modelcontextprotocol/sdk/experimental';
-import { CallToolResult, ServerContext } from '@modelcontextprotocol/server';
 import { Config } from '../../config.desktop.js';
 import { CallDeadline } from '../../desktop/callDeadline.js';
 import { ExternalApiToolExecutor } from '../../desktop/externalApi/externalApiToolExecutor.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
-import { TableauToolContext } from '../toolContext.js';
+import {
+  TableauRequestFields,
+  TableauToolCallback,
+  TableauToolContext,
+  ToolParamsSchema,
+} from '../toolContext.js';
 
 // Additional context available to all desktop tool callbacks
 export type TableauDesktopToolContext = TableauToolContext<DesktopMcpServer> & {
@@ -19,10 +21,9 @@ export type TableauDesktopToolContext = TableauToolContext<DesktopMcpServer> & {
   deadline?: CallDeadline;
 };
 
-// An extension of the RequestHandlerExtra type that includes the TableauDesktopToolContext
-export type TableauDesktopRequestHandlerExtra = TableauDesktopToolContext & ServerContext;
+// An extension of the request fields that includes the TableauDesktopToolContext
+export type TableauDesktopRequestHandlerExtra = TableauDesktopToolContext & TableauRequestFields;
 
 // An extension of ToolCallback that includes additional context in the extra parameter
-export type TableauDesktopToolCallback<
-  Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
-> = BaseToolCallback<CallToolResult, TableauDesktopRequestHandlerExtra, Args>;
+export type TableauDesktopToolCallback<Args extends undefined | ToolParamsSchema = undefined> =
+  TableauToolCallback<DesktopMcpServer, TableauDesktopRequestHandlerExtra, Args>;

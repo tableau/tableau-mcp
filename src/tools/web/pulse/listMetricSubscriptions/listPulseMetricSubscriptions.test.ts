@@ -104,7 +104,6 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 
   describe('constrainPulseMetricSubscriptions', () => {
-    /* @mcp-codemod-error This object looks like a v1 handler-context mock (requestId, signal). v2 nests the context — reshape it (requestId → mcpReq.id; signal → mcpReq.signal), e.g. { sendRequest: fn } → { mcpReq: { send: fn } }. Passed as-is to a migrated handler that reads ctx.mcpReq.*, the v1 shape throws "Cannot read properties of undefined". */
     const restApiArgs = {
       config: getConfig(),
       requestId: 'request-id',

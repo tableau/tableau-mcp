@@ -1,14 +1,13 @@
 import {
+  CallToolResult,
   McpServer,
-  ResourceTemplate,
-  ToolCallback,
   ProtocolError,
-  Tool as McpTool,
   ProtocolErrorCode,
+  ResourceTemplate,
   ServerContext,
+  Tool as McpTool,
 } from '@modelcontextprotocol/server';
-/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/server/zod-json-schema-compat.js. Manual migration required. */
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
+
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import {
@@ -41,6 +40,7 @@ import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
+import { getRequestFields, toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
 const serverName = DESKTOP_MCP_NAME;
@@ -307,10 +307,7 @@ export class DesktopMcpServer extends Server {
     });
 
     for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
-      const toolCallback: ToolCallback<typeof paramsSchema> = async (
-        args: typeof paramsSchema,
-        extra: ServerContext,
-      ) => {
+      const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
         const tableauToolCallback = await Provider.from(callback);
         // One clock per tool call, composed into extra.signal so the socket really aborts.
         const deadline = createCallDeadline({
@@ -320,7 +317,7 @@ export class DesktopMcpServer extends Server {
 
         try {
           const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
-            ...extra,
+            ...getRequestFields(extra),
             signal: deadline.signal,
             deadline,
             config,
@@ -336,13 +333,12 @@ export class DesktopMcpServer extends Server {
         }
       };
 
-      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       this.mcpServer.registerTool(
         name,
         {
           title: await Provider.from(title),
           description: await Provider.from(description),
-          inputSchema: await Provider.from(paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(paramsSchema)),
           annotations: await Provider.from(annotations),
           ...getDesktopToolMeta(name),
         },
@@ -466,12 +462,12 @@ function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
 }
 
 export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {
-  const paramsSchema = await Provider.from(tool.paramsSchema);
-  const objectSchema = normalizeObjectSchema(paramsSchema as any);
+  const schema = toStandardSchema(await Provider.from(tool.paramsSchema));
+  // Same conversion the SDK's own tools/list applies, minus the $schema dialect tag.
   const inputSchema = (
-    objectSchema
-      ? toJsonSchemaCompat(objectSchema, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object' as const, properties: {} }
+    schema
+      ? { type: 'object', ...schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) }
+      : { type: 'object', properties: {} }
   ) as McpTool['inputSchema'] & { $schema?: string };
   delete inputSchema.$schema;
   stripEmptySchemaNoise(inputSchema);

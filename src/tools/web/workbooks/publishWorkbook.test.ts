@@ -1,4 +1,4 @@
-import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
+import { CallToolResult, Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { AxiosError } from 'axios';
 
 import * as loggerModule from '../../../logging/logger.js';
@@ -8,6 +8,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { mockWorkbook } from './mockWorkbook.js';
 import { getPublishWorkbookTool } from './publishWorkbook.js';
@@ -156,18 +157,17 @@ describe('publishWorkbookTool', () => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
         flag === 'data-apps' ? enabled : true,
       );
-      const { McpServer } = await vi.importActual<
-        typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-      >('@modelcontextprotocol/server');
+      const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+        '@modelcontextprotocol/server',
+      );
       const server = new McpServer({ name: 'test', version: '0.0.0' });
       const tool = getPublishWorkbookTool(new WebMcpServer());
       const schema = await Provider.from(tool.paramsSchema);
-      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       server.registerTool(
         tool.name,
         {
           description: await Provider.from(tool.description),
-          inputSchema: schema,
+          inputSchema: toStandardSchema(schema),
         },
         async () => ({ content: [] }),
       );

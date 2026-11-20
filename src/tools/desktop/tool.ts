@@ -17,6 +17,7 @@ import { DesktopMcpServer } from '../../server.desktop.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { ToolParamsSchema } from '../toolContext.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
@@ -43,7 +44,7 @@ export function resolveEpisodeKey(
  */
 export type DesktopToolLogAndExecuteParams<
   T,
-  Args extends undefined | ZodRawShapeCompat | AnySchema,
+  Args extends undefined | ToolParamsSchema,
 > = LogAndExecuteParams<T, DesktopMcpServer, TableauDesktopRequestHandlerExtra, Args>;
 
 export type DesktopToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
@@ -250,7 +251,7 @@ function hashRequestId(requestId: RequestId): string {
  * Runs the tool body against the per-call clock. A tool that forwards `extra.signal` aborts on
  * its own; this race also covers a tool that awaits something the signal cannot interrupt.
  */
-async function raceDeadline<T, Args extends undefined | ZodRawShapeCompat | AnySchema>(
+async function raceDeadline<T, Args extends undefined | ToolParamsSchema>(
   extra: DesktopToolLogAndExecuteParams<T, Args>['extra'],
   callback: DesktopToolLogAndExecuteParams<T, Args>['callback'],
 ): ReturnType<DesktopToolLogAndExecuteParams<T, Args>['callback']> {

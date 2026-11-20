@@ -2,8 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Client, InMemoryTransport, ProtocolErrorCode } from '@modelcontextprotocol/client';
-import type { Result } from '@modelcontextprotocol/client';
+import {
+  Client,
+  InMemoryTransport,
+  ProtocolErrorCode,
+  type Result,
+} from '@modelcontextprotocol/client';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../logging/logger.js', () => ({
@@ -18,6 +23,10 @@ import {
   SkillsGetResultSchema,
   SkillsListResultSchema,
 } from './types.js';
+
+// The SDK strips resultType from results on 2025-era connections (what the in-memory pair negotiates).
+const WireListResultSchema = SkillsListResultSchema.omit({ resultType: true });
+const WireGetResultSchema = SkillsGetResultSchema.omit({ resultType: true });
 
 const SKILL: SkillEntry = {
   uri: 'skill://test-skill/SKILL.md',
@@ -47,9 +56,9 @@ async function requestSkills(
   method: 'skills/list' | 'skills/get',
   params?: Record<string, unknown>,
 ): Promise<Result> {
-  const { McpServer } = await vi.importActual<
-    typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/server');
+  const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+    '@modelcontextprotocol/server',
+  );
   const mcpServer = new McpServer({ name: 'test', version: '0.0.0' });
   registerSkillMethodHandlers(mcpServer, registry);
 
@@ -59,7 +68,7 @@ async function requestSkills(
   try {
     return await client.request(
       { method, params },
-      method === 'skills/get' ? SkillsGetResultSchema : SkillsListResultSchema,
+      method === 'skills/get' ? WireGetResultSchema : WireListResultSchema,
     );
   } finally {
     await client.close();
@@ -67,29 +76,49 @@ async function requestSkills(
   }
 }
 
-type ListPage = { resultType: string; skills: SkillEntry[]; nextCursor?: string };
+// Invokes a registered handler directly, bypassing the SDK's per-era result shaping.
+async function callHandler(
+  registry: SkillRegistry,
+  method: 'skills/list' | 'skills/get',
+  params: unknown,
+): Promise<unknown> {
+  const setRequestHandler = vi.fn();
+  registerSkillMethodHandlers({ server: { setRequestHandler } } as unknown as McpServer, registry);
+  const call = setRequestHandler.mock.calls.find(([name]) => name === method)!;
+  return call[2](params, {});
+}
+
+type ListPage = { skills: SkillEntry[]; nextCursor?: string };
 
 function listSkills(registry: SkillRegistry, params?: Record<string, unknown>): Promise<Result> {
   return requestSkills(registry, 'skills/list', params);
 }
 
 describe('skills/list', () => {
-  it('returns every skill entry with resultType complete', async () => {
+  it('returns every skill entry', async () => {
     const result = await listSkills(makeRegistry([SKILL]), {});
 
-    expect(result).toEqual({ resultType: 'complete', skills: [SKILL] });
+    expect(result).toEqual({ skills: [SKILL] });
+  });
+
+  // The SDK strips resultType on 2025-era connections, so the handlers' own output is checked directly.
+  it.each([
+    ['skills/list', {}, { resultType: 'complete', skills: [SKILL] }],
+    ['skills/get', { uri: SKILL.uri }, { resultType: 'complete', skill: SKILL }],
+  ] as const)('%s handler stamps resultType complete', async (method, params, expected) => {
+    await expect(callHandler(makeRegistry([SKILL]), method, params)).resolves.toEqual(expected);
   });
 
   it('accepts a request with no params', async () => {
     const result = await listSkills(makeRegistry([SKILL]));
 
-    expect(result).toEqual({ resultType: 'complete', skills: [SKILL] });
+    expect(result).toEqual({ skills: [SKILL] });
   });
 
   it('returns an empty list when there are no skills', async () => {
     const result = await listSkills(makeRegistry([]), {});
 
-    expect(result).toEqual({ resultType: 'complete', skills: [] });
+    expect(result).toEqual({ skills: [] });
   });
 });
 
@@ -144,7 +173,6 @@ describe('skills/list pagination', () => {
 
     expect(pages.map((p) => p.skills.length)).toEqual(pageSizes);
     pages.forEach((page, i) => {
-      expect(page.resultType).toBe('complete');
       expect('nextCursor' in page).toBe(i < pages.length - 1);
     });
     const skills = pages.flatMap((p) => p.skills);
@@ -204,7 +232,7 @@ describe('skills/list pagination', () => {
 
     const result = await requestSkills(registry, 'skills/get', { uri: skillUri(N) });
 
-    expect(result).toMatchObject({ resultType: 'complete', skill: { uri: skillUri(N) } });
+    expect(result).toMatchObject({ skill: { uri: skillUri(N) } });
     expect(registry.files()).toHaveLength((N + 1) * 2);
   });
 
@@ -240,15 +268,7 @@ describe('skills/list pagination', () => {
   it.each([42, null, 'invalid', [], { cursor: 42 }])(
     'reports a generic params error for an invalid request: %j',
     async (params) => {
-      const mcp = {
-        server: { setRequestHandler: vi.fn() },
-      } as unknown as Parameters<typeof registerSkillMethodHandlers>[0];
-      registerSkillMethodHandlers(mcp, makeRegistry([]));
-      const handler = vi.mocked(mcp.server.setRequestHandler).mock.calls[0][1];
-
-      await expect(
-        handler({ method: 'skills/list', params } as never, {} as never),
-      ).rejects.toMatchObject({
+      await expect(callHandler(makeRegistry([]), 'skills/list', params)).rejects.toMatchObject({
         code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Invalid skills/list params'),
       });
@@ -293,7 +313,7 @@ describe('skills/get', () => {
       uri: SKILL.uri,
     });
 
-    expect(result).toEqual({ resultType: 'complete', skill: SKILL });
+    expect(result).toEqual({ skill: SKILL });
   });
 
   it('returns the same complete entry advertised by skills/list', async () => {
@@ -302,7 +322,6 @@ describe('skills/get', () => {
     const result = await requestSkills(registry, 'skills/get', { uri: SKILL.uri });
 
     expect(result).toEqual({
-      resultType: 'complete',
       skill: (listed.skills as SkillEntry[])[0],
     });
   });

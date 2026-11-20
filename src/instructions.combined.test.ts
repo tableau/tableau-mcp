@@ -1,5 +1,6 @@
-import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+
 import { getDesktopConfig } from './config.desktop.js';
 import { buildCombinedInstructions } from './instructions.combined.js';
 import { DesktopMcpServer } from './server.desktop.js';

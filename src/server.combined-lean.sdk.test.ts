@@ -1,5 +1,6 @@
-import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+
 import { buildWebInstructions, LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { webToolGroups } from './tools/web/toolName.js';

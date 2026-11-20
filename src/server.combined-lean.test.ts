@@ -1,4 +1,5 @@
-import { McpServer, CallToolResult } from '@modelcontextprotocol/server';
+import { CallToolResult, McpServer } from '@modelcontextprotocol/server';
+
 import { buildWebInstructions, LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';

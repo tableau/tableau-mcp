@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer, type ServerContext } from '@modelcontextprotocol/server';
 import type { MockedFunction } from 'vitest';
 
 import features from '../features.json';
@@ -14,15 +14,13 @@ import {
   getRequiredMcpScopesForTool,
 } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
-import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
-import { TableauWebToolCallback } from './tools/web/toolContext.js';
-import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
@@ -89,6 +87,20 @@ vi.mock('./tools/web/registrationConditions.js', async (importOriginal) => {
 
 // Auto-mock the telemetry logger so the registration-time warning is captured as a spy call.
 vi.mock('./logging/logger.js');
+
+// The v2 context a registered tool callback receives.
+function getMockServerContext(): ServerContext {
+  return {
+    sessionId: 'test-session',
+    mcpReq: {
+      id: 2,
+      signal: new AbortController().signal,
+      _meta: undefined,
+      notify: vi.fn(),
+      send: vi.fn(),
+    },
+  } as unknown as ServerContext;
+}
 
 describe('server', () => {
   beforeEach(() => {
@@ -190,7 +202,7 @@ describe('server', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
         },
         expect.any(Function),
@@ -944,7 +956,7 @@ describe('server', () => {
       {
         title: await Provider.from(tool.title),
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
         annotations: await Provider.from(tool.annotations),
       },
       expect.any(Function),
@@ -975,7 +987,7 @@ describe('server', () => {
           {
             title: await Provider.from(tool.title),
             description: await Provider.from(tool.description),
-            inputSchema: await Provider.from(tool.paramsSchema),
+            inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
             annotations: await Provider.from(tool.annotations),
           },
           expect.any(Function),
@@ -1004,12 +1016,12 @@ describe('server', () => {
       .mock.calls.find((call) => call[0 /* tool name */] === 'list-datasources');
 
     invariant(listDatasourcesRegistration);
-    const listDatasourcesCallback =
-      listDatasourcesRegistration[2 /* callback */] as TableauWebToolCallback<
-        Partial<typeof exportedForTesting.listDatasourcesParamsSchema>
-      >;
+    const listDatasourcesCallback = listDatasourcesRegistration[2 /* callback */] as (
+      args: Record<string, unknown>,
+      ctx: ServerContext,
+    ) => Promise<unknown>;
 
-    await expect(listDatasourcesCallback({}, getMockRequestHandlerExtra())).rejects.toSatisfy(
+    await expect(listDatasourcesCallback({}, getMockServerContext())).rejects.toSatisfy(
       (error: unknown) =>
         error instanceof ServiceUnavailableError &&
         error.type === 'service-unavailable' &&
@@ -1039,7 +1051,7 @@ describe('server', () => {
       {
         title: 'Test App Tool',
         description: 'Test App Tool',
-        inputSchema: {},
+        inputSchema: toStandardSchema({}),
         annotations: {
           title: 'Test App Tool',
           readOnlyHint: true,
@@ -1189,7 +1201,7 @@ describe('server', () => {
               .mocked(server.mcpServer.registerTool)
               .mock.calls.find((call) => call[0] === 'delete-content')?.[2];
       invariant(registeredCallback);
-      await registeredCallback({}, getMockRequestHandlerExtra());
+      await registeredCallback({}, getMockServerContext());
 
       expect(mockAppTool.callback).toHaveBeenCalledWith(
         {},
@@ -2099,7 +2111,7 @@ describe('server', () => {
       {
         title: 'Test App Tool',
         description: 'Test App Tool',
-        inputSchema: {},
+        inputSchema: toStandardSchema({}),
         annotations: {
           title: 'Test App Tool',
           readOnlyHint: true,

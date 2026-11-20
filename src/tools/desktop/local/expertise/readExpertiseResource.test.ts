@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

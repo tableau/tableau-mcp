@@ -4,9 +4,8 @@ import {
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
 import {
-  McpServer,
-  ToolCallback,
   CallToolResult,
+  McpServer,
   ReadResourceResult,
   ServerContext,
 } from '@modelcontextprotocol/server';
@@ -31,6 +30,7 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
+import { getRequestFields, toStandardSchema } from './tools/toolContext.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import {
   checkRegistrationConditions,
@@ -82,6 +82,8 @@ export type LoadWebToolsResult = {
   // Deliberate omissions for the requested group (conditions not met); retrying will not help.
   notes?: string[];
 };
+
+type WebToolRegistrationCallback = (args: unknown, extra: ServerContext) => Promise<CallToolResult>;
 
 type CollectedMessage = { message: string; toolNames: string[] };
 
@@ -327,13 +329,12 @@ export class WebMcpServer extends Server {
     );
 
   private _registerLoadWebToolsTool = (): void => {
-    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     this.mcpServer.registerTool(
       LOAD_WEB_TOOLS_TOOL_NAME,
       {
         title: 'Load Web Tools',
         description: buildLoadWebToolsDescription(),
-        inputSchema: loadWebToolsParamsSchema,
+        inputSchema: z.object(loadWebToolsParamsSchema),
         annotations: {
           title: 'Load Web Tools',
           readOnlyHint: true,
@@ -371,10 +372,7 @@ export class WebMcpServer extends Server {
       getClientDisplayName(this.clientId) === 'Claude' &&
       !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
-    const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
-      args: typeof tool.paramsSchema,
-      extra: ServerContext,
-    ) => {
+    const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
       if (config.breakGlassDisableGlobally) {
         throw new ServiceUnavailableError(
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
@@ -382,11 +380,11 @@ export class WebMcpServer extends Server {
       }
 
       const requestOverridesHeader =
-        extra.http?.req?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
+        extra.http?.req?.headers.get(X_TABLEAU_MCP_CONFIG_HEADER) ?? '';
       const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
       const tableauToolCallback = await Provider.from(tool.callback);
       const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
-        ...extra,
+        ...getRequestFields(extra),
         config,
         server: this,
         get tableauAuthInfo() {
@@ -668,15 +666,14 @@ export class WebMcpServer extends Server {
 
   private _registerTool = async (
     tool: WebTool<any>,
-    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+    toolCallback: WebToolRegistrationCallback,
   ): Promise<void> => {
-    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     this.mcpServer.registerTool(
       tool.name,
       {
         title: await Provider.from(tool.title),
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
         annotations: await Provider.from(tool.annotations),
         _meta: await Provider.from(tool.meta),
       },
@@ -686,7 +683,7 @@ export class WebMcpServer extends Server {
 
   private _registerAppTool = async (
     tool: WebTool<any>,
-    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+    toolCallback: WebToolRegistrationCallback,
   ): Promise<void> => {
     invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
 
@@ -701,7 +698,7 @@ export class WebMcpServer extends Server {
       {
         title: (await Provider.from(tool.annotations)).title,
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
         annotations: await Provider.from(tool.annotations),
         _meta: {
           ui: {
@@ -719,7 +716,7 @@ export class WebMcpServer extends Server {
     const cspDomains = config.cspAllowedDomains;
 
     registerAppResource(
-      // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+      // @ts-expect-error -- ext-apps' Pick<McpServer, 'registerResource'> doesn't resolve the v2 overload set.
       this.mcpServer,
       tool.name,
       resourceUri,

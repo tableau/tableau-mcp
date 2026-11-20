@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';

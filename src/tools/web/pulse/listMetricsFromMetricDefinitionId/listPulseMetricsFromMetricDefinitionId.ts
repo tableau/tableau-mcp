@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { PulseMetric } from '../../../../sdks/tableau/types/pulse.js';

@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';

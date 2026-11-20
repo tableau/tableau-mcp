@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { APP_SCREENSHOT_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import {

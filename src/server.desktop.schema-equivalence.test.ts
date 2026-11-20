@@ -1,6 +1,6 @@
-import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
-import type { Tool } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer, type Tool } from '@modelcontextprotocol/server';
+
 import { getDesktopConfig } from './config.desktop.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import * as loggerModule from './logging/logger.js';
@@ -13,6 +13,7 @@ import {
 } from './server.desktop.js';
 import type { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
 vi.unmock('@modelcontextprotocol/server');
@@ -47,13 +48,12 @@ describe('getDesktopToolListEntry SDK schema equivalence', () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
     for (const tool of tools) {
-      /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
       sdkServer.registerTool(
         tool.name,
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
         },
         async () => ({ content: [] }),

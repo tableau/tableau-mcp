@@ -1,10 +1,10 @@
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import {
   Client,
   Implementation,
   ProtocolError,
   ProtocolErrorCode,
 } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { z } from 'zod';
 
 import { Variant } from '../../src/scripts/variants.js';
@@ -135,21 +135,23 @@ export class McpClient {
     }
 
     expect(result.content).toHaveLength(1);
-    expect(result.content[0].type).toBe(contentType);
+    const first = result.content[0];
+    expect(first.type).toBe(contentType);
 
     if (result.isError) {
-      const content = result.content[0][contentType === 'text' ? 'text' : 'data'];
+      const content = first.type === 'text' ? first.text : first.type === 'image' ? first.data : '';
       console.error(content);
       throw new Error(content);
     }
 
-    if (contentType === 'text') {
-      const text = result.content[0].text;
+    if (first.type === 'text') {
+      const text = first.text;
       invariant(typeof text === 'string');
       const response = schema.parse(JSON.parse(text));
       return response;
     } else {
-      const content = result.content[0].data;
+      invariant(first.type === 'image');
+      const content = first.data;
       invariant(typeof content === 'string');
       const response = schema.parse(content);
       return response;

@@ -1,12 +1,11 @@
-import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
-import type { McpServer } from '@modelcontextprotocol/server';
+import { type McpServer, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+
 import { InvalidSkillsCursorError } from './cursor.js';
 import { type SkillRegistry } from './registry.js';
 import {
-  SkillsGetHandlerRequestSchema,
   SkillsGetRequestSchema,
   type SkillsGetResult,
-  SkillsListHandlerRequestSchema,
+  SkillsHandlerParamsSchema,
   SkillsListRequestSchema,
   type SkillsListResult,
 } from './types.js';
@@ -15,11 +14,11 @@ import {
  * Registers the skills request handlers on the given server, backed by the registry.
  */
 export function registerSkillMethodHandlers(mcp: McpServer, registry: SkillRegistry): void {
-  /* @mcp-codemod-error Custom method handler: setRequestHandler(SkillsListHandlerRequestSchema, ...). In v2, use the 3-arg form: setRequestHandler('method/name', { params, result? }, handler). See docs/migration/upgrade-to-v2.md for details. */
   mcp.server.setRequestHandler(
-    SkillsListHandlerRequestSchema,
-    async (request): Promise<SkillsListResult> => {
-      const parsed = SkillsListRequestSchema.safeParse(request);
+    'skills/list',
+    { params: SkillsHandlerParamsSchema },
+    async (params): Promise<SkillsListResult> => {
+      const parsed = SkillsListRequestSchema.safeParse({ method: 'skills/list', params });
       if (!parsed.success) {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Invalid skills/list params');
       }
@@ -35,11 +34,11 @@ export function registerSkillMethodHandlers(mcp: McpServer, registry: SkillRegis
     },
   );
 
-  /* @mcp-codemod-error Custom method handler: setRequestHandler(SkillsGetHandlerRequestSchema, ...). In v2, use the 3-arg form: setRequestHandler('method/name', { params, result? }, handler). See docs/migration/upgrade-to-v2.md for details. */
   mcp.server.setRequestHandler(
-    SkillsGetHandlerRequestSchema,
-    async (request): Promise<SkillsGetResult> => {
-      const parsed = SkillsGetRequestSchema.safeParse(request);
+    'skills/get',
+    { params: SkillsHandlerParamsSchema },
+    async (params): Promise<SkillsGetResult> => {
+      const parsed = SkillsGetRequestSchema.safeParse({ method: 'skills/get', params });
       if (!parsed.success) {
         throw new ProtocolError(
           ProtocolErrorCode.InvalidParams,

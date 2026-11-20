@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { McpServer } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import dotenv from 'dotenv';
 
 import pkg from '../package.json';

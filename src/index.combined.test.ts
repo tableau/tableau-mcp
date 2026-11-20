@@ -128,6 +128,7 @@ vi.mock('./server.desktop.js', () => ({
 }));
 
 import { McpServer } from '@modelcontextprotocol/server';
+
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';

@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../../sdks/tableau/types/pulse.js';

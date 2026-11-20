@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -118,7 +119,7 @@ describe('queryKnowledgeContextTool', () => {
     // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
     // flat raw shape this tool now uses does not have that problem.
     const paramsSchema = await Provider.from(getTool().paramsSchema);
-    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const jsonSchema = advertisedInputSchema(paramsSchema);
     const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
 
     expect(properties).toBeTruthy();

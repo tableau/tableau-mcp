@@ -1,7 +1,5 @@
-import { ListToolsRequestSchema } from '@modelcontextprotocol/core';
-import { McpServer, CallToolResult, Tool as McpTool } from '@modelcontextprotocol/server';
-/* @mcp-codemod-error Unknown SDK import path: @modelcontextprotocol/sdk/server/zod-json-schema-compat.js. Manual migration required. */
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
+import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
+
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
@@ -22,14 +20,16 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
-  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
+
+type ToolsListHandler = (params: unknown, ctx: unknown) => Promise<unknown>;
 
 const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
@@ -68,7 +68,7 @@ describe('DesktopMcpServer', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
           ...(ALWAYS_LOAD_TOOL_NAMES.has(tool.name) && {
             _meta: { 'anthropic/alwaysLoad': true },
@@ -115,13 +115,10 @@ describe('DesktopMcpServer', () => {
     await server.registerTools();
 
     const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
-    const listToolsCall = setRequestHandler.mock.calls.find(
-      /* @mcp-codemod-error ListToolsRequestSchema is no longer the setRequestHandler/setNotificationHandler key in v2 — handlers register by the method string 'tools/list'. Update registration assertions/lookups (e.g. against a setRequestHandler mock) to compare against 'tools/list'. */
-      ([requestSchema]) => requestSchema === ListToolsRequestSchema,
-    );
+    const listToolsCall = setRequestHandler.mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeDefined();
 
-    const result = await listToolsCall![1]({} as never, {} as never);
+    const result = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
     const tools = (result as { tools: Array<Record<string, unknown>> }).tools;
     expect(tools.length).toBeGreaterThan(0);
     for (const tool of tools) {
@@ -152,7 +149,7 @@ describe('DesktopMcpServer', () => {
     expect(server.ownsMcpServer).toBe(false);
     const listToolsCall = vi
       .mocked(sharedMcpServer.server.setRequestHandler)
-      .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      .mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeUndefined();
   });
 
@@ -175,8 +172,8 @@ describe('DesktopMcpServer', () => {
       await server.registerTools();
       const listToolsCall = vi
         .mocked(server.mcpServer.server.setRequestHandler)
-        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
-      const listResult = await listToolsCall![1]({} as never, {} as never);
+        .mock.calls.find(([method]) => method === 'tools/list');
+      const listResult = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
       const listedTools = (listResult as { tools: McpTool[] }).tools;
 
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
@@ -282,12 +279,7 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
     const description = await Provider.from(tool.description);
     if (typeof title === 'string') values.push(title);
     values.push(description);
-    const paramsSchema = await Provider.from(tool.paramsSchema);
-    const obj = normalizeObjectSchema(paramsSchema as any);
-    const inputSchema = obj
-      ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object', properties: {} };
-    collectSchemaDescriptions(inputSchema);
+    collectSchemaDescriptions((await getDesktopToolListEntry(tool)).inputSchema);
   }
 
   return values;
@@ -301,47 +293,6 @@ describe('desktop tools/list Tableau vocabulary', () => {
       .sort();
 
     expect(offenders).toEqual([]);
-  });
-});
-
-describe('stripEmptySchemaNoise', () => {
-  it('drops empty descriptions and string-only propertyNames at any depth', () => {
-    const schema = {
-      type: 'object',
-      description: '',
-      properties: {
-        caption: { type: 'string', description: '' },
-        filters: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} },
-        list: { type: 'array', items: [{ type: 'string', description: '' }] },
-      },
-    };
-
-    stripEmptySchemaNoise(schema);
-
-    expect(schema).toEqual({
-      type: 'object',
-      properties: {
-        caption: { type: 'string' },
-        filters: { type: 'object', additionalProperties: {} },
-        list: { type: 'array', items: [{ type: 'string' }] },
-      },
-    });
-  });
-
-  it('keeps real descriptions and constrained propertyNames', () => {
-    const schema = {
-      type: 'object',
-      description: 'Kept.',
-      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
-    };
-
-    stripEmptySchemaNoise(schema);
-
-    expect(schema).toEqual({
-      type: 'object',
-      description: 'Kept.',
-      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
-    });
   });
 });
 

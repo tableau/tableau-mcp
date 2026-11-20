@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+
 import * as loggerModule from '../../../../logging/logger.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { WebMcpServer } from '../../../../server.web.js';

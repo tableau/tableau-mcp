@@ -1,12 +1,16 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/server';
 import { Result } from 'ts-results-es';
-import { z, ZodRawShape } from 'zod';
 
 import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { TypeOrProvider } from '../utils/provider.js';
-import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
+import {
+  TableauRequestHandlerExtra,
+  TableauToolCallback,
+  ToolArgs,
+  ToolParamsSchema,
+} from './toolContext.js';
 import { ToolName } from './toolName.js';
 
 type ToolAnnotationsWithOptionalTitle = Omit<Required<ToolAnnotations>, 'title'> &
@@ -22,7 +26,7 @@ export type ToolParams<
   TToolName extends ToolName,
   TExtra extends TableauRequestHandlerExtra<TServer>,
   TCallback extends TableauToolCallback<TServer, TExtra, Args>,
-  Args extends undefined | ZodRawShapeCompat | AnySchema,
+  Args extends undefined | ToolParamsSchema,
 > = {
   // The MCP server instance
   server: TServer;
@@ -60,17 +64,13 @@ export type LogAndExecuteParams<
   T,
   TServer extends Server,
   TExtra extends TableauRequestHandlerExtra<TServer>,
-  Args extends undefined | ZodRawShapeCompat | AnySchema,
+  Args extends undefined | ToolParamsSchema,
 > = {
   // The extra data provided to request handlers
   extra: TExtra;
 
   // The arguments of the tool call
-  args: Args extends ZodRawShape
-    ? z.output<z.ZodObject<Args>>
-    : Args extends AnySchema
-      ? SchemaOutput<Args>
-      : undefined;
+  args: ToolArgs<Args>;
 
   // A function that contains the business logic of the tool to be logged and executed
   callback: () => Promise<Result<T, McpToolError>>;
@@ -89,7 +89,7 @@ export abstract class Tool<
   TToolName extends ToolName,
   TExtra extends TableauRequestHandlerExtra<TServer>,
   TCallback extends TableauToolCallback<TServer, TExtra, Args>,
-  Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
+  Args extends undefined | ToolParamsSchema = undefined,
 > {
   server: TServer;
   name: TToolName;

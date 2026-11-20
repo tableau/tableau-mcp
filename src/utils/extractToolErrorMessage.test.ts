@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
+
 import { extractToolErrorMessage } from './extractToolErrorMessage.js';
 
 describe('extractToolErrorMessage', () => {

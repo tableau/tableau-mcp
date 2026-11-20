@@ -1,9 +1,11 @@
-import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
+import { CallToolResult, Client, InMemoryTransport } from '@modelcontextprotocol/client';
+
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getPublishDatasourceTool } from './publishDatasource.js';
 
@@ -123,17 +125,16 @@ describe('publishDatasourceTool', () => {
   });
 
   it('rejects a malformed projectId at the MCP schema layer before any file or API access', async () => {
-    const { McpServer } = await vi.importActual<
-      typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-    >('@modelcontextprotocol/server');
+    const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+      '@modelcontextprotocol/server',
+    );
     const server = new McpServer({ name: 'test', version: '0.0.0' });
     const tool = getPublishDatasourceTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
-    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     server.registerTool(
       tool.name,
-      { inputSchema: await Provider.from(tool.paramsSchema) },
-      async (args) => callback(args, getMockExtra()),
+      { inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)) },
+      async (args) => callback(args as never, getMockExtra()),
     );
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'test-client', version: '0.0.0' });

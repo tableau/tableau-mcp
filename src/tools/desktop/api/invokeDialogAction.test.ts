@@ -1,4 +1,4 @@
-import { Client, InMemoryTransport, CallToolResult } from '@modelcontextprotocol/client';
+import { CallToolResult, Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -18,6 +18,7 @@ import * as sessionResolution from '../../../desktop/session/sessionResolution.j
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getInvokeDialogActionTool } from './invokeDialogAction.js';
 
@@ -220,17 +221,16 @@ describe('invoke-dialog-action tool', () => {
   it('rejects invalid compact-schema inputs through MCP before dispatching the tool', async () => {
     const tool = getInvokeDialogActionTool(new DesktopMcpServer());
     const { McpServer: RealMcpServer } = await vi.importActual<
-      typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+      typeof import('@modelcontextprotocol/server')
     >('@modelcontextprotocol/server');
     const sdkServer = new RealMcpServer({ name: 'dialog-validation-test', version: '1.0.0' });
     const client = new Client({ name: 'dialog-validation-client', version: '1.0.0' });
     const dispatch = vi.fn(async (_args: unknown) => ({
       content: [{ type: 'text' as const, text: 'accepted' }],
     }));
-    /* @mcp-codemod-error Could not verify `inputSchema` is a schema object. Raw shapes are deprecated in v2 — pass a Standard Schema object (e.g. z.object({ … })); no change is needed if it already is one. */
     sdkServer.registerTool(
       tool.name,
-      { inputSchema: tool.paramsSchema as z.ZodRawShape },
+      { inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)) },
       dispatch,
     );
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
