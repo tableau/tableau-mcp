@@ -1,4 +1,4 @@
-import { PingRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { PingRequestSchema } from '@modelcontextprotocol/core';
 import { NextFunction, Request, Response } from 'express';
 
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/ping

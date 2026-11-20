@@ -1,8 +1,8 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import { getInspectKnowledgeContextTool } from './inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './queryKnowledgeContext.js';
@@ -19,9 +19,9 @@ type AdvertisedSchema = {
 // testSetup.ts globally mocks McpServer; the real one is needed to exercise the SDK's own
 // tools/list schema conversion, which is where the empty `properties: {}` came from.
 async function listKnowledgeTools(): Promise<Map<string, AdvertisedSchema>> {
-  const { McpServer } = await vi.importActual<
-    typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/sdk/server/mcp.js');
+  const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+    '@modelcontextprotocol/server',
+  );
   const mcpServer = new McpServer({ name: 'test', version: '0.0.0' });
   const server = new WebMcpServer();
   const tools = [
@@ -34,7 +34,7 @@ async function listKnowledgeTools(): Promise<Map<string, AdvertisedSchema>> {
       tool.name,
       {
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
       },
       async () => ({ content: [] }),
     );

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 
 const MAX_NEXT_ACTION_LABEL_LENGTH = 60;
 
