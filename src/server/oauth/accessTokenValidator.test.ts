@@ -1241,12 +1241,12 @@ describe('ExternalAccessTokenValidator', () => {
       [
         'issuer is missing',
         openIdConfiguration({ issuer: undefined }),
-        'Validation error: Required at "issuer"',
+        'Validation error: Invalid input: expected string, received undefined at "issuer"',
       ],
       [
         'jwks_uri is missing',
         openIdConfiguration({ jwks_uri: undefined }),
-        'Validation error: Required at "jwks_uri"',
+        'Validation error: Invalid input: expected string, received undefined at "jwks_uri"',
       ],
     ])('rejects the token when the document %s', async (_, document, validationError) => {
       const validator = new ExternalAccessTokenValidator({ fetch: discoveryFetch(document) });

@@ -469,6 +469,7 @@ export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<M
       : { type: 'object' as const, properties: {} }
   ) as McpTool['inputSchema'] & { $schema?: string };
   delete inputSchema.$schema;
+  stripEmptySchemaNoise(inputSchema);
 
   return {
     name: tool.name,
@@ -478,6 +479,28 @@ export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<M
     annotations: await Provider.from(tool.annotations),
     ...getDesktopToolMeta(tool.name),
   };
+}
+
+// zod 4 emits empty descriptions and `propertyNames: {type: 'string'}` on every record (JSON keys
+// are always strings); neither tells the model anything, and both count against the size budget.
+export function stripEmptySchemaNoise(node: unknown): void {
+  if (Array.isArray(node)) {
+    node.forEach(stripEmptySchemaNoise);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const obj = node as Record<string, unknown>;
+  if (obj.description === '') delete obj.description;
+  const names = obj.propertyNames as Record<string, unknown> | undefined;
+  if (
+    obj.type === 'object' &&
+    names &&
+    Object.keys(names).length === 1 &&
+    names.type === 'string'
+  ) {
+    delete obj.propertyNames;
+  }
+  Object.values(obj).forEach(stripEmptySchemaNoise);
 }
 
 // _meta is a client flag (Claude Code reads alwaysLoad from it); it never reaches the model.

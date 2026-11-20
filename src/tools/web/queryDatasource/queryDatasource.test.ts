@@ -671,7 +671,7 @@ describe('queryDatasourceTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
       data: badResponse.toString(),
-      warning: 'Validation error: Expected array, received string at "data"',
+      warning: 'Validation error: Invalid input: expected array, received string at "data"',
     });
   });
 

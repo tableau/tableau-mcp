@@ -41,7 +41,7 @@ describe('query-datasource', () => {
         schema: queryOutputSchema,
         toolArgs: { datasourceLuid: getSuperstoreDatasource(getDefaultEnv()).id, query },
       });
-      return z.array(z.record(z.unknown())).parse(data);
+      return z.array(z.record(z.string(), z.unknown())).parse(data);
     }
 
     it('should rank a measure with a table calc', async () => {
