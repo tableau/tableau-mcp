@@ -70,12 +70,13 @@ LUID filtering with `workbookFile` requires an explicit live session.
 <hr />
 
 ### `verbosity`
-How much detail each field carries: `full` (default) or `slim`.
+How much detail each field carries: `full` (default), `slim` or `model`.
 
 - `full` — returns a human-readable table of dimensions and measures plus a `fields` array carrying full metadata, including the fully-qualified `column_ref` for each field.
 - `slim` — returns compact candidate tuples grouped by datasource, sorted into the three buckets an insight or a simple viz needs, and omitting `column_ref`.
+- `model` — returns each datasource's data model instead of its fields: the logical tables, the physical joins and unions behind each, the relationships between tables with their field pairs, the number of visible measures, dimensions and relationships for each table (left to you to judge which table is the fact table), a count of visible fields tied to no table, and problems worth a review, such as a table in no relationship or a relationship that is many-to-many because its cardinality was never set.
 
-Defaults to `full`. `hasLuid` and `luids` are accepted only alongside `slim`; supplying either with `full` is refused before anything is read.
+Defaults to `full`. `hasLuid` and `luids` are accepted only alongside `slim`; supplying either with `full` or `model` is refused before anything is read.
 
 #### Example
 
@@ -83,13 +84,14 @@ Defaults to `full`. `hasLuid` and `luids` are accepted only alongside `slim`; su
 
 #### Output shapes
 
-The two verbosities return different result shapes:
+The verbosities return different result shapes:
 
 - `full` produces `{ message, fields }` — `message` is a formatted dimensions/measures table (or a "no fields found" note for an empty workbook), and `fields` is a flat array spanning all datasources, each field carrying its own `datasource`, `column_ref`, and (for a published datasource) `contentUrl`.
 - `slim` produces `{ datasources }` — one group per datasource, in first-seen order, so the datasource identity is carried once per group rather than repeated on every field. A single-datasource workbook is still one group, so callers always parse the same structure. Each group holds three arrays of positional tuples: `measures` (`[caption, localName, aggregation, "base" | "aggregatedCalc"]`) for numeric measures, `timeDimensions` (`[caption, localName, "date" | "datetime"]`), and `breakdownDimensions` (`[caption, localName, "nominal" | "ordinal"]`). A field that fits none of those three buckets is left out of the slim result entirely. When `hasLuid` is set, each surviving group also carries `luid` and the datasource's friendly `name`.
+- `model` produces `{ message, datasources }` — `message` is a plain-text summary, and each datasource carries `tables`, `relationships`, `problems` and `notes`. Each table carries `measures` and `dimensions` (omitted when no field carries a logical table id) and `relationships`, all counted from the workbook XML. The per-table counts cover the visible fields Tableau ties to that table. Calculations are not tied to a table, so when at least one field is tied to a table they are counted separately in `untiedFields` (`{ measures, dimensions }`), and the summary adds a line such as `9 fields not tied to a table (mostly calculations): 7 measures, 2 dimensions` when that count is above zero. When no field is tied to any table (a legacy datasource, or one without object ids), field ownership is unknown, so `untiedFields` is omitted and the summary shows no such line. Hidden fields are not counted anywhere.
 
 :::note
-`hasLuid` and `luids` require `verbosity: slim`. Supplying either with `full` is refused with `hasLuid and luids require verbosity: slim.`
+`hasLuid` and `luids` require `verbosity: slim`. Supplying either with `full` or `model` is refused with `hasLuid and luids require verbosity: slim.`
 :::
 
 <hr />

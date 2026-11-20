@@ -23,6 +23,20 @@ export {
   removeFieldFromRows,
 } from './fields.js';
 export {
+  type Cardinality,
+  type DataModelDatasource,
+  type DataModelProblem,
+  type DataModelProblemKind,
+  type DataModelRelationship,
+  type DataModelResult,
+  describeDataModel,
+  type JoinClause,
+  type LogicalTable,
+  type PhysicalRelation,
+  type RelationshipEndPoint,
+  type RelationshipFieldPair,
+} from './objectModel.js';
+export {
   findAllWorksheets,
   findWorksheet,
   generateUUID,

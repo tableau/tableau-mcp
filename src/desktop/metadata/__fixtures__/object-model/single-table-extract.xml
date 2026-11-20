@@ -1,0 +1,17 @@
+<!-- Trimmed from src/desktop/data/templates/part-to-whole__unit-grid__show-percentages-as-filled-cells.tbm:25 (datasource element) and :161-172 (object-graph, verbatim). Cut: everything else in the datasource. Added: the <workbook><datasources> wrapper. -->
+<workbook><datasources>
+    <datasource caption='Waffle Chart' inline='true' name='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' version='18.1'>
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_27F043AF92BC49A08782D1C4E18C60CA'>
+            <properties context=''>
+              <relation connection='hyper.0tfl77i1uruwft1dgju6m162tu1v' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+</datasources></workbook>

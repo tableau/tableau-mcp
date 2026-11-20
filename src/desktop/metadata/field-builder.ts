@@ -30,13 +30,13 @@ export function inferFieldTypeFromType(localType: string | undefined): string {
   }
 }
 
-function normalizeLogicalTableId(value: unknown): string | undefined {
+export function normalizeLogicalTableId(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim().replace(/^\[|\]$/g, '');
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function getEnabledFormatElement(container: unknown, elementName: string): any {
+export function getEnabledFormatElement(container: unknown, elementName: string): any {
   if (!container || typeof container !== 'object') return undefined;
 
   const elements = container as Record<string, unknown>;

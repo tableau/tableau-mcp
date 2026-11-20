@@ -1,0 +1,266 @@
+<!-- Hand-built from twb_2026.2.0.xsd:2246-2282 (end points, relationship) and :2672-2700, :2730-2770 (objects, object-graph). Ids and captions copy real-superstore-document.twb.xml:600-670. No real workbook in the repo sets unique-key, so the cardinality values here are guesses at the encoding, not observed output. -->
+<workbook><datasources>
+  <datasource name='Orphan'>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='People' id='People_1'><properties context=''><relation connection='c' name='People' table='[People$]' type='table' /></properties></object>
+        <object caption='Returns' id='Returns_1'><properties context=''><relation connection='c' name='Returns' table='[Returns$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Region]' /><expression op='[Region (People)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='People_1' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Dangling'>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='People' id='People_1'><properties context=''><relation connection='c' name='People' table='[People$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Region]' /><expression op='[Region (People)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='People_1' unique-key='true' />
+        </relationship>
+        <relationship>
+          <expression op='='><expression op='[Order ID]' /><expression op='[Order ID (Returns)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='Returns_Missing' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Duplicate Caption'>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='Orders' id='Orders_2'><properties context=''><relation connection='c' name='Orders2' table='[Orders 2023$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Order ID]' /><expression op='[Order ID (Orders2)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='Orders_2' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Explicit Cardinality'>
+    <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Region (People)]' role='dimension' type='nominal' datatype='string' />
+    <connection class='federated'><metadata-records>
+      <metadata-record class='column'><local-name>[Sales]</local-name><local-type>real</local-type><object-id>[Orders_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Region (People)]</local-name><local-type>string</local-type><object-id>[People_1]</object-id></metadata-record>
+    </metadata-records></connection>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='People' id='People_1'><properties context=''><relation connection='c' name='People' table='[People$]' type='table' /></properties></object>
+        <object caption='Returns' id='Returns_1'><properties context=''><relation connection='c' name='Returns' table='[Returns$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Region]' /><expression op='[Region (People)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' guaranteed-value='true' is-db-set-unique-key='false' />
+          <second-end-point object-id='People_1' unique-key='true' />
+        </relationship>
+        <relationship>
+          <expression op='='><expression op='[Order ID]' /><expression op='[Order ID (Returns)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='Returns_1' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Unknown Encoding'>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='Returns' id='Returns_1'><properties context=''><relation connection='c' name='Returns' table='[Returns$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Order ID]' /><expression op='[Order ID (Returns)]' /></expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='Returns_1' unique-key='yes' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Multi Field'>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='Targets' id='Targets_1'><properties context=''><relation connection='c' name='Targets' table='[Targets$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='AND'>
+            <expression op='='><expression op='[Region]' /><expression op='[Region (Targets)]' /></expression>
+            <expression op='='><expression op='[Category]' /><expression op='[Category (Targets)]' /></expression>
+          </expression>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='Targets_1' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Legacy'>
+    <connection class='federated'>
+      <relation connection='c' name='Orders' table='[Orders$]' type='table' />
+    </connection>
+    <_.fcp.ObjectModelEncapsulateLegacy.true...object-graph is-legacy='true'>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+      </objects>
+    </_.fcp.ObjectModelEncapsulateLegacy.true...object-graph>
+  </datasource>
+  <datasource name='No Graph'>
+    <connection class='federated'>
+      <relation connection='c' name='Orders' table='[Orders$]' type='table' />
+    </connection>
+  </datasource>
+  <datasource name='No Graph Collection'>
+    <connection class='federated'>
+      <relation type='collection'>
+        <relation connection='c' name='Orders' table='[Orders$]' type='table' />
+        <relation connection='c' name='People' table='[People$]' type='table' />
+      </relation>
+    </connection>
+  </datasource>
+  <datasource name='Missing Expression'>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='People' id='People_1'><properties context=''><relation type='text' name='Custom SQL'>SELECT 1</relation></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <first-end-point object-id='Orders_1' unique-key='false' />
+          <second-end-point object-id='People_1' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Calculated Side'>
+    <object-graph>
+      <objects>
+        <object caption='A' id='A_1'><properties context=''><relation connection='c' name='A' table='[A$]' type='table' /></properties></object>
+        <object caption='B' id='B_1'><properties context=''><relation connection='c' name='B' table='[B$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='>
+            <expression op='LEFT'><expression op='[Code]' /><expression op='3' /></expression>
+            <expression op='[Code (B)]' />
+          </expression>
+          <first-end-point object-id='A_1' unique-key='false' />
+          <second-end-point object-id='B_1' unique-key='true' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Multi Key Join'>
+    <object-graph>
+      <objects>
+        <object caption='A' id='A_1'>
+          <properties context=''>
+            <relation join='inner' type='join'>
+              <clause type='join'>
+                <expression op='AND'>
+                  <expression op='='><expression op='[A].[k1]' /><expression op='[B].[k1]' /></expression>
+                  <expression op='='><expression op='[A].[k2]' /><expression op='[B].[k2]' /></expression>
+                </expression>
+              </clause>
+              <relation connection='c' name='A' table='[A$]' type='table' />
+              <relation connection='c' name='B' table='[B$]' type='table' />
+            </relation>
+          </properties>
+        </object>
+      </objects>
+    </object-graph>
+  </datasource>
+  <datasource name='Snowflake'>
+    <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Profit]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Product Name]' role='dimension' type='nominal' datatype='string' />
+    <column name='[Category Name]' role='dimension' type='nominal' datatype='string' />
+    <connection class='federated'><metadata-records>
+      <metadata-record class='column'><local-name>[Sales]</local-name><local-type>real</local-type><object-id>[Orders_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Profit]</local-name><local-type>real</local-type><object-id>[Orders_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Product Name]</local-name><local-type>string</local-type><object-id>[Products_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Category Name]</local-name><local-type>string</local-type><object-id>[Category_1]</object-id></metadata-record>
+    </metadata-records></connection>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='Products' id='Products_1'><properties context=''><relation connection='c' name='Products' table='[Products$]' type='table' /></properties></object>
+        <object caption='Category' id='Category_1'><properties context=''><relation connection='c' name='Category' table='[Category$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Product ID]' /><expression op='[Product ID (Products)]' /></expression>
+          <first-end-point object-id='Orders_1' />
+          <second-end-point object-id='Products_1' />
+        </relationship>
+        <relationship>
+          <expression op='='><expression op='[Category ID]' /><expression op='[Category ID (Category)]' /></expression>
+          <first-end-point object-id='Products_1' />
+          <second-end-point object-id='Category_1' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+  <datasource name='Multi Fact'>
+    <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Profit]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Quantity]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Target]' role='measure' type='quantitative' datatype='real' />
+    <column name='[Region Name]' role='dimension' type='nominal' datatype='string' />
+    <column name='[Date Name]' role='dimension' type='nominal' datatype='string' />
+    <connection class='federated'><metadata-records>
+      <metadata-record class='column'><local-name>[Sales]</local-name><local-type>real</local-type><object-id>[Orders_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Profit]</local-name><local-type>real</local-type><object-id>[Orders_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Quantity]</local-name><local-type>real</local-type><object-id>[Orders_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Target]</local-name><local-type>real</local-type><object-id>[Targets_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Region Name]</local-name><local-type>string</local-type><object-id>[Region_1]</object-id></metadata-record>
+      <metadata-record class='column'><local-name>[Date Name]</local-name><local-type>string</local-type><object-id>[Date_1]</object-id></metadata-record>
+    </metadata-records></connection>
+    <object-graph>
+      <objects>
+        <object caption='Orders' id='Orders_1'><properties context=''><relation connection='c' name='Orders' table='[Orders$]' type='table' /></properties></object>
+        <object caption='Targets' id='Targets_1'><properties context=''><relation connection='c' name='Targets' table='[Targets$]' type='table' /></properties></object>
+        <object caption='Region' id='Region_1'><properties context=''><relation connection='c' name='Region' table='[Region$]' type='table' /></properties></object>
+        <object caption='Date' id='Date_1'><properties context=''><relation connection='c' name='Date' table='[Date$]' type='table' /></properties></object>
+      </objects>
+      <relationships>
+        <relationship>
+          <expression op='='><expression op='[Region]' /><expression op='[Region (Region)]' /></expression>
+          <first-end-point object-id='Orders_1' />
+          <second-end-point object-id='Region_1' />
+        </relationship>
+        <relationship>
+          <expression op='='><expression op='[Date]' /><expression op='[Date (Date)]' /></expression>
+          <first-end-point object-id='Orders_1' />
+          <second-end-point object-id='Date_1' />
+        </relationship>
+        <relationship>
+          <expression op='='><expression op='[Region]' /><expression op='[Region (Region)]' /></expression>
+          <first-end-point object-id='Targets_1' />
+          <second-end-point object-id='Region_1' />
+        </relationship>
+        <relationship>
+          <expression op='='><expression op='[Date]' /><expression op='[Date (Date)]' /></expression>
+          <first-end-point object-id='Targets_1' />
+          <second-end-point object-id='Date_1' />
+        </relationship>
+      </relationships>
+    </object-graph>
+  </datasource>
+</datasources></workbook>
