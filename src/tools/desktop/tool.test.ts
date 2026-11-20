@@ -413,6 +413,7 @@ describe('DesktopTool product telemetry', () => {
       oauth_client_id: '',
       oauth_client_display_name: '',
       auth_type: 'desktop',
+      parameters: '',
     });
   });
 

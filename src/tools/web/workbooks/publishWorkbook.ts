@@ -342,6 +342,10 @@ export const getPublishWorkbookTool = (
           }
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        getTelemetryExtras: (result): Record<string, string> =>
+          result.status === 'published'
+            ? { object_type: 'workbook', object_luid: result.data.id }
+            : {},
         getSuccessResult: (result) => ({
           isError: false,
           structuredContent: result,

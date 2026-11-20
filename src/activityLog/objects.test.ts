@@ -2,10 +2,14 @@ import { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.j
 
 import { WebMcpServer } from '../server.web.js';
 import { testProductVersion } from '../testShared.js';
-import { webToolNames } from '../tools/web/toolName.js';
+import { WebToolName, webToolNames } from '../tools/web/toolName.js';
 import { webToolFactories } from '../tools/web/tools.js';
 import { Provider } from '../utils/provider.js';
-import { activityLogObjectSources, getActivityLogObject } from './objects.js';
+import {
+  activityLogObjectSources,
+  getActivityLogObject,
+  getToolCallTelemetryParameters,
+} from './objects.js';
 
 // Building every tool reads the feature gate, which would otherwise look for features.json.
 vi.mock('../features/init.js', () => ({
@@ -117,5 +121,96 @@ describe('getActivityLogObject', () => {
     expect(getActivityLogObject('get-workbook', null)).toBeUndefined();
     expect(getActivityLogObject('get-workbook', 'x')).toBeUndefined();
     expect(getActivityLogObject('get-workbook', [LUID])).toBeUndefined();
+  });
+});
+
+describe('getToolCallTelemetryParameters', () => {
+  // Argument values that make each source yield an object; every other argument gets the id.
+  const specialArgs: Record<string, unknown> = {
+    resourceType: 'workbook',
+    objectType: 'view',
+    datasource: { luid: LUID },
+  };
+
+  function argsFor(toolName: WebToolName, id: string): Record<string, unknown> {
+    const source = activityLogObjectSources[toolName];
+    return Object.fromEntries(
+      (source?.args ?? []).map((arg) => [
+        arg,
+        arg === 'datasource' ? { luid: id } : (specialArgs[arg] ?? id),
+      ]),
+    );
+  }
+
+  const sourced = (Object.keys(activityLogObjectSources) as WebToolName[]).filter(
+    (name) => activityLogObjectSources[name],
+  );
+  const unsourced = (Object.keys(activityLogObjectSources) as WebToolName[]).filter(
+    (name) => !activityLogObjectSources[name],
+  );
+
+  it.each(sourced)('%s: a LUID id becomes object_type and object_luid', (toolName) => {
+    const object = getActivityLogObject(toolName, argsFor(toolName, LUID));
+    expect(object, toolName).toBeDefined();
+    expect(JSON.parse(getToolCallTelemetryParameters(object))).toEqual({
+      object_type: object?.type,
+      object_luid: LUID,
+    });
+  });
+
+  it.each(sourced)('%s: an id that is not a LUID gives an empty string', (toolName) => {
+    expect(
+      getToolCallTelemetryParameters(
+        getActivityLogObject(toolName, argsFor(toolName, 'Superstore')),
+      ),
+    ).toBe('');
+  });
+
+  it.each(unsourced)('%s: a tool with no single object gives an empty string', (toolName) => {
+    expect(
+      getToolCallTelemetryParameters(getActivityLogObject(toolName, { terms: LUID, id: LUID })),
+    ).toBe('');
+  });
+
+  it('merges extras, which win over the object fields', () => {
+    expect(
+      JSON.parse(
+        getToolCallTelemetryParameters(
+          { type: 'datasource', luid: LUID },
+          { object_luid: 'other', package_id: 'p' },
+        ),
+      ),
+    ).toEqual({ object_type: 'datasource', object_luid: 'other', package_id: 'p' });
+  });
+
+  it('uses extras alone when there is no object', () => {
+    expect(
+      JSON.parse(
+        getToolCallTelemetryParameters(undefined, { object_type: 'workbook', object_luid: LUID }),
+      ),
+    ).toEqual({ object_type: 'workbook', object_luid: LUID });
+  });
+
+  it('is an empty string with no object and empty or missing extras', () => {
+    expect(getToolCallTelemetryParameters(undefined)).toBe('');
+    expect(getToolCallTelemetryParameters(undefined, {})).toBe('');
+  });
+
+  it('never throws on weird input', () => {
+    const throwing = {
+      get type(): never {
+        throw new Error('boom');
+      },
+    } as unknown as Parameters<typeof getToolCallTelemetryParameters>[0];
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    expect(getToolCallTelemetryParameters(throwing)).toBe('');
+    expect(
+      getToolCallTelemetryParameters(undefined, cyclic as unknown as Record<string, string>),
+    ).toBe('');
+    expect(
+      getToolCallTelemetryParameters(null as unknown as undefined, null as unknown as undefined),
+    ).toBe('');
   });
 });

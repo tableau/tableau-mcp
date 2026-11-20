@@ -810,6 +810,133 @@ describe('Tool', () => {
         }),
       );
     });
+
+    describe('tool_call parameters', () => {
+      const DATASOURCE_LUID = '11111111-2222-3333-4444-555555555555';
+      const datasourceParams = { ...mockParams, paramsSchema: { datasourceLuid: z.string() } };
+
+      function sentParameters(): unknown {
+        const [, event] = mockTelemetrySend.mock.calls.find(([type]) => type === 'tool_call') ?? [];
+        return event?.parameters;
+      }
+
+      beforeEach(() => {
+        mockTelemetrySend.mockClear();
+      });
+
+      it('sends the object as JSON on success, as the last field', async () => {
+        await new WebTool(datasourceParams).logAndExecute({
+          extra: mockExtra,
+          args: { datasourceLuid: DATASOURCE_LUID },
+          callback: () => Promise.resolve(Ok({ data: 'success' })),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+
+        expect(JSON.parse(sentParameters() as string)).toEqual({
+          object_type: 'datasource',
+          object_luid: DATASOURCE_LUID,
+        });
+        const [, event] = mockTelemetrySend.mock.calls[0];
+        expect(Object.keys(event).at(-1)).toBe('parameters');
+      });
+
+      it('sends the object as JSON on error', async () => {
+        await new WebTool(datasourceParams).logAndExecute({
+          extra: mockExtra,
+          args: { datasourceLuid: DATASOURCE_LUID },
+          callback: () => {
+            throw new Error('Something unexpected happened');
+          },
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+
+        expect(JSON.parse(sentParameters() as string)).toEqual({
+          object_type: 'datasource',
+          object_luid: DATASOURCE_LUID,
+        });
+      });
+
+      it('sends an empty string when the call has no object', async () => {
+        await new WebTool(mockParams).logAndExecute({
+          extra: mockExtra,
+          args: { param1: 'test-value' },
+          callback: () => Promise.resolve(Ok({ data: 'success' })),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+
+        expect(sentParameters()).toBe('');
+      });
+
+      it('merges getTelemetryExtras from a successful result', async () => {
+        await new WebTool(mockParams).logAndExecute({
+          extra: mockExtra,
+          args: { param1: 'test-value' },
+          callback: () => Promise.resolve(Ok({ id: DATASOURCE_LUID })),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+          getTelemetryExtras: (result) => ({ object_type: 'workbook', object_luid: result.id }),
+        });
+
+        expect(JSON.parse(sentParameters() as string)).toEqual({
+          object_type: 'workbook',
+          object_luid: DATASOURCE_LUID,
+        });
+      });
+
+      it('does not call getTelemetryExtras when the call fails', async () => {
+        const getTelemetryExtras = vi.fn(() => ({ object_luid: 'x' }));
+        await new WebTool(mockParams).logAndExecute({
+          extra: mockExtra,
+          args: { param1: 'test-value' },
+          callback: () => Promise.resolve(new DatasourceNotAllowedError('Not allowed').toErr()),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+          getTelemetryExtras,
+        });
+
+        expect(getTelemetryExtras).not.toHaveBeenCalled();
+        expect(sentParameters()).toBe('');
+      });
+
+      it('still returns the tool result and sends telemetry when getTelemetryExtras throws', async () => {
+        const result = await new WebTool(datasourceParams).logAndExecute({
+          extra: mockExtra,
+          args: { datasourceLuid: DATASOURCE_LUID },
+          callback: () => Promise.resolve(Ok({ data: 'success' })),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+          getTelemetryExtras: () => {
+            throw new Error('boom');
+          },
+        });
+
+        expect(result).toEqual({
+          isError: false,
+          content: [{ type: 'text', text: JSON.stringify({ data: 'success' }) }],
+        });
+        expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(sentParameters() as string)).toEqual({
+          object_type: 'datasource',
+          object_luid: DATASOURCE_LUID,
+        });
+      });
+
+      it('never sends raw argument text', async () => {
+        const secretQuery = 'SELECT secret_customer_name FROM orders';
+        const secretName = 'Q4 Layoffs Plan';
+        await new WebTool({
+          ...mockParams,
+          paramsSchema: { datasourceLuid: z.string(), query: z.string(), name: z.string() },
+        }).logAndExecute({
+          extra: mockExtra,
+          args: { datasourceLuid: secretName, query: secretQuery, name: secretName },
+          callback: () => Promise.resolve(Ok({ data: 'success' })),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+
+        const sent = JSON.stringify(mockTelemetrySend.mock.calls);
+        expect(sent).not.toContain(secretQuery);
+        expect(sent).not.toContain(secretName);
+        expect(sentParameters()).toBe('');
+      });
+    });
   });
 
   describe('recordMetric telemetry', () => {

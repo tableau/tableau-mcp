@@ -126,3 +126,23 @@ export function getActivityLogObject(
     return undefined;
   }
 }
+
+/**
+ * The `parameters` field of a `tool_call` telemetry event: the object the call acted on, as JSON.
+ * Never raw arguments: extras must hold server-issued ids, never user text. Empty when there is
+ * nothing to send. Never throws.
+ */
+export function getToolCallTelemetryParameters(
+  object: ActivityLogObject | undefined,
+  extras?: Record<string, string>,
+): string {
+  try {
+    const fields = {
+      ...(object ? { object_type: object.type, object_luid: object.luid } : {}),
+      ...extras,
+    };
+    return Object.keys(fields).length > 0 ? JSON.stringify(fields) : '';
+  } catch {
+    return '';
+  }
+}
