@@ -14,8 +14,8 @@ Each call reports one outcome in its `status` field:
 
 - `bound` — the ask matched a template and every slot is filled; the response carries the bound arguments (and, when `auto_apply` succeeded, an applied receipt).
 - `propose` — no deterministic match; the response lists candidate templates and the fields to bind, for you to choose one and call again with a `proposal`.
-- `escalate` — no fast-path template fits the ask/data; the response routes you to direct authoring (for example `build-and-apply-worksheet`).
-- `blocked` — this MCP server refused a repeated or unchanged retry for the same ask (see [Notes and caveats](#notes-and-caveats)).
+- `escalate` — no fast-path template fits the ask/data; the response routes you to the template artifact path (`list-templates` → `list-available-fields` → `build-worksheets-from-templates` → `apply-worksheet`).
+- `blocked` — this MCP server refused the call before writing a chart, for example a repeated or unchanged retry for the same ask, a proposal outside the returned `call_2_contract`, an unresolved filter, or a pie with more than 12 slices (see [Notes and caveats](#notes-and-caveats)).
 
 :::note[Mutates the workbook]
 This tool is not read-only and not idempotent. With `auto_apply: true` it writes the bound chart to the live workbook, and any `calcs` are authored into the workbook before the bind — both mutate the open document. A completed apply re-run is a real re-mutation, not a no-op.
@@ -35,8 +35,13 @@ This tool acts on the workbook open in the local %product_name% instance, commun
 - Applies the bound chart to the live workbook (only when `auto_apply: true`, the result is `bound`, and the matched template is fast-path eligible): the template is injected and any sort/top-N is spliced into the workbook XML, the whole document is validated in-process (not an API call), then posted back. On any inject/validation/apply failure the tool falls back gracefully — the bound arguments are returned intact so no bind is lost.
   - `POST /v<x>/workbook/document` (`Content-Type: application/xml`) — apply the updated workbook XML. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
 - Navigates to the newly applied sheet (best-effort follow-up after a successful apply; a failure here never changes the applied result).
+  - `POST /v<x>/app:toggleStartPage` — hide the Start Page (skipped on API versions before 0.2.11). [API reference](ext://eca/reference/index.html#tag/Application/operation/toggleStartPage)
+  - `GET /v<x>/workbook` — resolve the sheet name to its id. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbook)
   - `POST /v<x>/workbook:goToSheet` — focus the newly applied sheet. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/goToSheet)
   - `GET /v<x>/workbook/document` — re-read to verify the sheet took focus. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
+- Reads the applied sheet's summary data to fill `summary_rows` (a failure is returned on `summary_rows_error` and never changes the applied result).
+  - `GET /v<x>/workbook/worksheets` — resolve the applied sheet's id. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/listWorksheets)
+  - `GET /v<x>/workbook/worksheets/{id}/summaryData` — read the summary rows. [API reference](ext://eca/reference/index.html#tag/Worksheets/operation/getWorksheetSummaryData)
 
 ## Required arguments
 
@@ -58,7 +63,7 @@ The %product_name% session to target (Desktop PID). Omit when the session is pin
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -72,17 +77,20 @@ The second-call payload that selects one template and binds every slot to a fiel
 - `confidence` — the match confidence. `Range: 0-1`.
 - `sort` — optional `{ by, direction }` where `direction` is `"asc"` or `"desc"`.
 - `top_n` — optional positive integer to keep only the top N members.
+- `bin_size` — optional positive number for a binned slot.
+- `filters` — optional array of `{ field, values?, context? }`; omit `values` for a filter that lists every member.
+- `template_parameters` — optional string-to-string map that fills `{{KEY}}` tokens in the template.
 
 #### Example
 
 ```json
 {
   "proposal": {
-    "template": "bar-basic",
+    "template": "ranking-ordered-bar",
     "title": "Sales by Region",
     "bindings": [
-      { "slot_id": "cat", "field": "Region" },
-      { "slot_id": "val", "field": "Sales" }
+      { "slot_id": "field_base_1", "field": "Region" },
+      { "slot_id": "field_base_2", "field": "Sales" }
     ],
     "confidence": 0.9
   }
@@ -123,7 +131,7 @@ The apply is a whole-document write. If the user changes the workbook between th
 
 #### Graceful fallback on apply failure
 
-If injecting the template, in-process validation, or the apply write fails, the response is `applied: false` with an `apply_error` and the bound `args` still present, so you can fall back to `build-and-apply-worksheet` (or the inject/apply template chain) using the returned arguments.
+If injecting the template, in-process validation, or the apply write fails, the response is `applied: false` with an `apply_error` and the bound `args` still present, so you can fall back to the template artifact path (`list-templates` → `list-available-fields` → `build-worksheets-from-templates` → `apply-worksheet`).
 
 <hr />
 
@@ -164,7 +172,7 @@ An existing worksheet to replace in place, given as its id or its name; omit to 
 :::note[Refusals]
 Checked against the open workbook before the bind runs. The name in the message is the sheet's name when the value matches a worksheet, and the value you passed when it does not.
 
-- `target_worksheet "${}" not found in the workbook — check get-sheets, or omit target_worksheet to create a new sheet`
+- `target_worksheet "<name>" not found in the workbook — check get-sheets, or omit target_worksheet to create a new sheet`
 - `target_worksheet "<name>" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`
 :::
 
@@ -237,16 +245,17 @@ Each calculation is checked before the workbook is changed. A message for a calc
 {
   "status": "bound",
   "used_llm": false,
-  "apply_hint": "worksheet-path",
-  "apply_instruction": "Create a sheet, substitute the fragment, then apply-worksheet.",
   "args": {
-    "template_name": "bar-basic",
+    "template_name": "ranking-ordered-bar",
     "title": "Sales by Region",
     "sheet_type": "worksheet",
     "template_parameters": { "DATASOURCE": "Superstore" },
-    "field_mapping": { "cat": "[Region]", "val": "[Sales]" }
+    "field_mapping": {
+      "{{field_base_1}}": "[Superstore].[none:Region:nk]",
+      "{{field_base_2}}": "[Superstore].[sum:Sales:qk]"
+    }
   },
-  "guidance": "Create a sheet, substitute the fragment, then apply-worksheet."
+  "guidance": "NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind."
 }
 ```
 
@@ -272,7 +281,7 @@ Each calculation is checked before the workbook is changed. A message for a calc
     "detail": "classifyNoLlm returned no deterministic template; routed to proposal candidates"
   },
   "output_schema": { "type": "object" },
-  "guidance": "No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), then call bind-template again with { session, ask, proposal } matching output_schema."
+  "guidance": "Call 1 requires a proposal. Choose one call_2_contract proposal choice, bind its exact slot IDs to exact compatible field names, and make Call 2 with the same ask/target, proposal, and top-level auto_apply:true. top_n ranks; filters[].context scopes filters. No recommendation is available. If a required choice remains ambiguous, call ask-user; do not guess. set derivation ONLY when the ask explicitly requests an aggregation/date grain different from the template default. Do not call other authoring tools between calls."
 }
 ```
 
@@ -283,9 +292,9 @@ Each calculation is checked before the workbook is changed. A message for a calc
   "status": "escalate",
   "reason": "field-not-found",
   "blockers": [
-    { "code": "field-not-found", "slot_id": "val", "detail": "No field named \"Revenue\"." }
+    { "code": "field-not-found", "slot_id": "field_base_2", "detail": "no field named \"Revenue\" in datasource(s)", "candidates": [] }
   ],
-  "guidance": "Escalated (field-not-found). No worksheet was produced. Blockers: [field-not-found] slot 'val' No field named \"Revenue\".. Next: Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates)."
+  "guidance": "Escalated (field-not-found). No worksheet was produced. Blockers: [field-not-found] slot 'field_base_2' no field named \"Revenue\" in datasource(s). Next: use the guarded artifact path: list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet. This is a normal path, not a failure."
 }
 ```
 
@@ -295,7 +304,7 @@ Each calculation is checked before the workbook is changed. A message for a calc
 {
   "status": "blocked",
   "reason": "unchanged_proposal",
-  "guidance": "Blocked: this proposal is semantically unchanged from the failed bind attempt. Title/confidence only changes do not count; change a binding, derivation, sort, or top_n based on evidence, otherwise ask-user or use build-and-apply-worksheet."
+  "guidance": "Blocked: this proposal is semantically unchanged from the failed bind attempt. Title/confidence only changes do not count; change a binding, derivation, sort, or top_n based on evidence, otherwise ask-user or use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet."
 }
 ```
 

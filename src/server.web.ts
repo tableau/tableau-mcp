@@ -3,14 +3,12 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
-import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   CallToolResult,
+  McpServer,
   ReadResourceResult,
-  ServerNotification,
-  ServerRequest,
-} from '@modelcontextprotocol/sdk/types.js';
+  ServerContext,
+} from '@modelcontextprotocol/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { z } from 'zod';
@@ -32,6 +30,7 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
+import { getRequestFields, toStandardSchema } from './tools/toolContext.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import {
   checkRegistrationConditions,
@@ -83,6 +82,11 @@ export type LoadWebToolsResult = {
   // Deliberate omissions for the requested group (conditions not met); retrying will not help.
   notes?: string[];
 };
+
+export type WebToolRegistrationCallback = (
+  args: unknown,
+  extra: ServerContext,
+) => Promise<CallToolResult>;
 
 type CollectedMessage = { message: string; toolNames: string[] };
 
@@ -333,7 +337,7 @@ export class WebMcpServer extends Server {
       {
         title: 'Load Web Tools',
         description: buildLoadWebToolsDescription(),
-        inputSchema: loadWebToolsParamsSchema,
+        inputSchema: z.object(loadWebToolsParamsSchema),
         annotations: {
           title: 'Load Web Tools',
           readOnlyHint: true,
@@ -344,7 +348,7 @@ export class WebMcpServer extends Server {
       },
       async (
         args: { group: LoadableWebToolGroupName },
-        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+        ctx: ServerContext,
       ): Promise<CallToolResult> => {
         const config = getConfig();
         if (config.breakGlassDisableGlobally) {
@@ -354,8 +358,8 @@ export class WebMcpServer extends Server {
         }
         const result = await this.loadWebTools(
           args.group,
-          getTableauAuthInfo(extra.authInfo),
-          extra.authInfo?.scopes,
+          getTableauAuthInfo(ctx.http?.authInfo),
+          ctx.http?.authInfo?.scopes,
         );
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       },
@@ -371,10 +375,7 @@ export class WebMcpServer extends Server {
       getClientDisplayName(this.clientId) === 'Claude' &&
       !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
-    const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
-      args: typeof tool.paramsSchema,
-      extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
-    ) => {
+    const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
       if (config.breakGlassDisableGlobally) {
         throw new ServiceUnavailableError(
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
@@ -382,21 +383,23 @@ export class WebMcpServer extends Server {
       }
 
       const requestOverridesHeader =
-        extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
+        extra.http?.req?.headers.get(X_TABLEAU_MCP_CONFIG_HEADER) ?? '';
       const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
       const tableauToolCallback = await Provider.from(tool.callback);
       const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
-        ...extra,
+        ...getRequestFields(extra),
         config,
         server: this,
         get tableauAuthInfo() {
-          return getTableauAuthInfo(extra.authInfo);
+          return getTableauAuthInfo(extra.http?.authInfo);
         },
         _userLuid: undefined,
         _siteLuid: undefined,
         getUserLuid() {
           return (
-            tableauRequestHandlerExtra._userLuid ?? getTableauAuthInfo(extra.authInfo)?.userId ?? ''
+            tableauRequestHandlerExtra._userLuid ??
+            getTableauAuthInfo(extra.http?.authInfo)?.userId ??
+            ''
           );
         },
         setUserLuid(userLuid: string) {
@@ -404,14 +407,16 @@ export class WebMcpServer extends Server {
         },
         getSiteLuid() {
           return (
-            tableauRequestHandlerExtra._siteLuid ?? getTableauAuthInfo(extra.authInfo)?.siteId ?? ''
+            tableauRequestHandlerExtra._siteLuid ??
+            getTableauAuthInfo(extra.http?.authInfo)?.siteId ??
+            ''
           );
         },
         setSiteLuid(siteLuid: string) {
           tableauRequestHandlerExtra._siteLuid = siteLuid;
         },
         getSiteName() {
-          return getTableauAuthInfo(extra.authInfo)?.siteName ?? config.siteName;
+          return getTableauAuthInfo(extra.http?.authInfo)?.siteName ?? config.siteName;
         },
         getConfigWithOverrides: async () =>
           getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
@@ -664,14 +669,14 @@ export class WebMcpServer extends Server {
 
   private _registerTool = async (
     tool: WebTool<any>,
-    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+    toolCallback: WebToolRegistrationCallback,
   ): Promise<void> => {
     this.mcpServer.registerTool(
       tool.name,
       {
         title: await Provider.from(tool.title),
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
         annotations: await Provider.from(tool.annotations),
         _meta: await Provider.from(tool.meta),
       },
@@ -681,7 +686,7 @@ export class WebMcpServer extends Server {
 
   private _registerAppTool = async (
     tool: WebTool<any>,
-    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+    toolCallback: WebToolRegistrationCallback,
   ): Promise<void> => {
     invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
 
@@ -696,7 +701,7 @@ export class WebMcpServer extends Server {
       {
         title: (await Provider.from(tool.annotations)).title,
         description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
+        inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
         annotations: await Provider.from(tool.annotations),
         _meta: {
           ui: {
@@ -714,7 +719,8 @@ export class WebMcpServer extends Server {
     const cspDomains = config.cspAllowedDomains;
 
     registerAppResource(
-      // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+      // @ts-expect-error -- ext-apps is ESM, so it types McpServer from the SDK's .d.mts while this
+      // CommonJS project gets the .d.cts; the two ResourceTemplate classes don't match.
       this.mcpServer,
       tool.name,
       resourceUri,

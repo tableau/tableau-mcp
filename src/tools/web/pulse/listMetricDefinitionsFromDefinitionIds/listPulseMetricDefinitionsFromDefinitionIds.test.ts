@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';

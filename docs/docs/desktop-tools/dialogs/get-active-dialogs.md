@@ -8,7 +8,7 @@ sidebar_position: 1
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Lists the current actionable dialogs in the connected %product_name% instance, including each dialog's exact identity, visible message and diagnostic text, and invokable actions. Text buttons retain their exact labels; recognized unlabeled controls use semantic actions such as close. Self-clearing progress windows are excluded, and an empty `dialogs` array means no dialog needs a decision. This is a read-only, idempotent inspection.
+Lists the current actionable dialogs in the connected %product_name% instance, including each dialog's exact identity, visible message and diagnostic text, and invokable actions. Text buttons retain their exact labels; recognized unlabeled controls use semantic actions such as close. Self-clearing progress windows are excluded, and an empty `dialogs` array means no dialog needs a decision only when `uiSnapshotAvailable` is `true`. This is a read-only, idempotent inspection.
 
 ## APIs called
 
@@ -24,13 +24,13 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 
 - **Identity is always present; content is best-effort.** Every dialog includes `objectName`, `title`, and `className`. `messageText`, `informativeText`, `detailedText`, `detailedTextTruncated`, `iconLevel`, `buttons`, and `actions` appear only when the running instance reports them. Standard message boxes expose those fields precisely; generic dialogs may omit them or include incidental labels.
 - **Diagnostic text is capped.** `detailedText` is limited to 1 MiB. When it is shortened, `detailedTextTruncated` is `true`.
-- Copy `objectName`, `title`, `className`, and an `actions` entry verbatim into [`invoke-dialog-action`](./invoke-dialog-action.md). Do not reconstruct a label from `buttons` or invent a `close`.
+- Copy `objectName`, `title`, `className`, `sessionId`, and `revision` verbatim into [`invoke-dialog-action`](./invoke-dialog-action.md), with an action this dialog advertises. Do not reconstruct a label from `buttons` or invent a `close`.
 
 ## Example results
 
@@ -43,6 +43,8 @@ Identifier of the target %product_name% session. When omitted, the session is re
       "objectName": "saveChangesDialog",
       "title": "Save Changes",
       "className": "QMessageBox",
+      "sessionId": "dialog-session-1",
+      "revision": 1,
       "messageText": "Do you want to save changes to Regional Sales?",
       "informativeText": "Unsaved changes will be lost if you discard them.",
       "detailedText": "Workbook: Regional Sales",
@@ -54,7 +56,9 @@ Identifier of the target %product_name% session. When omitted, the session is re
         { "kind": "button", "label": "Cancel" }
       ]
     }
-  ]
+  ],
+  "uiSnapshotAvailable": true,
+  "recentActions": []
 }
 ```
 
@@ -62,7 +66,9 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 ```json
 {
-  "dialogs": []
+  "dialogs": [],
+  "uiSnapshotAvailable": true,
+  "recentActions": []
 }
 ```
 

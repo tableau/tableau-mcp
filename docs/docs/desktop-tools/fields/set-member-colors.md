@@ -20,11 +20,11 @@ Talks to the open %product_name% workbook through the External Client API.
 
 ### `worksheetName`
 
-Worksheet name/id.worksheet
+Worksheet name/id.
 
 ### `colors`
 
-Member value; true or false for a boolean field.
+Members and the color for each: an array of 1 to 100 `{ member, color }` entries. `member` is the member value; true or false for a boolean field. `color` is a hex color, #rrggbb.
 
 ## Optional arguments
 

@@ -10,6 +10,5 @@ export function getMockRequestHandlerExtra(): TableauDesktopRequestHandlerExtra 
     signal: new AbortController().signal,
     requestId: 2,
     sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
   };
 }

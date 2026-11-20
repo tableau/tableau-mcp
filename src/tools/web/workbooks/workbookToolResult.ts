@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

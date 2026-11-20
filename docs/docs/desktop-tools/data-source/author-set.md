@@ -164,9 +164,9 @@ Internal datasource name or unique caption of the datasource to author the set i
 :::note[Refusals]
 Candidate names in these messages are limited to five.
 
-- `Datasource caption "<caption>" is ambiguous. Use an internal datasource name: <names>.`
-- `Datasource "<name>" was not found. Candidates: <names>.`
-- `Multiple datasources found; specify datasource. Candidates: <names>.`
+- `Datasource caption "<caption>" is ambiguous. Use an internal datasource name: <names>`
+- `Datasource "<name>" was not found. Candidates: <names>`
+- `Multiple datasources found; specify datasource. Candidates: <names>`
 - `No non-Parameters datasource found.`
 :::
 
@@ -181,7 +181,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 

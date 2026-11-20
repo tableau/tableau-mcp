@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { handleToolResult } from './handleToolResult.js';
