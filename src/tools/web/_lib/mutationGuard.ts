@@ -20,7 +20,7 @@
  * (SIEM, log archive, etc.) for retention. There is no built-in durable sink here.
  *
  * AC-5 — RESIDUAL GAP (code-enforced human approval): the MCP SDK shipped with this server
- * (@modelcontextprotocol/sdk >=1.26, currently 1.29) DOES expose an elicitation primitive
+ * (@modelcontextprotocol/server v2) DOES expose an elicitation primitive
  * (server.elicitInput(...)), but it is not wired in here and host/client support for it is uneven —
  * many clients do not yet implement elicitation, so the server cannot rely on it to block on an
  * interactive human approval at call time. HITL therefore remains a prompt-text contract

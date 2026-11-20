@@ -1,7 +1,7 @@
 import '../shared/mcp-app.css';
 
 import { App } from '@modelcontextprotocol/ext-apps';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 
 import pkg from '~/package.json';
 

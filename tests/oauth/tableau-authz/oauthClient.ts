@@ -1,16 +1,15 @@
-import { Client } from '@modelcontextprotocol/sdk/client';
-import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { InMemoryOAuthClientProvider } from '@modelcontextprotocol/sdk/examples/client/simpleOAuthClientProvider.js';
-import { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
 import {
   CallToolRequest,
-  CallToolResultSchema,
+  Client,
   ListToolsRequest,
   ListToolsResult,
-  ListToolsResultSchema,
-  LoggingMessageNotificationSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+  OAuthClientMetadata,
+  OAuthClientProvider,
+  StoredOAuthClientInformation,
+  StoredOAuthTokens,
+  StreamableHTTPClientTransport,
+  UnauthorizedError,
+} from '@modelcontextprotocol/client';
 import z from 'zod';
 
 import { WebToolName } from '../../../src/tools/web/toolName.js';
@@ -25,6 +24,50 @@ export type GetAuthZCodeFn = ({
   authorizationUrl: string;
   callbackUrl: string;
 }) => Promise<string>;
+
+class InMemoryOAuthClientProvider implements OAuthClientProvider {
+  private _clientInformation?: StoredOAuthClientInformation;
+  private _tokens?: StoredOAuthTokens;
+  private _codeVerifier?: string;
+
+  constructor(
+    readonly redirectUrl: string,
+    readonly clientMetadata: OAuthClientMetadata,
+    private readonly onRedirect: (url: URL) => void,
+    readonly clientMetadataUrl?: string,
+  ) {}
+
+  clientInformation(): StoredOAuthClientInformation | undefined {
+    return this._clientInformation;
+  }
+
+  saveClientInformation(clientInformation: StoredOAuthClientInformation): void {
+    this._clientInformation = clientInformation;
+  }
+
+  tokens(): StoredOAuthTokens | undefined {
+    return this._tokens;
+  }
+
+  saveTokens(tokens: StoredOAuthTokens): void {
+    this._tokens = tokens;
+  }
+
+  redirectToAuthorization(authorizationUrl: URL): void {
+    this.onRedirect(authorizationUrl);
+  }
+
+  saveCodeVerifier(codeVerifier: string): void {
+    this._codeVerifier = codeVerifier;
+  }
+
+  codeVerifier(): string {
+    if (!this._codeVerifier) {
+      throw new Error('No code verifier saved');
+    }
+    return this._codeVerifier;
+  }
+}
 
 export class OAuthClient {
   private readonly client: Client;
@@ -75,7 +118,7 @@ export class OAuthClient {
   }
 
   setNotificationHandler(): void {
-    this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {
+    this.client.setNotificationHandler('notifications/message', (notification) => {
       console.debug('[OAuthClient] Notification received:');
       try {
         if (typeof notification.params.data === 'string') {
@@ -180,7 +223,7 @@ export class OAuthClient {
       params: {},
     };
 
-    return await this.client.request(request, ListToolsResultSchema);
+    return await this.client.request(request);
   }
 
   async callTool<Z extends z.ZodTypeAny = z.ZodNever>(
@@ -212,7 +255,7 @@ export class OAuthClient {
       },
     };
 
-    const result = await this.client.request(request, CallToolResultSchema);
+    const result = await this.client.request(request);
     if (!Array.isArray(result.content)) {
       console.error(result.content);
       throw new Error('result.content must be an array');

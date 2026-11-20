@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { AxiosError } from 'axios';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';

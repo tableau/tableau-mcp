@@ -1,5 +1,4 @@
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, RequestId } from '@modelcontextprotocol/server';
 
 import { recordToolCall } from '../../activityLog/init.js';
 import { getActivityLogObject } from '../../activityLog/objects.js';
@@ -34,6 +33,7 @@ import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js'
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { ToolParamsSchema } from '../toolContext.js';
 import { RegistrationCondition } from './registrationConditions.js';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
 import { WebToolName } from './toolName.js';
@@ -75,34 +75,33 @@ export type ToolMeta = {
   };
 };
 
-export type WebToolParams<Args extends undefined | ZodRawShapeCompat | AnySchema = undefined> =
-  ToolParams<
-    WebMcpServer,
-    WebToolName,
-    TableauWebRequestHandlerExtra,
-    TableauWebToolCallback<Args>,
-    Args
-  > & {
-    /**
-     * Lowest site role allowed to see this tool at registration time. Required: every tool must
-     * declare its minimum. Use {@link SiteRole.VIEWER} for a tool with no role restriction — Viewer
-     * is satisfied by every authenticated caller, so it is never enforced (see
-     * {@link roleRequiresEnforcement}). When set above Viewer, the caller's site role must rank at or
-     * above it in {@link SITE_ROLE_HIERARCHY} (see {@link siteRoleMeetsMinimum}) or the tool is not
-     * registered for that caller.
-     */
-    minRequiredRole: SiteRole;
-    registrationConditions?: ReadonlyArray<RegistrationCondition>;
-  } & (
-      | {
-          app?: AppDetails;
-          meta?: never;
-        }
-      | {
-          app?: never;
-          meta?: ToolMeta;
-        }
-    );
+export type WebToolParams<Args extends undefined | ToolParamsSchema = undefined> = ToolParams<
+  WebMcpServer,
+  WebToolName,
+  TableauWebRequestHandlerExtra,
+  TableauWebToolCallback<Args>,
+  Args
+> & {
+  /**
+   * Lowest site role allowed to see this tool at registration time. Required: every tool must
+   * declare its minimum. Use {@link SiteRole.VIEWER} for a tool with no role restriction — Viewer
+   * is satisfied by every authenticated caller, so it is never enforced (see
+   * {@link roleRequiresEnforcement}). When set above Viewer, the caller's site role must rank at or
+   * above it in {@link SITE_ROLE_HIERARCHY} (see {@link siteRoleMeetsMinimum}) or the tool is not
+   * registered for that caller.
+   */
+  minRequiredRole: SiteRole;
+  registrationConditions?: ReadonlyArray<RegistrationCondition>;
+} & (
+    | {
+        app?: AppDetails;
+        meta?: never;
+      }
+    | {
+        app?: never;
+        meta?: ToolMeta;
+      }
+  );
 
 export type ConstrainedResult<T> =
   | {
@@ -127,15 +126,13 @@ export type ConstrainedResult<T> =
  */
 export type WebToolLogAndExecuteParams<
   T,
-  Args extends undefined | ZodRawShapeCompat | AnySchema,
+  Args extends undefined | ToolParamsSchema,
 > = LogAndExecuteParams<T, WebMcpServer, TableauWebRequestHandlerExtra, Args> & {
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
-export class WebTool<
-  Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
-> extends Tool<
+export class WebTool<Args extends undefined | ToolParamsSchema = undefined> extends Tool<
   WebMcpServer,
   WebToolName,
   TableauWebRequestHandlerExtra,
@@ -341,7 +338,7 @@ export class WebTool<
         errorCode,
         oauthClientId: sanitizedClientId,
         clientName,
-        userAgent: extra.requestInfo?.headers?.['user-agent'],
+        userAgent: extra.requestInfo?.headers.get('user-agent') ?? undefined,
         mcpRequestId: requestId.toString(),
         object: getActivityLogObject(this.name, args),
       });

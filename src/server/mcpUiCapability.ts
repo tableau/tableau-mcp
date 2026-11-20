@@ -1,4 +1,4 @@
-import { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { ClientCapabilities } from '@modelcontextprotocol/server';
 
 /**
  * `ClientCapabilities` widened with the `extensions` field where a client advertises MCP Apps
