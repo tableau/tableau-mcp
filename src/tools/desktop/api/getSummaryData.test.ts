@@ -16,13 +16,18 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getSummaryDataTool } from './getSummaryData.js';
-import { fetchWorksheetSummaryData, type SummaryDataRead } from './summaryDataCore.js';
+import {
+  fetchWorksheetSummaryData,
+  type SummaryDataRead,
+  type WorksheetSummaryData,
+} from './summaryDataCore.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
 const resultSchema = z.object({
   worksheet: z.object({ id: z.string(), name: z.string() }),
   maxRows: z.number(),
+  truncated: z.boolean().nullable(),
   readScope: z.object({
     target: z.literal('worksheet'),
     ignoreSelection: z.literal(true),
@@ -223,6 +228,113 @@ describe('fetchWorksheetSummaryData', () => {
     expect(result.error.error.message).toContain('SUM(Sales), AGG(Sales)');
   });
 
+  describe('truncation flag', () => {
+    const rowsOf = (n: number): unknown[][] => Array.from({ length: n }, (_, i) => [i]);
+    // Fake API: holds `available` rows and clamps any request to `serverCap`.
+    const run = async ({
+      maxRows,
+      available,
+      columns,
+      serverCap = 10000,
+      apiColumns = [{ name: 'a' }],
+    }: {
+      maxRows: number;
+      available: number;
+      columns?: string[];
+      serverCap?: number;
+      apiColumns?: unknown[];
+    }): Promise<{ value: WorksheetSummaryData; requested: number | undefined }> => {
+      let requested: number | undefined;
+      const read = (async (endpoint: string, fn: (e: unknown, s: AbortSignal) => unknown) => {
+        if (endpoint === 'worksheet list') {
+          return Ok({ worksheets: [{ id: 's', name: 'S', hidden: false, datasources: ['d'] }] });
+        }
+        await fn(
+          {
+            getWorksheetSummaryData: (_id: string, q: { maxRows: number }) => {
+              requested = q.maxRows;
+              return Ok({});
+            },
+          },
+          new AbortController().signal,
+        );
+        return Ok({
+          columns: apiColumns,
+          rows: rowsOf(Math.min(available, requested ?? 0, serverCap)),
+        });
+      }) as SummaryDataRead;
+      const result = await fetchWorksheetSummaryData({
+        read,
+        worksheet: undefined,
+        maxRows,
+        columns,
+      });
+      if (result.isErr()) throw new Error('unexpected error');
+      return { value: result.value, requested };
+    };
+
+    it('requests one extra row and reports truncated when more rows exist', async () => {
+      const { value, requested } = await run({ maxRows: 5, available: 100 });
+      expect(requested).toBe(6);
+      expect(value.truncated).toBe(true);
+      expect(value.rows).toHaveLength(5);
+    });
+
+    it('reports truncated with a column projection', async () => {
+      const { value } = await run({ maxRows: 5, available: 100, columns: ['a'] });
+      expect(value.truncated).toBe(true);
+      expect(value.rows.length).toBe(5);
+    });
+
+    it('reports not truncated when exactly maxRows rows exist', async () => {
+      const { value } = await run({ maxRows: 5, available: 5 });
+      expect(value.truncated).toBe(false);
+      expect(value.rows.length).toBe(5);
+    });
+
+    it('reports not truncated with a column projection and fewer rows', async () => {
+      const { value } = await run({ maxRows: 5, available: 2, columns: ['a'] });
+      expect(value.truncated).toBe(false);
+      expect(value.rows.length).toBe(2);
+    });
+
+    it('reports unknown when maxRows reaches the API default cap and the cap is filled', async () => {
+      const { value, requested } = await run({ maxRows: 10000, available: 20000 });
+      expect(requested).toBe(10000);
+      expect(value.truncated).toBeNull();
+      expect(value.rows.length).toBe(10000);
+    });
+
+    it('reports unknown when maxRows is above the API default cap', async () => {
+      const { value } = await run({ maxRows: 15000, available: 20000 });
+      expect(value.truncated).toBeNull();
+      expect(value.rows.length).toBe(10000);
+    });
+
+    it('reports not truncated at the API cap when fewer rows come back', async () => {
+      const { value } = await run({ maxRows: 10000, available: 9999 });
+      expect(value.truncated).toBe(false);
+    });
+
+    it('reports unknown when columns exist but no rows come back', async () => {
+      const { value } = await run({ maxRows: 5, available: 0 });
+      expect(value.truncated).toBeNull();
+      expect(value.rows.length).toBe(0);
+    });
+
+    it('reports not truncated for an empty sheet with no columns', async () => {
+      const { value } = await run({ maxRows: 5, available: 0, apiColumns: [] });
+      expect(value.truncated).toBe(false);
+    });
+
+    // Documented limitation: a server cap at or below maxRows cuts rows without any signal.
+    it('reports false when a server cap lower than maxRows silently cuts rows', async () => {
+      const { value } = await run({ maxRows: 50, available: 100, serverCap: 20 });
+      expect(value.rows.length).toBe(20);
+      expect(value.truncated).toBe(false);
+    });
+  });
+
   describe('column names that contain parentheses', () => {
     async function project(
       columns: unknown[],
@@ -324,7 +436,7 @@ describe('getSummaryDataTool', () => {
       'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard.',
     );
     expect(tool.description).toContain('Cells are raw values');
-    expect(tool.description).toContain('no truncation flag');
+    expect(tool.description).toContain('truncated: true means more rows exist; null means unknown');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
@@ -349,6 +461,7 @@ describe('getSummaryDataTool', () => {
       const body = parseResult(result);
       expect(body.worksheet).toEqual({ id: 'sheet-sales', name: 'Sales by Region' });
       expect(body.maxRows).toBe(50);
+      expect(body.truncated).toBe(false);
       expect(body.rowOrder).toEqual({
         status: 'unspecified',
         usableFor: 'value_readback',
@@ -370,7 +483,7 @@ describe('getSummaryDataTool', () => {
       expect(summaryRequest?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
       // Columns are projected from the returned data client-side, so no column filter is sent.
       expect(summaryRequest?.searchParams).toMatchObject({
-        maxRows: '50',
+        maxRows: '51',
         ignoreSelection: 'true',
       });
       expect(summaryRequest?.searchParams).not.toHaveProperty('columnsToIncludeByFieldName');
@@ -415,7 +528,7 @@ describe('getSummaryDataTool', () => {
       });
       const summaryRequest = harness.server.requests.at(-1) as any;
       expect(summaryRequest?.searchParams).toMatchObject({
-        maxRows: '200',
+        maxRows: '201',
         ignoreSelection: 'true',
       });
       expect(summaryRequest?.searchParams).not.toHaveProperty('columnsToIncludeByFieldName');
@@ -737,7 +850,7 @@ describe('getSummaryDataTool', () => {
       expect(parseResult(result).maxRows).toBe(1000);
 
       const summaryRequest = harness.server.requests.at(-1) as any;
-      expect(summaryRequest?.searchParams?.maxRows).toBe('1000');
+      expect(summaryRequest?.searchParams?.maxRows).toBe('1001');
     } finally {
       await harness.close();
     }

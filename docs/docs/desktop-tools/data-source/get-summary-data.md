@@ -62,7 +62,7 @@ When no worksheet is named and the workbook has more than one, the tool refuses 
 
 ### `maxRows`
 
-Maximum number of rows to return. A positive integer. Defaults to `200`, and values above the cap are clamped to `1000` before the data is read. `Range: 1-1000`.
+Maximum number of rows to return. A positive integer. Defaults to `200`, and values above the cap are clamped to `1000` before the data is read. `Range: 1-1000`. The tool reads one extra row to detect truncation; see `truncated` below.
 
 #### Example
 
@@ -90,6 +90,7 @@ Each name has to match a column the worksheet returned. A name that matches more
 
 - **Only fields on the view are carried.** The summary data contains just the fields present on the worksheet; a field that is not on the view (for example, one not yet added to Detail on the marks card) will not appear in the columns or rows. Add the field to the view first, then re-read.
 - **`shape` is a convenience summary.** The result includes a `shape` string such as `"2 rows x 3 columns"` describing the returned `summaryData`; it reflects the rows actually returned after the `maxRows` cap and any `columns` selection are applied.
+- **`truncated` says whether you saw every row.** It is `true` when more rows exist than were returned and `false` when every row was returned. It is `null` (unknown) when the API returned no rows although columns exist. `false` assumes the API's default 10000-row cap: a server configured with a lower cap can cut rows silently, and the tool cannot detect that.
 
 ## Example result
 
@@ -99,6 +100,7 @@ Each name has to match a column the worksheet returned. A name that matches more
 {
   "worksheet": { "id": "sheet-sales", "name": "Sales by Region" },
   "maxRows": 50,
+  "truncated": false,
   "shape": "2 rows x 3 columns",
   "summaryData": {
     "columns": [

@@ -23,6 +23,11 @@ export const SUMMARY_ROW_ORDER = {
 
 export type SummaryRowOrder = typeof SUMMARY_ROW_ORDER;
 
+// The /v0 API caps maxRows at 10000 by default, and a server can configure that lower. We can only
+// request maxRows + 1 below 10000. If a server's cap is at or below maxRows, rows are cut silently and
+// truncated is reported false, because the client cannot detect that.
+const API_DEFAULT_ROW_CAP = 10000;
+
 export const SUMMARY_DATA_READ_SCOPE = {
   target: 'worksheet',
   ignoreSelection: true,
@@ -34,6 +39,8 @@ export type WorksheetSummaryData = {
   worksheet: WorksheetItem;
   columns: unknown[];
   rows: unknown[][];
+  /** true: more rows exist. null: unknown. false assumes the API's default 10000-row cap; a server configured lower can cut rows silently. */
+  truncated: boolean | null;
   rowOrder: SummaryRowOrder;
   readScope: SummaryDataReadScope;
 };
@@ -78,6 +85,7 @@ export async function fetchWorksheetSummaryData({
       worksheet: resolvedWorksheet,
       columns: [],
       rows: [],
+      truncated: false,
       rowOrder: SUMMARY_ROW_ORDER,
       readScope: SUMMARY_DATA_READ_SCOPE,
     });
@@ -85,6 +93,8 @@ export async function fetchWorksheetSummaryData({
 
   // No columnsToIncludeByFieldName: it matches only a column-instance name, not a plain field
   // name, so it would silently no-op. Columns are projected from the returned data below instead.
+  const canProbeExtraRow = maxRows < API_DEFAULT_ROW_CAP;
+  const requestedRows = canProbeExtraRow ? maxRows + 1 : maxRows;
   const querySummary = async (): Promise<Result<DataTable, McpToolError>> =>
     await read(
       'summary-data',
@@ -92,7 +102,7 @@ export async function fetchWorksheetSummaryData({
         await activeExecutor.getWorksheetSummaryData(
           resolvedWorksheet.id,
           {
-            maxRows,
+            maxRows: requestedRows,
             ignoreSelection: SUMMARY_DATA_READ_SCOPE.ignoreSelection,
             ...(ignoreAliases === undefined ? {} : { ignoreAliases }),
           },
@@ -128,12 +138,23 @@ export async function fetchWorksheetSummaryData({
   }
 
   const returnedColumns = summaryResult.value.columns ?? [];
-  const returnedRows = summaryResult.value.rows ?? [];
+  const fetchedRows = summaryResult.value.rows ?? [];
+  // The API counts rows from the first column, so rows can be empty while data exists; a real
+  // empty sheet returns no columns either (materializeEmpty above handles that case).
+  const truncated =
+    fetchedRows.length > maxRows
+      ? true
+      : fetchedRows.length >= API_DEFAULT_ROW_CAP ||
+          (fetchedRows.length === 0 && returnedColumns.length > 0)
+        ? null
+        : false;
+  const returnedRows = fetchedRows.slice(0, maxRows);
   if (!columns || columns.length === 0) {
     return Ok({
       worksheet: resolvedWorksheet,
       columns: returnedColumns,
       rows: returnedRows,
+      truncated,
       rowOrder: SUMMARY_ROW_ORDER,
       readScope: SUMMARY_DATA_READ_SCOPE,
     });
@@ -147,6 +168,7 @@ export async function fetchWorksheetSummaryData({
     worksheet: resolvedWorksheet,
     columns: projection.value.map((index) => returnedColumns[index]),
     rows: returnedRows.map((row) => projection.value.map((index) => row[index])),
+    truncated,
     rowOrder: SUMMARY_ROW_ORDER,
     readScope: SUMMARY_DATA_READ_SCOPE,
   });
