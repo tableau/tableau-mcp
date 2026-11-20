@@ -16,6 +16,7 @@ import type CabuMethods from '../../../sdks/tableau/methods/cabuMethods.js';
 import { Localization } from '../../../sdks/tableau/types/cabu.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getHttpStatus } from '../../../utils/getHttpStatus.js';
 import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -61,7 +62,7 @@ Use \`search-content\` or \`list-datasources\` first to find the data source's L
 **Parameters:**
 
 - \`datasourceLuid\` (required): The LUID of the published data source to ask Tableau Agent about.
-- \`workbookLuid\` (optional): The LUID of a published workbook that connects to this data source. With it, Tableau Agent sees sample values of the data source's fields, which helps it match names and other values in a question. Pass it when the user names a workbook or dashboard built on this data source, or when you already know one. \`get-workbook\` lists a workbook's data sources: the one to use has this data source as its \`publishedParent\`. Without a workbook, Tableau Agent sees only the data source's fields.
+- \`workbookLuid\` (optional): The LUID of a published workbook that connects to this data source. With it, Tableau Agent sees sample values of the data source's fields, which helps it match names and other values in a question. Pass it when the user names a workbook, view, or dashboard built on this data source, or when you already know one. A view's LUID is not a workbook LUID: when the user names a view, pass the \`workbook.id\` that \`list-views\` or \`get-view\` returns for it. \`get-workbook\` lists a workbook's data sources: the one to use has this data source as its \`publishedParent\`. Without a workbook, Tableau Agent sees only the data source's fields.
 `,
     paramsSchema,
     annotations: {
@@ -106,11 +107,24 @@ Use \`search-content\` or \`list-datasources\` first to find the data source's L
                     siteId: restApi.siteId,
                     datasourceId: datasourceLuid,
                   }),
-                  restApi.workbooksMethods.queryWorkbookConnections({
-                    siteId: restApi.siteId,
-                    workbookId: workbookLuid,
-                  }),
+                  restApi.workbooksMethods
+                    .queryWorkbookConnections({
+                      siteId: restApi.siteId,
+                      workbookId: workbookLuid,
+                    })
+                    .catch((error: unknown) => {
+                      // Clients often pass a view's LUID here. Say how to recover instead of a bare 404.
+                      if (error instanceof Error && getHttpStatus(error) === '404') {
+                        return undefined;
+                      }
+                      throw error;
+                    }),
                 ]);
+                if (!connections) {
+                  return new ArgsValidationError(
+                    `Workbook ${workbookLuid} was not found. If it is a view's LUID, pass that view's workbook.id from list-views or get-view instead, or omit workbookLuid.`,
+                  ).toErr();
+                }
                 name = datasource.name;
                 if (!connections.some((connection) => connection.datasource?.name === name)) {
                   return new ArgsValidationError(

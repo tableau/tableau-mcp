@@ -172,6 +172,22 @@ describe('cabuStartConversationTool', () => {
       expect(mocks.mockStartConversation).not.toHaveBeenCalled();
     });
 
+    it('explains a view LUID passed as workbookLuid, and starts no conversation', async () => {
+      mocks.mockQueryWorkbookConnections.mockRejectedValue(
+        new AxiosError('Not Found', '404', undefined, undefined, {
+          status: 404,
+        } as AxiosError['response']),
+      );
+
+      const result = await getToolResult({ datasourceLuid, workbookLuid });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`Workbook ${workbookLuid} was not found`);
+      expect(result.content[0].text).toContain("view's workbook.id");
+      expect(mocks.mockStartConversation).not.toHaveBeenCalled();
+    });
+
     it('returns a workbook-not-allowed error when the workbook is outside tool-scoping', async () => {
       vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-luid');
 
