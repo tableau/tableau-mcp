@@ -21,6 +21,7 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
+import { logClientInitialized } from '../logging/clientInitialized.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { ClientInfo, Server } from '../server.js';
@@ -184,6 +185,18 @@ export async function startExpressServer({
       );
   });
 
+  // The 2025 handshake has no server-side "initialized" hook in stateless mode (each request gets
+  // a fresh server), so log from the initialize request itself. 2026-07-28 clients send no
+  // initialize and are not logged here.
+  function logHttpClientInitialized(body: unknown): void {
+    if (!isInitializeRequest(body)) return;
+    logClientInitialized({
+      protocolVersion: body.params.protocolVersion,
+      clientInfo: body.params.clientInfo,
+      capabilities: body.params.capabilities,
+    });
+  }
+
   async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       let transport: NodeStreamableHTTPServerTransport;
@@ -204,6 +217,7 @@ export async function startExpressServer({
         });
 
         await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.auth?.scopes);
+        logHttpClientInitialized(req.body);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -234,6 +248,7 @@ export async function startExpressServer({
             getTableauAuthInfo(req.auth),
             req.auth?.scopes,
           );
+          logHttpClientInitialized(req.body);
         } else {
           log({
             message: 'Rejected request: no valid session ID and not an initialize request',

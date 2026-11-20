@@ -7,6 +7,7 @@ import path from 'path';
 
 import { Config } from '../config.js';
 import { ArgsValidationError, McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
+import { log } from '../logging/logger.js';
 import { WebMcpServer } from '../server.web.js';
 import { startExpressServer } from './express.js';
 
@@ -125,7 +126,11 @@ describe.each([false, true])(
     afterEach(async () => {
       vi.restoreAllMocks();
       await Promise.all(
-        servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))),
+        servers.splice(0).map((server) => {
+          // The unanswered initialize in the log test would otherwise hold close() open.
+          server.closeAllConnections();
+          return new Promise((resolve) => server.close(resolve));
+        }),
       );
     });
 
@@ -181,6 +186,31 @@ describe.each([false, true])(
         });
       },
     );
+
+    it('logs the connecting client once on initialize', async () => {
+      mocks.registerTools.mockResolvedValue(undefined);
+      vi.mocked(log).mockClear();
+
+      // The mocked server never answers, so only wait for the log, not the response.
+      void postInitialize().catch(() => {});
+      await vi.waitFor(() =>
+        expect(
+          vi.mocked(log).mock.calls.filter(([e]) => e.message === 'MCP client initialized'),
+        ).toHaveLength(1),
+      );
+
+      expect(log).toHaveBeenCalledWith({
+        message: 'MCP client initialized',
+        level: 'info',
+        logger: 'http',
+        data: {
+          protocolVersion: '2025-06-18',
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+          capabilities: {},
+          elicitationSupported: false,
+        },
+      });
+    });
 
     it('answers a site settings 401 with the OAuth challenge, so the client signs in again', async () => {
       mocks.registerTools.mockRejectedValue(
