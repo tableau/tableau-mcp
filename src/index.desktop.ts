@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import dotenv from 'dotenv';
 
 import pkg from '../package.json';
@@ -7,7 +7,7 @@ import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
-import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
+import { isNotificationLevel, setNotificationLevel } from './logging/notification.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { startExpressServer } from './server/express.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
@@ -46,19 +46,29 @@ async function startDesktopProfile(): Promise<void> {
     void fileLogger.pruneOldLogs({ maxAgeDays: DESKTOP_LOG_RETENTION_DAYS });
   }
 
-  const server = new DesktopMcpServer();
-  await server.registerTools();
-  await server.registerResources();
-  server.mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
-    setNotificationLevel(server.mcpServer, request.params.level);
-    return {};
+  serveStdio(
+    async () => {
+      const server = new DesktopMcpServer();
+      await server.registerTools();
+      await server.registerResources();
+      server.mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
+        setNotificationLevel(server.mcpServer, request.params.level);
+        return {};
+      });
+      setNotificationLevel(server.mcpServer, notificationLevel, { silent: true });
+      return server.mcpServer;
+    },
+    {
+      onerror: (error) =>
+        log({ message: 'stdio error', level: 'error', logger: 'stdio', data: error }),
+    },
+  );
+
+  log({
+    message: `tableau-desktop-mcp v${pkg.version} running on stdio`,
+    level: 'info',
+    logger: 'startup',
   });
-
-  const transport = new StdioServerTransport();
-  await server.mcpServer.connect(transport);
-
-  setNotificationLevel(server.mcpServer, notificationLevel);
-  notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
 }
 
 async function startWebProfile(): Promise<void> {

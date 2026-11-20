@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import dotenv from 'dotenv';
 
 import pkg from '../package.json';
@@ -9,7 +9,7 @@ import { getConfig } from './config.js';
 import { buildCombinedInstructions } from './instructions.combined.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger';
-import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
+import { isNotificationLevel, setNotificationLevel } from './logging/notification.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { WebMcpServer } from './server.web.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
@@ -47,37 +47,47 @@ async function startServer(): Promise<void> {
     sessionPinned: desktopConfig.desktopSessionId !== undefined,
     profile: desktopConfig.toolProfile,
   });
-  const mcpServer = new McpServer(
-    {
-      name: serverName,
-      version: serverVersion,
+  serveStdio(
+    async () => {
+      const mcpServer = new McpServer(
+        {
+          name: serverName,
+          version: serverVersion,
+        },
+        {
+          capabilities: {
+            logging: {},
+            tools: {},
+          },
+          instructions,
+        },
+      );
+
+      const webMcpServer = new WebMcpServer({ mcpServer });
+      await webMcpServer.registerTools();
+
+      const desktopMcpServer = new DesktopMcpServer({ mcpServer });
+      await desktopMcpServer.registerTools();
+      await desktopMcpServer.registerResources();
+
+      mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
+        setNotificationLevel(desktopMcpServer.mcpServer, request.params.level);
+        return {};
+      });
+      setNotificationLevel(mcpServer, notificationLevel, { silent: true });
+      return mcpServer;
     },
     {
-      capabilities: {
-        logging: {},
-        tools: {},
-      },
-      instructions,
+      onerror: (error) =>
+        log({ message: 'stdio error', level: 'error', logger: 'stdio', data: error }),
     },
   );
 
-  const webMcpServer = new WebMcpServer({ mcpServer });
-  await webMcpServer.registerTools();
-
-  const desktopMcpServer = new DesktopMcpServer({ mcpServer });
-  await desktopMcpServer.registerTools();
-  await desktopMcpServer.registerResources();
-
-  mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
-    setNotificationLevel(desktopMcpServer.mcpServer, request.params.level);
-    return {};
+  log({
+    message: `${serverName} v${serverVersion} running on stdio`,
+    level: 'info',
+    logger: 'startup',
   });
-
-  const transport = new StdioServerTransport();
-  await mcpServer.connect(transport);
-
-  setNotificationLevel(mcpServer, notificationLevel);
-  notifier.info(mcpServer, `${serverName} v${serverVersion} running on stdio`);
 
   if (config.disableLogMasking) {
     log({ message: '⚠️ Log masking is disabled!', level: 'info', logger: 'startup' });
