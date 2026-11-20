@@ -89,6 +89,19 @@ The path to the SSL certificate file to use for the HTTP server.
 
 <hr />
 
+## `REQUEST_STATE_SECRET`
+
+The secret used to sign the state that a multi-step tool call sends back to the client between
+steps. For example, `update-user` asks the user to approve the change and then finishes the call
+once they accept.
+
+- Default: empty, which uses a random secret for each server process
+- Must be at least 32 bytes long.
+- Set the same value on every replica when you run more than one server behind a load balancer.
+  Otherwise a step that lands on a different replica is rejected and the client must start over.
+
+<hr />
+
 ## `CORS_ORIGIN_CONFIG`
 
 The origin or origins to allow CORS requests from.

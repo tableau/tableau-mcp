@@ -1,8 +1,11 @@
 import {
   AuthInfo,
   CallToolResult,
+  CLIENT_CAPABILITIES_META_KEY,
+  ClientCapabilities,
   RequestId,
   RequestMeta,
+  RequestStateAccessor,
   ServerContext,
   StandardSchemaWithJSON,
 } from '@modelcontextprotocol/server';
@@ -60,6 +63,15 @@ export type TableauRequestFields = {
   requestInfo?: { headers: Headers };
   _meta?: RequestMeta;
   sendNotification: ServerContext['mcpReq']['notify'];
+  /**
+   * Capabilities the client declared on THIS request (2026-07-28 `_meta` envelope). Undefined on
+   * 2025 connections, which declare them once at initialize; fall back to `server.capabilities`.
+   */
+  clientCapabilities?: ClientCapabilities;
+  /** Client answers to a previous round's input requests (2026-07-28 multi round-trip). */
+  inputResponses?: Record<string, unknown>;
+  /** The verified `requestState` payload echoed by the client, if any. */
+  requestState: RequestStateAccessor;
 };
 
 export function getRequestFields(ctx: ServerContext): TableauRequestFields {
@@ -71,6 +83,12 @@ export function getRequestFields(ctx: ServerContext): TableauRequestFields {
     requestInfo: ctx.http?.req ? { headers: ctx.http.req.headers } : undefined,
     _meta: ctx.mcpReq._meta,
     sendNotification: ctx.mcpReq.notify,
+    // The SDK types the lifted envelope as `{}`.
+    clientCapabilities: (ctx.mcpReq.envelope as Record<string, unknown> | undefined)?.[
+      CLIENT_CAPABILITIES_META_KEY
+    ] as ClientCapabilities | undefined,
+    inputResponses: ctx.mcpReq.inputResponses,
+    requestState: ctx.mcpReq.requestState,
   };
 }
 

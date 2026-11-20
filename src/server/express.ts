@@ -1,5 +1,17 @@
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/server';
+import {
+  NodeStreamableHTTPServerTransport,
+  toNodeHandler,
+  toWebRequest,
+} from '@modelcontextprotocol/node';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  createMcpHandler,
+  isInitializeRequest,
+  isLegacyRequest,
+  LoggingLevel,
+} from '@modelcontextprotocol/server';
+import { AsyncLocalStorage } from 'async_hooks';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
@@ -11,11 +23,12 @@ import { Config } from '../config.js';
 import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
-import { Server } from '../server.js';
+import { ClientInfo, Server } from '../server.js';
 import { WebMcpServer } from '../server.web.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../utils/authErrorMessage.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
+import { ClientCapabilitiesWithUiExtension } from './mcpUiCapability.js';
 import { handlePingRequest } from './middleware.js';
 import { getOAuthChallenge } from './oauth/authMiddleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
@@ -83,8 +96,46 @@ export async function startExpressServer({
   }
   middleware.push(latencyMiddleware());
 
+  // 2026-07-28 traffic is stateless per request: one factory-built server per POST. The parsed body
+  // rides an AsyncLocalStorage so the factory can read the per-request client envelope, which it
+  // needs before registration (MCP Apps gating, client display name).
+  const modernRequestBody = new AsyncLocalStorage<unknown>();
+  const modernHandler = toNodeHandler(
+    createMcpHandler(
+      async ({ authInfo }) => {
+        const meta = getRequestMeta(modernRequestBody.getStore());
+        const server = new WebMcpServer({
+          clientInfo: meta?.[CLIENT_INFO_META_KEY] as ClientInfo | undefined,
+          capabilities: meta?.[CLIENT_CAPABILITIES_META_KEY] as
+            ClientCapabilitiesWithUiExtension | undefined,
+          clientId: authInfo?.clientId,
+        });
+        await server.registerTools(getTableauAuthInfo(authInfo), authInfo?.scopes);
+        setNotificationLevel(server.mcpServer, logLevel, { silent: true });
+        return server.mcpServer;
+      },
+      {
+        legacy: 'reject',
+        onerror: (error) =>
+          log({
+            message: 'Error serving MCP request',
+            level: 'error',
+            logger: 'server',
+            data: error,
+          }),
+      },
+    ),
+  );
+
+  async function routeMcpPost(req: AuthenticatedRequest, res: Response): Promise<void> {
+    if (await isLegacyRequest(await toWebRequest(req, req.body), req.body)) {
+      return createMcpServer(req, res);
+    }
+    await modernRequestBody.run(req.body, () => modernHandler(req, res, req.body));
+  }
+
   const path = `/${basePath}`;
-  app.post(path, ...middleware, createMcpServer);
+  app.post(path, ...middleware, routeMcpPost);
   app.get(
     path,
     ...middleware,
@@ -258,6 +309,12 @@ async function connect(
   await server.mcpServer.connect(transport);
   setNotificationLevel(server.mcpServer, logLevel);
   log({ message: 'MCP server connected to transport', level: 'debug', logger: 'server' });
+}
+
+function getRequestMeta(body: unknown): Record<string, unknown> | undefined {
+  const params = (body as { params?: { _meta?: unknown } } | undefined)?.params;
+  const meta = params?._meta;
+  return meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : undefined;
 }
 
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
