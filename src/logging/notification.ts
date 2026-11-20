@@ -1,5 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { LoggingLevel, McpServer, RequestId } from '@modelcontextprotocol/server';
 
 import { getBaseConfig } from '../config.shared.js';
 import { ToolName } from '../tools/toolName.js';

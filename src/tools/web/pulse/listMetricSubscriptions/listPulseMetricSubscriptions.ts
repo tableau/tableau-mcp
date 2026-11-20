@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../../restApiInstance.js';

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { createHash, randomUUID } from 'crypto';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';

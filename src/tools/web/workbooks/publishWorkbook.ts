@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { readFile } from 'fs/promises';
 import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';

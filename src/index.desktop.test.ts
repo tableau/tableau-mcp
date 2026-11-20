@@ -13,11 +13,11 @@ const startupState = vi.hoisted(() => ({
   pruneOldLogs: vi.fn(async () => undefined),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
   StdioServerTransport: vi.fn(),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
+vi.mock('@modelcontextprotocol/core', () => ({
   SetLevelRequestSchema: {},
 }));
 

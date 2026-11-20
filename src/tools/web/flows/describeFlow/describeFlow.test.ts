@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { FlowDocumentForbiddenError } from '../../../../errors/mcpToolError.js';
 import { ProductVersion } from '../../../../sdks/tableau/types/serverInfo.js';

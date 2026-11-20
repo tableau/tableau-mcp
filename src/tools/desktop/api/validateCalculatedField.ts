@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { DATASOURCE_CALC_VALIDATION_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
