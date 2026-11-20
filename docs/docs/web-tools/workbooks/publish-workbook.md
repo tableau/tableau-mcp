@@ -8,51 +8,30 @@ sidebar_position: 18
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Opens the Publish Workbook dialog so the workbook open in the connected %product_name% instance can be published to the signed-in Tableau site. The dialog is interactive: a returned success means the flow was launched, not that a publish landed — dismissing or cancelling the dialog also succeeds. Requires being signed in to a site.
+Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing.
 
 :::note[Not read-only]
-This tool is not read-only and is not idempotent. Opening the dialog reaches a remote Tableau site (`openWorld`).
+This tool is not read-only and is not idempotent. Publishing reaches a remote Tableau site (`openWorld`).
 :::
 
 ## APIs called
 
-This tool acts on the workbook open in the running %product_name% instance. Opening the dialog is a call to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. There are no OAuth scopes on that loopback call: it is authorized by the running %product_name% instance's per-session bearer token. Completing publish in the dialog then talks to the connected Tableau site from %product_name% itself; this MCP tool does not call the Tableau Cloud or Server REST API.
+Talks to Tableau Cloud or Tableau Server.
 
-- Settles on which %product_name% session to target before anything is sent. Resolved in-process (not an API call).
-- Asks %product_name% to open the Publish Workbook dialog for the open workbook. Requires a connected session with an open workbook and a signed-in site; authorized by that session's loopback bearer token.
-  - `POST /v<x>/workbook:publish` — open the Publish Workbook dialog. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/publish)
+- Validates and uploads a TWB, or uploads a TWBX, then publishes it.
+- For project publishes, reads the published workbook's permission rules. This read is optional; see [Permissions after a project publish](#permissions-after-a-project-publish).
+
+## Required arguments
+
+### `name`
+
+The name to give the published workbook.
 
 ## Optional arguments
 
-### `session`
+### `overwrite`
 
-Identifier of the target %product_name% session. When omitted, the session is resolved automatically (for example, when it is pinned or exactly one %product_name% instance is connected).
-
-#### Example
-
-`"studio-1"`
-
-## Notes and caveats
-
-- **Launch is not publish.** `completed` means the dialog was opened; finish or cancel it in %product_name%. If %product_name% accepts the request before the dialog has settled, the result says the open was requested and is still being applied.
-
-## Example results
-
-### Dialog opened
-
-```json
-{ "message": "Opened the Publish Workbook dialog; finish or cancel it in Tableau." }
-```
-
-### Accepted, still being applied
-
-```json
-{ "message": "Requested opening the Publish Workbook dialog; Desktop is still applying it." }
-```
-
-## Related
-
-- [`save-workbook`](./save-workbook.md) — save the open workbook to disk without publishing.
+Whether to overwrite an existing workbook with the same name in the selected destination. Defaults to `false`.
 
 {/* tool-details */}
 ## One of `workbookUploadId` or `workbookFilePath`
@@ -182,7 +161,8 @@ access, and successful publishing does not verify permissions on a published par
       "column": 18,
       "elementName": "map"
     }
-  ]
+  ],
+  "permissions": []
 }
 ```
 

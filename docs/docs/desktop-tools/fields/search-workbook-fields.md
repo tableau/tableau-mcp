@@ -36,7 +36,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -68,7 +68,7 @@ Maximum number of matches to return. Type: integer. Range: 1–100. Default: `20
       "datasource": "Sample - Superstore",
       "caption": "Sales",
       "localName": "Sales",
-      "columnRef": "[Sample - Superstore].[Sales]",
+      "columnRef": "[Sample - Superstore].[sum:Sales:qk]",
       "role": "measure",
       "datatype": "real",
       "matchedOn": ["caption", "localName"],

@@ -22,10 +22,12 @@ This tool acts on the workbook open in the running %product_name% instance, not 
 - Validates the document before anything is sent to %product_name% — validated in-process (not an API call). Blocking problems stop the apply so a bad document never reaches %product_name%; the remaining findings ride along as preflight warnings and are counted in the result.
 - Checks that `storyboardName` agrees with the name carried inside the document, then resolves that name to a storyboard that is actually open. Requires a connected %product_name% session with an open workbook; authorized by that session's loopback bearer token.
   - `GET /v<x>/workbook/storyboards` — list the storyboards in the open workbook so the name can be matched to one. [API reference](ext://eca/reference/index.html#tag/Storyboards/operation/listStoryboards)
+  - `GET /v<x>/workbook/storyboards/{id}/document` — read the live storyboard to validate the edit against it and, when the cache file carries source metadata, for the freshness check. [API reference](ext://eca/reference/index.html#tag/Storyboards/operation/getStoryboardDocument)
 - Replaces that single storyboard with the document you supplied, leaving the workbook's other sheets untouched.
   - `POST /v<x>/workbook/storyboards/{id}/document` — replace one storyboard from the posted document (`Content-Type: application/xml`). [API reference](ext://eca/reference/index.html#tag/Storyboards/operation/applyStoryboardDocument)
 - Brings the updated storyboard to the foreground afterwards. Best-effort by construction: the apply has already landed, so navigation that does not take is recorded in the logs and never turns a successful apply into a failure.
   - `GET /v<x>/workbook/document` — re-read the workbook to confirm the target name before navigating. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)
+  - `GET /v<x>/workbook` — read the sheet inventory to resolve the storyboard id for navigation. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbook)
   - `POST /v<x>/workbook:goToSheet` — bring the updated storyboard to the foreground. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/goToSheet)
 
 ## Required arguments
@@ -77,11 +79,11 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 
-- **Last writer wins.** The apply carries no precondition check, so it overwrites an edit someone else made to the same storyboard in the meantime. Renaming the target storyboard while the apply is in flight makes the apply fail instead.
+- **Last writer wins.** When the cache file carries no source metadata, the apply carries no precondition check, so it overwrites an edit someone else made to the same storyboard in the meantime. When it does, the apply is refused if the storyboard changed since the read. Renaming the target storyboard while the apply is in flight makes the apply fail instead.
 - **The apply is not re-verified.** A storyboard apply has no structural readback, so the result carries an honest verification receipt that lists the applied structure as unverified. %product_name% accepting the document and the preflight warning count are observed; whether the storyboard kept the structure you intended is not. Read the storyboard back if you need to confirm it.
 - **Rejections from %product_name% surface as failures.** When %product_name% takes the request but reports that the document load itself failed, the tool reports that as an error rather than a success message.
 
