@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';

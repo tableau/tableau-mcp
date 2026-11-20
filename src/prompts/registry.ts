@@ -1,4 +1,4 @@
-import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptResult } from '@modelcontextprotocol/server';
 import { z, ZodRawShape } from 'zod';
 
 import { Config } from '../config.js';

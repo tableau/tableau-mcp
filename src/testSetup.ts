@@ -10,7 +10,7 @@ beforeEach(() => {
   stubDefaultEnvVars();
 });
 
-vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
+vi.mock('@modelcontextprotocol/server', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     McpServer: vi.fn().mockImplementation(function () {
