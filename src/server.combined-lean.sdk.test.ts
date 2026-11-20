@@ -1,4 +1,4 @@
-import { Client } from '@modelcontextprotocol/client';
+import { Client, INVALID_PARAMS, ProtocolError } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 
 import { buildWebInstructions, LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
@@ -69,6 +69,29 @@ describe('combined-lean against the real MCP SDK server', () => {
       await vi.waitFor(() => expect(listChanged).toHaveBeenCalled());
       const after = (await client.listTools()).tools.map((tool) => tool.name);
       expect(after.sort()).toEqual([LOAD_WEB_TOOLS_TOOL_NAME, ...webToolGroups.pulse].sort());
+    } finally {
+      await client.close();
+      await mcpServer.close();
+    }
+  });
+
+  // SDK v2 rejects unknown tools with a JSON-RPC error; v1 returned an isError result.
+  it('rejects a call to a not-yet-loaded tool with a -32602 protocol error', async () => {
+    const mcpServer = new McpServer(
+      { name: 'combined-lean-sdk', version: '0.0.0' },
+      { capabilities: { tools: { listChanged: true } }, instructions: buildWebInstructions() },
+    );
+    await new WebMcpServer({ mcpServer }).registerTools();
+    const client = new Client({ name: 'combined-lean-sdk-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      const call = client.callTool({ name: webToolGroups.pulse[0], arguments: {} });
+      await expect(call).rejects.toBeInstanceOf(ProtocolError);
+      await expect(call).rejects.toMatchObject({ code: INVALID_PARAMS });
     } finally {
       await client.close();
       await mcpServer.close();
