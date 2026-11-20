@@ -51,8 +51,8 @@ const packageJsonSchema = z
   .object({
     name: z.string(),
     description: z.string(),
-    bin: z.record(z.string()),
-    exports: z.record(z.string()),
+    bin: z.record(z.string(), z.string()),
+    exports: z.record(z.string(), z.string()),
   })
   .passthrough();
 

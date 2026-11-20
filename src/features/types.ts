@@ -25,7 +25,7 @@ export const serverFeatureGateConfigSchema = z.object({
  */
 export const providerConfigSchema = z
   .object({
-    module: z.string({ required_error: 'Custom provider requires "module" path' }),
+    module: z.string({ error: 'Custom provider requires "module" path' }),
   })
   .passthrough();
 

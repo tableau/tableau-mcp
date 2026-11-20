@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
-import { z, ZodRawShape, ZodTypeAny } from 'zod';
+import { z, ZodRawShape } from 'zod';
 
 import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
@@ -72,7 +72,7 @@ export type LogAndExecuteParams<
 
   // The arguments of the tool call
   args: Args extends ZodRawShape
-    ? z.objectOutputType<Args, ZodTypeAny>
+    ? z.output<z.ZodObject<Args>>
     : Args extends AnySchema
       ? SchemaOutput<Args>
       : undefined;

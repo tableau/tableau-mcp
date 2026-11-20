@@ -3,7 +3,6 @@ import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';
@@ -11,6 +10,7 @@ import { log } from '../../logging/logger.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
+import { formatZodError } from '../../utils/formatZodError.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
@@ -51,7 +51,7 @@ export function authorize(
     if (!result.success) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: fromError(result.error).toString(),
+        error_description: formatZodError(result.error),
       });
       return;
     }
@@ -387,7 +387,7 @@ export async function getClientFromMetadataDoc(
   if (!clientMetadataResult.success) {
     return Err({
       error: 'invalid_client_metadata',
-      error_description: `Client metadata is invalid: ${fromError(clientMetadataResult.error).toString()}`,
+      error_description: `Client metadata is invalid: ${formatZodError(clientMetadataResult.error)}`,
     });
   }
 

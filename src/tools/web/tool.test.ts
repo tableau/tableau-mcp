@@ -974,7 +974,7 @@ describe('Tool', () => {
         {
           code: 'invalid_type',
           expected: 'string',
-          received: 'object',
+          input: {},
           path: ['parameters', 0, 'members', 0],
           message: 'Expected string, received object',
         },
