@@ -78,7 +78,9 @@ describe('jobsFilterUtils', () => {
     });
 
     it('should throw on invalid field', () => {
-      expect(() => parseAndValidateJobsFilterString('invalidField:eq:value')).toThrow();
+      expect(() => parseAndValidateJobsFilterString('invalidField:eq:value')).toThrow(
+        "Invalid filter field 'invalidField'",
+      );
     });
 
     it('should throw on invalid operator for field', () => {
@@ -98,7 +100,9 @@ describe('jobsFilterUtils', () => {
     });
 
     it('should throw on invalid operator name', () => {
-      expect(() => parseAndValidateJobsFilterString('jobType:contains:refresh')).toThrow();
+      expect(() => parseAndValidateJobsFilterString('jobType:contains:refresh')).toThrow(
+        "Invalid filter operator 'contains'",
+      );
     });
 
     it('should throw on malformed expression (missing value)', () => {
