@@ -20,6 +20,7 @@ import type { AbCase } from './dataQuestions.js';
 
 const GOLD = {
   datasourceName: 'gold_run_the_business_enhanced (local copy) (local copy)',
+  projectName: 'cabu evals',
   // The workbook's data source. The site has an older same-named copy in the same project, which
   // the prompt can't tell apart, so accept it too.
   datasourceLuid: '0de2f740-dce7-4619-9abe-88e2afcde4e7',
