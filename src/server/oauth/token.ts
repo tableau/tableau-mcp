@@ -2,7 +2,6 @@ import { KeyObject, randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { CompactEncrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v4';
 
 import { getConfig } from '../../config.js';
 import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';
@@ -10,6 +9,7 @@ import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';
+import { formatZodError } from '../../utils/formatZodError.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
@@ -46,7 +46,7 @@ export function token(
     if (!result.success) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: fromError(result.error).toString(),
+        error_description: formatZodError(result.error),
       });
       return;
     }

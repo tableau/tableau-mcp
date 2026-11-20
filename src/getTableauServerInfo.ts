@@ -1,10 +1,11 @@
 import { ZodiosError } from '@zodios/core';
-import { fromError, isZodErrorLike } from 'zod-validation-error/v4';
+import { isZodErrorLike } from 'zod-validation-error/v4';
 
 import { getConfig } from './config.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { ServerInfo } from './sdks/tableau/types/serverInfo.js';
 import { ExpiringMap } from './utils/expiringMap.js';
+import { formatZodError } from './utils/formatZodError.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 let tableauServerInfoCache: ExpiringMap<string, ServerInfo> | undefined;
@@ -44,7 +45,7 @@ export const getTableauServerInfo = async (server?: string): Promise<ServerInfo>
   } catch (error) {
     const reason =
       error instanceof ZodiosError && isZodErrorLike(error.cause)
-        ? fromError(error.cause).toString()
+        ? formatZodError(error.cause)
         : getExceptionMessage(error);
 
     throw new Error(`Failed to get server info: ${reason}`);

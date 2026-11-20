@@ -2,10 +2,10 @@ import { KeyObject } from 'crypto';
 import express from 'express';
 import { compactDecrypt } from 'jose';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error/v4';
 
 import { log } from '../../logging/logger.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';
+import { formatZodError } from '../../utils/formatZodError.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema } from './schemas.js';
 import { RefreshTokenData } from './types.js';
 
@@ -50,7 +50,7 @@ export function revoke(
     if (!result.success) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: fromError(result.error).toString(),
+        error_description: formatZodError(result.error),
       });
       return;
     }
