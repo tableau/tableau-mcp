@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { AxiosError } from 'axios';
 
 import * as loggerModule from '../../../logging/logger.js';

@@ -1,4 +1,4 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { AuthInfo } from '@modelcontextprotocol/server';
 import { EventEmitter } from 'events';
 
 import * as telemetryInit from '../telemetry/init.js';

@@ -8,17 +8,15 @@ const startupState = vi.hoisted(() => ({
   sessionStoreDisconnected: false,
   connectedAtExpressStart: undefined as boolean | undefined,
   expressStarted: false,
-  desktopConnected: false,
+  desktopServed: false,
   shutdownHandlers: new Map<string, () => Promise<void>>(),
   pruneOldLogs: vi.fn(async () => undefined),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn(),
-}));
-
-vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
-  SetLevelRequestSchema: {},
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
+  serveStdio: vi.fn(() => {
+    startupState.desktopServed = true;
+  }),
 }));
 
 vi.mock('dotenv', () => ({
@@ -74,7 +72,6 @@ vi.mock('./logging/logger.js', () => ({
 
 vi.mock('./logging/notification.js', () => ({
   isNotificationLevel: vi.fn(() => true),
-  notifier: { info: vi.fn() },
   setNotificationLevel: vi.fn(),
 }));
 
@@ -91,9 +88,6 @@ vi.mock('./server.desktop.js', () => ({
       registerResources: vi.fn(async () => undefined),
       mcpServer: {
         server: { setRequestHandler: vi.fn() },
-        connect: vi.fn(async () => {
-          startupState.desktopConnected = true;
-        }),
       },
     };
   }),
@@ -122,11 +116,15 @@ vi.mock('./transportProfile.js', () => ({
   resolveTransportProfile: vi.fn(() => startupState.profile),
 }));
 
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+
 import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger } from './logging/fileLogger.js';
+import { setNotificationLevel } from './logging/notification.js';
+import { DesktopMcpServer } from './server.desktop.js';
 import { startExpressServer } from './server/express.js';
 import { connectSessionStore, initializeSessionStore } from './sessionStore/init.js';
 
@@ -154,7 +152,7 @@ describe('desktop binary startup', () => {
     startupState.sessionStoreDisconnected = false;
     startupState.connectedAtExpressStart = undefined;
     startupState.expressStarted = false;
-    startupState.desktopConnected = false;
+    startupState.desktopServed = false;
     startupState.shutdownHandlers.clear();
     processOnceSpy = vi.spyOn(process, 'once').mockImplementation(((signal, listener) => {
       startupState.shutdownHandlers.set(String(signal), listener as () => Promise<void>);
@@ -214,7 +212,7 @@ describe('desktop binary startup', () => {
     startupState.webConfigShouldThrow = true;
 
     await import('./index.desktop.js');
-    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+    await vi.waitFor(() => expect(startupState.desktopServed).toBe(true));
 
     expect(getDesktopConfig).toHaveBeenCalledOnce();
     expect(getConfig).not.toHaveBeenCalled();
@@ -224,6 +222,15 @@ describe('desktop binary startup', () => {
     expect(startExpressServer).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
+
+    // The factory builds a fresh Desktop server per connection.
+    expect(DesktopMcpServer).not.toHaveBeenCalled();
+    const factory = vi.mocked(serveStdio).mock.calls[0][0] as () => Promise<unknown>;
+    await factory();
+    expect(DesktopMcpServer).toHaveBeenCalledOnce();
+    expect(setNotificationLevel).toHaveBeenCalledWith(expect.anything(), 'info', {
+      silent: true,
+    });
   });
 
   it('prunes Desktop logs older than 14 days at startup when the file logger is enabled', async () => {
@@ -235,7 +242,7 @@ describe('desktop binary startup', () => {
     } as ReturnType<typeof getDesktopConfig>);
 
     await import('./index.desktop.js');
-    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+    await vi.waitFor(() => expect(startupState.desktopServed).toBe(true));
 
     expect(FileLogger).toHaveBeenCalledWith({
       logDirectory: '/tmp',
@@ -248,7 +255,7 @@ describe('desktop binary startup', () => {
     startupState.profile = 'desktop';
 
     await import('./index.desktop.js');
-    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+    await vi.waitFor(() => expect(startupState.desktopServed).toBe(true));
 
     expect(startupState.pruneOldLogs).not.toHaveBeenCalled();
   });

@@ -159,6 +159,20 @@ describe('Config', () => {
     expect(config.disableSessionManagement).toBe(true);
   });
 
+  it('should leave requestStateSecret empty by default', () => {
+    expect(new Config().requestStateSecret).toBe('');
+  });
+
+  it('should set requestStateSecret when it is at least 32 bytes', () => {
+    vi.stubEnv('REQUEST_STATE_SECRET', 'x'.repeat(32));
+    expect(new Config().requestStateSecret).toBe('x'.repeat(32));
+  });
+
+  it('should reject a requestStateSecret shorter than 32 bytes', () => {
+    vi.stubEnv('REQUEST_STATE_SECRET', 'too-short');
+    expect(() => new Config()).toThrow('REQUEST_STATE_SECRET must be at least 32 bytes long.');
+  });
+
   it('should default transport to stdio when not specified', () => {
     const config = new Config();
     expect(config.transport).toBe('stdio');

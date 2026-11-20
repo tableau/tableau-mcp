@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 
 import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
 import { showError } from '../shared/showError.js';

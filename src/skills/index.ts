@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
-import { ErrorCode, McpError, type ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ProtocolError,
+  ProtocolErrorCode,
+  type ReadResourceResult,
+} from '@modelcontextprotocol/server';
 
 import { getFeatureGate } from '../features/init.js';
 import { log } from '../logging/logger.js';
@@ -72,9 +76,12 @@ export async function registerSkills(server: Server): Promise<void> {
         });
         if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
           // Same code and message the SDK uses for an unknown resource URI.
-          throw new McpError(ErrorCode.InvalidParams, `Resource ${uri} not found`);
+          throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource ${uri} not found`);
         }
-        throw new McpError(ErrorCode.InternalError, `Failed to read skill resource ${uri}`);
+        throw new ProtocolError(
+          ProtocolErrorCode.InternalError,
+          `Failed to read skill resource ${uri}`,
+        );
       }
       return {
         contents: [

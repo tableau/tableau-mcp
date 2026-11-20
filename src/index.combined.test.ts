@@ -7,28 +7,20 @@ const startupState = vi.hoisted(() => ({
   sessionStoreDisconnected: false,
   shutdownHandlers: new Map<string, () => Promise<void>>(),
   resourcesRegistered: false,
-  resourcesAvailableAtConnect: undefined as boolean | undefined,
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
+vi.mock('@modelcontextprotocol/server', () => ({
   McpServer: vi.fn(function () {
     return {
       server: {
         setRequestHandler: vi.fn(),
       },
-      connect: vi.fn(async () => {
-        startupState.resourcesAvailableAtConnect = startupState.resourcesRegistered;
-      }),
     };
   }),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn(),
-}));
-
-vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
-  SetLevelRequestSchema: {},
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
+  serveStdio: vi.fn(),
 }));
 
 vi.mock('dotenv', () => ({
@@ -83,7 +75,6 @@ vi.mock('./logging/logger.js', () => ({
 
 vi.mock('./logging/notification.js', () => ({
   isNotificationLevel: vi.fn(() => true),
-  notifier: { info: vi.fn() },
   setNotificationLevel: vi.fn(),
 }));
 
@@ -127,12 +118,21 @@ vi.mock('./server.desktop.js', () => ({
   }),
 }));
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { setNotificationLevel } from './logging/notification.js';
 import { connectSessionStore } from './sessionStore/init.js';
+
+// Runs the factory the entrypoint hands to serveStdio, as the SDK does per connection.
+async function connectOneClient(): Promise<unknown> {
+  await vi.waitFor(() => expect(serveStdio).toHaveBeenCalledOnce());
+  const factory = vi.mocked(serveStdio).mock.calls[0][0] as () => Promise<unknown>;
+  return factory();
+}
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -160,7 +160,6 @@ describe('combined entrypoint startup', () => {
     startupState.sessionStoreDisconnected = false;
     startupState.shutdownHandlers.clear();
     startupState.resourcesRegistered = false;
-    startupState.resourcesAvailableAtConnect = undefined;
     processOnceSpy = vi.spyOn(process, 'once').mockImplementation(((signal, listener) => {
       startupState.shutdownHandlers.set(String(signal), listener as () => Promise<void>);
       return process;
@@ -183,14 +182,18 @@ describe('combined entrypoint startup', () => {
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
     expect(initializeActivityLog).toHaveBeenCalledOnce();
     expect(connectSessionStore).toHaveBeenCalledOnce();
+    expect(serveStdio).not.toHaveBeenCalled();
     expect(McpServer).not.toHaveBeenCalled();
 
     serverInfo.resolve({});
-    await vi.waitFor(() => expect(startupState.resourcesAvailableAtConnect).toBe(true));
+    const server = await connectOneClient();
 
+    // The server handed to serveStdio is fully registered, resources included.
+    expect(startupState.resourcesRegistered).toBe(true);
+    expect(server).toBe(vi.mocked(McpServer).mock.results[0].value);
+    expect(setNotificationLevel).toHaveBeenCalledWith(server, 'info', { silent: true });
     expect(startupState.providerAtWebToolRegistration).toBe('custom');
     expect(startupState.sessionStoreConnectedAtWebToolRegistration).toBe(true);
-    expect(startupState.resourcesAvailableAtConnect).toBe(true);
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
     expect(vi.mocked(McpServer).mock.calls[0][1]).toMatchObject({
       instructions: 'web instructions desktop instructions',
@@ -199,7 +202,7 @@ describe('combined entrypoint startup', () => {
 
   it('uses the shared shutdown handlers', async () => {
     await import('./index.combined.js');
-    await vi.waitFor(() => expect(startupState.resourcesAvailableAtConnect).toBe(true));
+    await connectOneClient();
 
     await startupState.shutdownHandlers.get('SIGTERM')!();
 

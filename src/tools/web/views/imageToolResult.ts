@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok, Result } from 'ts-results-es';
 
 import { getTenantLuids, TenantIdentitySource } from '../../../blobStorage/tenantKey.js';

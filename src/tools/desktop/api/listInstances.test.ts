@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from '../../../errors/externalApiAccess.js';

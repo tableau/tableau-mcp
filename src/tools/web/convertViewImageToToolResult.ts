@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 
 function mimeTypeFor(format: 'PNG' | 'SVG'): string {
   return format === 'SVG' ? 'image/svg+xml' : 'image/png';

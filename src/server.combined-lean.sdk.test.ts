@@ -1,13 +1,11 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 
 import { buildWebInstructions, LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { webToolGroups } from './tools/web/toolName.js';
 
-vi.unmock('@modelcontextprotocol/sdk/server/mcp.js');
+vi.unmock('@modelcontextprotocol/server');
 const mocks = vi.hoisted(() => ({
   enabledFeatures: new Set<string>(),
   siteRole: vi.fn(),
@@ -48,7 +46,7 @@ describe('combined-lean against the real MCP SDK server', () => {
 
     const client = new Client({ name: 'combined-lean-sdk-client', version: '0.0.0' });
     const listChanged = vi.fn();
-    client.setNotificationHandler(ToolListChangedNotificationSchema, listChanged);
+    client.setNotificationHandler('notifications/tools/list_changed', listChanged);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
     try {

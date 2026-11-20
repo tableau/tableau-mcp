@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { useRestApi } from '../../../../restApiInstance.js';
