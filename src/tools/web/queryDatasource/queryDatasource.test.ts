@@ -1206,12 +1206,25 @@ describe('queryDatasourceTool', () => {
     it('emits mcp.warnings without resultInfo when no row limit applies', async () => {
       const parsed = await getParsed({
         query,
-        extraArgs: { options: { returnFormat: 'OBJECTS' } },
+        extraArgs: { options: { returnFormat: 'ARRAYS' } },
       });
 
       expect(parsed.mcp).toEqual({
         warnings: [expect.objectContaining({ affectedProperties: ['options.returnFormat'] })],
       });
+    });
+
+    it('returns no warnings for a pasted request whose options match the tool', async () => {
+      const parsed = await getParsed({
+        datasourceLuid: null,
+        query,
+        extraArgs: {
+          datasource: { datasourceLuid },
+          options: { returnFormat: 'OBJECTS', debug: true, disaggregate: false },
+        },
+      });
+
+      expect(parsed).not.toHaveProperty('mcp');
     });
 
     it('applies options.interpretFieldCaptionsAsFieldNames like the top-level argument', async () => {

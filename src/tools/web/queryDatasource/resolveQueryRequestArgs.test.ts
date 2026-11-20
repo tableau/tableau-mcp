@@ -210,15 +210,17 @@ describe('resolveQueryRequestArgs', () => {
   });
 
   describe('overridden options', () => {
-    // Warn whenever present (D2). Flip these if J3 lands on "warn only when different".
     it.each([
-      { options: { returnFormat: 'OBJECTS' as const }, affected: ['options.returnFormat'] },
       { options: { returnFormat: 'ARRAYS' as const }, affected: ['options.returnFormat'] },
       { options: { debug: false }, affected: ['options.debug'] },
       { options: { returnServerSentEvents: true }, affected: ['options.returnServerSentEvents'] },
       {
         options: { returnFormat: 'ARRAYS' as const, debug: false, returnServerSentEvents: true },
         affected: ['options.returnFormat', 'options.debug', 'options.returnServerSentEvents'],
+      },
+      {
+        options: { returnFormat: 'OBJECTS' as const, debug: false },
+        affected: ['options.debug'],
       },
     ])('warns once for $options', ({ options, affected }) => {
       const { warnings } = resolveOk({ datasourceLuid: luid, options });
@@ -229,8 +231,22 @@ describe('resolveQueryRequestArgs', () => {
       });
     });
 
-    it('does not warn when none are present', () => {
-      expect(resolveOk({ datasourceLuid: luid, options: { rowLimit: 3 } }).warnings).toEqual([]);
+    it('names the value the tool used for each overridden option', () => {
+      const { warnings } = resolveOk({
+        datasourceLuid: luid,
+        options: { returnFormat: 'ARRAYS', returnServerSentEvents: true },
+      });
+      expect(warnings[0].message).toBe(
+        'The tool always uses returnFormat: "OBJECTS", returnServerSentEvents: false, so the values you passed were ignored.',
+      );
+    });
+
+    it.each([
+      { options: { returnFormat: 'OBJECTS' as const, debug: true, returnServerSentEvents: false } },
+      { options: { rowLimit: 3 } },
+      { options: {} },
+    ])('does not warn for $options', ({ options }) => {
+      expect(resolveOk({ datasourceLuid: luid, options }).warnings).toEqual([]);
     });
   });
 

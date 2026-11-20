@@ -94,8 +94,15 @@ const VERSION_GATED_OPTIONS = [
   minVersion: string;
 }>;
 
-// The tool always sends its own values for these.
-const OVERRIDDEN_OPTION_KEYS = ['returnFormat', 'debug', 'returnServerSentEvents'] as const;
+// The values the tool always uses. returnServerSentEvents isn't sent: false is the VDS default, and
+// servers before 2026.1 don't define it.
+const OVERRIDDEN_OPTION_VALUES = {
+  returnFormat: 'OBJECTS',
+  debug: true,
+  returnServerSentEvents: false,
+} as const;
+type OverriddenOptionKey = keyof typeof OVERRIDDEN_OPTION_VALUES;
+const OVERRIDDEN_OPTION_KEYS = Object.keys(OVERRIDDEN_OPTION_VALUES) as OverriddenOptionKey[];
 
 // Valid on a VDS QueryRequest (inherited from QueryOptions) but they only affect read-metadata.
 const IGNORED_READ_METADATA_OPTIONS: ReadonlySet<string> = new Set([
@@ -128,12 +135,9 @@ export function collectUnknownKeys(args: QueryRequestEnvelopeArgs): string[] {
   return unknown;
 }
 
-// Pending PM (J3): may become "warn only when the value differs from what the tool sends".
-export function shouldWarnOverriddenOption(
-  _key: (typeof OVERRIDDEN_OPTION_KEYS)[number],
-  value: unknown,
-): boolean {
-  return value !== undefined;
+// A value equal to the tool's own changes nothing, so a pasted request that matches stays quiet.
+export function shouldWarnOverriddenOption(key: OverriddenOptionKey, value: unknown): boolean {
+  return value !== undefined && value !== OVERRIDDEN_OPTION_VALUES[key];
 }
 
 export function resolveQueryRequestArgs(
@@ -218,8 +222,9 @@ function buildIgnoredPropertyWarnings(
     warnings.push({
       type: 'IGNORED_REQUEST_PROPERTY',
       severity: 'WARNING',
-      message:
-        'The tool sets returnFormat (OBJECTS), debug (true), and returnServerSentEvents (false) itself, so these options were ignored.',
+      message: `The tool always uses ${overridden
+        .map((key) => `${key}: ${JSON.stringify(OVERRIDDEN_OPTION_VALUES[key])}`)
+        .join(', ')}, so the values you passed were ignored.`,
       affectedProperties: overridden.map((key) => `options.${key}`),
     });
   }
