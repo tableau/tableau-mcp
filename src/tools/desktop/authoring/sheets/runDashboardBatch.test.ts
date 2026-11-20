@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -197,7 +197,7 @@ describe('runDashboardBatchTool', () => {
     expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
     expect(entry._meta).toEqual({ 'anthropic/alwaysLoad': true });
-    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_302);
+    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_273);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {

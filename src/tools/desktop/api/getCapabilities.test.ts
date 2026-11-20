@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -89,8 +89,8 @@ describe('get-capabilities tool', () => {
 
     const { session } = tool.paramsSchema as z.ZodRawShape;
 
-    expect(session.safeParse(123).success).toBe(false);
-    expect(session.safeParse(undefined).success).toBe(true);
+    expect(z.safeParse(session, 123).success).toBe(false);
+    expect(z.safeParse(session, undefined).success).toBe(true);
   });
 });
 

@@ -1,11 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import {
-  CallToolResult,
-  ListToolsRequestSchema,
-  Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
@@ -27,13 +20,17 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
+  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
+
+type ToolsListHandler = (params: unknown, ctx: unknown) => Promise<unknown>;
 
 const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
@@ -72,7 +69,7 @@ describe('DesktopMcpServer', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
           ...(ALWAYS_LOAD_TOOL_NAMES.has(tool.name) && {
             _meta: { 'anthropic/alwaysLoad': true },
@@ -119,12 +116,10 @@ describe('DesktopMcpServer', () => {
     await server.registerTools();
 
     const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
-    const listToolsCall = setRequestHandler.mock.calls.find(
-      ([requestSchema]) => requestSchema === ListToolsRequestSchema,
-    );
+    const listToolsCall = setRequestHandler.mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeDefined();
 
-    const result = await listToolsCall![1]({} as never, {} as never);
+    const result = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
     const tools = (result as { tools: Array<Record<string, unknown>> }).tools;
     expect(tools.length).toBeGreaterThan(0);
     for (const tool of tools) {
@@ -155,7 +150,7 @@ describe('DesktopMcpServer', () => {
     expect(server.ownsMcpServer).toBe(false);
     const listToolsCall = vi
       .mocked(sharedMcpServer.server.setRequestHandler)
-      .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      .mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeUndefined();
   });
 
@@ -178,8 +173,8 @@ describe('DesktopMcpServer', () => {
       await server.registerTools();
       const listToolsCall = vi
         .mocked(server.mcpServer.server.setRequestHandler)
-        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
-      const listResult = await listToolsCall![1]({} as never, {} as never);
+        .mock.calls.find(([method]) => method === 'tools/list');
+      const listResult = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
       const listedTools = (listResult as { tools: McpTool[] }).tools;
 
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
@@ -285,12 +280,7 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
     const description = await Provider.from(tool.description);
     if (typeof title === 'string') values.push(title);
     values.push(description);
-    const paramsSchema = await Provider.from(tool.paramsSchema);
-    const obj = normalizeObjectSchema(paramsSchema as any);
-    const inputSchema = obj
-      ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object', properties: {} };
-    collectSchemaDescriptions(inputSchema);
+    collectSchemaDescriptions((await getDesktopToolListEntry(tool)).inputSchema);
   }
 
   return values;
@@ -304,6 +294,47 @@ describe('desktop tools/list Tableau vocabulary', () => {
       .sort();
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('stripEmptySchemaNoise', () => {
+  it('drops empty descriptions and string-only propertyNames at any depth', () => {
+    const schema = {
+      type: 'object',
+      description: '',
+      properties: {
+        caption: { type: 'string', description: '' },
+        filters: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string', description: '' }] },
+      },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      properties: {
+        caption: { type: 'string' },
+        filters: { type: 'object', additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string' }] },
+      },
+    });
+  });
+
+  it('keeps real descriptions and constrained propertyNames', () => {
+    const schema = {
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    });
   });
 });
 
@@ -322,16 +353,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2651], // raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
-    ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
-    ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
-    ['run-dashboard-batch', 1302], // remeasured after accepting an empty KPI list
-    ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
-    // Approved with the tool-search transition: the per-sheet schema prevents partial
-    // cross-field bulk edits; preserve that contract instead of compressing its names.
-    ['format-worksheets', 1097],
+    ['bind-template', 2620], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
+    ['add-field', 1367], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
+    ['apply-worksheet', 1489], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
+    ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
+    ['author-action', 2546], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

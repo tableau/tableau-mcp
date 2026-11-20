@@ -1,15 +1,12 @@
-import { McpServer, ResourceTemplate, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-  ServerNotification,
-  ServerRequest,
+  CallToolResult,
+  McpServer,
+  ProtocolError,
+  ProtocolErrorCode,
+  ResourceTemplate,
+  ServerContext,
   Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/server';
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
@@ -43,6 +40,7 @@ import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
+import { getRequestFields, toInputJsonSchema, toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
 const serverName = DESKTOP_MCP_NAME;
@@ -309,20 +307,17 @@ export class DesktopMcpServer extends Server {
     });
 
     for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
-      const toolCallback: ToolCallback<typeof paramsSchema> = async (
-        args: typeof paramsSchema,
-        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
-      ) => {
+      const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
         const tableauToolCallback = await Provider.from(callback);
         // One clock per tool call, composed into extra.signal so the socket really aborts.
         const deadline = createCallDeadline({
-          clientSignal: extra.signal,
+          clientSignal: extra.mcpReq.signal,
           budgetMs: config.desktopCallTimeoutMs,
         });
 
         try {
           const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
-            ...extra,
+            ...getRequestFields(extra),
             signal: deadline.signal,
             deadline,
             config,
@@ -343,7 +338,7 @@ export class DesktopMcpServer extends Server {
         {
           title: await Provider.from(title),
           description: await Provider.from(description),
-          inputSchema: await Provider.from(paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(paramsSchema)),
           annotations: await Provider.from(annotations),
           ...getDesktopToolMeta(name),
         },
@@ -368,7 +363,7 @@ export class DesktopMcpServer extends Server {
     // McpServer. On the combined variant's shared server, overriding tools/list
     // would hide the web half's tools (including ones combined-lean registers late).
     if (this.ownsMcpServer) {
-      this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      this.mcpServer.server.setRequestHandler('tools/list', async () => ({
         tools: listedTools,
       }));
     }
@@ -424,12 +419,15 @@ export class DesktopMcpServer extends Server {
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];
         if (typeof slug !== 'string' || !slug) {
-          throw new McpError(ErrorCode.InvalidParams, 'Missing expertise slug in URI.');
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
+            'Missing expertise slug in URI.',
+          );
         }
         const text = readExpertiseResource(`expertise://tableau/${slug}`);
         if (!text) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
             `Unknown expertise resource: expertise://tableau/${slug}`,
           );
         }
@@ -441,7 +439,10 @@ export class DesktopMcpServer extends Server {
   private _registerDashboardXmlGuide = async (): Promise<void> => {
     const text = readResourceAsset('dashboard-xml-guide.md');
     if (text === null) {
-      throw new McpError(ErrorCode.InternalError, 'Dashboard layout guide asset not found.');
+      throw new ProtocolError(
+        ProtocolErrorCode.InternalError,
+        'Dashboard layout guide asset not found.',
+      );
     }
     this.registerResource({
       name: 'dashboard-xml-guide',
@@ -461,14 +462,12 @@ function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
 }
 
 export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {
-  const paramsSchema = await Provider.from(tool.paramsSchema);
-  const objectSchema = normalizeObjectSchema(paramsSchema as any);
-  const inputSchema = (
-    objectSchema
-      ? toJsonSchemaCompat(objectSchema, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object' as const, properties: {} }
+  // Same conversion the SDK's own tools/list applies, minus the $schema dialect tag.
+  const inputSchema = toInputJsonSchema(
+    toStandardSchema(await Provider.from(tool.paramsSchema)),
   ) as McpTool['inputSchema'] & { $schema?: string };
   delete inputSchema.$schema;
+  stripEmptySchemaNoise(inputSchema);
 
   return {
     name: tool.name,
@@ -478,6 +477,28 @@ export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<M
     annotations: await Provider.from(tool.annotations),
     ...getDesktopToolMeta(tool.name),
   };
+}
+
+// zod 4 emits empty descriptions and `propertyNames: {type: 'string'}` on every record (JSON keys
+// are always strings); neither tells the model anything, and both count against the size budget.
+export function stripEmptySchemaNoise(node: unknown): void {
+  if (Array.isArray(node)) {
+    node.forEach(stripEmptySchemaNoise);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const obj = node as Record<string, unknown>;
+  if (obj.description === '') delete obj.description;
+  const names = obj.propertyNames as Record<string, unknown> | undefined;
+  if (
+    obj.type === 'object' &&
+    names &&
+    Object.keys(names).length === 1 &&
+    names.type === 'string'
+  ) {
+    delete obj.propertyNames;
+  }
+  Object.values(obj).forEach(stripEmptySchemaNoise);
 }
 
 // _meta is a client flag (Claude Code reads alwaysLoad from it); it never reaches the model.

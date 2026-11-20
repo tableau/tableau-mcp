@@ -6,7 +6,7 @@
  * The tool callbacks are called directly (bypassing MCP input validation) against the REAL SDK
  * methods, so this proves the SDK guards alone stop the payload before any request is sent.
  */
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import * as loggerModule from '../../logging/logger.js';

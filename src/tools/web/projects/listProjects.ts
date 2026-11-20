@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -50,7 +50,6 @@ const capabilityParamsSchema = z.object(paramsSchema);
 const baseParamsSchema = capabilityParamsSchema.omit({ capability: true });
 type ListProjectsParamsSchema = z.ZodType<
   z.output<typeof capabilityParamsSchema>,
-  z.ZodTypeDef,
   z.input<typeof capabilityParamsSchema>
 >;
 

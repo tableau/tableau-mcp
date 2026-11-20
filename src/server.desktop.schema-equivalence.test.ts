@@ -1,7 +1,5 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer, type Tool } from '@modelcontextprotocol/server';
 
 import { getDesktopConfig } from './config.desktop.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
@@ -11,12 +9,14 @@ import {
   DesktopMcpServer,
   getDesktopToolListEntry,
   getModelFacingToolEntry,
+  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import type { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
-vi.unmock('@modelcontextprotocol/sdk/server/mcp.js');
+vi.unmock('@modelcontextprotocol/server');
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: vi.fn(() => false) })),
 }));
@@ -26,6 +26,7 @@ function normalizeSdkTool(tool: Tool): Tool {
     inputSchema: Tool['inputSchema'] & { $schema?: string };
   };
   delete normalized.inputSchema.$schema;
+  stripEmptySchemaNoise(normalized.inputSchema);
   delete normalized._meta;
   delete normalized.execution;
   const annotations = normalized.annotations;
@@ -52,7 +53,7 @@ describe('getDesktopToolListEntry SDK schema equivalence', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
         },
         async () => ({ content: [] }),
