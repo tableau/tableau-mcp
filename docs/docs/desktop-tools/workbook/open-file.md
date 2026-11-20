@@ -8,7 +8,7 @@ sidebar_position: 9
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Opens a local file in %product_name% by absolute path: a `.twb`/`.twbx` opens as a workbook, while a datasource file (Excel, `.tds`, extract, and the like) attaches to the open workbook. Opening a workbook while one is already open launches a new window, but this session stays bound to the original — reads keep reporting the first workbook, not the newly opened one.
+Opens a local file in %product_name% by absolute path: a `.twb`/`.twbx` opens as a workbook, while a datasource file (Excel, `.tds`, extract, and the like) attaches to the open workbook. Opening a different workbook while one is already open launches a new window (an empty, unsaved workbook is replaced instead, and reopening the open file reloads it after a save prompt), but this session stays bound to the original — reads keep reporting the first workbook, not the newly opened one.
 
 :::note[Not read-only]
 This tool is not read-only and not idempotent. It opens a file in the live %product_name% session, so repeating the call is not a no-op.
@@ -34,7 +34,7 @@ Absolute path of the local file to open. Type: string. Must contain at least one
 ```
 
 :::note[New window vs this session]
-When `filePath` points at a `.twb` or `.twbx` and a workbook is already open, %product_name% launches that file in a new window. This session stays bound to the original workbook: later reads still describe the first workbook, not the one just opened. Opening a datasource file does not start a new window — it attaches to the workbook this session already has.
+When `filePath` points at a different `.twb` or `.twbx` and a workbook is already open, %product_name% launches that file in a new window, unless the open workbook is empty and unsaved, in which case it is replaced. Pointing at the file already open reloads it after a save prompt. This session stays bound to the original workbook: later reads still describe the first workbook, not the one just opened. Opening a datasource file does not start a new window — it attaches to the workbook this session already has.
 :::
 
 ## Optional arguments
@@ -44,7 +44,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note[Session resolution does not guess]
 With no `session` given and no %product_name% instance running, or more than one running, the tool reports an error rather than picking one; the multiple-instance error lists the session IDs to choose from. A `session` that names an instance which is not among the running ones is refused the same way.
@@ -70,6 +70,6 @@ With no `session` given and no %product_name% instance running, or more than one
 
 ## Related
 
-- [`save-workbook`](./save-workbook.md) — saves the session-bound open workbook in place, or a copy to an absolute path.
+- [`save-workbook`](./save-workbook.md) — saves the session-bound open workbook in place, or Save As to an absolute path, which becomes the open document.
 - `get-sheets` — lists worksheets in the workbook this session is bound to, which remains the original workbook if `open-file` launched a second window.
 - `get-xml` — reads the structure of that same session-bound workbook.

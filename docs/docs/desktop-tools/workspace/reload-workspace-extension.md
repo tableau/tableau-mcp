@@ -47,7 +47,7 @@ Identifier of the target %product_name% session. Type: string. Optional when a s
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 :::note
 With no session to resolve — none pinned, and either no running instance or more than one — the tool refuses instead of choosing. The multiple-instance refusal lists the session ids and points at [`list-instances`](../session/list-instances.md). A `session` that is not among the running instances is refused as well.

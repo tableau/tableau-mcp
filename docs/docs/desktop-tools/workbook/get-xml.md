@@ -32,7 +32,7 @@ Session ID. Optional when a session is pinned or only one %product_name% instanc
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 

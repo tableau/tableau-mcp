@@ -237,7 +237,7 @@
       "folder": "external-api",
       "label": "External API",
       "position": 15,
-      "description": "Passthrough tools that expose the Tableau Studio external API surface (site, dashboard, worksheet, and health info).",
+      "description": "Passthrough tools that expose the Tableau Studio external API surface (capabilities, workbook diagnostics, and operations).",
       "collapsed": null,
       "hasOverview": false
     },
@@ -267,7 +267,7 @@
       "folder": "session",
       "label": "Session",
       "position": 1,
-      "description": "Tools for discovering local Tableau Studio instances and detecting user-made changes for the current session.",
+      "description": "Tools for discovering local Tableau Studio instances and reading app and session state.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -287,7 +287,7 @@
       "folder": "tableau-agent",
       "label": "Tableau Agent",
       "position": 17,
-      "description": "Tools that control Tableau Agent chrome: refreshing auto-updates and the start-page visibility.",
+      "description": "Tools that control Tableau Agent chrome: the start-page visibility.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -297,7 +297,7 @@
       "folder": "template",
       "label": "Templates",
       "position": 11,
-      "description": "Tools for injecting XML templates into the open workbook.",
+      "description": "Tools for building worksheet artifacts from templates.",
       "collapsed": null,
       "hasOverview": false
     },
@@ -460,7 +460,7 @@
       "sidebarPosition": 1
     },
     "get-app-info": {
-      "category": "desktop-tools/data-source",
+      "category": "desktop-tools/session",
       "sidebarPosition": 7
     },
     "get-capabilities": {
@@ -664,7 +664,7 @@
       "sidebarPosition": 4
     },
     "publish-workbook": {
-      "category": "desktop-tools/workbook",
+      "category": "web-tools/workbooks",
       "sidebarPosition": 18
     },
     "query-admin-insights": {
@@ -692,8 +692,8 @@
       "sidebarPosition": 5
     },
     "refresh-auto-updates": {
-      "category": "desktop-tools/tableau-agent",
-      "sidebarPosition": 1
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 18
     },
     "refresh-datasource": {
       "category": "desktop-tools/data-source",
