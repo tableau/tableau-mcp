@@ -589,6 +589,9 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 | `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
 | `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
 | `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
+| `mcp_version` | version of this MCP server | version of this MCP server |
+| `client_name` | `clientInfo.name` from the MCP `initialize` request (not the OAuth client behind `oauth_client_display_name`), cut to 200 characters. Empty in stateless HTTP (`DISABLE_SESSION_MANAGEMENT=true`) | `clientInfo.name` from the MCP `initialize` request, cut to 200 characters |
+| `client_version` | `clientInfo.version` from the MCP `initialize` request, cut to 200 characters. Empty in stateless HTTP (`DISABLE_SESSION_MANAGEMENT=true`) | `clientInfo.version` from the MCP `initialize` request, cut to 200 characters |
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to

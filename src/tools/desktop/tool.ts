@@ -17,7 +17,7 @@ import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { getClientTelemetryFields, LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
@@ -219,6 +219,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     } finally {
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
+        ...getClientTelemetryFields(this.server),
         request_id: requestId.toString(),
         // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)
         session_id: extra.config.desktopSessionLuid ?? '',

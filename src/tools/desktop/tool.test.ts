@@ -4,6 +4,7 @@ import os from 'os';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
+import pkg from '../../../package.json';
 import { Config } from '../../config.desktop.js';
 import { createCallDeadline } from '../../desktop/callDeadline.js';
 import * as episodeEvents from '../../desktop/episode-events.js';
@@ -12,6 +13,7 @@ import { sessionRouteState } from '../../desktop/route/route-state.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
+import { ClientInfo } from '../../server.js';
 import { Provider } from '../../utils/provider.js';
 import { DesktopTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -413,7 +415,44 @@ describe('DesktopTool product telemetry', () => {
       oauth_client_id: '',
       oauth_client_display_name: '',
       auth_type: 'desktop',
+      mcp_version: pkg.version,
+      // stdio fallback: the global McpServer mock's getClientVersion()
+      client_name: 'test-client',
+      client_version: '1.0.0',
     });
+  });
+
+  it('tags tool_call with the server version and the MCP clientInfo name and version', async () => {
+    await makeTool('ask-user', { name: 'tableau-studio', version: '2.3.4' }).logAndExecute({
+      extra: extraWithConfig({}),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        mcp_version: pkg.version,
+        client_name: 'tableau-studio',
+        client_version: '2.3.4',
+      }),
+    );
+  });
+
+  it('caps client_name and client_version at 200 characters', async () => {
+    await makeTool('ask-user', { name: 'n'.repeat(500), version: 'v'.repeat(500) }).logAndExecute({
+      extra: extraWithConfig({}),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        client_name: 'n'.repeat(200),
+        client_version: 'v'.repeat(200),
+      }),
+    );
   });
 
   it('forwards the signed-in site and user LUID from config', async () => {
@@ -666,9 +705,12 @@ describe('DesktopTool product telemetry', () => {
   });
 });
 
-function makeTool(name: DesktopToolName = 'ask-user'): DesktopTool<{ session: any }> {
+function makeTool(
+  name: DesktopToolName = 'ask-user',
+  clientInfo?: ClientInfo,
+): DesktopTool<{ session: any }> {
   return new DesktopTool({
-    server: new DesktopMcpServer(),
+    server: new DesktopMcpServer({ clientInfo }),
     name,
     title: 'Ask User',
     description: 'Test tool',

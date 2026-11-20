@@ -10,6 +10,7 @@ import { z, ZodRawShape } from 'zod';
 import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
+import { MAX_TELEMETRY_CLIENT_ID_LENGTH } from '../telemetry/clientDisplayName.js';
 import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
@@ -83,6 +84,28 @@ export type LogAndExecuteParams<
   // A function that can transform a successful result of the callback into a CallToolResult
   getSuccessResult?: (result: T) => CallToolResult;
 };
+
+/**
+ * Server version and MCP initialize `clientInfo` for the `tool_call` product telemetry event.
+ * Client-supplied values are capped like the OAuth client id. Never throws: telemetry must not
+ * break a tool call.
+ */
+export function getClientTelemetryFields(server: Server): {
+  mcp_version: string;
+  client_name: string;
+  client_version: string;
+} {
+  try {
+    const clientInfo = server.clientInfo;
+    return {
+      mcp_version: server.version,
+      client_name: (clientInfo?.name ?? '').slice(0, MAX_TELEMETRY_CLIENT_ID_LENGTH),
+      client_version: (clientInfo?.version ?? '').slice(0, MAX_TELEMETRY_CLIENT_ID_LENGTH),
+    };
+  } catch {
+    return { mcp_version: '', client_name: '', client_version: '' };
+  }
+}
 
 /**
  * Represents an MCP tool
