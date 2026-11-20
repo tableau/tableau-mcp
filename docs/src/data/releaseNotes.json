@@ -424,10 +424,10 @@
     "summary": "Reports application information about the Tableau instance that is currently running.",
     "date": "2026-09-01",
     "changeType": "ADD",
-    "toolCategory": "Data Sources",
+    "toolCategory": "Session",
     "toolType": "Desktop Tools",
     "toolName": "get-app-info",
-    "docPath": "/docs/desktop-tools/data-source/get-app-info"
+    "docPath": "/docs/desktop-tools/session/get-app-info"
   },
   {
     "title": "Get Summary Data",
@@ -940,14 +940,14 @@
   },
   {
     "title": "Publish Workbook",
-    "summary": "Opens the Publish Workbook dialog for the open workbook. Success means the dialog launched, not that a publish landed.",
+    "summary": "Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau.",
     "date": "2026-11-01",
     "changeType": "ADD",
     "toolCategory": "Workbooks",
-    "toolType": "Desktop Tools",
+    "toolType": "Web Tools",
     "toolName": "publish-workbook",
-    "docPath": "/docs/desktop-tools/workbook/publish-workbook",
-    "sourceCommit": "0da0f3336b33"
+    "docPath": "/docs/web-tools/workbooks/publish-workbook",
+    "sourceCommit": "c5e4bb24d02e"
   },
   {
     "title": "Search Workbook Fields",
@@ -976,10 +976,10 @@
     "summary": "Also returns live UI state: Start Page visibility, whether the Data Source page is active, and presentation mode, alongside build identification.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
-    "toolCategory": "Data Sources",
+    "toolCategory": "Session",
     "toolType": "Desktop Tools",
     "toolName": "get-app-info",
-    "docPath": "/docs/desktop-tools/data-source/get-app-info",
+    "docPath": "/docs/desktop-tools/session/get-app-info",
     "sourceCommit": "0da0f3336b33"
   },
   {
@@ -1094,13 +1094,13 @@
   },
   {
     "title": "Refresh Auto Updates",
-    "summary": "Runs pending automatic updates for one worksheet now. Use after batching edits with pause-auto-updates.",
+    "summary": "Runs pending automatic updates for one worksheet now. Use after batching edits with set-auto-updates-paused.",
     "date": "2026-11-01",
     "changeType": "ADD",
-    "toolCategory": "Tableau Agent",
+    "toolCategory": "Workbooks",
     "toolType": "Desktop Tools",
     "toolName": "refresh-auto-updates",
-    "docPath": "/docs/desktop-tools/tableau-agent/refresh-auto-updates",
+    "docPath": "/docs/desktop-tools/workbook/refresh-auto-updates",
     "sourceCommit": "20adccf8fa79"
   },
   {
@@ -1407,14 +1407,24 @@
     "docPath": "/docs/web-tools/flows/run-flow-task"
   },
   {
-    "title": "Scaffold a Desktop data app",
-    "summary": "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as simple-id. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.",
+    "title": "Scaffold a data app",
+    "summary": "Scaffolds a new Tableau data app workspace: a starter viz extension that queries a published datasource live through the Extensions API.",
     "date": "2026-11-01",
     "changeType": "ADD",
     "toolCategory": "Data Apps",
     "toolType": "Web Tools",
     "toolName": "scaffold-data-app",
     "docPath": "/docs/web-tools/data-apps/scaffold-data-app"
+  },
+  {
+    "title": "Scaffold a Desktop data app",
+    "summary": "Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as simple-id. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.",
+    "date": "2026-11-01",
+    "changeType": "ADD",
+    "toolCategory": "Worksheets",
+    "toolType": "Desktop Tools",
+    "toolName": "scaffold-data-app",
+    "docPath": "/docs/desktop-tools/worksheet/scaffold-data-app"
   },
   {
     "title": "Set Data Source Page Active",

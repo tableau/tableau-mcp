@@ -51,18 +51,23 @@ Search text matched against template **ids** — not against descriptions, keywo
 template's contents. Trimmed, `1`–`256` characters. When omitted, every template in the
 catalog is a candidate and the page is ordered by id.
 
-Matching runs in one of two modes, chosen automatically:
+Matching runs in one of three modes, chosen automatically:
 
-- **Substring** — when at least one template id contains the query as a case-insensitive
-  substring, only those templates match, ordered by id
-- **Token** — otherwise the query is split on non-alphanumeric characters and matched against
-  the tokens of each template id; a template matches when it shares at least one token. Plural
+- **Exact id** — when the query equals a template id (case-insensitive), only that template
+  matches
+- **Token** — otherwise, when at least one template id shares a token with the query, the query
+  is split on non-alphanumeric characters and matched against the tokens of each template id; a
+  template matches when it shares at least one token. Plural
   and participle forms fold together, so `ranked`, `ranking`, and `ranks` all match `rank`, and
   `bars`, `columns`, `maps`, `charts`, `rates`, and `ratios` match their singular form.
   Orientation and styling words count as synonyms of the shape that has them: `horizontal`
   matches a `bar` template, `vertical` a `column` template, and `filled` a `choropleth`
   template. Matches are ranked by score — an orientation match counts most, then `rank`, then
-  any other shared token — with a shorter id breaking a tie and id order breaking the rest
+  any other shared token — with the template preferred for a chart noun (for example
+  `ranking-ordered-bar` for `bar`) breaking a tie, then (when `includeSlots` is `true`) a
+  validation-passing template, then a shorter id, and id order breaking the rest
+- **Substring** — otherwise, when at least one template id contains the query as a
+  case-insensitive substring, only those templates match, ordered by id
 
 #### Specialized variants
 
@@ -103,7 +108,7 @@ empty page.
 
 :::note[Page with the filters that produced the cursor]
 A cursor is only meaningful for the filters it came from, since those filters decide the
-candidate list it indexes into. Pass the same `query` and `pass1EligibleOnly` alongside it. A
+candidate list it indexes into. Pass the same `query` and `requiredChannels` alongside it. A
 cursor that is not the id of a candidate under the current filters is refused with
 `Invalid template cursor "<id>" for the current filters.` and no page is returned.
 :::
@@ -227,35 +232,19 @@ A template is kept only when it provides **every** listed channel. Combine with 
 
 ## Example results
 
-### A search, first page (`query: "bar"`, `limit: 2`)
+### A search, first page (`query: "bar"`, `limit: 1`)
 
 `nextCursor` is non-null, so more candidates remain past this page.
 
 ```json
 {
-  "total": 39,
-  "candidateCount": 3,
-  "scanned": 2,
-  "count": 2,
+  "total": 137,
+  "candidateCount": 8,
+  "scanned": 1,
+  "count": 1,
   "nextCursor": "ranking-ordered-bar",
   "diagnostics": { "count": 0, "returned": 0, "truncated": false, "templates": [] },
   "templates": [
-    {
-      "template": "magnitude-horizontal-bar",
-      "provenance": "protected",
-      "overridesLowerPrecedence": false,
-      "pass1_eligible": true,
-      "pass1_blockers": [],
-      "slot_signature": {
-        "total": 2,
-        "required": 2,
-        "kinds": ["categorical", "quantitative"],
-        "required_slots": [
-          { "slot_id": "field_base_1", "kind": "categorical" },
-          { "slot_id": "field_base_2", "kind": "quantitative" }
-        ]
-      }
-    },
     {
       "template": "ranking-ordered-bar",
       "provenance": "protected",
@@ -267,10 +256,30 @@ A template is kept only when it provides **every** listed channel. Combine with 
         "required": 2,
         "kinds": ["categorical", "quantitative"],
         "required_slots": [
-          { "slot_id": "field_base_1", "kind": "categorical" },
-          { "slot_id": "field_base_2", "kind": "quantitative" }
-        ]
-      }
+          {
+            "slot_id": "field_base_1",
+            "kind": "categorical",
+            "derivation": "none",
+            "role": ["rows"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_2",
+            "kind": "quantitative",
+            "derivation": "sum",
+            "role": ["cols"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          }
+        ],
+        "optional_slots": []
+      },
+      "visible_channels": {
+        "direct": ["rows", "cols"],
+        "calculated": []
+      },
+      "same_field_groups": []
     }
   ]
 }
@@ -278,33 +287,76 @@ A template is kept only when it provides **every** listed channel. Combine with 
 
 ### The last page (`cursor` from the previous page)
 
-Called as `{ "query": "bar", "limit": 2, "cursor": "ranking-ordered-bar" }`. `nextCursor` is
+Called as `{ "query": "bar", "limit": 1, "cursor": "part-to-whole-stacked-bar-chart" }`. `nextCursor` is
 `null`, so this is the end of the results.
 
 ```json
 {
-  "total": 39,
-  "candidateCount": 3,
+  "total": 137,
+  "candidateCount": 8,
   "scanned": 1,
   "count": 1,
   "nextCursor": null,
   "diagnostics": { "count": 0, "returned": 0, "truncated": false, "templates": [] },
   "templates": [
     {
-      "template": "ranking-stacked-bar",
+      "template": "part-to-whole-proportional-stacked-bar",
       "provenance": "protected",
       "overridesLowerPrecedence": false,
       "pass1_eligible": true,
       "pass1_blockers": [],
       "slot_signature": {
-        "total": 3,
-        "required": 2,
+        "total": 4,
+        "required": 4,
         "kinds": ["categorical", "quantitative"],
         "required_slots": [
-          { "slot_id": "field_base_1", "kind": "categorical" },
-          { "slot_id": "field_base_2", "kind": "quantitative" }
+          {
+            "slot_id": "field_base_1",
+            "kind": "categorical",
+            "derivation": "none",
+            "role": ["rows"],
+            "binding_usage": "both",
+            "calculation_channels": ["size"]
+          },
+          {
+            "slot_id": "field_base_2_sum",
+            "kind": "quantitative",
+            "derivation": "sum",
+            "role": ["cols"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_3",
+            "kind": "categorical",
+            "derivation": "none",
+            "role": ["color"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_2_none",
+            "kind": "quantitative",
+            "derivation": "none",
+            "role": [],
+            "binding_usage": "calculation-input",
+            "calculation_channels": ["size"]
+          }
+        ],
+        "optional_slots": []
+      },
+      "visible_channels": {
+        "direct": ["rows", "cols", "color"],
+        "calculated": [
+          {
+            "channel": "size",
+            "dependency_slot_ids": ["field_base_1", "field_base_2_none"]
+          }
         ]
-      }
+      },
+      "same_field_groups": [
+        ["field_base_2_sum", "field_base_2_none"]
+      ]
     }
   ]
 }
@@ -317,7 +369,7 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
 
 ```json
 {
-  "total": 39,
+  "total": 137,
   "candidateCount": 1,
   "scanned": 1,
   "count": 1,
@@ -335,10 +387,30 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
         "required": 2,
         "kinds": ["categorical", "quantitative"],
         "required_slots": [
-          { "slot_id": "field_base_1", "kind": "categorical" },
-          { "slot_id": "field_base_2", "kind": "quantitative" }
-        ]
+          {
+            "slot_id": "field_base_1",
+            "kind": "categorical",
+            "derivation": "none",
+            "role": ["rows"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_2",
+            "kind": "quantitative",
+            "derivation": "sum",
+            "role": ["cols"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          }
+        ],
+        "optional_slots": []
       },
+      "visible_channels": {
+        "direct": ["rows", "cols"],
+        "calculated": []
+      },
+      "same_field_groups": [],
       "slots": [
         {
           "slot_id": "field_base_1",
@@ -346,7 +418,11 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
           "required": true,
           "bindable": true,
           "derivation": "none",
-          "role": ["rows"]
+          "role": ["rows"],
+          "binding_usage": "direct",
+          "calculation_channels": [],
+          "communicative_role": "axis-partition",
+          "purpose": "Categorical dimension that partitions rows (one mark group per member)."
         },
         {
           "slot_id": "field_base_2",
@@ -354,7 +430,11 @@ Called as `{ "query": "ranking-ordered-bar", "includeSlots": true }`, so `limit`
           "required": true,
           "bindable": true,
           "derivation": "sum",
-          "role": ["cols"]
+          "role": ["cols"],
+          "binding_usage": "direct",
+          "calculation_channels": [],
+          "communicative_role": "measure-value",
+          "purpose": "Continuous measure that drives the primary quantitative axis (bar length / position)."
         }
       ]
     }
@@ -368,7 +448,7 @@ An ineligible template is still returned by default, with the reasons it cannot 
 
 ```json
 {
-  "total": 39,
+  "total": 137,
   "candidateCount": 1,
   "scanned": 1,
   "count": 1,
@@ -376,20 +456,67 @@ An ineligible template is still returned by default, with the reasons it cannot 
   "diagnostics": { "count": 0, "returned": 0, "truncated": false, "templates": [] },
   "templates": [
     {
-      "template": "trend-indexed-growth",
+      "template": "ranking-bump-chart",
       "provenance": "protected",
       "overridesLowerPrecedence": false,
       "pass1_eligible": false,
-      "pass1_blockers": ["unresolved-table-calc-bareRefs: [Sales]"],
+      "pass1_blockers": ["unresolved-table-calc-bareRefs: {{field_base_2}}"],
       "slot_signature": {
-        "total": 2,
-        "required": 2,
-        "kinds": ["quantitative", "temporal"],
+        "total": 4,
+        "required": 4,
+        "kinds": ["categorical", "quantitative", "temporal"],
         "required_slots": [
-          { "slot_id": "field_base_1", "kind": "temporal" },
-          { "slot_id": "field_base_2", "kind": "quantitative" }
+          {
+            "slot_id": "field_base_1_yr",
+            "kind": "temporal",
+            "derivation": "yr",
+            "role": ["cols", "filter"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_1_mn",
+            "kind": "temporal",
+            "derivation": "mn",
+            "role": ["cols"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_2",
+            "kind": "categorical",
+            "derivation": "none",
+            "role": ["color"],
+            "binding_usage": "direct",
+            "calculation_channels": []
+          },
+          {
+            "slot_id": "field_base_3",
+            "kind": "quantitative",
+            "derivation": "none",
+            "role": [],
+            "binding_usage": "calculation-input",
+            "calculation_channels": ["rows", "text"]
+          }
+        ],
+        "optional_slots": []
+      },
+      "visible_channels": {
+        "direct": ["cols", "color"],
+        "calculated": [
+          {
+            "channel": "rows",
+            "dependency_slot_ids": ["field_base_3"]
+          },
+          {
+            "channel": "text",
+            "dependency_slot_ids": ["field_base_3"]
+          }
         ]
-      }
+      },
+      "same_field_groups": [
+        ["field_base_1_yr", "field_base_1_mn"]
+      ]
     }
   ]
 }
