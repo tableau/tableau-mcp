@@ -211,10 +211,17 @@ function isQualifiedReferenceSeparator(separator: string): boolean {
   return sawDot;
 }
 
-function scanUnqualifiedCalculationReferences(
-  formula: string,
-): Array<{ value: string; start: number; end: number; lodDepth: number }> {
-  const references: Array<{ value: string; start: number; end: number; lodDepth: number }> = [];
+type ScannedReference = { value: string; start: number; end: number; lodDepth: number };
+
+/**
+ * Every bracket reference outside strings and comments, in source order. `joinedToNext`
+ * holds index i when reference i and i + 1 form a qualified `[Datasource].[Field]` pair.
+ */
+function scanCalculationReferences(formula: string): {
+  references: ScannedReference[];
+  joinedToNext: ReadonlySet<number>;
+} {
+  const references: ScannedReference[] = [];
   let quote: "'" | '"' | undefined;
   let inLineComment = false;
   let inBlockComment = false;
@@ -289,16 +296,48 @@ function scanUnqualifiedCalculationReferences(
     }
   }
 
-  const qualified = new Set<number>();
+  const joinedToNext = new Set<number>();
   for (let index = 1; index < references.length; index += 1) {
     const between = formula.slice(references[index - 1].end, references[index].start);
-    if (isQualifiedReferenceSeparator(between)) {
-      qualified.add(index - 1);
-      qualified.add(index);
-    }
+    if (isQualifiedReferenceSeparator(between)) joinedToNext.add(index - 1);
   }
 
-  return references.filter((_reference, index) => !qualified.has(index));
+  return { references, joinedToNext };
+}
+
+function scanUnqualifiedCalculationReferences(formula: string): ScannedReference[] {
+  const { references, joinedToNext } = scanCalculationReferences(formula);
+  return references.filter(
+    (_reference, index) => !joinedToNext.has(index) && !joinedToNext.has(index - 1),
+  );
+}
+
+function bareReferenceName(reference: string): string {
+  return reference.slice(1, -1).replaceAll(']]', ']');
+}
+
+/**
+ * Every field a formula names, LOD inputs included, deduped in first-appearance order.
+ * A `[Datasource].[Field]` pair keeps its datasource; a bare `[Field]` has none.
+ */
+export function getCalculationFieldReferences(
+  formula: string,
+): Array<{ datasource?: string; field: string }> {
+  const { references, joinedToNext } = scanCalculationReferences(formula);
+  const fields = new Map<string, { datasource?: string; field: string }>();
+
+  for (let index = 0; index < references.length; index += 1) {
+    let last = index;
+    while (joinedToNext.has(last)) last += 1;
+    const field = bareReferenceName(references[last].value);
+    const datasource = last > index ? bareReferenceName(references[index].value) : undefined;
+    const key = `${datasource ?? ''}\u0000${field}`;
+    if (!fields.has(key))
+      fields.set(key, datasource === undefined ? { field } : { datasource, field });
+    index = last;
+  }
+
+  return [...fields.values()];
 }
 
 function getUnqualifiedCalculationReferences(formula: string): string[] {

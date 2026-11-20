@@ -113,6 +113,9 @@ export function parseDatasourceQualifiedColumnRef(
   };
 }
 
+// Same roles as `instance_role` in binder/manifest-types.ts.
+const INSTANCE_PIVOT_SUFFIXED = /^(.*):(nk|ok|qk):\d+$/;
+
 export function parseColumnInstanceRef(columnInstanceRef: string): ColumnInstanceRefParts | null {
   if (!columnInstanceRef.startsWith('[') || !columnInstanceRef.endsWith(']')) {
     return null;
@@ -120,16 +123,19 @@ export function parseColumnInstanceRef(columnInstanceRef: string): ColumnInstanc
 
   const instance = columnInstanceRef.slice(1, -1);
   const first = instance.indexOf(':');
-  const last = instance.lastIndexOf(':');
+  // Desktop saves a numeric uniqueness suffix: [usr:Calc_1:nk:13] is pivot `nk` of field `Calc_1`.
+  const suffixed = INSTANCE_PIVOT_SUFFIXED.exec(instance);
+  const body = suffixed ? `${suffixed[1]}:${suffixed[2]}` : instance;
+  const last = body.lastIndexOf(':');
   if (first <= 0 || last <= first) return null;
 
-  const localFieldName = instance.slice(first + 1, last);
+  const localFieldName = body.slice(first + 1, last);
   if (!localFieldName) return null;
 
   return {
-    derivation: instance.slice(0, first),
+    derivation: body.slice(0, first),
     localFieldName,
-    pivot: instance.slice(last + 1),
+    pivot: body.slice(last + 1),
     columnInstanceName: `[${instance}]`,
   };
 }

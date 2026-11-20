@@ -57,6 +57,7 @@ import { getAuthorCalcTool } from './authoring/datasource/authorCalc.js';
 import { getAuthorParameterTool } from './authoring/datasource/authorParameter.js';
 import { getAuthorSetTool } from './authoring/datasource/authorSet.js';
 import { getAddFieldTool } from './authoring/fields/addField.js';
+import { getGetFieldDependenciesTool } from './authoring/fields/getFieldDependencies.js';
 import { getListAvailableFieldsTool } from './authoring/fields/listAvailableFields.js';
 import { getRemoveFieldTool } from './authoring/fields/removeField.js';
 import { getResolveFieldTool } from './authoring/fields/resolveField.js';
@@ -124,6 +125,7 @@ export const desktopToolFactories = [
   getRemoveFieldTool,
   getResolveFieldTool,
   getSearchWorkbookFieldsTool,
+  getGetFieldDependenciesTool,
   getAskUserTool,
   getBindTemplateTool,
   getRunDashboardBatchTool,

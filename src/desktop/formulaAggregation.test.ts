@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   createCalculationAggregationResolver,
   formulaRequiresUserDerivation,
+  getCalculationDependencyReferences,
+  getCalculationFieldReferences,
 } from './formulaAggregation.js';
+import { normalizeArray, parseXML } from './metadata/parser.js';
 
 describe('formulaRequiresUserDerivation', () => {
   it.each([
@@ -142,5 +148,79 @@ describe('createCalculationAggregationResolver', () => {
 
     expect(resolveAggregation('[Field 24]')).toBe(false);
     expect(formulas.getCount - getCountBeforeResolution).toBeLessThanOrEqual(formulas.size);
+  });
+});
+
+describe('getCalculationFieldReferences', () => {
+  it('keeps a qualified parameter reference as a datasource and field pair', () => {
+    expect(getCalculationFieldReferences('[Sales] * [Parameters].[Parameter 1]')).toEqual([
+      { field: 'Sales' },
+      { datasource: 'Parameters', field: 'Parameter 1' },
+    ]);
+  });
+
+  it('skips references inside comments and string literals', () => {
+    expect(
+      getCalculationFieldReferences(
+        '[Sales] // + [Line Comment]\n+ LEN("[In String]") /* [Block Comment] */ + [Profit]',
+      ),
+    ).toEqual([{ field: 'Sales' }, { field: 'Profit' }]);
+  });
+
+  it('unescapes a doubled closing bracket', () => {
+    expect(getCalculationFieldReferences('[Weird]]Name] + 1')).toEqual([{ field: 'Weird]Name' }]);
+  });
+
+  it('keeps references inside an LOD expression', () => {
+    expect(getCalculationFieldReferences('{ FIXED [Sub-Category] : SUM([Profit]) }')).toEqual([
+      { field: 'Sub-Category' },
+      { field: 'Profit' },
+    ]);
+  });
+
+  it('dedupes in first-appearance order', () => {
+    expect(
+      getCalculationFieldReferences('[B] + [A] + [B] + [Parameters].[A] + [Parameters].[A]'),
+    ).toEqual([{ field: 'B' }, { field: 'A' }, { datasource: 'Parameters', field: 'A' }]);
+  });
+});
+
+describe('getCalculationDependencyReferences on the real Superstore document', () => {
+  const formulas = new Map<string, string>();
+  const workbook = parseXML(
+    readFileSync(
+      join(
+        process.cwd(),
+        'src/tools/desktop/authoring/datasource/__fixtures__/real-superstore-document.twb.xml',
+      ),
+      'utf-8',
+    ),
+  );
+  for (const datasource of normalizeArray(workbook.workbook?.datasources?.datasource)) {
+    for (const column of normalizeArray<any>(datasource.column)) {
+      const formula = column.calculation?.['@_formula'];
+      if (typeof formula === 'string') formulas.set(column['@_name'], formula);
+    }
+  }
+
+  // Pinned before the scanner was shared with getCalculationFieldReferences: add-field copies
+  // exactly these inputs, so any drift here changes live worksheet XML.
+  it.each([
+    [
+      '[Calc_ProfitTier]',
+      [
+        '[Calc_MemberProfit]',
+        '[Calc_TopThreshold]',
+        '[Calc_MemberProfit]',
+        '[Calc_BottomThreshold]',
+      ],
+    ],
+    [
+      '[Calc_DisplayProfit]',
+      ['[Calc_ProfitTier]', '[Profit]', '[Calc_ProfitTier]', '[Sub-Category]', '[Profit]'],
+    ],
+    ['[Calc_MemberProfit]', ['[Sub-Category]', '[Profit]']],
+  ])('returns the unchanged references for %s', (columnName, expected) => {
+    expect(getCalculationDependencyReferences(formulas.get(columnName)!)).toEqual(expected);
   });
 });

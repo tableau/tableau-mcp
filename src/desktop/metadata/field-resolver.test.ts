@@ -1,6 +1,7 @@
 import {
   formatCanonicalColumnRef,
   parseCanonicalColumnRef,
+  parseColumnInstanceRef,
   resolveField,
 } from './field-resolver.js';
 
@@ -234,5 +235,18 @@ describe('canonical column_ref helpers', () => {
 
   it('returns null for datasource-qualified refs that are not canonical instances', () => {
     expect(parseCanonicalColumnRef('[Sample].[Profit]')).toBeNull();
+  });
+});
+
+describe('parseColumnInstanceRef numeric suffix', () => {
+  it.each([
+    ['[usr:Calc_1:nk:13]', 'usr', 'Calc_1', 'nk'],
+    ['[usr:X_Path (copy):qk:1]', 'usr', 'X_Path (copy)', 'qk'],
+    ['[none:Cat:ok:2]', 'none', 'Cat', 'ok'],
+    ['[sum:Sales:qk]', 'sum', 'Sales', 'qk'],
+    ['[usr:Calc:7:nk]', 'usr', 'Calc:7', 'nk'],
+    ['[usr:A:zz:13]', 'usr', 'A:zz', '13'],
+  ])('parses %s', (ref, derivation, localFieldName, pivot) => {
+    expect(parseColumnInstanceRef(ref)).toMatchObject({ derivation, localFieldName, pivot });
   });
 });

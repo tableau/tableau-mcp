@@ -11,6 +11,10 @@ describe('ToolName', () => {
     expect(isDesktopToolName('capture-window-screenshot')).toBe(true);
   });
 
+  it('recognizes get-field-dependencies as a Desktop tool name', () => {
+    expect(isDesktopToolName('get-field-dependencies')).toBe(true);
+  });
+
   it('builds exactly the tool names listed in desktopToolNames, with no duplicates', () => {
     const server = new DesktopMcpServer();
     const factoryNames = [...desktopToolFactories, ...episodeToolFactories].map(
