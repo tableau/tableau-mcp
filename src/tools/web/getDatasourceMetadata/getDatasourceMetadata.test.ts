@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok } from 'ts-results-es';
 
 import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
