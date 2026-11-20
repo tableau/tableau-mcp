@@ -732,3 +732,35 @@ describe('dependency graph fix round 3', () => {
     );
   });
 });
+
+describe('bin size parameters and colon-bearing field names', () => {
+  const binXml = workbook(
+    "<datasource hasconnection='false' inline='true' name='Parameters'>" +
+      "<column caption='Profit Bin Size' datatype='integer' name='[Parameter 2]' param-domain-type='range' role='measure' type='quantitative' value='200'><calculation class='tableau' formula='200' /></column></datasource>" +
+      "<datasource name='ds'><column datatype='real' name='[Profit]' role='measure' type='quantitative' />" +
+      "<column aggregation='None' caption='Profit (bin)' datatype='integer' name='[Profit (bin)]' role='dimension' type='ordinal'>" +
+      "<calculation class='bin' decimals='0' formula='[Profit]' peg='0' size-parameter='[Parameters].[Parameter 2]' /></column></datasource>",
+  );
+
+  it('lists the bin column as a dependent of its size parameter', () => {
+    const result = getFieldDependencies(binXml, 'Profit Bin Size');
+    const names = result.roots[0].nodes.map((node) => node.name);
+    expect(names).toContain('Profit (bin)');
+    expect(result.summary).not.toContain('affects no fields');
+  });
+
+  it('still reaches the bin column from the field it bins', () => {
+    const names = getFieldDependencies(binXml, 'Profit').roots[0].nodes.map((node) => node.name);
+    expect(names).toContain('Profit (bin)');
+  });
+
+  it('keeps a set built on a field whose name has several colons as its dependent', () => {
+    const xml = workbook(
+      "<datasource name='ds'><column datatype='string' name='[Q1: Net: Sales]' role='dimension' type='nominal' />" +
+        "<group name='[Top Set]' name-style='unqualified' user:ui-builder='filter-group'>" +
+        "<groupfilter function='level-members' level='[Q1: Net: Sales]' /></group></datasource>",
+    );
+    const names = getFieldDependencies(xml, 'Q1: Net: Sales').roots[0].nodes.map((n) => n.name);
+    expect(names).toContain('Top Set');
+  });
+});

@@ -110,6 +110,8 @@ function walkGroupFilter(groupFilter: any, visit: (value: string) => void): void
     walkGroupFilter(nested, visit);
 }
 
+const INSTANCE_PIVOTS: ReadonlySet<string> = new Set(['nk', 'ok', 'qk']);
+
 /** Every field a formula-like value names; `instanceColumns` maps `[sum:Sales:qk]` back to `Sales`. */
 function columnsReferencedIn(
   value: string,
@@ -118,9 +120,12 @@ function columnsReferencedIn(
 ): Array<{ datasource: string; column: string }> {
   return getCalculationFieldReferences(value).map((reference) => {
     const datasource = reference.datasource ?? defaultDatasource;
+    const instance = parseColumnInstanceRef(`[${reference.field}]`);
+    // A name like `Q1: Net: Sales` also parses as an instance; only a real pivot makes it one.
+    const genuine = instance && INSTANCE_PIVOTS.has(instance.pivot) ? instance : null;
     const column =
       instanceColumns.get(fieldNodeId(datasource, reference.field)) ??
-      parseColumnInstanceRef(`[${reference.field}]`)?.localFieldName ??
+      genuine?.localFieldName ??
       reference.field;
     return { datasource, column };
   });
@@ -277,12 +282,25 @@ export function buildDependencyGraph(workbookXml: string): DependencyGraph {
     }
     for (const column of normalizeArray<any>(datasource.column)) {
       const columnName = column?.['@_name'];
-      const source = column?.calculation?.['@_column'];
-      if (typeof columnName !== 'string' || typeof source !== 'string') continue;
-      if (column.calculation['@_class'] !== 'categorical-bin') continue;
+      const calculation = column?.calculation;
+      if (typeof columnName !== 'string') continue;
       const from = fieldNodeId(datasourceName, bareName(columnName));
       if (!nodes.has(from)) continue;
-      addEdge({ from, to: resolveReference(datasourceName, bareName(source)), kind: 'formula' });
+      const source = calculation?.['@_column'];
+      if (typeof source === 'string' && calculation['@_class'] === 'categorical-bin') {
+        addEdge({ from, to: resolveReference(datasourceName, bareName(source)), kind: 'formula' });
+      }
+      // A numeric bin's width can come from a parameter; deleting it breaks the bin.
+      const sizeParameter = calculation?.['@_size-parameter'];
+      if (typeof sizeParameter === 'string') {
+        for (const { datasource: ds, column: target } of columnsReferencedIn(
+          sizeParameter,
+          datasourceName,
+          new Map(),
+        )) {
+          addEdge({ from, to: resolveReference(ds, target), kind: 'formula' });
+        }
+      }
     }
   }
 

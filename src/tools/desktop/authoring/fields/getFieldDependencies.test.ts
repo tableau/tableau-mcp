@@ -158,6 +158,7 @@ describe('getFieldDependenciesTool', () => {
     expect(error.statusCode).toBe(404);
     expect(result.content[0].text).toBe(error.message);
     expect(result.content[0].text).toContain('"Missing"');
+    expect(error.message).toContain('parameters are not searched there');
     expect(result.structuredContent).toBeUndefined();
   });
 
