@@ -78,6 +78,9 @@ export async function startExpressServer({
         'Cache-Control',
         'Accept',
         'MCP-Protocol-Version',
+        // 2026-07-28 requires these on every request (Mcp-Name on tools/call).
+        'Mcp-Method',
+        'Mcp-Name',
         X_TABLEAU_AUTH_HEADER,
         X_TABLEAU_MCP_CONFIG_HEADER,
       ],
@@ -98,48 +101,78 @@ export async function startExpressServer({
   }
   middleware.push(latencyMiddleware());
 
-  // 2026-07-28 traffic is stateless per request: one factory-built server per POST. The parsed body
-  // rides an AsyncLocalStorage so the factory can read the per-request client envelope, which it
-  // needs before registration (MCP Apps gating, client display name).
-  const modernRequestBody = new AsyncLocalStorage<unknown>();
-  const modernHandler = toNodeHandler(
-    createMcpHandler(
-      async ({ authInfo }) => {
-        const meta = getRequestMeta(modernRequestBody.getStore());
-        const server = new WebMcpServer({
-          clientInfo: meta?.[CLIENT_INFO_META_KEY] as ClientInfo | undefined,
-          capabilities: meta?.[CLIENT_CAPABILITIES_META_KEY] as
-            ClientCapabilitiesWithUiExtension | undefined,
-          clientId: authInfo?.clientId,
-        });
+  // 2026-07-28 traffic is stateless per request: one factory-built server per POST. The request rides
+  // an AsyncLocalStorage so the factory can read the per-request client envelope, which it needs
+  // before registration (MCP Apps gating, client display name).
+  const modernRequest = new AsyncLocalStorage<{
+    req: AuthenticatedRequest;
+    setupError?: unknown;
+  }>();
+  const modernMcpHandler = createMcpHandler(
+    async ({ authInfo }) => {
+      const context = modernRequest.getStore();
+      const meta = getRequestMeta(context?.req.body);
+      // The SDK calls the factory only after validating the envelope, so rejected requests aren't logged.
+      logModernClientOnce(meta);
+      const server = new WebMcpServer({
+        clientInfo: meta?.[CLIENT_INFO_META_KEY] as ClientInfo | undefined,
+        capabilities: meta?.[CLIENT_CAPABILITIES_META_KEY] as
+          ClientCapabilitiesWithUiExtension | undefined,
+        clientId: authInfo?.clientId,
+      });
+      try {
         await server.registerTools(getTableauAuthInfo(authInfo), authInfo?.scopes);
-        setNotificationLevel(server.mcpServer, logLevel, { silent: true });
-        return server.mcpServer;
-      },
-      {
-        legacy: 'reject',
-        onerror: (error) =>
-          log({
-            message: 'Error serving MCP request',
-            level: 'error',
-            logger: 'server',
-            data: error,
-          }),
-      },
-    ),
+      } catch (error) {
+        if (context) context.setupError = error;
+        throw error;
+      }
+      setNotificationLevel(server.mcpServer, logLevel, { silent: true });
+      return server.mcpServer;
+    },
+    {
+      legacy: 'reject',
+      onerror: (error) =>
+        log({
+          message: 'Error serving MCP request',
+          level: 'error',
+          logger: 'server',
+          data: error,
+        }),
+    },
   );
+  // The SDK answers a factory error with a bare 500. Swap in the 2025 path's mapping so a site
+  // settings 401 still carries the OAuth challenge and a Tableau 4xx stays a 4xx.
+  const modernHandler = toNodeHandler({
+    fetch: async (request, options) => {
+      const response = await modernMcpHandler.fetch(request, options);
+      const context = modernRequest.getStore();
+      if (context?.setupError === undefined) return response;
+      const { status, headers, body } = await describeRequestError(context.setupError, context.req);
+      return globalThis.Response.json(body, { status, headers });
+    },
+  });
 
   async function routeMcpPost(req: AuthenticatedRequest, res: Response): Promise<void> {
-    if (await isLegacyRequest(await toWebRequest(req, req.body), req.body)) {
+    // Without a parsed JSON body there is nothing to classify; the 2025 transport answers it.
+    if (!(await isProtocol2026Enabled()) || req.body === undefined) {
       return createMcpServer(req, res);
     }
-    logModernClientOnce(getRequestMeta(req.body));
-    await modernRequestBody.run(req.body, () => modernHandler(req, res, req.body));
+
+    try {
+      if (await isLegacyRequest(await toWebRequest(req, req.body), req.body)) {
+        return createMcpServer(req, res);
+      }
+      await modernRequest.run({ req }, () => modernHandler(req, res, req.body));
+    } catch (error) {
+      log({ message: 'Error routing MCP request', level: 'error', logger: 'server', data: error });
+      if (!res.headersSent) {
+        await sendRequestError(error, req, res);
+      }
+    }
   }
 
   const path = `/${basePath}`;
-  const serveProtocol2026 = await getFeatureGate().isFeatureEnabled('mcp-protocol-2026');
-  app.post(path, ...middleware, serveProtocol2026 ? routeMcpPost : createMcpServer);
+  app.post(path, ...middleware, routeMcpPost);
   app.get(
     path,
     ...middleware,
@@ -279,36 +312,60 @@ export async function startExpressServer({
         data: error,
       });
       if (!res.headersSent) {
-        // A site settings failure carries a curated message and the upstream status, so a Tableau 4xx stays a 4xx.
-        const siteSettingsError =
-          error instanceof McpSiteSettingsUnavailableError ? error : undefined;
-        const status = siteSettingsError?.statusCode ?? 500;
-        if (status === 401) {
-          if (getTableauAuthInfo(req.auth)?.type === 'Passthrough') {
-            res.status(401).json(INVALID_TOKEN_BODY);
-          } else {
-            // Any rejected connection with 401 status code must issue OAuth challenge
-            res
-              .status(401)
-              .header('WWW-Authenticate', await getOAuthChallenge(req.body, { invalidToken: true }))
-              .json({
-                error: 'invalid_token',
-                error_description: `${siteSettingsError?.message} ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
-              });
-          }
-          return;
-        }
-        res.status(status).json({
-          jsonrpc: '2.0',
-          error: {
-            code: status < 500 ? -32000 : -32603,
-            message: siteSettingsError?.message ?? 'Internal server error',
-          },
-          id: null,
-        });
+        await sendRequestError(error, req, res);
       }
     }
   }
+}
+
+type RequestErrorResponse = { status: number; headers?: Record<string, string>; body: unknown };
+
+async function describeRequestError(
+  error: unknown,
+  req: AuthenticatedRequest,
+): Promise<RequestErrorResponse> {
+  // A site settings failure carries a curated message and the upstream status, so a Tableau 4xx stays a 4xx.
+  const siteSettingsError = error instanceof McpSiteSettingsUnavailableError ? error : undefined;
+  const status = siteSettingsError?.statusCode ?? 500;
+  if (status === 401) {
+    if (getTableauAuthInfo(req.auth)?.type === 'Passthrough') {
+      return { status, body: INVALID_TOKEN_BODY };
+    }
+    // Any rejected connection with 401 status code must issue OAuth challenge
+    return {
+      status,
+      headers: {
+        'WWW-Authenticate': await getOAuthChallenge(req.body, { invalidToken: true }),
+      },
+      body: {
+        error: 'invalid_token',
+        error_description: `${siteSettingsError?.message} ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
+      },
+    };
+  }
+  return {
+    status,
+    body: {
+      jsonrpc: '2.0',
+      error: {
+        code: status < 500 ? -32000 : -32603,
+        message: siteSettingsError?.message ?? 'Internal server error',
+      },
+      id: null,
+    },
+  };
+}
+
+async function sendRequestError(
+  error: unknown,
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { status, headers, body } = await describeRequestError(error, req);
+  res
+    .status(status)
+    .set(headers ?? {})
+    .json(body);
 }
 
 async function connect(
@@ -327,6 +384,16 @@ async function connect(
   await server.mcpServer.connect(transport);
   setNotificationLevel(server.mcpServer, logLevel);
   log({ message: 'MCP server connected to transport', level: 'debug', logger: 'server' });
+}
+
+// Read per request so a runtime-backed gate can roll the route out or back without a restart.
+// A gate failure keeps the request on the 2025 path.
+async function isProtocol2026Enabled(): Promise<boolean> {
+  try {
+    return await getFeatureGate().isFeatureEnabled('mcp-protocol-2026');
+  } catch {
+    return false;
+  }
 }
 
 function getRequestMeta(body: unknown): Record<string, unknown> | undefined {

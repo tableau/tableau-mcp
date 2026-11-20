@@ -3,6 +3,7 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
+import { createHash } from 'crypto';
 
 import { log } from './logger.js';
 
@@ -45,7 +46,10 @@ export function logModernClientOnce(meta: Record<string, unknown> | undefined): 
       rawCapabilities && typeof rawCapabilities === 'object'
         ? (rawCapabilities as { elicitation?: unknown })
         : {};
-    const key = JSON.stringify([protocolVersion, clientInfo, stableStringify(capabilities)]);
+    // Hashed so a large client-controlled envelope can't grow the set by its own size.
+    const key = createHash('sha256')
+      .update(stableStringify([protocolVersion, clientInfo, capabilities]))
+      .digest('base64');
     if (seenModernClients.has(key)) return;
 
     if (seenModernClients.size >= MAX_SEEN_CLIENTS) {

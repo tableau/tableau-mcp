@@ -1,3 +1,4 @@
+import { McpServer } from '@modelcontextprotocol/server';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
@@ -11,13 +12,22 @@ import { log } from '../logging/logger.js';
 import { WebMcpServer } from '../server.web.js';
 import { startExpressServer } from './express.js';
 
-const mocks = vi.hoisted(() => ({ registerTools: vi.fn(), enabledFeatures: new Set<string>() }));
+const mocks = vi.hoisted(() => ({
+  registerTools: vi.fn(),
+  enabledFeatures: new Set<string>(),
+  gateFails: false,
+}));
 
 vi.mock('../features/init.js', () => ({
   getFeatureGate: () => ({
-    isFeatureEnabled: async (name: string) => mocks.enabledFeatures.has(name),
+    isFeatureEnabled: async (name: string) => {
+      if (mocks.gateFails) throw new Error('gate unavailable');
+      return mocks.enabledFeatures.has(name);
+    },
   }),
 }));
+// The 2026-07-28 handler checks `instanceof McpServer`, so the end-to-end tests need the real class.
+vi.unmock('@modelcontextprotocol/server');
 vi.mock('../server.web.js', () => ({ WebMcpServer: vi.fn() }));
 vi.mock('../logging/logger.js');
 
@@ -131,6 +141,7 @@ describe.each([false, true])(
     afterEach(async () => {
       vi.restoreAllMocks();
       mocks.enabledFeatures.clear();
+      mocks.gateFails = false;
       await Promise.all(
         servers.splice(0).map((server) => {
           // The unanswered initialize in the log test would otherwise hold close() open.
@@ -218,56 +229,120 @@ describe.each([false, true])(
       });
     });
 
-    it.each([true, false])(
-      'serves a 2026-07-28 request from the per-request handler only with mcp-protocol-2026 on (%s)',
-      async (flagOn) => {
-        if (flagOn) mocks.enabledFeatures.add('mcp-protocol-2026');
-        mocks.registerTools.mockResolvedValue(undefined);
-        vi.mocked(log).mockClear();
-        const { server } = await startExpressServer({
-          basePath: 'tableau-mcp',
-          config: makeConfig({ disableSessionManagement: stateless }),
-          logLevel: 'debug',
-          host: '127.0.0.1',
-        });
-        servers.push(server);
-        const { port } = server.address() as AddressInfo;
-        const clientInfo = { name: `gate-${flagOn}-${stateless}`, version: '1.0.0' };
+    const post2026ToolsList = async (clientName: string): Promise<Response> => {
+      const { server } = await startExpressServer({
+        basePath: 'tableau-mcp',
+        config: makeConfig({ disableSessionManagement: stateless }),
+        logLevel: 'debug',
+        host: '127.0.0.1',
+      });
+      servers.push(server);
+      const { port } = server.address() as AddressInfo;
 
-        await fetch(`http://127.0.0.1:${port}/tableau-mcp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json, text/event-stream',
-            'Mcp-Method': 'tools/list',
-            'MCP-Protocol-Version': '2026-07-28',
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'tools/list',
-            params: {
-              _meta: {
-                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-                'io.modelcontextprotocol/clientInfo': clientInfo,
-                'io.modelcontextprotocol/clientCapabilities': {},
+      return fetch(`http://127.0.0.1:${port}/tableau-mcp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          'Mcp-Method': 'tools/list',
+          'MCP-Protocol-Version': '2026-07-28',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {
+            _meta: {
+              'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+              'io.modelcontextprotocol/clientInfo': {
+                name: `${clientName}-${stateless}`,
+                version: '1.0.0',
               },
+              'io.modelcontextprotocol/clientCapabilities': {},
             },
-          }),
-          // The mocked server never answers on the 2025 path.
-          signal: AbortSignal.timeout(500),
-        }).catch(() => {});
+          },
+        }),
+      });
+    };
 
-        const builtFromEnvelope = vi
-          .mocked(WebMcpServer)
-          .mock.calls.some(([options]) => options?.clientInfo?.name === clientInfo.name);
-        const logged = vi
-          .mocked(log)
-          .mock.calls.some(([e]) => e.message === 'MCP client initialized');
-        expect(builtFromEnvelope).toBe(flagOn);
-        expect(logged).toBe(flagOn);
-      },
-    );
+    // A real McpServer, so the request is answered end to end on either path.
+    const serveRealMcpServer = (): void => {
+      vi.mocked(WebMcpServer).mockImplementation(function () {
+        const mcpServer = new McpServer({ name: 'test', version: '0.0.0' });
+        mcpServer.registerTool('echo', { description: 'Echo' }, async () => ({ content: [] }));
+        return { registerTools: mocks.registerTools, mcpServer } as never;
+      });
+    };
+
+    const builtFromEnvelope = (clientName: string): boolean =>
+      vi
+        .mocked(WebMcpServer)
+        .mock.calls.some(([options]) => options?.clientInfo?.name === `${clientName}-${stateless}`);
+
+    it('answers a 2026-07-28 tools/list from a server built from the request envelope', async () => {
+      mocks.enabledFeatures.add('mcp-protocol-2026');
+      mocks.registerTools.mockResolvedValue(undefined);
+      serveRealMcpServer();
+
+      const response = await post2026ToolsList('envelope');
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('"name":"echo"');
+      expect(builtFromEnvelope('envelope')).toBe(true);
+    });
+
+    it('keeps a 2026-07-28 request on the 2025 path with mcp-protocol-2026 off', async () => {
+      mocks.registerTools.mockResolvedValue(undefined);
+      serveRealMcpServer();
+      vi.mocked(log).mockClear();
+
+      const response = await post2026ToolsList('flag-off');
+      await response.text();
+
+      expect(builtFromEnvelope('flag-off')).toBe(false);
+      expect(vi.mocked(log).mock.calls.some(([e]) => e.message === 'MCP client initialized')).toBe(
+        false,
+      );
+    });
+
+    it('keeps a 2026-07-28 request on the 2025 path when the gate lookup fails', async () => {
+      mocks.enabledFeatures.add('mcp-protocol-2026');
+      mocks.gateFails = true;
+      mocks.registerTools.mockResolvedValue(undefined);
+      serveRealMcpServer();
+
+      const response = await post2026ToolsList('gate-fails');
+      await response.text();
+
+      expect(builtFromEnvelope('gate-fails')).toBe(false);
+    });
+
+    it('answers a site settings 401 on a 2026-07-28 request with the OAuth challenge', async () => {
+      mocks.enabledFeatures.add('mcp-protocol-2026');
+      mocks.registerTools.mockRejectedValue(
+        new McpSiteSettingsUnavailableError('Could not get the MCP settings.', 401),
+      );
+
+      const response = await post2026ToolsList('challenge');
+
+      expect(response.status).toBe(401);
+      expect(response.headers.get('www-authenticate')).toContain('error="invalid_token"');
+      expect(await response.json()).toMatchObject({ error: 'invalid_token' });
+    });
+
+    it('keeps a site settings 4xx a 4xx on a 2026-07-28 request', async () => {
+      mocks.enabledFeatures.add('mcp-protocol-2026');
+      mocks.registerTools.mockRejectedValue(
+        new McpSiteSettingsUnavailableError('Could not get the MCP settings.', 404),
+      );
+
+      const response = await post2026ToolsList('not-found');
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: -32000, message: 'Could not get the MCP settings.' },
+      });
+    });
 
     it('logs a 2026-07-28 client once across requests, and a different client separately', async () => {
       mocks.enabledFeatures.add('mcp-protocol-2026');
