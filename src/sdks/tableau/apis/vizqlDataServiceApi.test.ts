@@ -214,11 +214,19 @@ describe('Table calculation Field schema', () => {
       tableCalcField({ tableCalcType: 'RANK', dimensions, bogus: 1 }),
     );
     expect(result.success).toBe(false);
+    // Zod 4 nests each variant's issues under one invalid_union; the table calc variant is first.
     expect(result.error?.issues).toEqual([
       expect.objectContaining({
-        code: 'unrecognized_keys',
-        keys: ['bogus'],
-        path: ['tableCalculation'],
+        code: 'invalid_union',
+        errors: expect.arrayContaining([
+          [
+            expect.objectContaining({
+              code: 'unrecognized_keys',
+              keys: ['bogus'],
+              path: ['tableCalculation'],
+            }),
+          ],
+        ]),
       }),
     ]);
   });

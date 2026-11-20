@@ -1,7 +1,6 @@
 import { randomBytes } from 'crypto';
 import express from 'express';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
@@ -9,6 +8,7 @@ import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';
+import { formatZodError } from '../../utils/formatZodError.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
 import { siteBindingRequired, siteMatchesConfig } from './siteBinding.js';
@@ -34,7 +34,7 @@ export function callback(
     if (!result.success) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: fromError(result.error).toString(),
+        error_description: formatZodError(result.error),
       });
       return;
     }

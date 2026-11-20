@@ -3,9 +3,9 @@ import { type Dirent, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
 import { lookup } from 'mime-types';
-import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../logging/logger.js';
+import { formatZodError } from '../utils/formatZodError.js';
 import { decodeCursor, encodeCursor } from './cursor.js';
 import {
   type SkillEntry as SkillData,
@@ -175,7 +175,7 @@ export function buildSkillRegistry(skillsDir: string = getSkillsDir()): SkillReg
     if (!frontmatter.success) {
       log({
         level: 'warning',
-        message: `Skill "${name}" ${SKILL_MANIFEST} has invalid frontmatter; skipping. ${fromError(frontmatter.error).toString()}`,
+        message: `Skill "${name}" ${SKILL_MANIFEST} has invalid frontmatter; skipping. ${formatZodError(frontmatter.error)}`,
         logger: LOGGER,
       });
       continue;
