@@ -77,19 +77,19 @@ export const flowDocumentConnectionSchema = z
     isPackaged: looseBooleanSchema,
     // Descriptive topology (class, server, dbname, filename, ...). Credentials are
     // stripped server-side, so we read these freely but keep the shape open.
-    connectionAttributes: z.record(z.unknown()).optional(),
+    connectionAttributes: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
 export const flowDocumentSchema = z
   .object({
-    nodes: z.record(flowDocumentNodeSchema).optional(),
+    nodes: z.record(z.string(), flowDocumentNodeSchema).optional(),
     initialNodes: z.array(z.string()).optional(),
-    connections: z.record(flowDocumentConnectionSchema).optional(),
-    dataConnections: z.record(flowDocumentConnectionSchema).optional(),
+    connections: z.record(z.string(), flowDocumentConnectionSchema).optional(),
+    dataConnections: z.record(z.string(), flowDocumentConnectionSchema).optional(),
     parameters: z
       .object({
-        parameters: z.record(z.unknown()).optional(),
+        parameters: z.record(z.string(), z.unknown()).optional(),
       })
       .passthrough()
       .optional(),

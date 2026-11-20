@@ -11,6 +11,7 @@ import {
   DesktopMcpServer,
   getDesktopToolListEntry,
   getModelFacingToolEntry,
+  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import type { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
@@ -26,6 +27,7 @@ function normalizeSdkTool(tool: Tool): Tool {
     inputSchema: Tool['inputSchema'] & { $schema?: string };
   };
   delete normalized.inputSchema.$schema;
+  stripEmptySchemaNoise(normalized.inputSchema);
   delete normalized._meta;
   delete normalized.execution;
   const annotations = normalized.annotations;
