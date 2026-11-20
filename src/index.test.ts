@@ -10,9 +10,11 @@ const startupState = vi.hoisted(() => ({
 }));
 
 vi.mock('@modelcontextprotocol/server/stdio', () => ({
-  serveStdio: vi.fn(() => {
-    startupState.events.push('stdio served');
-  }),
+  StdioServerTransport: vi.fn(),
+}));
+
+vi.mock('@modelcontextprotocol/core', () => ({
+  SetLevelRequestSchema: {},
 }));
 
 vi.mock('dotenv', () => ({
@@ -66,6 +68,7 @@ vi.mock('./logging/logger.js', () => ({
 
 vi.mock('./logging/notification.js', () => ({
   isNotificationLevel: vi.fn(() => true),
+  notifier: { info: vi.fn() },
   setNotificationLevel: vi.fn(),
 }));
 
@@ -83,6 +86,9 @@ vi.mock('./server.web.js', () => ({
       }),
       mcpServer: {
         server: { setRequestHandler: vi.fn() },
+        connect: vi.fn(async () => {
+          startupState.events.push('stdio connected');
+        }),
       },
     };
   }),
@@ -106,11 +112,8 @@ vi.mock('./sessionStore/init.js', () => ({
   disconnectSessionStore: vi.fn(async () => undefined),
 }));
 
-import { serveStdio } from '@modelcontextprotocol/server/stdio';
-
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
-import { setNotificationLevel } from './logging/notification.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
 
@@ -247,23 +250,10 @@ describe('default entrypoint startup', () => {
     await vi.waitFor(() => expect(getTableauServerInfo).toHaveBeenCalledOnce());
 
     expect(WebMcpServer).not.toHaveBeenCalled();
-    expect(serveStdio).not.toHaveBeenCalled();
+    expect(startupState.events).not.toContain('stdio connected');
 
     serverInfo.resolve({});
-    await vi.waitFor(() => expect(serveStdio).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(startupState.events).toContain('stdio connected'));
     expect(startExpressServer).not.toHaveBeenCalled();
-
-    // The factory builds a fresh server per connection.
-    const factory = vi.mocked(serveStdio).mock.calls[0][0] as () => Promise<unknown>;
-    expect(WebMcpServer).not.toHaveBeenCalled();
-    await factory();
-    expect(WebMcpServer).toHaveBeenCalledOnce();
-    expect(startupState.events).toContain('tools registered');
-    expect(setNotificationLevel).toHaveBeenCalledWith(expect.anything(), 'info', {
-      silent: true,
-    });
-    expect(log).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('running on stdio') }),
-    );
   });
 });

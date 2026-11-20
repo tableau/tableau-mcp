@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import dotenv from 'dotenv';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
-import { isNotificationLevel, setNotificationLevel } from './logging/notification.js';
+import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
@@ -35,30 +35,18 @@ async function startServer(): Promise<void> {
     case 'stdio': {
       await serverInfoReady;
 
-      // serveStdio builds an instance per connection (and per discarded server/discover probe)
-      // and serves both the 2025 handshake and 2026-07-28 per-request traffic.
-      serveStdio(
-        async () => {
-          const server = new WebMcpServer();
-          await server.registerTools();
-          server.mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
-            setNotificationLevel(server.mcpServer, request.params.level);
-            return {};
-          });
-          setNotificationLevel(server.mcpServer, notificationLevel, { silent: true });
-          return server.mcpServer;
-        },
-        {
-          onerror: (error) =>
-            log({ message: 'stdio error', level: 'error', logger: 'stdio', data: error }),
-        },
-      );
-
-      log({
-        message: `tableau-mcp v${serverVersion} running on stdio`,
-        level: 'info',
-        logger: 'startup',
+      const server = new WebMcpServer();
+      await server.registerTools();
+      server.mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
+        setNotificationLevel(server.mcpServer, request.params.level);
+        return {};
       });
+
+      const transport = new StdioServerTransport();
+      await server.mcpServer.connect(transport);
+
+      setNotificationLevel(server.mcpServer, notificationLevel);
+      notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
       break;
     }
     case 'http': {
