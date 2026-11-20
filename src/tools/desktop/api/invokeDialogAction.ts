@@ -24,8 +24,7 @@ function compactObjectSchema<Output>(
   return z.record(z.string(), z.unknown()).transform((value, context) => {
     const parsed = schema.safeParse(value);
     if (!parsed.success) {
-      for (const issue of parsed.error.issues)
-        context.issues.push({ ...issue, input: value } as never);
+      for (const issue of parsed.error.issues) context.addIssue({ ...issue });
       return z.NEVER;
     }
     return parsed.data;
