@@ -68,11 +68,11 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 
-- **In-place replace, never create.** The dashboard must already exist in the open workbook: this replaces it and does not add one. A name that resolves to no open dashboard is refused with a message pointing you at `get-sheets` to check the name, or at [`run-dashboard-batch`](run-dashboard-batch.md) to create a dashboard. The apply is serialized against other sheet edits so the two cannot interleave.
+- **In-place replace, never create.** The dashboard must already exist in the open workbook: this replaces it and does not add one. A name that resolves to no open dashboard is refused with a message pointing you at creating the dashboard in Desktop and adding the referenced worksheets there, then re-reading and applying the layout. The apply is serialized against other sheet edits so the two cannot interleave.
 - **Apply is not re-verified.** A dashboard apply has no structural readback, so the success message carries an honest host-verification receipt that labels the applied intent as unverified. Treat dashboard state as unconfirmed until it is read back; do not report problems the host did not surface.
 - **Load rejections surface verbatim.** When %product_name% accepts the request at the transport level but rejects the actual document load (for example, a qualified-name parse error), the tool reports that failure text as-is rather than a success message.
 - **Every call reads a cache companion.** Each call reads the cached file and its fingerprint from the local filesystem; this is why the tool is not idempotent.

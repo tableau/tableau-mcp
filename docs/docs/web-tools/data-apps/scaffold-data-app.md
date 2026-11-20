@@ -2,19 +2,20 @@
 sidebar_position: 1
 ---
 
-# Scaffold a Desktop data app
+# Scaffold a data app
 
 {/* availability */}
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Prepares a data app package and worksheetFile for an open sheet. The fragment uses that sheet's live name and stamps worksheetId as `simple-id`. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename.
+Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live through the Extensions API. The workspace holds a workbook plus an extension package with `index.html`, a `src/app.js` starter for your query and visualization, and a `manifest.json`. The tool only scaffolds and names the app. It does not wire a datasource, write query logic, build, publish, or embed data.
 
 ## APIs called
 
 Talks to Tableau Cloud or Tableau Server.
 
-- Prepares a data app package and worksheetFile for an open sheet.
+- Reads the site's external allowed-origins list for extension packages. Requires the `tableau:packages:read` scope.
+  - `GET /api/exp/sites/{siteId}/packages/allowed-origins`
 
 ## Required arguments
 
@@ -27,7 +28,8 @@ Display name for the new data app.
 From `datappName` the tool derives the following identity:
 
 - **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
-  to a single hyphen.
+  to a single hyphen. A slug longer than 32 characters is split at hyphens into dot-separated parts
+  of at most 32 characters.
 - **display name**: `datappName` verbatim.
 
 - **version**: `1.0.0`.
@@ -35,7 +37,7 @@ From `datappName` the tool derives the following identity:
 
 The version and author are fixed defaults, not derived per call. All four values are placeholders
 in the template (`TODO-MANIFEST-ID`, `TODO App Name`, `TODO-MANIFEST-VERSION`, `TODO Author Name`),
-filled by the `postUnzip` edits in `data-app.trex` and `manifest.json` (the version also in the
+filled by the `postUnzip` edits in `data-app.trex` and `manifest.json` (all but the author also in the
 `.twb`), so they always agree.
 
 ## Package manifest
@@ -116,6 +118,7 @@ client steps.
       {
         "file": "Data App Name/Data App Name.twb",
         "replacements": [
+          { "find": "TODO-SOURCE-BUILD", "replace": "2026.3.2 (20263.26.1027.1340)" },
           { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
           { "find": "TODO App Name", "replace": "Sales Demo" },
           { "find": "TODO Sheet Name", "replace": "Sales Demo" },
@@ -167,6 +170,7 @@ client steps.
       {
         "file": "Data App Name/Data App Name.twb",
         "replacements": [
+          { "find": "TODO-SOURCE-BUILD", "replace": "2026.3.2 (20263.26.1027.1340)" },
           { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
           { "find": "TODO App Name", "replace": "Sales Demo" },
           { "find": "TODO Sheet Name", "replace": "Sales Demo" },

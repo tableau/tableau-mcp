@@ -75,7 +75,7 @@ Datasource "the name you passed" is not a unique live datasource name or caption
 
 ### `fieldMapping`
 
-An object mapping each of the template's slot identifiers to the exact `column_ref` returned by field resolution. Between 1 and 32 entries; an empty mapping, or one over 32 entries, is refused before anything is read.
+An object mapping each of the template's slot identifiers to the exact `column_ref` returned by field resolution. Between 1 and 32 entries; an empty mapping, or one over 32 entries, is refused before anything is built.
 
 Field references are the fully qualified form the workbook uses, for example `[Sales Extract].[sum:Revenue:qk]`. A plainer field name or caption is also accepted, but only when it identifies exactly one field: a name that matches several is refused as ambiguous, with the qualified references it matched listed so you can pick one. Every mapping is checked against the schema of the workbook that was read, and any binding problem — a field the workbook does not contain, an ambiguous name, or a field whose role does not suit the slot it was mapped to — is reported per slot with nothing built.
 
@@ -102,18 +102,18 @@ The %product_name% session to build against, given as its process id. Omit it wh
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
 ### `derivationOverrides`
 
-Aggregation by slot.
+An object mapping a slot identifier to the aggregation to use for that slot instead of the template default: one of `sum`, `avg`, `min`, `max`, `cnt`, `ctd`, `med`, `std`, `stp`, `var`, or `vrp`.
 
 :::note
 An aggregation override for a slot cannot be honored when the binding emits a different aggregation than the one requested. The refusal names the requested aggregation, the slot, and the field reference the binding emits. Already aggregated fields retain their existing calculation. Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.
 
-- `Aggregation override '${}' for slot '${}' cannot be honored: the binding emits '${}'. Already aggregated fields retain their existing calculation. Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.`
+- `Aggregation override '<aggregation>' for slot '<slot>' cannot be honored: the binding emits '<field>'. Already aggregated fields retain their existing calculation. Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.`
 :::
 
 ### `topN`
