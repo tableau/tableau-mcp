@@ -32,9 +32,22 @@ export const queryOptionsArgSchema = z
       .max(MAX_INT32 - 1)
       .optional(),
     interpretFieldCaptionsAsFieldNames: z.boolean().optional(),
-    disaggregate: z.boolean().optional(),
-    bypassMetadataCache: z.boolean().optional(),
-    withNewSession: z.boolean().optional(),
+    disaggregate: z
+      .boolean()
+      .optional()
+      .describe(
+        'true returns one row per underlying record. Aggregation functions are ignored, but column names still show them (SUM(Sales) holds one record value).',
+      ),
+    bypassMetadataCache: z
+      .boolean()
+      .optional()
+      .describe('true reads fresh data source metadata instead of the cache. Tableau 2025.3+.'),
+    withNewSession: z
+      .boolean()
+      .optional()
+      .describe(
+        'true opens a new database session instead of reusing one, which adds latency. It does not bypass the query cache, so results are not guaranteed fresh. Tableau 2026.2+.',
+      ),
     returnFormat: z.enum(['OBJECTS', 'ARRAYS']).optional(),
     debug: z.boolean().optional(),
     returnServerSentEvents: z.boolean().optional(),

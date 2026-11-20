@@ -46,7 +46,8 @@ data source details from the Tableau REST API. The MCP-layer gate requires the
 ### `datasourceLuid`
 
 The LUID of the data source, potentially retrieved by the [List Data Sources](list-datasources.md)
-tool.
+tool. Required unless [`datasource.datasourceLuid`](#datasource) is given; if both are given, they
+must match.
 
 #### Example
 
@@ -112,6 +113,44 @@ See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_re
 #### Example
 
 `2000`
+
+<hr />
+
+### `datasource`
+
+The `datasource` object of a VizQL Data Service `QueryRequest`, accepted as-is so a stored request
+runs without edits. Only `datasourceLuid` is used:
+
+- `connections` is ignored, with a warning. Credentials always come from the server configuration.
+- `workbookDatasourceId` is ignored, with a warning naming the `datasourceLuid` that was queried.
+  To query an embedded data source, pass its LUID in `datasourceLuid` and its workbook's LUID in
+  `workbookLuid`.
+
+<hr />
+
+### `options`
+
+The `options` object of a VizQL Data Service `QueryRequest`, accepted as-is.
+
+| Option | Behavior |
+|---|---|
+| `rowLimit` | Acts like [`limit`](#limit); the smaller of the two wins. |
+| `interpretFieldCaptionsAsFieldNames` | Same as the top-level argument; the two must not conflict. |
+| `disaggregate` | Forwarded. `true` returns one row per underlying record and ignores aggregation functions, though column names still show them (`SUM(Sales)` holds one record's value). |
+| `bypassMetadataCache` | Forwarded, and also used for the tool's own validation reads. Requires Tableau 2025.3 or later. |
+| `withNewSession` | Forwarded. Opens a new database session instead of reusing one. It doesn't bypass the query cache, so it doesn't guarantee fresh data. Requires Tableau 2026.2 or later. |
+| `returnFormat`, `debug`, `returnServerSentEvents` | Always set by the tool (`OBJECTS`, `true`, `false`). A different value is ignored, with a warning. |
+| `includeHiddenFields`, `includeGroupFormulas`, `includeRemoteDatabaseNames` | Apply only to reading metadata. Ignored, with a warning. |
+
+On a server older than an option's required version, `false` is dropped and `true` returns an error
+naming the version. Unknown keys in `options`, `datasource`, or at the top level return an error
+listing them.
+
+#### Example
+
+```json
+{ "rowLimit": 100, "disaggregate": false }
+```
 
 ## Notes and caveats
 
@@ -207,4 +246,25 @@ still executes and returns data):
 If the intent is to find the Top values *within* the filtered subset, add `"context": true` to
 the affected dimension filter(s). If the intent is to find the Top values globally and then
 filter them, no change is needed — the warning can be ignored.
+
+### Ignored request properties
+
+When a [`datasource`](#datasource) or [`options`](#options) property is accepted but not used, the
+result carries an `IGNORED_REQUEST_PROPERTY` warning naming it. The query still runs:
+
+```json
+{
+  "data": [ /* ... */ ],
+  "mcp": {
+    "warnings": [
+      {
+        "type": "IGNORED_REQUEST_PROPERTY",
+        "severity": "WARNING",
+        "message": "The tool always uses returnFormat: \"OBJECTS\", so the values you passed were ignored.",
+        "affectedProperties": ["options.returnFormat"]
+      }
+    ]
+  }
+}
+```
 {/* /tool-details */}
