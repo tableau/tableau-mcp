@@ -50,7 +50,6 @@ const capabilityParamsSchema = z.object(paramsSchema);
 const baseParamsSchema = capabilityParamsSchema.omit({ capability: true });
 type ListProjectsParamsSchema = z.ZodType<
   z.output<typeof capabilityParamsSchema>,
-  z.ZodTypeDef,
   z.input<typeof capabilityParamsSchema>
 >;
 

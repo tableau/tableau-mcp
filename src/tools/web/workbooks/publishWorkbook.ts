@@ -87,7 +87,6 @@ const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true
 // schema has no personalSpace, so it is optional on the shared output type.
 type PublishWorkbookParamsSchema = z.ZodType<
   Omit<z.output<typeof personalSpaceParamsSchema>, 'personalSpace'> & { personalSpace?: boolean },
-  z.ZodTypeDef,
   z.input<typeof personalSpaceParamsSchema>
 >;
 

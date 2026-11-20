@@ -9,11 +9,11 @@ import {
   JWTVerifyGetKey,
 } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
 
 import { Config, getConfig } from '../../config.js';
 import { AUDIT_LOGGER, log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
+import { formatZodError } from '../../utils/formatZodError.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import invariant from '../../utils/invariant.js';
 import { isHttpsOrLoopbackUrl, LOOPBACK_HOSTS } from './loopbackHosts.js';
@@ -95,7 +95,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
 
       const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
       if (!mcpAccessToken.success) {
-        return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
+        return Err(`Invalid access token: ${formatZodError(mcpAccessToken.error)}`);
       }
 
       const { iss, aud, exp, clientId } = mcpAccessToken.data;
@@ -114,7 +114,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
       if (this.config.auth === 'oauth') {
         const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
         if (!mcpAccessToken.success) {
-          return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
+          return Err(`Invalid access token: ${formatZodError(mcpAccessToken.error)}`);
         }
 
         const {
@@ -229,7 +229,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
       const parsed = tableauBearerTokenSchema.safeParse(decoded);
       if (!parsed.success) {
-        return Err(`Invalid access token: ${fromError(parsed.error).toString()}`);
+        return Err(`Invalid access token: ${formatZodError(parsed.error)}`);
       }
 
       let { 'https://tableau.com/userId': userId } = parsed.data;
@@ -396,7 +396,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     const claims = externalTokenClaimsSchema.safeParse(payload);
     return claims.success
       ? Ok(claims.data)
-      : Err(`invalid claims: ${fromError(claims.error).toString()}`);
+      : Err(`invalid claims: ${formatZodError(claims.error)}`);
   }
 
   private async resolveGetKey(): Promise<Result<JWTVerifyGetKey, string>> {
@@ -441,7 +441,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
 
     const parsed = openIdConfigurationSchema.safeParse(body);
     if (!parsed.success) {
-      throw new Error(`invalid openid-configuration: ${fromError(parsed.error).toString()}`);
+      throw new Error(`invalid openid-configuration: ${formatZodError(parsed.error)}`);
     }
 
     const { issuer: documentIssuer, jwksUri } = parsed.data;
