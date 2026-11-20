@@ -1,4 +1,16 @@
 export { addDashboard, deleteDashboard, listWorkbookDashboards } from './dashboards.js';
+export {
+  buildDependencyGraph,
+  type DependencyDirection,
+  type DependencyEdge,
+  type DependencyGraph,
+  type DependencyNode,
+  type DependencyTrace,
+  type FieldDependenciesResult,
+  findDependencyRoots,
+  getFieldDependencies,
+  traceDependencies,
+} from './dependencies.js';
 export { listAvailableFields } from './field-builder.js';
 export {
   type FieldCandidate,

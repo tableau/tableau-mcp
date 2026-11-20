@@ -32,6 +32,7 @@ export const desktopToolNames = [
   'remove-field',
   'resolve-field',
   'search-workbook-fields',
+  'get-field-dependencies',
   'ask-user',
   'tableau-begin-episode',
   'tableau-end-episode',

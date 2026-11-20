@@ -239,3 +239,16 @@ export class CacheFileWriteError extends McpToolError {
     });
   }
 }
+
+export class FieldNotFoundError extends McpToolError {
+  constructor(query: string, datasource?: string) {
+    const scope = datasource === undefined ? 'any datasource' : `datasource "${datasource}"`;
+    super({
+      type: 'field-not-found',
+      message:
+        `No field, calculation or parameter named "${query}" in ${scope} of the open workbook. ` +
+        'The name must match a caption or field name exactly. For fields and calculations, search-workbook-fields finds the exact name; parameters are not searched there, so use the parameter caption as shown in Tableau.',
+      statusCode: 404,
+    });
+  }
+}

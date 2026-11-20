@@ -496,11 +496,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 74-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 75-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(74);
+      expect(selected).toHaveLength(75);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -545,6 +545,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'invoke-dialog-action',
         'list-available-fields',
         'search-workbook-fields',
+        'get-field-dependencies',
         'get-show-me-options',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
@@ -616,6 +617,23 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         (tool) => tool.name === 'search-workbook-fields',
       ),
     ).toHaveLength(1);
+  });
+
+  it('registers get-field-dependencies once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+
+    expect(tools.filter((tool) => tool.name === 'get-field-dependencies')).toHaveLength(1);
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('get-field-dependencies')).toBe(true);
+    const served = selectToolsForProfile(tools, 'dynamic-authoring').filter(
+      (tool) => tool.name === 'get-field-dependencies',
+    );
+    expect(served).toHaveLength(1);
+    expect(served[0].annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
   });
 
   it('registers capture-window-screenshot once in full and dynamic-authoring profiles', () => {

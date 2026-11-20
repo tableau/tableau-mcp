@@ -92,9 +92,9 @@ export function searchWorkbookFields(
   };
 }
 
-type PlacementsByField = Map<string, Map<string, SearchWorkbookFieldPlacement>>;
+export type PlacementsByField = Map<string, Map<string, SearchWorkbookFieldPlacement>>;
 
-function collectPlacements(worksheets: ParsedWorksheet[]): PlacementsByField {
+export function collectPlacements(worksheets: ParsedWorksheet[]): PlacementsByField {
   const placementsByField: PlacementsByField = new Map();
 
   for (const worksheet of worksheets) {
@@ -139,7 +139,7 @@ function collectPlacements(worksheets: ParsedWorksheet[]): PlacementsByField {
   return placementsByField;
 }
 
-function placementsForField(
+export function placementsForField(
   placementsByField: PlacementsByField,
   datasource: string,
   fieldLocalName: string,

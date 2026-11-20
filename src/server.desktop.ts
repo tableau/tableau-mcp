@@ -139,6 +139,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'invoke-dialog-action',
     'list-available-fields',
     'search-workbook-fields',
+    'get-field-dependencies',
     'get-sheets',
     'get-show-me-options',
     'get-summary-data',

@@ -78,6 +78,13 @@ export function buildColumnRef(fieldRef: FieldReference): string {
   return `[${fieldRef.datasource}].${fieldRef.columnInstanceName}`;
 }
 
+/** Columns Tableau generates for itself, and names with stray brackets, are never user fields. */
+export function isInternalColumnName(columnName: string): boolean {
+  if (columnName.includes('__tableau_internal_')) return true;
+  const bare = columnName.replace(/^\[|\]$/g, '');
+  return bare.includes('[') || bare.includes(']');
+}
+
 /**
  * List all available fields from the workbook's datasources
  * @param workbookXml - Full workbook XML
@@ -275,10 +282,7 @@ export function listAvailableFieldsFromWorkbook(
 
     // 4. Process all columns
     for (const [columnName, { column, source }] of columnMap.entries()) {
-      if (columnName.includes('__tableau_internal_')) continue;
-
-      const cleanNameTest = columnName.replace(/^\[|\]$/g, '');
-      if (cleanNameTest.includes('[') || cleanNameTest.includes(']')) continue;
+      if (isInternalColumnName(columnName)) continue;
 
       let role: string;
       let type: string;
