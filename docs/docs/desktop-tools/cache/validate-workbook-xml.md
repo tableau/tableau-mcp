@@ -37,25 +37,25 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"77700"`
 
 ## Notes and caveats
 
 - **Offline falls back to the local check.** When no %product_name% instance is reachable, the tool returns the result of the local well-formedness check instead of failing, so a syntax problem is still surfaced without a live session.
-- **The running instance's result is authoritative.** When the deeper check runs, its `isValid` verdict and `validationIssues` supersede the local check — including structural problems the local well-formedness check cannot see, such as a dashboard zone that references a missing worksheet.
+- **The running instance's result is authoritative.** When the deeper check runs, its `isValid` verdict and `issues` supersede the local check — including structural problems the local well-formedness check cannot see, such as a dashboard zone that references a missing worksheet.
 
 ## Example results
 
 ### Well-formed workbook (validated against the running instance)
 
 ```json
-{ "isValid": true, "validationIssues": [] }
+{ "isValid": true, "issues": [] }
 ```
 
 ### Structural issues reported by the running instance
 
 ```json
-{ "isValid": false, "validationIssues": ["Dashboard zone references missing worksheet \"Missing Sheet\""] }
+{ "isValid": false, "issues": [{ "severity": "error", "message": "Dashboard zone references missing worksheet \"Missing Sheet\"" }] }
 ```
 
 ### Malformed XML (local check)

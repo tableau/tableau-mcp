@@ -25,7 +25,7 @@ Session ID. Optional when a session is pinned or only one %product_name% instanc
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 <hr />
 
@@ -39,4 +39,4 @@ Operation id, from the operations list. Omit it to list in-flight and recent ope
 
 ## Related
 
-- [`get-diagnostics`](./get-diagnostics.md) — reads diagnostics for the running %product_name% instance.
+- [`get-diagnostics`](./get-diagnostics.md) — reads diagnostics for the open workbook or a worksheet.

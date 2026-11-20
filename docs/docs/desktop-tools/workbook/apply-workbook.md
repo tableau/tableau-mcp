@@ -18,7 +18,7 @@ This tool is not read-only and not idempotent. It replaces the whole workbook in
 
 This tool acts on the workbook open in the local %product_name% instance, not on the Tableau Cloud or Tableau Server REST API. Under the hood these are calls to the local **%product_name% %ecapi_name%** — a REST API the running %product_name% instance serves at `http://127.0.0.1:<port>/v<x>`, where `<x>` is the latest API version. There are no OAuth scopes: each call is authorized by the running %product_name% instance's per-session bearer token over the loopback interface. The apply is a single authoritative write: %product_name% replaces the open workbook from the document you post.
 
-- Reads the workbook content to apply from the cached file path, after checking that the file was produced by the same %product_name% session. Local filesystem; no API call.
+- Reads the workbook content to apply from the cached file path, after checking, when it has a fingerprint, that the file was produced by the same %product_name% session. Local filesystem; no API call.
 - Validates the workbook XML before anything is sent to %product_name% — validated in-process (not an API call). Known failure patterns are caught here so invalid XML never reaches %product_name%.
 - Applies the whole workbook document to the open %product_name% workbook, replacing it.
   - `POST /v<x>/workbook/document` — replace the open workbook from the posted document (`Content-Type: application/xml`). [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
@@ -33,7 +33,7 @@ The file must be non-empty and begin with an XML declaration or a tag.
 
 #### Cache session guard
 
-The file must carry a companion fingerprint matching the resolved %product_name% session. A cache produced by a different (or restarted) %product_name% instance is rejected before anything is applied, preventing cross-instance cache bleed.
+When the file has a companion fingerprint, it must match the resolved %product_name% session. A cache produced by a different (or restarted) %product_name% instance is rejected before anything is applied, preventing cross-instance cache bleed.
 
 #### Example
 
@@ -48,7 +48,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 

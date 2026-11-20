@@ -12,9 +12,9 @@ Lists %product_name%'s Saved Data Sources (My Tableau Repository, including bund
 
 ## APIs called
 
-Talks to the open %product_name% workbook through the External Client API.
+Talks to the running %product_name% instance through the External Client API.
 
-- Lists %product_name%'s Saved Data Sources (My Tableau Repository, including bundled samples like World Indicators and Sample - Superstore).
+- Reads the repository location of the running instance with `GET /v<x>/app`, then lists %product_name%'s Saved Data Sources (My Tableau Repository, including bundled samples like World Indicators and Sample - Superstore) from its `Datasources` folder on the local filesystem.
 
 ## Optional arguments
 
