@@ -31,6 +31,7 @@ type SummaryDataResult = {
   worksheet: { id: string; name: string };
   maxRows: number;
   shape: string;
+  truncated: boolean | null;
   rowOrder: SummaryRowOrder;
   readScope: SummaryDataReadScope;
   summaryData: { columns: unknown[]; rows: unknown[] };
@@ -43,7 +44,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'get-summary-data',
     title,
     description:
-      'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard. Cells are raw values. Rows stop at maxRows with no truncation flag.',
+      'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard. Cells are raw values. truncated: true means more rows exist; null means unknown.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -88,6 +89,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
               return new Ok({
                 worksheet: { id: resolvedWorksheet.id, name: resolvedWorksheet.name },
                 maxRows: resolvedMaxRows,
+                truncated: summaryResult.value.truncated,
                 shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
                 rowOrder: summaryResult.value.rowOrder,
                 readScope: summaryResult.value.readScope,
