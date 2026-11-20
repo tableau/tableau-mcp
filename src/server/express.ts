@@ -21,7 +21,7 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
-import { logClientInitialized } from '../logging/clientInitialized.js';
+import { logClientInitialized, logModernClientOnce } from '../logging/clientInitialized.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { ClientInfo, Server } from '../server.js';
@@ -132,6 +132,7 @@ export async function startExpressServer({
     if (await isLegacyRequest(await toWebRequest(req, req.body), req.body)) {
       return createMcpServer(req, res);
     }
+    logModernClientOnce(getRequestMeta(req.body));
     await modernRequestBody.run(req.body, () => modernHandler(req, res, req.body));
   }
 
@@ -187,7 +188,7 @@ export async function startExpressServer({
 
   // The 2025 handshake has no server-side "initialized" hook in stateless mode (each request gets
   // a fresh server), so log from the initialize request itself. 2026-07-28 clients send no
-  // initialize and are not logged here.
+  // initialize; routeMcpPost logs them on first sight via logModernClientOnce.
   function logHttpClientInitialized(body: unknown): void {
     if (!isInitializeRequest(body)) return;
     logClientInitialized({

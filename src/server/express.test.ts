@@ -212,6 +212,67 @@ describe.each([false, true])(
       });
     });
 
+    it('logs a 2026-07-28 client once across requests, and a different client separately', async () => {
+      mocks.registerTools.mockResolvedValue(undefined);
+      vi.mocked(log).mockClear();
+      const { server } = await startExpressServer({
+        basePath: 'tableau-mcp',
+        config: makeConfig({ disableSessionManagement: stateless }),
+        logLevel: 'debug',
+        host: '127.0.0.1',
+      });
+      servers.push(server);
+      const { port } = server.address() as AddressInfo;
+
+      // The dedup set is module-level, so each describe.each run needs its own client names.
+      const post = (client: string, capabilities: object = {}): Promise<unknown> =>
+        fetch(`http://127.0.0.1:${port}/tableau-mcp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            'Mcp-Method': 'tools/list',
+            'MCP-Protocol-Version': '2026-07-28',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/list',
+            params: {
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': { name: `${client}-${stateless}`, version: '1.0.0' },
+                'io.modelcontextprotocol/clientCapabilities': capabilities,
+              },
+            },
+          }),
+        }).catch(() => {});
+      const initLogs = (): Array<unknown> =>
+        vi.mocked(log).mock.calls.filter(([e]) => e.message === 'MCP client initialized');
+
+      await post('modern-a');
+      await post('modern-a');
+      expect(initLogs()).toHaveLength(1);
+      expect(log).toHaveBeenCalledWith({
+        message: 'MCP client initialized',
+        level: 'info',
+        logger: 'http',
+        data: {
+          protocolVersion: '2026-07-28',
+          clientInfo: { name: `modern-a-${stateless}`, version: '1.0.0' },
+          capabilities: {},
+          elicitationSupported: false,
+        },
+      });
+
+      await post('modern-b');
+      expect(initLogs()).toHaveLength(2);
+
+      // A capability change on a known client is logged again.
+      await post('modern-a', { elicitation: {} });
+      expect(initLogs()).toHaveLength(3);
+    });
+
     it('answers a site settings 401 with the OAuth challenge, so the client signs in again', async () => {
       mocks.registerTools.mockRejectedValue(
         new McpSiteSettingsUnavailableError('Could not get the MCP settings.', 401),
