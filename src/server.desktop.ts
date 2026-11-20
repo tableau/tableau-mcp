@@ -40,7 +40,7 @@ import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
-import { getRequestFields, toStandardSchema } from './tools/toolContext.js';
+import { getRequestFields, toInputJsonSchema, toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
 const serverName = DESKTOP_MCP_NAME;
@@ -462,12 +462,9 @@ function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
 }
 
 export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {
-  const schema = toStandardSchema(await Provider.from(tool.paramsSchema));
   // Same conversion the SDK's own tools/list applies, minus the $schema dialect tag.
-  const inputSchema = (
-    schema
-      ? { type: 'object', ...schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) }
-      : { type: 'object', properties: {} }
+  const inputSchema = toInputJsonSchema(
+    toStandardSchema(await Provider.from(tool.paramsSchema)),
   ) as McpTool['inputSchema'] & { $schema?: string };
   delete inputSchema.$schema;
   stripEmptySchemaNoise(inputSchema);

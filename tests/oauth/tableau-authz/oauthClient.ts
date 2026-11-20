@@ -1,5 +1,7 @@
 import {
+  CallToolRequest,
   Client,
+  ListToolsRequest,
   ListToolsResult,
   OAuthClientMetadata,
   OAuthClientProvider,
@@ -216,7 +218,12 @@ export class OAuthClient {
 
   async listTools(): Promise<ListToolsResult> {
     console.log('[OAuthClient] Listing tools');
-    return await this.client.listTools();
+    const request: ListToolsRequest = {
+      method: 'tools/list',
+      params: {},
+    };
+
+    return await this.client.request(request);
   }
 
   async callTool<Z extends z.ZodTypeAny = z.ZodNever>(
@@ -240,7 +247,15 @@ export class OAuthClient {
     textFormat = textFormat ?? 'json';
     toolArgs = toolArgs ?? {};
 
-    const result = await this.client.callTool({ name: toolName, arguments: toolArgs });
+    const request: CallToolRequest = {
+      method: 'tools/call',
+      params: {
+        name: toolName,
+        arguments: toolArgs,
+      },
+    };
+
+    const result = await this.client.request(request);
     if (!Array.isArray(result.content)) {
       console.error(result.content);
       throw new Error('result.content must be an array');

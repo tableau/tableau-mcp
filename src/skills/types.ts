@@ -38,9 +38,7 @@ export const SkillEntrySchema = z.object({
 
 export type SkillEntry = z.infer<typeof SkillEntrySchema>;
 
-/**
- * `skills/list` request. The `method` literal is what the SDK routes on.
- */
+/** `skills/list` request. */
 export const SkillsListRequestSchema = z.object({
   method: z.literal('skills/list'),
   params: z.object({ cursor: z.string().optional() }).passthrough().optional(),

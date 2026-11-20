@@ -47,15 +47,15 @@ import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { getBindTemplateTool, POST_APPLY_UNCERTAINTY_GUIDANCE } from './bindTemplate.js';
 import { proposalSignature } from './proposalSignature.js';
 
-// Auto-mock the live-read command. Partial-mock the binder core so the pure
-// DERIVATION_* exports used to build the zod schema stay intact while only
-// bindTemplate is stubbed. The runtime catalog is built from the real bundled TBMs;
-// static manifests are intentionally absent.
-// The SDK types `structuredContent` as `{}`; these tests read named fields from it.
+// The SDK types `structuredContent` as `unknown`; these tests read named fields from it.
 type CallToolResult = SdkCallToolResult & {
   structuredContent?: Record<string, any>;
 };
 
+// Auto-mock the live-read command. Partial-mock the binder core so the pure
+// DERIVATION_* exports used to build the zod schema stay intact while only
+// bindTemplate is stubbed. The runtime catalog is built from the real bundled TBMs;
+// static manifests are intentionally absent.
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js', async (importOriginal) => {
   const actual =

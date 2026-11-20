@@ -5,7 +5,12 @@ import features from '../features.json';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
-import { buildWebInstructions, serverName, WebMcpServer } from './server.web.js';
+import {
+  buildWebInstructions,
+  serverName,
+  WebMcpServer,
+  type WebToolRegistrationCallback,
+} from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import {
@@ -1016,10 +1021,8 @@ describe('server', () => {
       .mock.calls.find((call) => call[0 /* tool name */] === 'list-datasources');
 
     invariant(listDatasourcesRegistration);
-    const listDatasourcesCallback = listDatasourcesRegistration[2 /* callback */] as (
-      args: Record<string, unknown>,
-      ctx: ServerContext,
-    ) => Promise<unknown>;
+    const listDatasourcesCallback =
+      listDatasourcesRegistration[2 /* callback */] as WebToolRegistrationCallback;
 
     await expect(listDatasourcesCallback({}, getMockServerContext())).rejects.toSatisfy(
       (error: unknown) =>

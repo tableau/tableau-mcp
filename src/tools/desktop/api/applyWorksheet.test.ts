@@ -34,7 +34,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockContainedCacheReadFromFs } from './applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from './applyWorksheet.js';
 
-// The SDK types `structuredContent` as `{}`; these tests read named fields from it.
+// The SDK types `structuredContent` as `unknown`; these tests read named fields from it.
 type CallToolResult = SdkCallToolResult & {
   structuredContent?: Record<string, any>;
 };

@@ -18,13 +18,13 @@ export function registerSkillMethodHandlers(mcp: McpServer, registry: SkillRegis
     'skills/list',
     { params: SkillsHandlerParamsSchema },
     async (params): Promise<SkillsListResult> => {
-      const parsed = SkillsListRequestSchema.safeParse({ method: 'skills/list', params });
+      const parsed = SkillsListRequestSchema.shape.params.safeParse(params);
       if (!parsed.success) {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Invalid skills/list params');
       }
       try {
         // resultType stays 'complete' per the skills spec, even for a partial page
-        return { resultType: 'complete', ...registry.list(parsed.data.params?.cursor) };
+        return { resultType: 'complete', ...registry.list(parsed.data?.cursor) };
       } catch (error) {
         if (error instanceof InvalidSkillsCursorError) {
           throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Invalid cursor');
@@ -38,14 +38,14 @@ export function registerSkillMethodHandlers(mcp: McpServer, registry: SkillRegis
     'skills/get',
     { params: SkillsHandlerParamsSchema },
     async (params): Promise<SkillsGetResult> => {
-      const parsed = SkillsGetRequestSchema.safeParse({ method: 'skills/get', params });
+      const parsed = SkillsGetRequestSchema.shape.params.safeParse(params);
       if (!parsed.success) {
         throw new ProtocolError(
           ProtocolErrorCode.InvalidParams,
           'skills/get requires a string uri parameter',
         );
       }
-      const { uri } = parsed.data.params;
+      const { uri } = parsed.data;
       const skill = registry.get(uri);
       if (!skill) {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Skill ${uri} not found`);

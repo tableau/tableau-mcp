@@ -27,10 +27,6 @@ vi.mock('@modelcontextprotocol/server/stdio', () => ({
   StdioServerTransport: vi.fn(),
 }));
 
-vi.mock('@modelcontextprotocol/core', () => ({
-  SetLevelRequestSchema: {},
-}));
-
 vi.mock('dotenv', () => ({
   default: { config: vi.fn() },
 }));

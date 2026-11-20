@@ -1,4 +1,4 @@
-import { ToolParamsSchema, toStandardSchema } from '../../toolContext.js';
+import { toInputJsonSchema, ToolParamsSchema, toStandardSchema } from '../../toolContext.js';
 
 /**
  * Reproduces what the server advertises as a tool's `inputSchema`: the registration adapter wraps
@@ -11,12 +11,5 @@ import { ToolParamsSchema, toStandardSchema } from '../../toolContext.js';
  * `.shape`, so the advertised schema previously came out as `{"type":"object","properties":{}}`.
  */
 export function advertisedInputSchema(paramsShape: ToolParamsSchema): Record<string, unknown> {
-  const schema = toStandardSchema(paramsShape);
-  if (!schema) {
-    return { type: 'object', properties: {} };
-  }
-  return {
-    type: 'object',
-    ...schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }),
-  };
+  return toInputJsonSchema(toStandardSchema(paramsShape));
 }

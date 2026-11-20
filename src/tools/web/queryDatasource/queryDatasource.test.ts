@@ -211,7 +211,7 @@ describe('queryDatasourceTool', () => {
       server.registerTool(
         tool.name,
         { inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)) },
-        (args) => callback(args as never, getMockRequestHandlerExtra()),
+        (args) => callback(args, getMockRequestHandlerExtra()),
       );
       const client = new Client({ name: 'test-client', version: '0.0.0' });
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

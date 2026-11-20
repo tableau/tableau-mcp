@@ -24,9 +24,10 @@ import {
   SkillsListResultSchema,
 } from './types.js';
 
-// The SDK strips resultType from results on 2025-era connections (what the in-memory pair negotiates).
-const WireListResultSchema = SkillsListResultSchema.omit({ resultType: true });
-const WireGetResultSchema = SkillsGetResultSchema.omit({ resultType: true });
+// The v2 client drops resultType when decoding 2025-era results (what the in-memory pair
+// negotiates), so client round trips can't see it.
+const ClientDecodedListResultSchema = SkillsListResultSchema.omit({ resultType: true });
+const ClientDecodedGetResultSchema = SkillsGetResultSchema.omit({ resultType: true });
 
 const SKILL: SkillEntry = {
   uri: 'skill://test-skill/SKILL.md',
@@ -68,7 +69,7 @@ async function requestSkills(
   try {
     return await client.request(
       { method, params },
-      method === 'skills/get' ? WireGetResultSchema : WireListResultSchema,
+      method === 'skills/get' ? ClientDecodedGetResultSchema : ClientDecodedListResultSchema,
     );
   } finally {
     await client.close();
@@ -76,7 +77,7 @@ async function requestSkills(
   }
 }
 
-// Invokes a registered handler directly, bypassing the SDK's per-era result shaping.
+// Invokes a registered handler directly, bypassing the client's per-era result decoding.
 async function callHandler(
   registry: SkillRegistry,
   method: 'skills/list' | 'skills/get',
@@ -101,7 +102,7 @@ describe('skills/list', () => {
     expect(result).toEqual({ skills: [SKILL] });
   });
 
-  // The SDK strips resultType on 2025-era connections, so the handlers' own output is checked directly.
+  // The client drops resultType on 2025-era connections, so the handlers' own output is checked directly.
   it.each([
     ['skills/list', {}, { resultType: 'complete', skills: [SKILL] }],
     ['skills/get', { uri: SKILL.uri }, { resultType: 'complete', skill: SKILL }],

@@ -232,7 +232,3 @@ export function constrainDatasources({
     result: datasources,
   };
 }
-
-export const exportedForTesting = {
-  listDatasourcesParamsSchema: paramsSchema,
-};

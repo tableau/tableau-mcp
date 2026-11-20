@@ -134,7 +134,7 @@ describe('publishDatasourceTool', () => {
     server.registerTool(
       tool.name,
       { inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)) },
-      async (args) => callback(args as never, getMockExtra()),
+      async (args) => callback(args, getMockExtra()),
     );
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'test-client', version: '0.0.0' });

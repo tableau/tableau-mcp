@@ -142,7 +142,7 @@ describe('manageKnowledgeContextTool', () => {
 
   it('enforces the one-to-100 statement array bound at the schema level', async () => {
     const paramsSchema = await Provider.from(getTool().paramsSchema);
-    const objectSchema = z.object(paramsSchema as z.ZodRawShape);
+    const objectSchema = z.object(paramsSchema);
 
     expect(
       objectSchema.safeParse({ action: 'create', statements: [], isGlobal: true }).success,

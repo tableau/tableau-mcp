@@ -1,7 +1,6 @@
 import {
   AuthInfo,
   CallToolResult,
-  Notification,
   RequestId,
   RequestMeta,
   ServerContext,
@@ -21,6 +20,12 @@ export type ToolArgs<Args extends undefined | ToolParamsSchema> = Args extends Z
     ? StandardSchemaWithJSON.InferOutput<Args>
     : undefined;
 
+export function toStandardSchema<S extends ZodRawShape>(schema: S): z.ZodObject<S>;
+export function toStandardSchema<S extends StandardSchemaWithJSON>(schema: S): S;
+export function toStandardSchema(schema: ToolParamsSchema): StandardSchemaWithJSON;
+export function toStandardSchema(
+  schema: ToolParamsSchema | undefined,
+): StandardSchemaWithJSON | undefined;
 export function toStandardSchema(
   schema: ToolParamsSchema | undefined,
 ): StandardSchemaWithJSON | undefined {
@@ -28,6 +33,16 @@ export function toStandardSchema(
     return schema as StandardSchemaWithJSON | undefined;
   }
   return z.object(schema);
+}
+
+// The inputSchema the SDK's tools/list advertises; the SDK doesn't export its converter.
+export function toInputJsonSchema(schema: StandardSchemaWithJSON | undefined): {
+  type: 'object';
+  [key: string]: unknown;
+} {
+  return schema
+    ? { type: 'object', ...schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) }
+    : { type: 'object', properties: {} };
 }
 
 // Additional context available to all tool callbacks
@@ -44,8 +59,7 @@ export type TableauRequestFields = {
   authInfo?: AuthInfo;
   requestInfo?: { headers: Headers };
   _meta?: RequestMeta;
-  sendNotification: (notification: Notification) => Promise<void>;
-  sendRequest: ServerContext['mcpReq']['send'];
+  sendNotification: ServerContext['mcpReq']['notify'];
 };
 
 export function getRequestFields(ctx: ServerContext): TableauRequestFields {
@@ -57,7 +71,6 @@ export function getRequestFields(ctx: ServerContext): TableauRequestFields {
     requestInfo: ctx.http?.req ? { headers: ctx.http.req.headers } : undefined,
     _meta: ctx.mcpReq._meta,
     sendNotification: ctx.mcpReq.notify,
-    sendRequest: ctx.mcpReq.send,
   };
 }
 

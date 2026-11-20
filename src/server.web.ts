@@ -83,7 +83,10 @@ export type LoadWebToolsResult = {
   notes?: string[];
 };
 
-type WebToolRegistrationCallback = (args: unknown, extra: ServerContext) => Promise<CallToolResult>;
+export type WebToolRegistrationCallback = (
+  args: unknown,
+  extra: ServerContext,
+) => Promise<CallToolResult>;
 
 type CollectedMessage = { message: string; toolNames: string[] };
 
@@ -716,7 +719,8 @@ export class WebMcpServer extends Server {
     const cspDomains = config.cspAllowedDomains;
 
     registerAppResource(
-      // @ts-expect-error -- ext-apps' Pick<McpServer, 'registerResource'> doesn't resolve the v2 overload set.
+      // @ts-expect-error -- ext-apps is ESM, so it types McpServer from the SDK's .d.mts while this
+      // CommonJS project gets the .d.cts; the two ResourceTemplate classes don't match.
       this.mcpServer,
       tool.name,
       resourceUri,

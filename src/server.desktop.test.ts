@@ -20,6 +20,7 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
+  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -293,6 +294,47 @@ describe('desktop tools/list Tableau vocabulary', () => {
       .sort();
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('stripEmptySchemaNoise', () => {
+  it('drops empty descriptions and string-only propertyNames at any depth', () => {
+    const schema = {
+      type: 'object',
+      description: '',
+      properties: {
+        caption: { type: 'string', description: '' },
+        filters: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string', description: '' }] },
+      },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      properties: {
+        caption: { type: 'string' },
+        filters: { type: 'object', additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string' }] },
+      },
+    });
+  });
+
+  it('keeps real descriptions and constrained propertyNames', () => {
+    const schema = {
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    });
   });
 });
 
