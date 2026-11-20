@@ -21,6 +21,7 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
+import { getFeatureGate } from '../features/init.js';
 import { logClientInitialized, logModernClientOnce } from '../logging/clientInitialized.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
@@ -137,7 +138,8 @@ export async function startExpressServer({
   }
 
   const path = `/${basePath}`;
-  app.post(path, ...middleware, routeMcpPost);
+  const serveProtocol2026 = await getFeatureGate().isFeatureEnabled('mcp-protocol-2026');
+  app.post(path, ...middleware, serveProtocol2026 ? routeMcpPost : createMcpServer);
   app.get(
     path,
     ...middleware,
