@@ -69,6 +69,8 @@ export type AbCase = {
   projectName?: string;
   /** Not in the prompt: the model must find it, and the eval checks it picked this one. */
   datasourceLuid: string;
+  /** Same-named copies of the data source that also count as the right choice. */
+  altDatasourceLuids?: Array<string>;
   /** A view of a workbook built on the data source, named in the first turn's prompt. */
   viewName?: string;
   /** The workbook containing `viewName`. Not in the prompt; the eval checks the model found it. */

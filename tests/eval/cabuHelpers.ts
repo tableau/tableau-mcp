@@ -115,9 +115,10 @@ export function buildCasePrompt(abCase: AbCase, turnIndex: number, optIn: boolea
  */
 export function checkSourceChoice(abCase: AbCase, executions: Array<ToolExecution>): Array<string> {
   const problems: Array<string> = [];
+  const accepted = [abCase.datasourceLuid, ...(abCase.altDatasourceLuids ?? [])];
   for (const toolName of ['query_datasource', 'tableau_agent_start_conversation']) {
     for (const call of findCalls(executions, toolName)) {
-      if (call.arguments.datasourceLuid !== abCase.datasourceLuid) {
+      if (!accepted.includes(String(call.arguments.datasourceLuid))) {
         problems.push(
           `${toolName} used data source ${String(call.arguments.datasourceLuid)}, expected ${abCase.datasourceLuid}`,
         );

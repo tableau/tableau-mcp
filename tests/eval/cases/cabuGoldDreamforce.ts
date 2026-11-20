@@ -20,10 +20,13 @@ import type { AbCase } from './dataQuestions.js';
 
 const GOLD = {
   datasourceName: 'gold_run_the_business_enhanced (local copy) (local copy)',
-  datasourceLuid: '7611e6c5-c0f9-4a6d-afc2-f6647923c2e9',
-  // The suite's view; prompts name it so the model can find the workbook with the preferences.
+  // The workbook's data source. The site has an older same-named copy in the same project, which
+  // the prompt can't tell apart, so accept it too.
+  datasourceLuid: '0de2f740-dce7-4619-9abe-88e2afcde4e7',
+  altDatasourceLuids: ['17dfa1d7-8bad-490f-8135-cc3d1383e554'],
+  // The suite's view; prompts name it so the model can find its workbook.
   viewName: 'Sales by Account - Dreamforce',
-  workbookLuid: '5eafe9c6-89cc-410f-ac30-f0f6a6a0f23a',
+  workbookLuid: '2bceb6e3-d8d7-4bee-97f2-7cb77d6e037f',
 };
 
 // References round to 2–3 significant digits ("$1.41B"), so allow 1%.
