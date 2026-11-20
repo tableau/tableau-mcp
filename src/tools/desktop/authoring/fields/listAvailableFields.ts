@@ -7,7 +7,12 @@ import {
   endpointNotInThisBuild,
   isRouteMissing,
 } from '../../../../desktop/externalApi/toolUtils.js';
-import { listAvailableFields } from '../../../../desktop/metadata/index.js';
+import {
+  type DataModelDatasource,
+  describeDataModel,
+  listAvailableFields,
+} from '../../../../desktop/metadata/index.js';
+import { tableLabel } from '../../../../desktop/metadata/objectModel.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
@@ -26,10 +31,10 @@ const paramsSchema = {
   session: z.string().optional().describe('Session ID; refresh live workbook.'),
   workbookFile: z.string().optional().describe('Cache file; omit for live session.'),
   verbosity: z
-    .enum(['slim', 'full'])
+    .enum(['slim', 'full', 'model'])
     .optional()
     .describe(
-      'full (default): table + fields. slim: candidate tuples and fieldTables logical table IDs by datasource.',
+      'full (default): table + fields. slim: candidate tuples + fieldTables. model: tables, joins.',
     ),
   hasLuid: z.boolean().optional().describe('Slim: LUID-backed only; live required.'),
   luids: z.array(z.string().min(1)).optional().describe('Slim: LUIDs; [] all; any miss errors.'),
@@ -123,8 +128,51 @@ function renderFieldTable(fields: AvailableField[]): string {
   return output;
 }
 
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function renderDataModel(datasources: DataModelDatasource[]): string {
+  if (datasources.length === 0) return 'No datasources found in the workbook.';
+  return datasources
+    .map((ds) => {
+      const caption = (id: string): string => tableLabel(ds.tables, id);
+      const lines = [
+        `Datasource "${ds.caption ?? ds.name}": ${plural(ds.tables.length, 'table')}, ${plural(ds.relationships.length, 'relationship')}.`,
+      ];
+      for (const table of ds.tables) {
+        const counts =
+          table.measures !== undefined && table.dimensions !== undefined
+            ? [plural(table.measures, 'measure'), plural(table.dimensions, 'dimension')]
+            : ['field ownership unknown'];
+        counts.push(plural(table.relationships, 'relationship'));
+        lines.push(`- ${table.caption ?? table.id}: ${counts.join(', ')}`);
+      }
+      const { measures, dimensions } = ds.untiedFields ?? { measures: 0, dimensions: 0 };
+      if (measures + dimensions > 0) {
+        lines.push(
+          `- ${plural(measures + dimensions, 'field')} not tied to a table (mostly calculations): ${plural(measures, 'measure')}, ${plural(dimensions, 'dimension')}`,
+        );
+      }
+      for (const r of ds.relationships) {
+        const pairs = r.fields
+          .map((f) => `${f.fromField} ${f.operator} ${f.toField}`)
+          .join(' AND ');
+        lines.push(
+          `- ${caption(r.fromTableId)} to ${caption(r.toTableId)} on ${pairs || '(no field pair)'}`,
+        );
+      }
+      for (const problem of ds.problems)
+        lines.push(`- problem ${problem.kind}: ${problem.message}`);
+      for (const note of ds.notes) lines.push(`- note: ${note}`);
+      return lines.join('\n');
+    })
+    .join('\n\n');
+}
+
 type ListAvailableFieldsResult =
   | { message: string; fields: ReturnType<typeof listAvailableFields> }
+  | { message: string; datasources: DataModelDatasource[] }
   | ListAvailableFieldsSlimResult;
 
 const title = 'Listing available fields';
@@ -138,7 +186,7 @@ export const getListAvailableFieldsTool = (
     description: [
       'List datasource fields available for authoring from a live or cached workbook.',
       'Does not report worksheet placements.',
-      'Full gives column_ref; slim gives insight candidates plus authoritative logical table IDs.',
+      'Full gives column_ref; slim gives insight candidates and fieldTables; model gives table counts, relationships, problems.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -225,6 +273,11 @@ export const getListAvailableFieldsTool = (
           } else {
             invariant(cachedWorkbook.text !== undefined, 'the cached workbook was read');
             workbookXml = cachedWorkbook.text;
+          }
+
+          if (verbosity === 'model') {
+            const { datasources } = describeDataModel(workbookXml);
+            return new Ok({ message: renderDataModel(datasources), datasources });
           }
 
           const fields = listAvailableFields(workbookXml);

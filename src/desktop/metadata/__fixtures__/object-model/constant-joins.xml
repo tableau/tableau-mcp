@@ -1,0 +1,76 @@
+<!-- Trimmed from src/desktop/data/templates/magnitude__column__compare-sizes-from-zero.tbm:27 (datasource), :4043-4047 and :4072-4102 (object-graph; cut the Orders <columns> list at :4048-4071, so the :4047 relation tag is now self-closing), and from src/desktop/data/templates/correlation__radar-profile__compare-multivariate-profiles.tbm:16 (datasource) and :455-489 (object-graph, verbatim). Added: the <workbook><datasources> wrapper. -->
+<workbook><datasources>
+    <datasource inline='true' name='Sample - EU Superstore' version='18.1'>
+      <object-graph>
+        <objects>
+          <object caption='Orders' id='Orders_ECFCA1FB690A41FE803BC071773BA862'>
+            <properties context=''>
+              <relation connection='excel-direct.0ozsbj20cdelf51evvdk71kugqg0 (copy)' name='Orders' table='[Orders$]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Orders_ECFCA1FB690A41FE803BC071773BA862' table='[Extract].[Orders_ECFCA1FB690A41FE803BC071773BA862]' type='table' />
+            </properties>
+          </object>
+          <object caption='Sheet1' id='Sheet1_F37365A782B541658041CC3614B2B70E'>
+            <properties context=''>
+              <relation connection='excel-direct.1ydij020ko4px315uagch1rhgjjf' name='Sheet1' table='[Sheet1$]' type='table'>
+                <columns gridOrigin='A1:B201:no:A1:B201:0' header='yes' outcome='6'>
+                  <column datatype='integer' name='Range' ordinal='0' />
+                  <column datatype='integer' name='X' ordinal='1' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Sheet1_F37365A782B541658041CC3614B2B70E' table='[Extract].[Sheet1_F37365A782B541658041CC3614B2B70E]' type='table' />
+            </properties>
+          </object>
+        </objects>
+        <relationships>
+          <relationship>
+            <expression op='='>
+              <expression op='1' />
+              <expression op='[X]' />
+            </expression>
+            <first-end-point object-id='Orders_ECFCA1FB690A41FE803BC071773BA862' />
+            <second-end-point object-id='Sheet1_F37365A782B541658041CC3614B2B70E' />
+          </relationship>
+        </relationships>
+      </object-graph>
+    </datasource>
+    <datasource caption='Radar Chart (Football)' inline='true' name='federated.0ekaykw02fhokp0zlnc6r075pqpt' version='18.1'>
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24'>
+            <properties context=''>
+              <relation connection='hyper.1jf4xhv038pq6x115jy4t1ssdjn8' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24' table='[Extract].[Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24]' type='table' />
+            </properties>
+          </object>
+          <object caption='Sheet1' id='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F'>
+            <properties context=''>
+              <relation connection='excel-direct.0mfntxm1bhdcwv15s1lhm13wwpi8' name='Sheet1' table='[Sheet1$]' type='table'>
+                <columns gridOrigin='A1:A104:no:A1:A104:0' header='yes' outcome='6'>
+                  <column datatype='integer' name='Pad' ordinal='0' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F' table='[Extract].[Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F]' type='table' />
+            </properties>
+          </object>
+        </objects>
+        <relationships>
+          <relationship>
+            <expression op='='>
+              <expression op='1' />
+              <expression op='1&#13;&#10;' />
+            </expression>
+            <first-end-point object-id='Extract (Extract.Extract)_2363FB1A4F434CB184243B518D96DB24' />
+            <second-end-point object-id='Sheet1_DD2C9AE4B947401EB520BA2FEC5C298F' />
+          </relationship>
+        </relationships>
+      </object-graph>
+    </datasource>
+</datasources></workbook>

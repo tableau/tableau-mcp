@@ -655,6 +655,209 @@ describe('listAvailableFieldsTool', () => {
       'does not serve the workbook datasources endpoint yet',
     );
   });
+
+  describe("verbosity: 'model'", () => {
+    const mockModel = {
+      datasources: [
+        {
+          name: 'Sample - Superstore',
+          tables: [
+            {
+              id: 'Orders_1',
+              caption: 'Orders',
+              isLegacy: false,
+              measures: 4,
+              dimensions: 14,
+              relationships: 2,
+            },
+            {
+              id: 'People_1',
+              caption: 'People',
+              isLegacy: false,
+              measures: 0,
+              dimensions: 1,
+              relationships: 1,
+            },
+          ],
+          untiedFields: { measures: 6, dimensions: 3 },
+          relationships: [
+            {
+              fromTableId: 'Orders_1',
+              toTableId: 'People_1',
+              operator: '=',
+              fields: [{ operator: '=', fromField: '[Region]', toField: '[Region (People)]' }],
+              from: { tableId: 'Orders_1', cardinality: 'not-set' },
+              to: { tableId: 'People_1', cardinality: 'not-set' },
+            },
+          ],
+          problems: [
+            {
+              kind: 'many-to-many',
+              tables: ['Orders_1', 'People_1'],
+              relationship: 0,
+              message: 'Orders to People is many-to-many: cardinality not set (Tableau default).',
+            },
+          ],
+          notes: [],
+        },
+      ],
+    };
+
+    it('accepts model in the schema and describes it', async () => {
+      const tool = getListAvailableFieldsTool(new DesktopMcpServer());
+      const paramsSchema = await Provider.from(tool.paramsSchema);
+      expect(paramsSchema.verbosity.safeParse('model').success).toBe(true);
+      expect(paramsSchema.verbosity.description).toContain('model');
+      expect(tool.description).toContain('model gives table counts, relationships, problems.');
+    });
+
+    it('returns the structured datasources and a plain summary', async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(STALE_XML);
+      vi.mocked(metadataModule.describeDataModel).mockReturnValue(mockModel as any);
+
+      const result = await getResult({ workbookFile: WORKBOOK_FILE, verbosity: 'model' });
+
+      const body = parseBody(result);
+      expect(Object.keys(body).sort()).toEqual(['datasources', 'message']);
+      expect(body.datasources).toEqual(mockModel.datasources);
+      expect(body.message).toContain('Datasource "Sample - Superstore": 2 tables, 1 relationship.');
+      expect(body.message).toContain('- Orders: 4 measures, 14 dimensions, 2 relationships');
+      expect(body.message).toContain(
+        '- 9 fields not tied to a table (mostly calculations): 6 measures, 3 dimensions',
+      );
+      expect(body.message).toContain('- Orders to People on [Region] = [Region (People)]');
+      expect(body.message).toContain('- problem many-to-many: Orders to People is many-to-many');
+      expect(metadataModule.describeDataModel).toHaveBeenCalledWith(STALE_XML);
+      expect(metadataModule.listAvailableFields).not.toHaveBeenCalled();
+    });
+
+    it('names a dangling empty end point "(unknown table)" and omits counts it does not know', async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(STALE_XML);
+      vi.mocked(metadataModule.describeDataModel).mockReturnValue({
+        datasources: [
+          {
+            name: 'DS',
+            tables: [{ id: 'A', caption: 'A', isLegacy: false, relationships: 1 }],
+            relationships: [
+              {
+                fromTableId: 'A',
+                toTableId: '',
+                fields: [],
+                from: { tableId: 'A', cardinality: 'one' },
+                to: { tableId: '', cardinality: 'one' },
+              },
+            ],
+            problems: [],
+            notes: [],
+          },
+        ],
+      } as any);
+
+      const result = await getResult({ workbookFile: WORKBOOK_FILE, verbosity: 'model' });
+
+      const message = parseBody(result).message;
+      expect(message).toContain('Datasource "DS": 1 table, 1 relationship.');
+      expect(message).toContain('- A: field ownership unknown, 1 relationship');
+      expect(message).toContain('- A to (unknown table) on (no field pair)');
+      expect(message).not.toContain('not tied to a table');
+    });
+
+    it.each([
+      [
+        'a graphless legacy datasource',
+        `<workbook><datasources><datasource caption='Legacy' name='federated.legacy1'>
+          <connection class='federated'><relation name='Orders' table='[Orders$]' type='table'/>
+            <metadata-records>
+              <metadata-record class='column'><local-name>[Region]</local-name><parent-name>[Orders]</parent-name><local-type>string</local-type></metadata-record>
+              <metadata-record class='column'><local-name>[Sales]</local-name><parent-name>[Orders]</parent-name><local-type>real</local-type></metadata-record>
+            </metadata-records></connection>
+        </datasource></datasources></workbook>`,
+      ],
+      ['a datasource with its object ids stripped', 'STRIPPED_SUPERSTORE'],
+    ])('renders no "not tied to a table" line for %s', async (_label, source) => {
+      const realFs = await vi.importActual<typeof import('fs')>('fs');
+      const xml =
+        source === 'STRIPPED_SUPERSTORE'
+          ? realFs
+              .readFileSync('tests/e2e/fixtures/workbooks/superstore-datasource.twb', 'utf8')
+              .replace(/<object-id>\[[^\]]+\]<\/object-id>/g, '')
+          : source;
+      const actual = await vi.importActual<typeof metadataModule>(
+        '../../../../desktop/metadata/index.js',
+      );
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(xml);
+      vi.mocked(metadataModule.describeDataModel).mockReturnValue(actual.describeDataModel(xml));
+
+      const result = await getResult({ workbookFile: WORKBOOK_FILE, verbosity: 'model' });
+
+      const message = parseBody(result).message;
+      expect(message).toContain('field ownership unknown');
+      expect(message).not.toContain('not tied to a table');
+    });
+
+    it('reads the live workbook when no workbookFile is given', async () => {
+      vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+      vi.mocked(metadataModule.describeDataModel).mockReturnValue({ datasources: [] });
+      const extra = {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockResolvedValue({} as any),
+      };
+
+      const result = await getResult({ session: SESSION, verbosity: 'model', extra });
+
+      const body = parseBody(result);
+      expect(body).toEqual({ message: 'No datasources found in the workbook.', datasources: [] });
+      expect(metadataModule.describeDataModel).toHaveBeenCalledWith(LIVE_XML);
+    });
+
+    it.each([{ hasLuid: true }, { hasLuid: true, luids: ['luid-superstore'] }])(
+      'rejects LUID filtering with model (%o)',
+      async (args) => {
+        const result = await getResult({ ...args, verbosity: 'model' });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('hasLuid and luids require verbosity: slim.');
+        expect(metadataModule.describeDataModel).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['full', 'slim'] as const)(
+      'leaves %s output unchanged by model mode',
+      async (verbosity) => {
+        vi.mocked(existsSync).mockReturnValue(true);
+        vi.mocked(readFileSync).mockReturnValue(STALE_XML);
+        vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
+        vi.mocked(metadataModule.describeDataModel).mockReturnValue(mockModel as any);
+
+        const baseline = await getResult({ workbookFile: WORKBOOK_FILE });
+        const result = await getResult({ workbookFile: WORKBOOK_FILE, verbosity });
+
+        expect(result.isError).toBe(false);
+        expect(metadataModule.describeDataModel).not.toHaveBeenCalled();
+        const text = (result.content[0] as { text: string }).text;
+        const baselineText = (baseline.content[0] as { text: string }).text;
+        if (verbosity === 'full') {
+          expect(text).toBe(baselineText);
+        } else {
+          expect(JSON.parse(text)).toEqual({
+            datasources: [
+              {
+                datasource: 'Sample - Superstore',
+                fieldTables: {},
+                measures: [['Profit', 'Profit', 'Sum', 'base']],
+                timeDimensions: [],
+                breakdownDimensions: [['Category', 'Category', 'nominal']],
+              },
+            ],
+          });
+        }
+      },
+    );
+  });
 });
 
 function mockLiveWorkbookDatasourceMetadata(
@@ -692,7 +895,7 @@ async function getResult({
 }: {
   workbookFile?: string;
   session?: string;
-  verbosity?: 'slim' | 'full';
+  verbosity?: 'slim' | 'full' | 'model';
   hasLuid?: boolean;
   luids?: string[];
   extra?: ReturnType<typeof getMockRequestHandlerExtra>;

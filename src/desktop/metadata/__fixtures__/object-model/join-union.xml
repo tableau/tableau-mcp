@@ -1,0 +1,73 @@
+<!-- Trimmed from src/desktop/data/templates/spatial__spike-map__show-magnitude-at-locations-with-height.tbm:19 (datasource element) and :686-753 (object-graph, verbatim). Cut: everything else in the datasource. Added: the <workbook><datasources> wrapper. -->
+<workbook><datasources>
+    <datasource caption='Spike Chart' inline='true' name='federated.1c4k6r40hod0qv1b98nix0a4vlle' version='18.1'>
+      <object-graph>
+        <objects>
+          <object caption='Sheet1' id='Sheet1_0377C3D97A1B40318670C951F650A809'>
+            <properties context=''>
+              <relation join='inner' type='join'>
+                <clause type='join'>
+                  <expression op='='>
+                    <expression op='[Sheet1+].[Code]' />
+                    <expression op='[Sheet12].[alpha-3]' />
+                  </expression>
+                </clause>
+                <relation all='true' name='Sheet1+' type='union'>
+                  <columns header='yes'>
+                    <column datatype='string' name='Entity' />
+                    <column datatype='string' name='Code' />
+                    <column datatype='string' name='Year' />
+                    <column datatype='real' name='Gender Inequality Index' />
+                    <column datatype='string' name='Sheet' />
+                    <column datatype='string' name='Table Name' />
+                  </columns>
+                  <relation connection='excel-direct.16id9n91njdebi1bvffm70xc7und' name='Sheet1' table='[Sheet1$]' type='table'>
+                    <columns gridOrigin='A1:D182:no:A1:D182:0' header='yes' outcome='2'>
+                      <column datatype='string' name='Entity' ordinal='0' />
+                      <column datatype='string' name='Code' ordinal='1' />
+                      <column datatype='string' name='Year' ordinal='2' />
+                      <column datatype='string' name='Gender Inequality Index' ordinal='3' />
+                    </columns>
+                  </relation>
+                  <relation connection='excel-direct.16id9n91njdebi1bvffm70xc7und' name='Sheet11' table='[Sheet1$]' type='table'>
+                    <columns gridOrigin='A1:D182:no:A1:D182:0' header='yes' outcome='2'>
+                      <column datatype='string' name='Entity' ordinal='0' />
+                      <column datatype='string' name='Code' ordinal='1' />
+                      <column datatype='string' name='Year' ordinal='2' />
+                      <column datatype='string' name='Gender Inequality Index' ordinal='3' />
+                    </columns>
+                  </relation>
+                </relation>
+                <relation connection='excel-direct.0gmjyva0j3y2cr18hj0xf129cig1' name='Sheet12' table='[Sheet1$]' type='table'>
+                  <columns gridOrigin='A1:S191:no:A1:S191:0' header='yes' outcome='2'>
+                    <column datatype='integer' name='1' ordinal='0' />
+                    <column datatype='string' name='name' ordinal='1' />
+                    <column datatype='string' name='alpha-2' ordinal='2' />
+                    <column datatype='string' name='alpha-3' ordinal='3' />
+                    <column datatype='string' name='country-code' ordinal='4' />
+                    <column datatype='string' name='iso_3166-2' ordinal='5' />
+                    <column datatype='string' name='region' ordinal='6' />
+                    <column datatype='string' name='sub-region' ordinal='7' />
+                    <column datatype='string' name='intermediate-region' ordinal='8' />
+                    <column datatype='string' name='region-code' ordinal='9' />
+                    <column datatype='string' name='sub-region-code' ordinal='10' />
+                    <column datatype='string' name='intermediate-region-code' ordinal='11' />
+                    <column datatype='string' name='country code' ordinal='12' />
+                    <column datatype='real' name='Latitude' ordinal='13' />
+                    <column datatype='real' name='Longitude' ordinal='14' />
+                    <column datatype='string' name='Country Name' ordinal='15' />
+                    <column datatype='string' name='coordinates_0' ordinal='16' />
+                    <column datatype='string' name='coordinates_1' ordinal='17' />
+                    <column datatype='string' name='country_code' ordinal='18' />
+                  </columns>
+                </relation>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+</datasources></workbook>
