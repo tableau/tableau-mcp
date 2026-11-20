@@ -1,11 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import {
-  CallToolResult,
-  ListToolsRequestSchema,
-  Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
@@ -34,7 +27,10 @@ import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
+
+type ToolsListHandler = (params: unknown, ctx: unknown) => Promise<unknown>;
 
 const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
@@ -73,7 +69,7 @@ describe('DesktopMcpServer', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
           ...(ALWAYS_LOAD_TOOL_NAMES.has(tool.name) && {
             _meta: { 'anthropic/alwaysLoad': true },
@@ -120,12 +116,10 @@ describe('DesktopMcpServer', () => {
     await server.registerTools();
 
     const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
-    const listToolsCall = setRequestHandler.mock.calls.find(
-      ([requestSchema]) => requestSchema === ListToolsRequestSchema,
-    );
+    const listToolsCall = setRequestHandler.mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeDefined();
 
-    const result = await listToolsCall![1]({} as never, {} as never);
+    const result = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
     const tools = (result as { tools: Array<Record<string, unknown>> }).tools;
     expect(tools.length).toBeGreaterThan(0);
     for (const tool of tools) {
@@ -156,7 +150,7 @@ describe('DesktopMcpServer', () => {
     expect(server.ownsMcpServer).toBe(false);
     const listToolsCall = vi
       .mocked(sharedMcpServer.server.setRequestHandler)
-      .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      .mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeUndefined();
   });
 
@@ -179,8 +173,8 @@ describe('DesktopMcpServer', () => {
       await server.registerTools();
       const listToolsCall = vi
         .mocked(server.mcpServer.server.setRequestHandler)
-        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
-      const listResult = await listToolsCall![1]({} as never, {} as never);
+        .mock.calls.find(([method]) => method === 'tools/list');
+      const listResult = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
       const listedTools = (listResult as { tools: McpTool[] }).tools;
 
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
@@ -286,12 +280,7 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
     const description = await Provider.from(tool.description);
     if (typeof title === 'string') values.push(title);
     values.push(description);
-    const paramsSchema = await Provider.from(tool.paramsSchema);
-    const obj = normalizeObjectSchema(paramsSchema as any);
-    const inputSchema = obj
-      ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object', properties: {} };
-    collectSchemaDescriptions(inputSchema);
+    collectSchemaDescriptions((await getDesktopToolListEntry(tool)).inputSchema);
   }
 
   return values;

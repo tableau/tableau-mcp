@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { DIALOG_SESSION_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { DialogList } from '../../../desktop/externalApi/types.js';

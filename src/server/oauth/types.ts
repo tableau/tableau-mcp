@@ -1,4 +1,4 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { AuthInfo } from '@modelcontextprotocol/server';
 import express from 'express';
 
 import { User } from '../../sdks/tableau/types/user.js';
