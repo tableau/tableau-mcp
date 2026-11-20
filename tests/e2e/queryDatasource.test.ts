@@ -146,4 +146,84 @@ describe('query-datasource', () => {
       ]);
     });
   });
+
+  describe('VDS QueryRequest envelope', () => {
+    const resultSchema = z.object({
+      data: z.array(z.record(z.unknown())),
+      mcp: z
+        .object({
+          warnings: z
+            .array(z.object({ type: z.string(), affectedProperties: z.array(z.string()) }))
+            .optional(),
+          resultInfo: z.object({ truncated: z.boolean() }).passthrough().optional(),
+        })
+        .optional(),
+    });
+    const salesByCategory = {
+      fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Sales', function: 'SUM' }],
+    };
+
+    async function queryRequest(
+      query: Record<string, unknown>,
+      options: Record<string, unknown>,
+    ): Promise<z.infer<typeof resultSchema>> {
+      return client.callTool('query-datasource', {
+        schema: resultSchema,
+        toolArgs: {
+          datasource: { datasourceLuid: getSuperstoreDatasource(getDefaultEnv()).id },
+          query,
+          options,
+        },
+      });
+    }
+
+    it('runs a pasted request as written', async () => {
+      const result = await queryRequest(
+        { fields: [{ fieldCaption: 'Customer Name' }, { fieldCaption: 'Sales', function: 'SUM' }] },
+        { returnFormat: 'OBJECTS', debug: true, rowLimit: 3, disaggregate: false },
+      );
+
+      expect(result.data).toHaveLength(3);
+      expect(result.mcp?.resultInfo?.truncated).toBe(true);
+      expect(result.mcp?.warnings).toBeUndefined();
+    });
+
+    it('forwards disaggregate, which returns record-level rows', async () => {
+      const aggregated = await queryRequest(salesByCategory, { rowLimit: 10, disaggregate: false });
+      const disaggregated = await queryRequest(salesByCategory, {
+        rowLimit: 10,
+        disaggregate: true,
+      });
+
+      // Superstore has 3 categories; a row per record far exceeds the limit.
+      expect(aggregated.data).toHaveLength(3);
+      expect(aggregated.mcp?.resultInfo?.truncated).toBe(false);
+      expect(disaggregated.data).toHaveLength(10);
+      expect(disaggregated.mcp?.resultInfo?.truncated).toBe(true);
+    });
+
+    it('keeps OBJECTS rows and warns when returnFormat differs', async () => {
+      const result = await queryRequest(salesByCategory, { returnFormat: 'ARRAYS' });
+
+      expect(result.data.length).toBeGreaterThan(0);
+      for (const row of result.data) expect(row).toHaveProperty('Category');
+      expect(result.mcp?.warnings).toEqual([
+        { type: 'IGNORED_REQUEST_PROPERTY', affectedProperties: ['options.returnFormat'] },
+      ]);
+    });
+
+    it('rejects an unknown option by name', async () => {
+      const result = await client.client.callTool({
+        name: 'query-datasource',
+        arguments: {
+          datasource: { datasourceLuid: getSuperstoreDatasource(getDefaultEnv()).id },
+          query: salesByCategory,
+          options: { foo: 1 },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain('options.foo');
+    });
+  });
 });
