@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { createHash, randomUUID } from 'crypto';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -361,7 +361,7 @@ const WATERFALL_SORT_HINT =
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 export const POST_APPLY_UNCERTAINTY_GUIDANCE =
-  'Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.';
+  'Post-apply state is uncertain: inspect live worksheet state with get-xml before any correction. Do NOT call bind-template again or replay apply.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
 // agent must NOT hand-author another one. These clauses are appended only for splices the
 // function observed succeeding; requested-but-skipped filters are warnings, not successes.
@@ -2559,7 +2559,7 @@ function applyFallback(
     ...base,
     guidance:
       guidance ??
-      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). Before any correction, inspect live worksheet state with get-worksheet-xml; do not replay an uncertain apply. If correction is needed, use list-available-fields to reacquire RAW column_ref values, then list-templates, build-worksheets-from-templates, and apply-worksheet. Do not pass the returned XML-escaped field_mapping into templatePlan or call bind-template again.`,
+      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). Before any correction, inspect live worksheet state with get-xml; do not replay an uncertain apply. If correction is needed, use list-available-fields to reacquire RAW column_ref values, then list-templates, build-worksheets-from-templates, and apply-worksheet. Do not pass the returned XML-escaped field_mapping into templatePlan or call bind-template again.`,
     applied: false,
     apply_error,
     retry_safe: retrySafe,
@@ -3627,8 +3627,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 return new Ok(completeRequestDecline(ask));
               }
               const retainedCall2Contract = priorRecovery?.proposalContext as
-                | Call2Contract
-                | undefined;
+                Call2Contract | undefined;
               const retainedDatasource =
                 retainedCall2Contract?.arguments.datasource ??
                 priorRecovery?.largePieConfirmation?.datasource;
@@ -3937,7 +3936,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 );
                 if (target === 'not-found') {
                   return new ArgsValidationError(
-                    `target_worksheet "${canonicalTargetWorksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+                    `target_worksheet "${canonicalTargetWorksheet}" not found in the workbook — check get-sheets, or omit target_worksheet to create a new sheet`,
                   ).toErr();
                 }
                 if (target === 'in-dashboard') {

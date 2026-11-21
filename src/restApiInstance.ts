@@ -1,4 +1,4 @@
-import { RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { RequestId } from '@modelcontextprotocol/server';
 
 import { getConfig } from './config.js';
 import { log } from './logging/logger.js';

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { randomUUID } from 'crypto';
 import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
@@ -371,9 +371,9 @@ export const getApplyWorksheetTool = (
             file: worksheetFile,
             session,
             emptyPathGuidance:
-              'Get one from get-worksheet-xml, edit it with read-cached-xml and ' +
+              'Get one from get-xml, edit it with read-cached-xml and ' +
               'write-cached-xml, then pass that path here.',
-            notFoundGuidance: 'Provide a path returned by get-worksheet-xml.',
+            notFoundGuidance: 'Provide a path returned by get-xml.',
           });
           if (preamble.isErr()) {
             return preamble;

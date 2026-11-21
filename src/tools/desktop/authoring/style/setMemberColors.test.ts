@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
@@ -52,8 +52,7 @@ type Setup = {
   datasources?: Array<{ id: string; name: string }>;
   /** Summary data the sheet returns; default lists the Category members. `error` fails the read. */
   summary?:
-    | { columns: Array<string | { name: string; dataType?: string }>; rows: string[][] }
-    | 'error';
+    { columns: Array<string | { name: string; dataType?: string }>; rows: string[][] } | 'error';
   /** Datasource document returned by the re-read inside the apply lock. */
   reread?: string;
   warnings?: Array<{ code: string; message: string }>;

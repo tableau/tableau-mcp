@@ -46,8 +46,7 @@ it('does not skip session-fatal worksheet readback or attempt field verification
 });
 const sheetUpsertMock = vi.hoisted(() => ({
   upsertSheetIntoWorkbook: undefined as
-    | undefined
-    | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
+    undefined | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
 }));
 
 vi.mock('../metadata/sheets.js', async (importOriginal) => {
@@ -1301,14 +1300,14 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         );
         expect(message).toContain('apply-worksheet cannot rename a worksheet');
         expect(message).toContain('call rename-sheet');
-        expect(message).toContain('get-worksheet-xml');
+        expect(message).toContain('get-xml');
         expect(message).not.toContain('back to');
         expect(e.applyWorksheetDocument).not.toHaveBeenCalled();
         expect(e.applyWorkbookDocument).not.toHaveBeenCalled();
       },
     );
 
-    it('refuses a rename-sheet race at the gate with get-worksheet-xml guidance', async () => {
+    it('refuses a rename-sheet race at the gate with get-xml guidance', async () => {
       const e = executorFor('Renamed', doc('Renamed'));
 
       const result = await loadWorksheetXml({
@@ -1324,9 +1323,9 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       expect(message).toContain(
         'worksheetName "Renamed" does not match <worksheet name="Old Name"> in the file',
       );
-      expect(message).toContain('with list-worksheets');
+      expect(message).toContain('with get-sheets');
       expect(message).toContain('pass "Old Name" as worksheetName');
-      expect(message).toContain('get-worksheet-xml');
+      expect(message).toContain('get-xml');
       expect(e.applyWorksheetDocument).not.toHaveBeenCalled();
     });
 

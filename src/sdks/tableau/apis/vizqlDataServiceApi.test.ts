@@ -38,6 +38,200 @@ describe('Field schema', () => {
   });
 });
 
+describe('Table calculation Field schema', () => {
+  const dimensions = [{ fieldCaption: 'Category' }];
+  const ref = { fieldCaption: 'Region' };
+  const customSort = { fieldCaption: 'Sales', function: 'SUM', direction: 'DESC' };
+  const tableCalcField = (tableCalculation: Record<string, unknown>): Record<string, unknown> => ({
+    fieldCaption: 'Sales',
+    function: 'SUM',
+    tableCalculation,
+  });
+
+  it.each([
+    { tableCalcType: 'CUSTOM', dimensions, levelAddress: ref, restartEvery: ref, customSort },
+    { tableCalcType: 'NESTED', dimensions, fieldCaption: 'Inner', levelAddress: ref, customSort },
+    { tableCalcType: 'DIFFERENCE_FROM', dimensions, relativeTo: 'PREVIOUS', customSort },
+    { tableCalcType: 'PERCENT_DIFFERENCE_FROM', dimensions, relativeTo: 'FIRST' },
+    { tableCalcType: 'PERCENT_FROM', dimensions, levelAddress: ref, relativeTo: 'LAST' },
+    { tableCalcType: 'PERCENT_OF_TOTAL', dimensions, levelAddress: ref, customSort },
+    { tableCalcType: 'RANK', dimensions, rankType: 'MODIFIED COMPETITION', direction: 'DESC' },
+    { tableCalcType: 'PERCENTILE', dimensions, direction: 'ASC' },
+    { tableCalcType: 'RUNNING_TOTAL', dimensions, aggregation: 'AVG', restartEvery: ref },
+    {
+      tableCalcType: 'MOVING_CALCULATION',
+      dimensions,
+      aggregation: 'MAX',
+      previous: 2,
+      next: 1,
+      includeCurrent: false,
+      fillInNull: true,
+      customSort,
+    },
+  ])('accepts a $tableCalcType table calculation', (tableCalculation) => {
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).not.toThrow();
+  });
+
+  // Servers before 2026.2 don't accept UNSPECIFIED; omitting the field means the same thing.
+  describe('rejects UNSPECIFIED in the table calc enums', () => {
+    const cases = [
+      { tableCalcType: 'RANK', property: 'rankType', valid: 'DENSE' },
+      { tableCalcType: 'DIFFERENCE_FROM', property: 'relativeTo', valid: 'PREVIOUS' },
+      { tableCalcType: 'RUNNING_TOTAL', property: 'aggregation', valid: 'SUM' },
+      { tableCalcType: 'MOVING_CALCULATION', property: 'aggregation', valid: 'SUM' },
+    ];
+    const spec = (
+      { tableCalcType, property }: (typeof cases)[number],
+      value: string,
+    ): Record<string, unknown> => ({ tableCalcType, dimensions, [property]: value });
+
+    // Each case also parses the valid value, so the rejection must come from UNSPECIFIED.
+    const expectOnlyUnspecifiedRejected = (
+      c: (typeof cases)[number],
+      wrap: (s: Record<string, unknown>) => Record<string, unknown>,
+    ): void => {
+      expect(() => fieldSchema.parse(wrap(spec(c, c.valid)))).not.toThrow();
+      expect(() => fieldSchema.parse(wrap(spec(c, 'UNSPECIFIED')))).toThrow();
+    };
+
+    it.each(cases)('$property in a primary $tableCalcType', (c) => {
+      expectOnlyUnspecifiedRejected(c, tableCalcField);
+    });
+
+    it.each(cases.slice(0, 2))('$property in a secondary $tableCalcType', (c) => {
+      expectOnlyUnspecifiedRejected(c, (secondaryTableCalculation) =>
+        tableCalcField({ tableCalcType: 'RUNNING_TOTAL', dimensions, secondaryTableCalculation }),
+      );
+    });
+
+    it.each(cases)('$property in a nested $tableCalcType', (c) => {
+      expectOnlyUnspecifiedRejected(c, (nested) => ({
+        ...tableCalcField({ tableCalcType: 'NESTED', dimensions, fieldCaption: 'Inner' }),
+        nestedTableCalculations: [nested],
+      }));
+    });
+  });
+
+  it('accepts a table calc on a calculation, and on a bare field caption', () => {
+    const tableCalculation = { tableCalcType: 'RANK', dimensions };
+    expect(() =>
+      fieldSchema.parse({ fieldCaption: 'X', calculation: 'SUM([Sales])', tableCalculation }),
+    ).not.toThrow();
+    expect(() => fieldSchema.parse({ fieldCaption: 'X', tableCalculation })).not.toThrow();
+  });
+
+  it('accepts nestedTableCalculations, including null', () => {
+    const nested = { tableCalcType: 'NESTED', dimensions, fieldCaption: 'Inner' };
+    for (const nestedTableCalculations of [[nested], null]) {
+      expect(() =>
+        fieldSchema.parse({ ...tableCalcField(nested), nestedTableCalculations }),
+      ).not.toThrow();
+    }
+  });
+
+  it('accepts one level of secondaryTableCalculation', () => {
+    const tableCalculation = {
+      tableCalcType: 'RUNNING_TOTAL',
+      dimensions,
+      secondaryTableCalculation: { tableCalcType: 'PERCENT_OF_TOTAL', dimensions },
+    };
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).not.toThrow();
+  });
+
+  it.each(['DIFFERENCE_FROM', 'PERCENT_DIFFERENCE_FROM', 'PERCENT_FROM', 'RANK', 'PERCENTILE'])(
+    'accepts %s as a secondaryTableCalculation',
+    (secondaryType) => {
+      const tableCalculation = {
+        tableCalcType: 'MOVING_CALCULATION',
+        dimensions,
+        secondaryTableCalculation: { tableCalcType: secondaryType, dimensions },
+      };
+      expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).not.toThrow();
+    },
+  );
+
+  // VDS rejects these as secondaries; RUNNING_TOTAL and MOVING_CALCULATION would also nest.
+  it.each(['CUSTOM', 'NESTED', 'RUNNING_TOTAL', 'MOVING_CALCULATION'])(
+    'rejects %s as a secondaryTableCalculation',
+    (secondaryType) => {
+      const tableCalculation = {
+        tableCalcType: 'RUNNING_TOTAL',
+        dimensions,
+        secondaryTableCalculation: {
+          tableCalcType: secondaryType,
+          dimensions,
+          ...(secondaryType === 'NESTED' ? { fieldCaption: 'X' } : {}),
+        },
+      };
+      expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).toThrow();
+    },
+  );
+
+  it('rejects NESTED without a fieldCaption', () => {
+    const tableCalculation = { tableCalcType: 'NESTED', dimensions };
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).toThrow();
+  });
+
+  it('rejects a table calculation without dimensions', () => {
+    const tableCalculation = { tableCalcType: 'RANK' };
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).toThrow();
+  });
+
+  it('rejects an unknown tableCalcType', () => {
+    const tableCalculation = { tableCalcType: 'MEDIAN', dimensions };
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).toThrow();
+  });
+
+  it.each([
+    ['a property from another variant', { tableCalcType: 'RANK', dimensions, relativeTo: 'NEXT' }],
+    ['an extra property on a dimension', { tableCalcType: 'RANK', dimensions: [{ ...ref, x: 1 }] }],
+    [
+      'a customSort missing its direction',
+      {
+        tableCalcType: 'PERCENT_OF_TOTAL',
+        dimensions,
+        customSort: { ...customSort, direction: undefined },
+      },
+    ],
+  ])('rejects a table calculation with %s', (_, tableCalculation) => {
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).toThrow();
+  });
+
+  it('rejects a non-integer moving window', () => {
+    const tableCalculation = { tableCalcType: 'MOVING_CALCULATION', dimensions, previous: 1.5 };
+    expect(() => fieldSchema.parse(tableCalcField(tableCalculation))).toThrow();
+  });
+
+  it('rejects a table calc field with extra properties (strict mode)', () => {
+    const data = { ...tableCalcField({ tableCalcType: 'RANK', dimensions }), binSize: 10 };
+    expect(() => fieldSchema.parse(data)).toThrow();
+  });
+
+  // Guards the union order: with the table calc variant listed later, the error would come
+  // from the dimension variant and say to remove `function` and `tableCalculation`.
+  it('reports a mistake inside tableCalculation at its own path', () => {
+    const result = fieldSchema.safeParse(
+      tableCalcField({ tableCalcType: 'RANK', dimensions, bogus: 1 }),
+    );
+    expect(result.success).toBe(false);
+    // Zod 4 nests each variant's issues under one invalid_union; the table calc variant is first.
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        code: 'invalid_union',
+        errors: expect.arrayContaining([
+          [
+            expect.objectContaining({
+              code: 'unrecognized_keys',
+              keys: ['bogus'],
+              path: ['tableCalculation'],
+            }),
+          ],
+        ]),
+      }),
+    ]);
+  });
+});
+
 describe('user-has-query-permissions request schema', () => {
   it('accepts a request with a datasourceLuid', () => {
     const data = { datasource: { datasourceLuid: 'abc-123' } };
@@ -230,6 +424,92 @@ describe('SET Filter schema', () => {
       field: { fieldCaption: 'Category' },
       values: ['A', 'B'],
       extra: 123,
+    };
+    expect(() => filterSchema.parse(data)).toThrow();
+  });
+
+  it('accepts a SET filter with mixed value types and null', () => {
+    const data = {
+      filterType: 'SET',
+      field: { fieldCaption: 'Category' },
+      values: ['Furniture', 1, true, null],
+    };
+    expect(() => filterSchema.parse(data)).not.toThrow();
+  });
+
+  it.each([[{ a: 1 }], [['Furniture']]])('rejects a SET filter value of %j', (value) => {
+    const data = {
+      filterType: 'SET',
+      field: { fieldCaption: 'Category' },
+      values: ['Furniture', value],
+    };
+    expect(() => filterSchema.parse(data)).toThrow();
+  });
+});
+
+describe('CONDITION Filter schema', () => {
+  const condition = { fieldCaption: 'Sales', function: 'SUM', comparison: '>', value: 1000 };
+
+  it('accepts a CONDITION filter with a condition', () => {
+    const data = { filterType: 'CONDITION', field: { fieldCaption: 'Customer Name' }, condition };
+    expect(() => filterSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a CONDITION filter with a calculation', () => {
+    const data = {
+      filterType: 'CONDITION',
+      field: { fieldCaption: 'Customer Name' },
+      calculation: 'SUM([Sales]) > 1000',
+    };
+    expect(() => filterSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a date string as the condition value', () => {
+    const data = {
+      filterType: 'CONDITION',
+      field: { fieldCaption: 'Customer Name' },
+      condition: { ...condition, function: 'MAX', fieldCaption: 'Order Date', value: '2024-01-01' },
+    };
+    expect(() => filterSchema.parse(data)).not.toThrow();
+  });
+
+  // The validator, not the schema, requires exactly one of condition and calculation.
+  it.each([
+    ['neither', {}],
+    ['both', { condition, calculation: 'SUM([Sales]) > 1000' }],
+  ])('accepts a CONDITION filter with %s condition and calculation', (_, extra) => {
+    const data = { filterType: 'CONDITION', field: { fieldCaption: 'Customer Name' }, ...extra };
+    expect(() => filterSchema.parse(data)).not.toThrow();
+  });
+
+  it('rejects an unknown comparison', () => {
+    const data = {
+      filterType: 'CONDITION',
+      field: { fieldCaption: 'Customer Name' },
+      condition: { ...condition, comparison: '!=' },
+    };
+    expect(() => filterSchema.parse(data)).toThrow();
+  });
+
+  it('rejects a condition missing its function', () => {
+    const { function: _, ...withoutFunction } = condition;
+    const data = {
+      filterType: 'CONDITION',
+      field: { fieldCaption: 'Customer Name' },
+      condition: withoutFunction,
+    };
+    expect(() => filterSchema.parse(data)).toThrow();
+  });
+
+  it.each([
+    ['the filter', { extra: 1 }],
+    ['the condition', { condition: { ...condition, extra: 1 } }],
+  ])('rejects extra properties on %s (strict mode)', (_, extra) => {
+    const data = {
+      filterType: 'CONDITION',
+      field: { fieldCaption: 'Customer Name' },
+      condition,
+      ...extra,
     };
     expect(() => filterSchema.parse(data)).toThrow();
   });

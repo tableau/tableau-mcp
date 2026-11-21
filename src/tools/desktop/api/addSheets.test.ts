@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -56,7 +56,7 @@ describe('add-worksheet / add-dashboard / add-storyboard tools', () => {
     ({ makeTool }) => {
       const { description } = makeTool(new DesktopMcpServer());
       expect(description).toContain('becomes the active sheet');
-      expect(description).toContain('get-workbook-inventory');
+      expect(description).toContain('get-sheets');
     },
   );
 

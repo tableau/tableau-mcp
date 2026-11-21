@@ -168,7 +168,9 @@ describe('author-action edit/delete', () => {
           expect(result.content[0].text).toContain(
             failure === 'rewritten' ? 'definition changed' : 'no longer present',
           );
-          expect(result.content[0].text).toContain('Run undo-workbook in the same session');
+          expect(result.content[0].text).toContain(
+            'Run undo-redo-workbook with action undo in the same session',
+          );
           expect(result.content[0].text).toContain('restore the previous workbook before retrying');
           expect(result.content[0].text).not.toContain('Copies were added');
         },
@@ -744,7 +746,9 @@ describe('author-action edit/delete', () => {
             'This Desktop build adds actions instead of replacing them.',
           );
           expect(result.content[0].text).toContain('Copies were added to the workbook.');
-          expect(result.content[0].text).toContain('Run undo-workbook in the same session');
+          expect(result.content[0].text).toContain(
+            'Run undo-redo-workbook with action undo in the same session',
+          );
           expect(result.content[0].text).toContain(
             'use a Desktop build that supports replacing workbook actions before retrying',
           );
@@ -865,7 +869,7 @@ describe('author-action edit/delete', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).not.toContain('Copies were added');
-      expect(result.content[0].text).not.toContain('undo-workbook');
+      expect(result.content[0].text).not.toContain('undo-redo-workbook with action undo');
     },
   );
 

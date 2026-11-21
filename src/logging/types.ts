@@ -1,4 +1,4 @@
-import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import type { LoggingLevel } from '@modelcontextprotocol/server';
 
 export type LogLevel = LoggingLevel;
 export const orderedLogLevels = [

@@ -1,0 +1,8 @@
+{
+  "label": "Templates",
+  "position": 11,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for building worksheet artifacts from templates."
+  }
+}

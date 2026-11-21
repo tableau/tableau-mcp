@@ -10,7 +10,7 @@ info to generate a scoped JSON Web Token (JWT) and use it to authenticate to the
 The generated JWT will have the minimum set of scopes necessary to invoke the methods called by the
 tool being executed.
 
-For example, for the [`query-datasource`](../../../tools/data-qna/query-datasource.md) tool, since
+For example, for the [`query-datasource`](../../../web-tools/data-qna/query-datasource.md) tool, since
 it internally calls into VizQL Data Service, the JWT will only have the
 `tableau:viz_data_service:read` scope.
 

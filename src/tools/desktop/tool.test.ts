@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import os from 'os';
 import { join } from 'path';
@@ -128,7 +128,7 @@ describe('DesktopTool episode telemetry', () => {
 
         await makeTool().logAndExecute({
           extra,
-          args,
+          args: args as { session: string },
           callback: async () => {
             if (fails) throw new Error('boom');
             return new Ok({ ok: true });
@@ -336,7 +336,7 @@ describe('DesktopTool episode telemetry', () => {
 });
 
 describe('DesktopTool worksheet orientation', () => {
-  it('executes get-worksheet-xml before authoring and records ordinary success telemetry', async () => {
+  it('executes get-xml before authoring and records ordinary success telemetry', async () => {
     const dir = tmpDir();
     const extra = {
       ...getMockRequestHandlerExtra(),
@@ -349,7 +349,7 @@ describe('DesktopTool worksheet orientation', () => {
     const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
     const callback = vi.fn(async () => new Ok({ worksheetXml: '<worksheet/>' }));
 
-    const result = await makeTool('get-worksheet-xml').logAndExecute({
+    const result = await makeTool('get-xml').logAndExecute({
       extra,
       args: { session: 'S1' },
       callback,
@@ -364,13 +364,13 @@ describe('DesktopTool worksheet orientation', () => {
           type: 'tool_start',
           session_id: 'S1',
           episode_id: begin.episode_id,
-          tool: 'get-worksheet-xml',
+          tool: 'get-xml',
         },
         {
           type: 'tool_end',
           session_id: 'S1',
           episode_id: begin.episode_id,
-          tool: 'get-worksheet-xml',
+          tool: 'get-xml',
           success: true,
           outcome: 'succeeded',
         },

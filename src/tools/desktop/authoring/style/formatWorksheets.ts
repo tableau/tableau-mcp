@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -77,8 +77,7 @@ export type WorksheetFormatRequest = {
 };
 
 export type FormatWorksheetDocumentResult =
-  | { ok: true; xml: string }
-  | { ok: false; message: string };
+  { ok: true; xml: string } | { ok: false; message: string };
 
 type FormattedWorksheet = { worksheet: string; verified: true; readbackWarning?: string };
 

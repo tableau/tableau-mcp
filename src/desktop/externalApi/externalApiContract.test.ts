@@ -120,10 +120,10 @@ const resolveRef = (property: SpecProperty | undefined): SpecProperty | undefine
     ? property
     : (specSchema(property.$ref.replace('#/components/schemas/', '')) as SpecProperty);
 
-const declaredKeys = (schema: z.AnyZodObject): Array<string> => Object.keys(schema.shape);
+const declaredKeys = (schema: z.ZodObject): Array<string> => Object.keys(schema.shape);
 
-const requiredKeys = (schema: z.AnyZodObject): Array<string> =>
-  declaredKeys(schema).filter((key) => !(schema.shape[key] as z.ZodTypeAny).isOptional());
+const requiredKeys = (schema: z.ZodObject): Array<string> =>
+  declaredKeys(schema).filter((key) => !(schema.shape[key] as z.ZodType).isOptional());
 
 // Read schemas parse fail-open: each keeps spec-`required` fields optional so an older Desktop
 // build that omits a field a newer spec marks required still parses. Each entry is the set of
@@ -451,7 +451,7 @@ describe('external client API contract (captured openapi fixture)', () => {
         if (!schema) throw new Error(`Missing invocation schema for ${String(kind)}`);
         expect(declaredKeys(schema).sort()).toEqual(Object.keys(branch.properties ?? {}).sort());
         expect(requiredKeys(schema).sort()).toEqual([...(branch.required ?? [])].sort());
-        expect(schema._def.unknownKeys).toBe('strict');
+        expect(schema._zod.def.catchall?._zod.def.type).toBe('never');
       }
     });
 

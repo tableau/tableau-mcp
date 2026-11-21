@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 
 import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
@@ -52,12 +52,14 @@ vi.mock('../_lib/evidence.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../_lib/evidence.js')>();
   return {
     ...actual,
-    RegistryEvidence: vi.fn().mockImplementation(() => ({
-      establish: vi.fn(),
-      verify: vi.fn().mockResolvedValue(true),
-      describeEvidence: () => ({ kind: 'registry-nonce' }),
-      getEstablishedNonce: () => 'mock-nonce-123',
-    })),
+    RegistryEvidence: vi.fn().mockImplementation(function () {
+      return {
+        establish: vi.fn(),
+        verify: vi.fn().mockResolvedValue(true),
+        describeEvidence: () => ({ kind: 'registry-nonce' }),
+        getEstablishedNonce: () => 'mock-nonce-123',
+      };
+    }),
   };
 });
 

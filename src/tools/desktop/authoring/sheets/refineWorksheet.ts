@@ -9,7 +9,7 @@
 // out-of-envelope input without retrying, applying twice, or falling back to whole-workbook XML.
 // The pure planners own the mutation shape; this file owns I/O and registration.
 
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -65,12 +65,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 
 type RefineOperation =
-  | 'top_n'
-  | 'sort_direction'
-  | 'sort_by_field'
-  | 'mark_type'
-  | 'round_bar'
-  | 'round_stacked_bar';
+  'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type' | 'round_bar' | 'round_stacked_bar';
 
 type ProgrammaticRoundedBarVerification = {
   helperFields: number;

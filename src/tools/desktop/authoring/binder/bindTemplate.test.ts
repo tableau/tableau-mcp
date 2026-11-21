@@ -1,6 +1,7 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult as SdkCallToolResult } from '@modelcontextprotocol/server';
 import { createHash } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
+import type { Mock } from 'vitest';
 import { z } from 'zod';
 
 import { listDataAssetNames, readDataAsset } from '../../../../desktop/assets.js';
@@ -45,6 +46,11 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { getBindTemplateTool, POST_APPLY_UNCERTAINTY_GUIDANCE } from './bindTemplate.js';
 import { proposalSignature } from './proposalSignature.js';
+
+// The SDK types `structuredContent` as `unknown`; these tests read named fields from it.
+type CallToolResult = SdkCallToolResult & {
+  structuredContent?: Record<string, any>;
+};
 
 // Auto-mock the live-read command. Partial-mock the binder core so the pure
 // DERIVATION_* exports used to build the zod schema stay intact while only
@@ -102,6 +108,9 @@ vi.mock('fs', async (importOriginal) => {
     writeFileSync: vi.fn(),
   };
 });
+
+type GetExecutor = TableauDesktopToolContext['getExecutor'];
+const executorStub = {} as Awaited<ReturnType<GetExecutor>>;
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
 const NOT_APPLIED_GUIDANCE =
@@ -1532,7 +1541,7 @@ describe('bindTemplateTool', () => {
           ],
         },
       };
-      const getExecutor = vi.fn().mockResolvedValue({});
+      const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
       vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(M7_WORKBOOK_XML));
       vi.mocked(binderModule.bindTemplate).mockResolvedValue(kpiProposeResult);
 
@@ -2743,7 +2752,7 @@ describe('bindTemplateTool', () => {
       })),
       confidence: 0.9,
     };
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(waterfallProposeResult);
 
@@ -2789,7 +2798,7 @@ describe('bindTemplateTool', () => {
         binding.slot_id === 'profit' ? { ...binding, field: 'Profit' } : binding,
       ),
     };
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(waterfallProposeResult);
 
@@ -3209,11 +3218,12 @@ describe('bindTemplateTool', () => {
     await getToolResult({ session: '1', ask: 'bar chart of Sales by Region' });
 
     expect(listSpy).toHaveBeenCalledTimes(1);
-    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        manifests: new Map([['seam-probe', fakeDescriptor]]),
-      }),
-    );
+    // The tool projects the descriptor (automaticDescriptor) before binding, so match the
+    // seam-sourced template rather than the unprojected object.
+    const { manifests } = vi.mocked(binderModule.bindTemplate).mock.calls[0][0];
+    expect([...manifests.keys()]).toEqual(['seam-probe']);
+    expect(manifests.get('seam-probe')).toMatchObject({ template: fakeDescriptor.template });
+    expect(manifests.get('seam-probe')?.slots).toEqual(fakeDescriptor.slots);
   });
 });
 
@@ -3228,7 +3238,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
       .mockResolvedValueOnce(escalateResult);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     const ask = 'bar chart of Revenue by Region';
 
     const call1 = await getToolResult({ session: '1', ask, getExecutor });
@@ -3276,7 +3286,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
       .mockResolvedValueOnce(boundViaProposalResult);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     const ask = 'bar chart of Revenue by Region';
 
     await getToolResult({ session: '1', ask, getExecutor });
@@ -4054,10 +4064,10 @@ describe('bindTemplateTool bind recovery gate', () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);
     const getExecutor = vi
-      .fn()
-      .mockResolvedValueOnce({})
+      .fn<GetExecutor>()
+      .mockResolvedValueOnce(executorStub)
       .mockRejectedValueOnce(new Error('desktop unavailable'))
-      .mockResolvedValue({});
+      .mockResolvedValue(executorStub);
 
     await getToolResult({
       session: '1',
@@ -4156,7 +4166,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
       .mockImplementationOnce(() => firstCall2Bind);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     const ask = 'bar chart of Revenue by Region';
     const askKey = normalizeAskForMatch(ask);
 
@@ -4245,7 +4255,7 @@ describe('bindTemplateTool bind recovery gate', () => {
   it('routes a first-call Tier-2 escalation to fallback and blocks repair before Desktop work', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(missingCountryEscalateResult);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     const ask = 'symbol map of Sales by State';
 
     const tier2 = await getToolResult({ session: '1', ask, getExecutor });
@@ -4279,7 +4289,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(escalateResult);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
     const ask = 'bar chart of Revenue by Region';
 
     const escalated = await getToolResult({ session: '1', ask, getExecutor });
@@ -4421,7 +4431,7 @@ async function getToolResult({
     ...(customSignal && { signal: customSignal }),
   };
 
-  return await callback(
+  return (await callback(
     {
       session,
       ask,
@@ -4436,7 +4446,7 @@ async function getToolResult({
       keep_large_pie,
     } as any,
     extra,
-  );
+  )) as CallToolResult;
 }
 
 function datasourceBlock(xml: string, datasourceName: string): string {
@@ -4485,7 +4495,7 @@ function setupAutoApplyMocks({
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorksheetDiagnostics: ReturnType<typeof vi.fn>;
-  getExecutor: ReturnType<typeof vi.fn>;
+  getExecutor: Mock<GetExecutor>;
 } {
   let liveXml = workbookReads[0] ?? XML;
   let workbookReadIndex = 0;
@@ -4562,7 +4572,7 @@ function setupAutoApplyMocks({
   const getWorksheetDiagnostics = vi.fn(async (worksheetId: string) =>
     Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
   );
-  const getExecutor = vi.fn().mockResolvedValue({
+  const getExecutor = vi.fn<GetExecutor>().mockResolvedValue({
     desktopInstanceId: 'inst-test',
     desktopApiVersion: '0.2.16',
     goToSheet,
@@ -4571,7 +4581,7 @@ function setupAutoApplyMocks({
     applyWorkbookDocument,
     getWorksheetDiagnostics,
     ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
-  });
+  } as unknown as Awaited<ReturnType<GetExecutor>>);
   return {
     goToSheet,
     getWorkbook,
@@ -5022,7 +5032,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       JSON.stringify({
         status: 'bound',
         guidance:
-          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.',
+          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Post-apply state is uncertain: inspect live worksheet state with get-xml before any correction. Do NOT call bind-template again or replay apply.',
         applied: true,
         sheet_name: 'Sales by Region',
         phase_ms: { bind: 0, inject: 0, apply: 0 },
@@ -5088,7 +5098,7 @@ describe('bindTemplateTool auto_apply gate', () => {
         },
       }),
     });
-    const executor = await getExecutor();
+    const executor = await getExecutor('1');
     executor.listWorksheets = vi.fn().mockResolvedValue(
       Ok({
         worksheets: [
@@ -6677,10 +6687,12 @@ describe('bindTemplateTool auto_apply gate', () => {
       // wait for the combined calc + worksheet mutation to settle.
       workbookReads: [CALC_BASE_XML, CALC_BASE_XML, appliedKpiXml],
     });
-    vi.mocked(buildInjectedWorkbookXml).mockImplementation(() => ({
-      ok: true,
-      xml: appliedKpiXml,
-    }));
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(function () {
+      return {
+        ok: true,
+        xml: appliedKpiXml,
+      };
+    });
 
     const result = await getToolResult({
       session: '1',
@@ -7943,7 +7955,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
     mockInstances([4242]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
     const result = await getToolResult({ ask: 'bar chart of Sales by Region', getExecutor });
 
@@ -7956,7 +7968,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
 
   it('fails closed listing instances when 2+ Desktop instances are running', async () => {
     mockInstances([11, 22]);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
     const result = await getToolResult({ ask: 'bar chart of Sales by Region', getExecutor });
 
@@ -7971,7 +7983,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
 
   it('fails closed when no Desktop instance is running', async () => {
     mockInstances([]);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
     const result = await getToolResult({ ask: 'bar chart of Sales by Region', getExecutor });
 
@@ -7986,7 +7998,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
     mockInstances([11, 22]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
     const result = await getToolResult({
       session: '22',
@@ -8000,7 +8012,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
 
   it('rejects an explicit session that is not a running instance, naming the running pids', async () => {
     mockInstances([11, 22]);
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
     const result = await getToolResult({
       session: '7',
@@ -8109,7 +8121,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('target_worksheet "No Such Sheet" not found');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('get-sheets');
     expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
     expect(goToSheet).not.toHaveBeenCalled();
@@ -8708,7 +8720,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     const ask = 'bar chart of Sales by Region';
     const askKey = normalizeAskForMatch(ask);
     sessionRouteState.recordBindRecoveryTerminal('1', askKey, { outcome: 'escalate' });
-    const getExecutor = vi.fn().mockResolvedValue({});
+    const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
     const blocked = body(
       await getToolResult({
@@ -8739,7 +8751,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       } else {
         sessionRouteState.recordBindRecoveryAttempt('1', askKey, call2);
       }
-      const getExecutor = vi.fn().mockResolvedValue({});
+      const getExecutor = vi.fn<GetExecutor>().mockResolvedValue(executorStub);
 
       const blocked = body(
         await getToolResult({
@@ -10219,7 +10231,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).not.toContain('HOST VERIFICATION');
     expect(applied.guidance).not.toContain('Done — no further tool calls needed');
     expect(applied.guidance).toContain('inspect live worksheet state');
-    expect(applied.guidance).toContain('get-worksheet-xml');
+    expect(applied.guidance).toContain('get-xml');
     expect(applied.guidance).toContain('Do NOT call bind-template again');
     expect(applied.completionEvidence).toBeUndefined();
     expect(

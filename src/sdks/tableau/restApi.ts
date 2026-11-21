@@ -1,5 +1,4 @@
-import { fromError } from 'zod-validation-error/v3';
-
+import { formatZodError } from '../../utils/formatZodError.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import {
   AxiosInterceptor,
@@ -38,8 +37,7 @@ import { BearerToken, bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
 
 export type RestApiCredentials =
-  | ({ type: 'X-Tableau-Auth' } & Credentials)
-  | { type: 'Bearer'; token: string };
+  ({ type: 'X-Tableau-Auth' } & Credentials) | { type: 'Bearer'; token: string };
 
 /**
  * Interface for the Tableau REST APIs
@@ -426,7 +424,7 @@ function getBearerTokenPayload(token: string): BearerToken {
   const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
   const bearerToken = bearerTokenSchema.safeParse(decoded);
   if (!bearerToken.success) {
-    throw new Error(`Invalid bearer token: ${fromError(bearerToken.error).toString()}`);
+    throw new Error(`Invalid bearer token: ${formatZodError(bearerToken.error)}`);
   }
 
   return bearerToken.data;

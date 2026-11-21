@@ -1,9 +1,9 @@
 Tableau MCP hands files to and from your agent through short-lived presigned S3 URLs. These
 tools use them:
 
-- [`scaffold-data-app`](/tools/data-apps/scaffold-data-app.md) returns an `s3URL` the agent
+- [`scaffold-data-app`](../web-tools/data-apps/scaffold-data-app.md) returns an `s3URL` the agent
   **downloads** the starter template from.
-- [`request-workbook-upload`](/tools/workbooks/request-workbook-upload.md) returns an `uploadUrl`
+- [`request-workbook-upload`](../web-tools/workbooks/request-workbook-upload.md) returns an `uploadUrl`
   the agent **uploads** the workbook to before `publish-workbook`.
 
 The agent's own environment makes these requests, not the Tableau MCP server. If that environment

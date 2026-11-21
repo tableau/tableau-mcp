@@ -1,11 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import {
-  CallToolResult,
-  ListToolsRequestSchema,
-  Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
@@ -27,13 +20,17 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
+  stripEmptySchemaNoise,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
+
+type ToolsListHandler = (params: unknown, ctx: unknown) => Promise<unknown>;
 
 const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
@@ -72,7 +69,7 @@ describe('DesktopMcpServer', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
           ...(ALWAYS_LOAD_TOOL_NAMES.has(tool.name) && {
             _meta: { 'anthropic/alwaysLoad': true },
@@ -97,7 +94,7 @@ describe('DesktopMcpServer', () => {
         vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
       ).map(([name]) => name);
       expect(registeredNames).toContain('list-instances');
-      expect(registeredNames).toContain('list-worksheets');
+      expect(registeredNames).toContain('get-sheets');
     } finally {
       spy.mockRestore();
     }
@@ -119,12 +116,10 @@ describe('DesktopMcpServer', () => {
     await server.registerTools();
 
     const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
-    const listToolsCall = setRequestHandler.mock.calls.find(
-      ([requestSchema]) => requestSchema === ListToolsRequestSchema,
-    );
+    const listToolsCall = setRequestHandler.mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeDefined();
 
-    const result = await listToolsCall![1]({} as never, {} as never);
+    const result = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
     const tools = (result as { tools: Array<Record<string, unknown>> }).tools;
     expect(tools.length).toBeGreaterThan(0);
     for (const tool of tools) {
@@ -155,7 +150,7 @@ describe('DesktopMcpServer', () => {
     expect(server.ownsMcpServer).toBe(false);
     const listToolsCall = vi
       .mocked(sharedMcpServer.server.setRequestHandler)
-      .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      .mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeUndefined();
   });
 
@@ -178,8 +173,8 @@ describe('DesktopMcpServer', () => {
       await server.registerTools();
       const listToolsCall = vi
         .mocked(server.mcpServer.server.setRequestHandler)
-        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
-      const listResult = await listToolsCall![1]({} as never, {} as never);
+        .mock.calls.find(([method]) => method === 'tools/list');
+      const listResult = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
       const listedTools = (listResult as { tools: McpTool[] }).tools;
 
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
@@ -259,7 +254,7 @@ describe('desktop tools/list serialized surface', () => {
     // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
     // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
     // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(10_014);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(10_035);
   });
 });
 
@@ -285,12 +280,7 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
     const description = await Provider.from(tool.description);
     if (typeof title === 'string') values.push(title);
     values.push(description);
-    const paramsSchema = await Provider.from(tool.paramsSchema);
-    const obj = normalizeObjectSchema(paramsSchema as any);
-    const inputSchema = obj
-      ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object', properties: {} };
-    collectSchemaDescriptions(inputSchema);
+    collectSchemaDescriptions((await getDesktopToolListEntry(tool)).inputSchema);
   }
 
   return values;
@@ -298,11 +288,53 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
 
 describe('desktop tools/list Tableau vocabulary', () => {
   it('does not expose XML in tool titles, descriptions, or parameter descriptions', async () => {
+    const toolNamePattern = new RegExp(`\\b(${desktopToolNames.join('|')})\\b(?!-)`, 'g');
     const offenders = (await collectDesktopToolVocabularySurface())
-      .filter((value) => /\bxml\b/i.test(value))
+      .filter((value) => /\bxml\b/i.test(value.replace(toolNamePattern, '')))
       .sort();
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('stripEmptySchemaNoise', () => {
+  it('drops empty descriptions and string-only propertyNames at any depth', () => {
+    const schema = {
+      type: 'object',
+      description: '',
+      properties: {
+        caption: { type: 'string', description: '' },
+        filters: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string', description: '' }] },
+      },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      properties: {
+        caption: { type: 'string' },
+        filters: { type: 'object', additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string' }] },
+      },
+    });
+  });
+
+  it('keeps real descriptions and constrained propertyNames', () => {
+    const schema = {
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    });
   });
 });
 
@@ -321,16 +353,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2651], // raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
-    ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
-    ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
-    ['run-dashboard-batch', 1302], // remeasured after accepting an empty KPI list
-    ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
-    // Approved with the tool-search transition: the per-sheet schema prevents partial
-    // cross-field bulk edits; preserve that contract instead of compressing its names.
-    ['format-worksheets', 1097],
+    ['bind-template', 2620], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
+    ['add-field', 1367], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
+    ['apply-worksheet', 1489], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
+    ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
+    ['author-action', 2546], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -411,21 +440,17 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
       const names = selectToolsForProfile(allTools(), profile).map((tool) => tool.name);
 
       expect(names).toContain('list-available-fields');
-      expect(names).toContain('get-worksheet-xml');
+      expect(names).toContain('get-xml');
     },
   );
 
   it('makes the repair read available before authoring in full and default profiles', async () => {
     const tools = allTools();
-    const defaultTool = selectToolsForProfile(tools, '').find(
-      (tool) => tool.name === 'get-worksheet-xml',
-    )!;
-    const fullTool = selectToolsForProfile(tools, 'full').find(
-      (tool) => tool.name === 'get-worksheet-xml',
-    )!;
+    const defaultTool = selectToolsForProfile(tools, '').find((tool) => tool.name === 'get-xml')!;
+    const fullTool = selectToolsForProfile(tools, 'full').find((tool) => tool.name === 'get-xml')!;
     const extra = { ...getMockRequestHandlerExtra(), getExecutor: vi.fn() };
     type OrientationCallback = (
-      args: { session?: string },
+      args: { session?: string; kind: 'worksheet'; sheetId: string },
       callbackExtra: ReturnType<typeof getMockRequestHandlerExtra>,
     ) => Promise<CallToolResult>;
     const defaultCallback = (await Provider.from(
@@ -433,8 +458,9 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     )) as unknown as OrientationCallback;
     const fullCallback = (await Provider.from(fullTool.callback)) as unknown as OrientationCallback;
 
-    const defaultResult = await defaultCallback({ session: 'S1' }, extra);
-    const fullResult = await fullCallback({ session: 'S1' }, extra);
+    const args = { session: 'S1', kind: 'worksheet' as const, sheetId: 'sheet-sales' };
+    const defaultResult = await defaultCallback(args, extra);
+    const fullResult = await fullCallback(args, extra);
 
     expect(fullResult.isError).toBe(true);
     expect(defaultResult.isError).toBe(true);
@@ -453,22 +479,17 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     expect(selected.map((tool) => tool.name)).toContain('run-dashboard-batch');
     expect(selected.map((tool) => tool.name)).not.toContain('dashboard-auto-apply');
     // The fallback chain used when the fast path cannot finish must survive in the demo set.
-    for (const fallback of [
-      'bind-template',
-      'get-workbook-xml',
-      'apply-workbook',
-      'apply-worksheet',
-    ]) {
+    for (const fallback of ['bind-template', 'get-xml', 'apply-workbook', 'apply-worksheet']) {
       expect(selected.map((t) => t.name)).toContain(fallback);
     }
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 89-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 74-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(89);
+      expect(selected).toHaveLength(74);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, diagnostics, screenshot, deterministic
       // fast-path, and the two expertise doors the system prompt's "consult the expertise library" law routes to.
@@ -494,34 +515,26 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'read-expertise-resource',
         'search-expertise',
         'get-summary-data',
-        'get-workbook-inventory',
-        'list-workbook-datasources',
-        'get-datasource-info',
-        'get-datasource-xml',
+        'get-sheets',
+        'get-datasources',
         'apply-datasource',
         'activate-sheet',
         'delete-sheet',
         'rename-sheet',
         'sort-worksheet',
         'show-me',
-        'undo-workbook',
-        'redo-workbook',
+        'undo-redo-workbook',
         'list-instances',
         'get-desktop-state',
         'get-app-info',
         'get-capabilities',
-        'list-operations',
-        'get-operation',
+        'get-operations',
         'get-diagnostics',
         'get-active-dialogs',
         'invoke-dialog-action',
         'list-available-fields',
         'search-workbook-fields',
-        'list-worksheets',
         'get-show-me-options',
-        'list-dashboards',
-        'list-storyboards',
-        'get-sheet-info',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
         'list-datasource-logical-tables',
@@ -537,30 +550,21 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'workbook-export-as',
         'close-workbook',
         'refresh-auto-updates',
-        'refresh-dashboard-auto-updates',
-        'refresh-storyboard-auto-updates',
         'reload-extensions',
         'get-workspace-extensions',
         'reload-workspace-extension',
-        'refresh-datasource-data',
-        'refresh-datasource-extract',
-        'get-workbook-xml',
+        'refresh-datasource',
+        'get-xml',
         'apply-workbook',
-        'get-dashboard-xml',
         'apply-dashboard',
-        'get-storyboard-xml',
         'apply-storyboard',
         'export-worksheet-image',
         'export-dashboard-image',
         'export-storyboard-image',
-        // The manual field-edit path's read leg — mints the worksheetFile add-field/
-        // remove-field/apply-worksheet consume.
-        'get-worksheet-xml',
       ]) {
         expect(selected.map((t) => t.name)).toContain(verb);
       }
-      // Keep unrelated validation tools out. The six scoped and
-      // whole-workbook fallbacks above are the complete XML surface added to this profile.
+      // Keep unrelated validation tools out.
       for (const banished of [
         'validate-workbook-xml',
         'validate-worksheet-xml',
@@ -644,36 +648,6 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
     expect(
       selectToolsForProfile(tools, 'dynamic-authoring').filter(
         (tool) => tool.name === 'refresh-auto-updates',
-      ),
-    ).toHaveLength(1);
-  });
-
-  it('registers refresh-storyboard-auto-updates once in full and dynamic-authoring profiles', () => {
-    const tools = allTools();
-
-    expect(
-      desktopToolNames.filter((name) => name === 'refresh-storyboard-auto-updates'),
-    ).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === 'refresh-storyboard-auto-updates')).toHaveLength(1);
-    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('refresh-storyboard-auto-updates')).toBe(true);
-    expect(
-      selectToolsForProfile(tools, 'dynamic-authoring').filter(
-        (tool) => tool.name === 'refresh-storyboard-auto-updates',
-      ),
-    ).toHaveLength(1);
-  });
-
-  it('registers refresh-dashboard-auto-updates once in full and dynamic-authoring profiles', () => {
-    const tools = allTools();
-
-    expect(
-      desktopToolNames.filter((name) => name === 'refresh-dashboard-auto-updates'),
-    ).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === 'refresh-dashboard-auto-updates')).toHaveLength(1);
-    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('refresh-dashboard-auto-updates')).toBe(true);
-    expect(
-      selectToolsForProfile(tools, 'dynamic-authoring').filter(
-        (tool) => tool.name === 'refresh-dashboard-auto-updates',
       ),
     ).toHaveLength(1);
   });
@@ -807,11 +781,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
     expect(floors.get('capture-window-screenshot')).toBe('0.2.28');
-    expect(floors.get('pause-auto-updates')).toBe('0.2.5');
+    expect(floors.get('set-auto-updates-paused')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
-    expect(floors.get('refresh-storyboard-auto-updates')).toBe('0.2.20');
-    expect(floors.get('refresh-dashboard-auto-updates')).toBe('0.2.19');
-    expect(floors.get('resume-auto-updates')).toBe('0.2.5');
     expect(floors.get('open-file')).toBe('0.2.6');
     expect(floors.get('list-saved-datasources')).toBe('0.2.6');
     expect(floors.get('save-workbook')).toBe('0.2.6');
@@ -823,15 +794,13 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('close-workbook')).toBe('0.2.32');
     expect(floors.get('get-workspace-extensions')).toBe('0.2.34');
     expect(floors.get('reload-workspace-extension')).toBe('0.2.34');
-    expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
-    expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('refresh-datasource')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
     expect(floors.get('get-active-dialogs')).toBe('0.2.26');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.26');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
     expect(floors.get('get-diagnostics')).toBe('0.2.16');
-    expect(floors.get('get-datasource-info')).toBe('0.2.10');
-    expect(floors.get('get-datasource-xml')).toBe('0.2.10');
+    expect(floors.get('get-datasources')).toBeUndefined();
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
@@ -857,30 +826,29 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     );
   });
 
-  it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
+  it('gates apply-datasource at 0.2.10, not get-datasources or get-xml, and fails open for an unknown version', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
     );
-    const featureNames = ['get-datasource-info', 'get-datasource-xml', 'apply-datasource'] as const;
     const at209 = filterToolsByApiVersion(profileTools, '0.2.9').map((tool) => tool.name);
     const at210 = filterToolsByApiVersion(profileTools, '0.2.10').map((tool) => tool.name);
     const unknown = filterToolsByApiVersion(profileTools, undefined);
 
-    for (const name of featureNames) {
-      expect(at209).not.toContain(name);
-      expect(at210).toContain(name);
-    }
+    expect(at209).not.toContain('apply-datasource');
+    expect(at210).toContain('apply-datasource');
+    expect(at209).toContain('get-datasources');
+    expect(at209).toContain('get-xml');
     expect(unknown).toBe(profileTools);
   });
 
   it('registers each individual datasource factory exactly once', () => {
-    const featureNames = new Set(['get-datasource-info', 'get-datasource-xml', 'apply-datasource']);
+    const featureNames = new Set(['get-datasources', 'apply-datasource']);
     const names = desktopToolFactories
       .map((factory) => factory(new DesktopMcpServer()).name)
       .filter((name) => featureNames.has(name));
 
-    expect(names).toHaveLength(3);
+    expect(names).toHaveLength(2);
     expect(new Set(names)).toEqual(featureNames);
   });
 
@@ -910,7 +878,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     ]) {
       expect(gated).not.toContain(dropped);
     }
-    for (const kept of ['pause-auto-updates', 'resume-auto-updates', 'apply-worksheet']) {
+    for (const kept of ['set-auto-updates-paused', 'apply-worksheet']) {
       expect(gated).toContain(kept);
     }
   });
@@ -993,25 +961,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
-  });
-
-  it('gates dashboard and storyboard refresh at their respective API versions', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.19')).not.toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.2.20')).toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.3.0')).toContain('refresh-storyboard-auto-updates');
-    expect(namesAt(undefined)).toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.2.18')).not.toContain('refresh-dashboard-auto-updates');
-    expect(namesAt('0.2.19')).toContain('refresh-dashboard-auto-updates');
-    expect(namesAt('0.3.0')).toContain('refresh-dashboard-auto-updates');
-    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
-    expect(namesAt(undefined)).toContain('refresh-dashboard-auto-updates');
   });
 
   it('gates Show Me option discovery at External Client API 0.2.18', () => {

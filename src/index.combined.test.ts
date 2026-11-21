@@ -10,7 +10,7 @@ const startupState = vi.hoisted(() => ({
   resourcesAvailableAtConnect: undefined as boolean | undefined,
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
+vi.mock('@modelcontextprotocol/server', () => ({
   McpServer: vi.fn(function () {
     return {
       server: {
@@ -23,12 +23,8 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   }),
 }));
 
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
   StdioServerTransport: vi.fn(),
-}));
-
-vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
-  SetLevelRequestSchema: {},
 }));
 
 vi.mock('dotenv', () => ({
@@ -127,7 +123,7 @@ vi.mock('./server.desktop.js', () => ({
   }),
 }));
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';

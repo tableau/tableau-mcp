@@ -12,18 +12,16 @@ import { ArgsValidationError } from '../../errors/mcpToolError.js';
  */
 
 export type ArtifactParamKind =
-  | 'workbook'
-  | 'worksheet'
-  | 'dashboard'
-  | 'storyboard'
-  | 'datasource';
+  'workbook' | 'worksheet' | 'dashboard' | 'storyboard' | 'datasource';
 
 export function sessionParam(options: { max?: number } = {}): z.ZodOptional<z.ZodString> {
   const base = options.max === undefined ? z.string() : z.string().max(options.max);
   return base.optional().describe('Session ID; optional if pinned or unique.');
 }
 
-export function xmlModeParam(): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'inline']>>> {
+export function xmlModeParam(): z.ZodDefault<
+  z.ZodOptional<z.ZodEnum<{ file: 'file'; inline: 'inline' }>>
+> {
   return z
     .enum(['file', 'inline'])
     .optional()

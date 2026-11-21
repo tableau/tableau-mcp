@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { resolve } from 'path';
 
 import * as configModule from '../../../../config.desktop.js';
@@ -28,13 +28,12 @@ const VALID_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 const MALFORMED_XML = '<worksheet name="Sheet1"><table></worksheet>';
 
 function setupCacheMock(): void {
-  vi.mocked(DesktopCache).mockImplementation(
-    () =>
-      ({
-        getCacheFilePath: ({ prefix, id }: { prefix: string; id?: string }) =>
-          `${CACHE_DIR}/${prefix}-${id ?? 'default'}.xml`,
-      }) as unknown as DesktopCache,
-  );
+  vi.mocked(DesktopCache).mockImplementation(function () {
+    return {
+      getCacheFilePath: ({ prefix, id }: { prefix: string; id?: string }) =>
+        `${CACHE_DIR}/${prefix}-${id ?? 'default'}.xml`,
+    } as unknown as DesktopCache;
+  });
 }
 
 function mockPinnedSession(desktopSessionId: string | undefined): void {
@@ -253,7 +252,7 @@ describe('writeCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Nope');
       expect(result.content[0].text).toContain('plain worksheet name (A & B), not the XML-escaped');
-      expect(result.content[0].text).toContain('list-worksheets');
+      expect(result.content[0].text).toContain('get-sheets');
       expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 

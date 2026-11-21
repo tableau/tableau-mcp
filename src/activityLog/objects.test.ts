@@ -1,4 +1,4 @@
-import { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { z } from 'zod';
 
 import { WebMcpServer } from '../server.web.js';
 import { testProductVersion } from '../testShared.js';
@@ -32,8 +32,7 @@ describe('activityLogObjectSources', () => {
       }
 
       const schema = (await Provider.from(tool.paramsSchema)) as
-        | ZodRawShapeCompat
-        | { shape: ZodRawShapeCompat };
+        z.ZodRawShape | { shape: z.ZodRawShape };
       const argNames = Object.keys('shape' in schema ? schema.shape : schema);
       expect(argNames, tool.name).toEqual(expect.arrayContaining([...source.args]));
       checked.push(tool.name);

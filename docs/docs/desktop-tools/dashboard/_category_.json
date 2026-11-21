@@ -1,0 +1,8 @@
+{
+  "label": "Dashboards",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for building, applying, and inspecting dashboards in the open workbook."
+  }
+}
