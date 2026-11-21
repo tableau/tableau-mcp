@@ -112,7 +112,8 @@ export async function startExpressServer({
     async ({ authInfo }) => {
       const context = modernRequest.getStore();
       const meta = getRequestMeta(context?.req.body);
-      // The SDK calls the factory only after validating the envelope, so rejected requests aren't logged.
+      // The SDK calls the factory only after validating the envelope against its 2026-07-28 schema
+      // (a malformed one gets a 400), so rejected requests aren't logged and the casts below only narrow.
       logModernClientOnce(meta);
       const server = new WebMcpServer({
         clientInfo: meta?.[CLIENT_INFO_META_KEY] as ClientInfo | undefined,

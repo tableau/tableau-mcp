@@ -7,29 +7,68 @@ import { createHash } from 'crypto';
 
 import { log } from './logger.js';
 
-export function logClientInitialized({
-  protocolVersion,
-  clientInfo,
-  capabilities = {},
-}: {
+type ClientSummary = {
   protocolVersion: string | undefined;
-  clientInfo: unknown;
-  capabilities?: { elicitation?: unknown };
-}): void {
-  log({
-    message: 'MCP client initialized',
-    level: 'info',
-    logger: 'http',
-    data: {
-      protocolVersion,
-      clientInfo,
-      capabilities,
-      elicitationSupported: capabilities.elicitation !== undefined,
-    },
-  });
+  clientInfo: { name: string | undefined; version: string | undefined };
+  capabilities: Array<string>;
+  extensions: Array<string>;
+  elicitationSupported: boolean;
+};
+
+// Clients control these values, so only allowlisted fields are logged, each bounded in size.
+const MAX_LOGGED_STRING_LENGTH = 200;
+const MAX_LOGGED_KEYS = 20;
+
+function truncate(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.slice(0, MAX_LOGGED_STRING_LENGTH) : undefined;
 }
 
-// Clients control these values, so the dedup set is capped; the oldest entry is evicted first.
+function keysOf(value: unknown): Array<string> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value)
+        .sort()
+        .slice(0, MAX_LOGGED_KEYS)
+        .map((key) => truncate(key)!)
+    : [];
+}
+
+function summarizeClient({
+  protocolVersion,
+  clientInfo,
+  capabilities,
+}: {
+  protocolVersion: unknown;
+  clientInfo: unknown;
+  capabilities?: unknown;
+}): ClientSummary {
+  const info =
+    clientInfo && typeof clientInfo === 'object' ? (clientInfo as Record<string, unknown>) : {};
+  const caps =
+    capabilities && typeof capabilities === 'object'
+      ? (capabilities as Record<string, unknown>)
+      : {};
+  return {
+    protocolVersion: truncate(protocolVersion),
+    clientInfo: { name: truncate(info.name), version: truncate(info.version) },
+    capabilities: keysOf(caps),
+    extensions: keysOf(caps.extensions),
+    elicitationSupported: caps.elicitation !== undefined,
+  };
+}
+
+function logSummary(summary: ClientSummary): void {
+  log({ message: 'MCP client initialized', level: 'info', logger: 'http', data: summary });
+}
+
+export function logClientInitialized(client: {
+  protocolVersion: string | undefined;
+  clientInfo: unknown;
+  capabilities?: unknown;
+}): void {
+  logSummary(summarizeClient(client));
+}
+
+// The dedup set is capped too; the oldest entry is evicted first.
 const MAX_SEEN_CLIENTS = 1000;
 const seenModernClients = new Set<string>();
 
@@ -39,17 +78,15 @@ export function logModernClientOnce(meta: Record<string, unknown> | undefined): 
   try {
     const protocolVersion = meta?.[PROTOCOL_VERSION_META_KEY];
     const clientInfo = meta?.[CLIENT_INFO_META_KEY];
-    const rawCapabilities = meta?.[CLIENT_CAPABILITIES_META_KEY];
     if (protocolVersion === undefined && clientInfo === undefined) return;
 
-    const capabilities =
-      rawCapabilities && typeof rawCapabilities === 'object'
-        ? (rawCapabilities as { elicitation?: unknown })
-        : {};
-    // Hashed so a large client-controlled envelope can't grow the set by its own size.
-    const key = createHash('sha256')
-      .update(stableStringify([protocolVersion, clientInfo, capabilities]))
-      .digest('base64');
+    const summary = summarizeClient({
+      protocolVersion,
+      clientInfo,
+      capabilities: meta?.[CLIENT_CAPABILITIES_META_KEY],
+    });
+    // Keyed on the logged summary, so varying an unlogged field doesn't log again.
+    const key = createHash('sha256').update(JSON.stringify(summary)).digest('base64');
     if (seenModernClients.has(key)) return;
 
     if (seenModernClients.size >= MAX_SEEN_CLIENTS) {
@@ -57,21 +94,8 @@ export function logModernClientOnce(meta: Record<string, unknown> | undefined): 
     }
     seenModernClients.add(key);
 
-    logClientInitialized({
-      protocolVersion: typeof protocolVersion === 'string' ? protocolVersion : undefined,
-      clientInfo,
-      capabilities,
-    });
+    logSummary(summary);
   } catch {
     // Logging must never affect request handling.
   }
-}
-
-// Key order must not change the dedup key.
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, (_key, v) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
-      : v,
-  );
 }

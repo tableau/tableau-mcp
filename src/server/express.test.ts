@@ -223,13 +223,17 @@ describe.each([false, true])(
         data: {
           protocolVersion: '2025-06-18',
           clientInfo: { name: 'test-client', version: '1.0.0' },
-          capabilities: {},
+          capabilities: [],
+          extensions: [],
           elicitationSupported: false,
         },
       });
     });
 
-    const post2026ToolsList = async (clientName: string): Promise<Response> => {
+    const post2026ToolsList = async (
+      clientName: string,
+      clientCapabilities: unknown = {},
+    ): Promise<Response> => {
       const { server } = await startExpressServer({
         basePath: 'tableau-mcp',
         config: makeConfig({ disableSessionManagement: stateless }),
@@ -258,7 +262,7 @@ describe.each([false, true])(
                 name: `${clientName}-${stateless}`,
                 version: '1.0.0',
               },
-              'io.modelcontextprotocol/clientCapabilities': {},
+              'io.modelcontextprotocol/clientCapabilities': clientCapabilities,
             },
           },
         }),
@@ -289,6 +293,16 @@ describe.each([false, true])(
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('"name":"echo"');
       expect(builtFromEnvelope('envelope')).toBe(true);
+    });
+
+    it('rejects a malformed 2026-07-28 envelope before building a server', async () => {
+      mocks.enabledFeatures.add('mcp-protocol-2026');
+      serveRealMcpServer();
+
+      const response = await post2026ToolsList('malformed', { extensions: 'not-an-object' });
+
+      expect(response.status).toBe(400);
+      expect(builtFromEnvelope('malformed')).toBe(false);
     });
 
     it('keeps a 2026-07-28 request on the 2025 path with mcp-protocol-2026 off', async () => {
@@ -396,7 +410,8 @@ describe.each([false, true])(
         data: {
           protocolVersion: '2026-07-28',
           clientInfo: { name: `modern-a-${stateless}`, version: '1.0.0' },
-          capabilities: {},
+          capabilities: [],
+          extensions: [],
           elicitationSupported: false,
         },
       });
