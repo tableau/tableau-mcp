@@ -68,7 +68,8 @@ iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/
    - If no archives exist, the release is too old and you'll need to choose a newer release. Older
      releases may also lack the macOS archives.
 3. Extract the archive. Each archive contains one executable, `tableau-mcp` (`tableau-mcp.exe` on
-   Windows): the standard Tableau MCP server. The Desktop executable is not in release archives.
+   Windows): the standard Tableau MCP server. The Desktop executable is not in release archives. Build it from
+   source with `npm run build:sea:desktop` (emits `tableau-mcp-desktop`).
 4. Create a [.env](https://www.dotenv.org/docs/security/env.html) file with your Tableau MCP
    settings. See [Environment Variables](../configuration/mcp-config/env-vars.md) section for more
    details.
