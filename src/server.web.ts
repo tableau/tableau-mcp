@@ -431,16 +431,22 @@ export class WebMcpServer extends Server {
         // Keep tool callback behavior aligned with the registration path: clients forced onto the
         // plain-tool fallback must receive text results even when the global MCP Apps flag is on.
         mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
+        // State is signed with the tool that minted it, so one tool's state is never another's.
+        requestState: <T>() => {
+          const signed = extra.mcpReq.requestState<{ tool?: unknown; state?: T }>();
+          return signed?.tool === tool.name ? signed.state : undefined;
+        },
         async requestInput(inputRequests, state) {
           inputRequiredResult = inputRequired({
             inputRequests,
-            requestState: await getRequestStateCodec().mint(state, extra),
+            requestState: await getRequestStateCodec().mint({ tool: tool.name, state }, extra),
           });
         },
       };
 
       const result = await tableauToolCallback(args, tableauRequestHandlerExtra);
-      return inputRequiredResult ?? result;
+      // A tool that fails after asking for input reports the failure instead of the question.
+      return result.isError ? result : (inputRequiredResult ?? result);
     };
 
     if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {

@@ -36,11 +36,11 @@ export type TableauWebToolContext = TableauToolContext<WebMcpServer> & {
   /**
    * Asks the client for input before the tool finishes (2026-07-28 multi round-trip). The
    * registration adapter returns an `input_required` result in place of the callback's own result
-   * for this round, with `state` signed into `requestState` so the retry can read it back from
-   * `requestState()`. Only call it when {@link TableauWebToolContext.server}'s client capabilities
-   * cover the requests.
+   * for this round (unless the callback returns an error), with `state` signed into `requestState`
+   * so the retry can read it back from `requestState()`. Only call it when the client can answer
+   * the requests (see `clientSupportsFormElicitation` in `_lib/elicitation.ts`).
    */
-  requestInput: (inputRequests: InputRequests, state: unknown) => Promise<void>;
+  requestInput: (inputRequests: InputRequests, state: object) => Promise<void>;
 };
 
 // An extension of the request fields that includes the TableauWebToolContext

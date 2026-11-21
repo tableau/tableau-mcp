@@ -78,6 +78,7 @@ function mockGuardSuccess(): void {
 describe('updateUserTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockReset().mockResolvedValue(false);
     mockGuardSuccess();
   });
 
@@ -486,17 +487,44 @@ describe('updateUserTool', () => {
       );
 
       expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          phase: 'confirm',
-          evidence: expect.any(ElicitationApprovalEvidence),
-        }),
+        expect.objectContaining({ phase: 'confirm' }),
       );
+      const { evidence } = mocks.mockGuardMutation.mock.calls[0][0];
+      expect(evidence).toBeInstanceOf(ElicitationApprovalEvidence);
+      const target = { id: userId, kind: 'user' as const };
+      await expect(
+        evidence.verify({ tool: 'update-user', target, binding: approvalState.binding }),
+      ).resolves.toBe(true);
+      await expect(
+        evidence.verify({ tool: 'update-user', target, binding: `${userId}:Viewer` }),
+      ).resolves.toBe(false);
       expect(mocks.mockUpdateUser).toHaveBeenCalledWith({
         siteId: 'test-site-id',
         userId,
         siteRole: 'Unlicensed',
       });
       expect((result.content[0] as { text: string }).text).toContain('successfully updated');
+    });
+
+    it('treats a malformed echoed state as no approval', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+      const requestInput = vi.fn().mockResolvedValue(undefined);
+
+      await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        {
+          server: elicitingServer(),
+          requestInput,
+          requestState: (() => 'v1.unverified') as TableauWebRequestHandlerExtra['requestState'],
+          inputResponses: { confirm: { action: 'accept', content: { confirm: true } } },
+        },
+      );
+
+      expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: 'preview' }),
+      );
+      expect(requestInput).toHaveBeenCalled();
+      expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
     });
 
     it.each([

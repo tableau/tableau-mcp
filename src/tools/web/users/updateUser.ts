@@ -1,9 +1,4 @@
-import {
-  CallToolResult,
-  ClientCapabilities,
-  inputRequired,
-  inputResponse,
-} from '@modelcontextprotocol/server';
+import { acceptedContent, CallToolResult, inputRequired } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -17,9 +12,11 @@ import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { clientSupportsFormElicitation } from '../_lib/elicitation.js';
 import {
   ElicitationApprovalEvidence,
   ElicitationApprovalState,
+  elicitationApprovalStateSchema,
   RegistryEvidence,
 } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
@@ -70,15 +67,6 @@ const elicitedConfirmSchema = z.object({
 
 const isElicitationEnabled = (): Promise<boolean> =>
   getFeatureGate().isFeatureEnabled('update-user-elicitation');
-
-// A bare `elicitation: {}` predates the form/url split and means form support.
-function supportsFormElicitation(capabilities: ClientCapabilities | undefined): boolean {
-  const elicitation = capabilities?.elicitation;
-  return (
-    elicitation !== undefined &&
-    (elicitation.form !== undefined || Object.keys(elicitation).length === 0)
-  );
-}
 
 export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
@@ -143,19 +131,16 @@ ${
               // With the flag off, an echoed state is ignored and the call is a plain preview.
               const elicitationEnabled = !args.confirm && (await isElicitationEnabled());
               const approvalState = elicitationEnabled
-                ? extra.requestState<ElicitationApprovalState>()
+                ? elicitationApprovalStateSchema.safeParse(extra.requestState()).data
                 : undefined;
               const elicit =
                 approvalState !== undefined ||
-                (elicitationEnabled &&
-                  supportsFormElicitation(extra.clientCapabilities ?? extra.server.capabilities));
+                (elicitationEnabled && clientSupportsFormElicitation(extra));
               let accepted = false;
               if (approvalState !== undefined) {
-                const answer = inputResponse(extra.inputResponses, 'confirm');
                 accepted =
-                  answer.kind === 'elicit' &&
-                  answer.action === 'accept' &&
-                  elicitedConfirmSchema.safeParse(answer.content).data?.confirm === true;
+                  acceptedContent(extra.inputResponses, 'confirm', elicitedConfirmSchema)
+                    ?.confirm === true;
                 if (!accepted) {
                   return new Ok(
                     `No change made: the user did not approve changing user '${args.userId}' ` +

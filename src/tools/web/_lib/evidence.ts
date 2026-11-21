@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
+import { z } from 'zod';
+
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
-import { WebToolName } from '../toolName.js';
+import { WebToolName, webToolNames } from '../toolName.js';
 import { MutationTarget } from './mutationGuard.js';
 import { formatPendingDeletionTag, getPendingDeletionMarkers } from './pendingDeletionTag.js';
 
@@ -303,7 +305,12 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
 }
 
 /** What a preview signs into the multi-round-trip `requestState` for ElicitationApprovalEvidence. */
-export type ElicitationApprovalState = { tool: WebToolName; targetId: string; binding: string };
+export const elicitationApprovalStateSchema = z.object({
+  tool: z.enum(webToolNames),
+  targetId: z.string(),
+  binding: z.string(),
+});
+export type ElicitationApprovalState = z.infer<typeof elicitationApprovalStateSchema>;
 
 /**
  * ElicitationApprovalEvidence — proof that a human approved the mutation in a client-rendered

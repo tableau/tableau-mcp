@@ -7,6 +7,7 @@ import {
 } from '@modelcontextprotocol/server';
 
 import { getConfig } from '../config.js';
+import { getMutationPreviewTtlMs } from '../tools/web/_lib/evidence.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 
 let codec: RequestStateCodec | undefined;
@@ -20,6 +21,8 @@ export function getRequestStateCodec(): RequestStateCodec {
     // A per-process key only verifies state that comes back to the same process, so deployments
     // with more than one replica must set REQUEST_STATE_SECRET.
     key: getConfig().requestStateSecret || randomBytes(32),
+    // The state is replayable until it expires, so it gets the same window as a preview token.
+    ttlSeconds: Math.floor(getMutationPreviewTtlMs() / 1000),
     bind: (ctx: ServerContext) => {
       const authInfo = getTableauAuthInfo(ctx.http?.authInfo);
       return [ctx.mcpReq.method, authInfo?.siteId ?? '', authInfo?.userId ?? ''].join('\0');
