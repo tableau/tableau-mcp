@@ -19,5 +19,6 @@
   "activity-log": false,
   "admin-tools": false,
   "disable-strict-scope-match": false,
-  "mcp-protocol-2026": false
+  "mcp-protocol-2026": false,
+  "update-user-elicitation": false
 }

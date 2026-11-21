@@ -5,6 +5,8 @@ import {
 } from '@modelcontextprotocol/ext-apps/server';
 import {
   CallToolResult,
+  inputRequired,
+  InputRequiredResult,
   McpServer,
   ReadResourceResult,
   ServerContext,
@@ -27,6 +29,7 @@ import { ClientInfo, Server } from './server.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { getRequestStateCodec, requestStateOptions } from './server/requestState.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
@@ -86,7 +89,7 @@ export type LoadWebToolsResult = {
 export type WebToolRegistrationCallback = (
   args: unknown,
   extra: ServerContext,
-) => Promise<CallToolResult>;
+) => Promise<CallToolResult | InputRequiredResult>;
 
 type CollectedMessage = { message: string; toolNames: string[] };
 
@@ -198,6 +201,7 @@ export class WebMcpServer extends Server {
       serverName,
       serverVersion,
       instructions: buildWebInstructions(),
+      requestState: requestStateOptions,
     });
   }
 
@@ -375,7 +379,10 @@ export class WebMcpServer extends Server {
       getClientDisplayName(this.clientId) === 'Claude' &&
       !(await getFeatureGate().isFeatureEnabled('mcp-apps-for-claude'));
 
-    const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
+    const toolCallback = async (
+      args: unknown,
+      extra: ServerContext,
+    ): Promise<CallToolResult | InputRequiredResult> => {
       if (config.breakGlassDisableGlobally) {
         throw new ServiceUnavailableError(
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
@@ -386,6 +393,7 @@ export class WebMcpServer extends Server {
         extra.http?.req?.headers.get(X_TABLEAU_MCP_CONFIG_HEADER) ?? '';
       const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
       const tableauToolCallback = await Provider.from(tool.callback);
+      let inputRequiredResult: InputRequiredResult | undefined;
       const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
         ...getRequestFields(extra),
         config,
@@ -423,9 +431,22 @@ export class WebMcpServer extends Server {
         // Keep tool callback behavior aligned with the registration path: clients forced onto the
         // plain-tool fallback must receive text results even when the global MCP Apps flag is on.
         mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
+        // State is signed with the tool that minted it, so one tool's state is never another's.
+        requestState: <T>() => {
+          const signed = extra.mcpReq.requestState<{ tool?: unknown; state?: T }>();
+          return signed?.tool === tool.name ? signed.state : undefined;
+        },
+        async requestInput(inputRequests, state) {
+          inputRequiredResult = inputRequired({
+            inputRequests,
+            requestState: await getRequestStateCodec().mint({ tool: tool.name, state }, extra),
+          });
+        },
       };
 
-      return tableauToolCallback(args, tableauRequestHandlerExtra);
+      const result = await tableauToolCallback(args, tableauRequestHandlerExtra);
+      // A tool that fails after asking for input reports the failure instead of the question.
+      return result.isError ? result : (inputRequiredResult ?? result);
     };
 
     if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {

@@ -134,7 +134,7 @@ export async function startExpressServer({
       legacy: 'reject',
       onerror: (error) =>
         log({
-          message: 'Error serving MCP request',
+          message: 'Error serving 2026-07-28 MCP request',
           level: 'error',
           logger: 'server',
           data: error,

@@ -1,6 +1,7 @@
 import {
   InitializeRequest,
   McpServer,
+  McpServerOptions,
   ProtocolError,
   ProtocolErrorCode,
   ReadResourceTemplateCallback,
@@ -60,6 +61,7 @@ export abstract class Server {
     serverName,
     serverVersion,
     instructions,
+    requestState,
   }: {
     mcpServer?: McpServer;
     clientInfo?: ClientInfo;
@@ -69,6 +71,8 @@ export abstract class Server {
     serverVersion: string;
     /** MCP server instructions surfaced to every connecting client at initialize. */
     instructions?: string;
+    /** Verifies multi-round-trip `requestState` echoed by the client. */
+    requestState?: McpServerOptions['requestState'];
   }) {
     const description =
       'When opening local .twb/.twbx files, derive the full Tableau Desktop app path and choose the newest installed version when multiple are present.';
@@ -88,6 +92,7 @@ export abstract class Server {
             prompts: {},
           },
           ...(instructions ? { instructions } : {}),
+          ...(requestState ? { requestState } : {}),
         },
       );
 

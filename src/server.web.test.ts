@@ -1,5 +1,11 @@
-import { McpServer, type ServerContext } from '@modelcontextprotocol/server';
-import type { MockedFunction } from 'vitest';
+import {
+  type CallToolResult,
+  inputRequired,
+  McpServer,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
+import type { Mock, MockedFunction } from 'vitest';
+import { z } from 'zod';
 
 import features from '../features.json';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
@@ -18,6 +24,7 @@ import {
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
 } from './server/oauth/scopes.js';
+import { getRequestStateCodec } from './server/requestState.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { toStandardSchema } from './tools/toolContext.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
@@ -26,6 +33,7 @@ import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowled
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
+import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
@@ -103,6 +111,7 @@ function getMockServerContext(): ServerContext {
       _meta: undefined,
       notify: vi.fn(),
       send: vi.fn(),
+      requestState: () => undefined,
     },
   } as unknown as ServerContext;
 }
@@ -1032,6 +1041,76 @@ describe('server', () => {
         error.message ===
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
     );
+  });
+
+  describe('requestInput', () => {
+    const inputRequests = {
+      ok: inputRequired.elicit({ message: 'OK?', requestedSchema: z.object({ ok: z.boolean() }) }),
+    };
+
+    async function registerCallback(
+      callback: (extra: TableauWebRequestHandlerExtra) => Promise<CallToolResult>,
+    ): Promise<{ toolCallback: WebToolRegistrationCallback; seen: Mock }> {
+      const seen = vi.fn();
+      const tool = createMockAppTool();
+      tool.callback = async (_args: unknown, extra: TableauWebRequestHandlerExtra) => {
+        seen(extra.requestState());
+        return callback(extra);
+      };
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([tool]);
+      const server = getServer();
+      await server.registerTools();
+      const registration = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.find((call) => call[0] === tool.name);
+      invariant(registration);
+      return { toolCallback: registration[2] as WebToolRegistrationCallback, seen };
+    }
+
+    function echoing(requestState: unknown): ServerContext {
+      const ctx = getMockServerContext();
+      ctx.mcpReq.requestState = (() => requestState) as ServerContext['mcpReq']['requestState'];
+      return ctx;
+    }
+
+    it('returns input_required with signed state that the same tool reads back', async () => {
+      const { toolCallback, seen } = await registerCallback(async (extra) => {
+        await extra.requestInput(inputRequests, { step: 1 });
+        return { content: [{ type: 'text', text: 'placeholder' }] };
+      });
+
+      const ctx = getMockServerContext();
+      const result = await toolCallback({}, ctx);
+
+      expect(result).toMatchObject({ resultType: 'input_required', inputRequests });
+      invariant('requestState' in result && typeof result.requestState === 'string');
+      const signed = await getRequestStateCodec().verify(result.requestState, ctx);
+      expect(signed).toEqual({ tool: 'mock-app-tool', state: { step: 1 } });
+
+      await toolCallback({}, echoing(signed));
+      expect(seen).toHaveBeenLastCalledWith({ step: 1 });
+    });
+
+    it.each([
+      ['another tool', { tool: 'delete-content', state: { step: 1 } }],
+      ['an unverified string', 'v1.unverified'],
+    ])('hides state minted for %s', async (_, requestState) => {
+      const { toolCallback, seen } = await registerCallback(async () => ({ content: [] }));
+
+      await toolCallback({}, echoing(requestState));
+
+      expect(seen).toHaveBeenCalledWith(undefined);
+    });
+
+    it('returns the error when the tool fails after asking for input', async () => {
+      const error: CallToolResult = { isError: true, content: [{ type: 'text', text: 'boom' }] };
+      const { toolCallback } = await registerCallback(async (extra) => {
+        await extra.requestInput(inputRequests, { step: 1 });
+        return error;
+      });
+
+      expect(await toolCallback({}, getMockServerContext())).toBe(error);
+    });
   });
 
   it('should register app tools when tool has app property', async () => {

@@ -12,6 +12,7 @@ import { log } from './logging/logger';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { WebMcpServer } from './server.web.js';
+import { requestStateOptions } from './server/requestState.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
 
 const serverName = 'tableau-combined-mcp';
@@ -58,6 +59,8 @@ async function startServer(): Promise<void> {
         tools: {},
       },
       instructions,
+      // Server only adds the requestState hook to an McpServer it builds itself.
+      requestState: requestStateOptions,
     },
   );
 
