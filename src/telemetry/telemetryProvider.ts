@@ -15,6 +15,16 @@
 export type TelemetryAttributes = Record<string, string | number | boolean | undefined>;
 
 /**
+ * Handle to an in-flight span, returned by {@link TelemetryProvider.startSpan}.
+ */
+export interface SpanHandle {
+  /**
+   * Ends the span. Pass the error if the operation failed.
+   */
+  end(error?: unknown): void;
+}
+
+/**
  * Telemetry provider interface for metrics collection.
  */
 export interface TelemetryProvider {
@@ -55,4 +65,14 @@ export interface TelemetryProvider {
    * ```
    */
   recordHistogram(name: string, value: number, attributes: TelemetryAttributes): void;
+
+  /**
+   * Starts a span and returns a handle to end it later. Optional: providers that
+   * don't implement tracing simply don't have this method, and call sites must
+   * feature-detect it (`provider.startSpan?.(...)`).
+   *
+   * @param name - The span name (e.g., 'tableau.rest_api.request')
+   * @param attributes - Dimensions/tags for the span
+   */
+  startSpan?(name: string, attributes?: TelemetryAttributes): SpanHandle;
 }
