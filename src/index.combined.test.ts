@@ -87,6 +87,11 @@ vi.mock('./sdks/tableau/restApi.js', () => ({
   RestApi: { host: '' },
 }));
 
+vi.mock('./storage/init.js', () => ({
+  initializeKeyValueStore: vi.fn(),
+  closeKeyValueStore: vi.fn(),
+}));
+
 vi.mock('./sessionStore/init.js', () => ({
   initializeSessionStore: vi.fn(),
   connectSessionStore: vi.fn(async () => {

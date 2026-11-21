@@ -10,6 +10,9 @@ Environment variables can be provided in many different ways, including:
 - [A variety of ways](https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/)
   when running in Docker.
 
+Use [key-value storage configuration](storage.md) to select in-memory storage or bring your own
+backend implementation.
+
 Beyond environment variables, some configuration can be overridden at a more granular level:
 
 - **[Site Settings](site-settings.md)** — Override select configuration variables on a per-site basis via the REST API. Site settings are applied on top of environment variables for all users authenticated to the site.

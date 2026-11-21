@@ -478,6 +478,52 @@ are passed through.
 
 <hr />
 
+## `KV_STORE_PROVIDER`
+
+The provider to use for generic key-value storage. This setting is independent of
+[OAuth session storage](oauth.md#session_store_provider).
+
+- Default: `memory`
+- Possible values:
+  - `memory` - Store values in memory in the current process
+  - `custom` - Load a custom provider configured through
+    [`KV_STORE_PROVIDER_CONFIG`](#kv_store_provider_config)
+- Unrecognized values fail startup.
+
+The startup readiness log records the selected KV provider. Memory storage is local to each
+process; use a custom provider when callers need shared storage across replicas.
+
+See [Key-value storage](storage.md) for the provider contract and per-write expiration rules.
+
+<hr />
+
+## `KV_STORE_PROVIDER_CONFIG`
+
+Configuration for a custom key-value store provider.
+
+- Required when: [`KV_STORE_PROVIDER`](#kv_store_provider) is `custom`
+- Format: JSON object with a string `module` field and optional provider-specific settings
+- Providing this setting without `KV_STORE_PROVIDER` fails startup.
+- Providing this setting with `KV_STORE_PROVIDER=memory` fails startup, including an empty value.
+
+The `module` field may be a path relative to the server's working directory, an absolute path, or an
+installed npm package name. The module must export a default class or a named `KeyValueStore` class
+implementing the
+[`KeyValueStore`](https://github.com/tableau/tableau-mcp/blob/main/src/storage/keyValueStore.ts)
+interface. All configuration fields are passed to its constructor.
+
+**Example:**
+
+```bash
+KV_STORE_PROVIDER=custom
+KV_STORE_PROVIDER_CONFIG='{"module":"./my-kv-provider.cjs","table":"mcp-state"}'
+```
+
+Invalid configuration or a provider that cannot load or lacks a required operation fails startup.
+See [Key-value storage](storage.md) for implementation details.
+
+<hr />
+
 ## `LATENCY_METRIC_NAME`
 
 The name of the histogram metric used to record HTTP request latency for tool calls.

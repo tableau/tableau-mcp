@@ -14,6 +14,8 @@
 !build/index.js.map
 !build/sessionStore/
 !build/sessionStore/sessionStore.d.ts
+!build/storage/
+!build/storage/keyValueStore.d.ts
 !build/telemetry/
 !build/telemetry/telemetryProvider.d.ts
 !build/telemetry/tracing.js

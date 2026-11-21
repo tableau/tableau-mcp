@@ -19,11 +19,30 @@ import {
   providerConfigSchema as sessionStoreProviderConfigSchema,
   SessionStoreConfig,
 } from './sessionStore/types.js';
+import {
+  isKeyValueStoreProvider,
+  KeyValueStoreConfig,
+  providerConfigSchema as keyValueStoreProviderConfigSchema,
+} from './storage/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
+
+function parseStorageProviderConfig(rawConfig: string | undefined, setting: string): unknown {
+  if (!rawConfig) {
+    throw new Error(`${setting}_CONFIG is required when ${setting} is "custom"`);
+  }
+  let parsedConfig: unknown;
+  try {
+    parsedConfig = JSON.parse(rawConfig);
+  } catch {
+    // JSON.parse errors can echo credentials from the supplied configuration.
+    throw new Error(`${setting}_CONFIG is not valid JSON`);
+  }
+  return parsedConfig;
+}
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -97,6 +116,7 @@ export class Config extends BaseConfig {
   telemetry: TelemetryConfig;
   latencyMetricName: string;
   featureGate: FeatureGateConfig;
+  keyValueStore: KeyValueStoreConfig;
   sessionStore: SessionStoreConfig;
   activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
@@ -177,6 +197,8 @@ export class Config extends BaseConfig {
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
+      KV_STORE_PROVIDER: keyValueStoreProvider,
+      KV_STORE_PROVIDER_CONFIG: keyValueStoreProviderConfig,
       SESSION_STORE_PROVIDER: sessionStoreProvider,
       SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
       ACTIVITY_LOG_PROVIDER: activityLogProvider,
@@ -366,6 +388,27 @@ export class Config extends BaseConfig {
       };
     }
 
+    // Key-value store provider configuration
+    if (keyValueStoreProvider === undefined && keyValueStoreProviderConfig !== undefined) {
+      throw new Error('KV_STORE_PROVIDER must be set when KV_STORE_PROVIDER_CONFIG is provided');
+    }
+    if (keyValueStoreProvider !== undefined && !isKeyValueStoreProvider(keyValueStoreProvider)) {
+      throw new Error('KV_STORE_PROVIDER must be "memory" or "custom"');
+    }
+    if (keyValueStoreProvider === 'memory' && keyValueStoreProviderConfig !== undefined) {
+      throw new Error(
+        'KV_STORE_PROVIDER_CONFIG must not be set when KV_STORE_PROVIDER is "memory"',
+      );
+    }
+    this.keyValueStore =
+      keyValueStoreProvider === 'custom'
+        ? {
+            provider: 'custom',
+            providerConfig: keyValueStoreProviderConfigSchema.parse(
+              parseStorageProviderConfig(keyValueStoreProviderConfig, 'KV_STORE_PROVIDER'),
+            ),
+          }
+        : { provider: 'memory' };
     // Session store provider configuration (similar to feature gate provider)
     if (isSessionStoreProvider(sessionStoreProvider) && sessionStoreProvider === 'custom') {
       if (!sessionStoreProviderConfig) {
