@@ -19,14 +19,12 @@
  * (stderr/stdout/file); operators MUST ship that audit stream to their durable/immutable log store
  * (SIEM, log archive, etc.) for retention. There is no built-in durable sink here.
  *
- * AC-5 — RESIDUAL GAP (code-enforced human approval): the MCP SDK shipped with this server
- * (@modelcontextprotocol/server v2) DOES expose an elicitation primitive
- * (server.elicitInput(...)), but it is not wired in here and host/client support for it is uneven —
- * many clients do not yet implement elicitation, so the server cannot rely on it to block on an
- * interactive human approval at call time. HITL therefore remains a prompt-text contract
- * (centralized in src/prompts/_lib/confirm.ts) reinforced by the server-authoritative evidence gate
- * below — a confirmed mutation is rejected unless a preview genuinely ran. Adopting a true
- * elicitation handshake (or the app-only confirmation tool described in confirm.ts) is tracked as
+ * AC-5 — RESIDUAL GAP (code-enforced human approval): update-user asks the human directly through
+ * an elicitation form (ElicitationApprovalEvidence) when the client supports it. Many clients do
+ * not, so for them and for every other tool HITL remains a prompt-text contract (centralized in
+ * src/prompts/_lib/confirm.ts) reinforced by the server-authoritative evidence gate below — a
+ * confirmed mutation is rejected unless a preview genuinely ran. Extending elicitation to the other
+ * mutation tools (or the app-only confirmation tool described in confirm.ts) is tracked as
  * follow-up.
  *
  * RegistryEvidence's nonce store is in-memory (see the DURABILITY CAVEAT in evidence.ts): it is not

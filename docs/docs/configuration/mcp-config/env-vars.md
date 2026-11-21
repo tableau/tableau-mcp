@@ -375,6 +375,20 @@ information about the client's identity, capabilities, and protocol version comp
 
 <hr />
 
+## `REQUEST_STATE_SECRET`
+
+Some tools ask the client for input partway through a call, for example to have the user approve a
+change. The server hands the client a signed state to send back with the answer, so it doesn't have
+to store anything between rounds. This is the key it signs that state with.
+
+- Default: a random key generated when the server starts.
+- Must be at least 32 bytes long.
+- Set this when you run more than one replica of the MCP server. With the default, each replica has
+  its own key, so a call fails when the client's answer reaches a different replica.
+- Treat it as a secret: anyone with the key can forge state for any user.
+
+<hr />
+
 ## `TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS`
 
 Some tools may have behavior or arguments that depend on the Tableau Server or Cloud version the MCP

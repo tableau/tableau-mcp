@@ -1,17 +1,27 @@
-import { CallToolResult } from '@modelcontextprotocol/server';
+import {
+  CallToolResult,
+  ClientCapabilities,
+  inputRequired,
+  inputResponse,
+} from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { isAdminToolsEnabled } from '../../../features/adminTools.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { RegistryEvidence } from '../_lib/evidence.js';
+import {
+  ElicitationApprovalEvidence,
+  ElicitationApprovalState,
+  RegistryEvidence,
+} from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
 
@@ -54,6 +64,22 @@ const paramsSchema = {
     ),
 };
 
+const elicitedConfirmSchema = z.object({
+  confirm: z.boolean().describe('Apply this site role change?'),
+});
+
+const isElicitationEnabled = (): Promise<boolean> =>
+  getFeatureGate().isFeatureEnabled('update-user-elicitation');
+
+// A bare `elicitation: {}` predates the form/url split and means form support.
+function supportsFormElicitation(capabilities: ClientCapabilities | undefined): boolean {
+  const elicitation = capabilities?.elicitation;
+  return (
+    elicitation !== undefined &&
+    (elicitation.form !== undefined || Object.keys(elicitation).length === 0)
+  );
+}
+
 export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
 
@@ -62,7 +88,8 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
     name: 'update-user',
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
     disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
-    description: `
+    description: new Provider(
+      async () => `
   Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to "Unlicensed" to reclaim licenses.
 
   This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` environment variable to be enabled.
@@ -73,7 +100,13 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
   2. **Update (\`confirm: true\`):** applies the role change. Requires the \`confirmationToken\` from a prior preview of this same \`userId\` and \`siteRole\` (the server verifies and consumes it).
 
   The token is server-generated and bound to the previewed \`userId\` and \`siteRole\`: a token minted while previewing role A cannot confirm an update to role B. Present the change to the user and get explicit approval before confirming.
-
+${
+  (await isElicitationEnabled())
+    ? `
+  If the client supports form elicitation, the preview call instead asks the user to approve the change directly and applies it once they accept, so no second call or token is needed.
+`
+    : ''
+}
   **Required human confirmation:** After preview, present the change to the user and get explicit approval before calling again with \`confirm: true\`. Do not auto-confirm.
 
   **Parameters:**
@@ -86,6 +119,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
 
   Tableau REST API scopes: \`tableau:users:update\`, \`tableau:users:read\`.
   `,
+    ),
     paramsSchema,
     annotations: {
       title: 'Update User',
@@ -103,8 +137,36 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
             ...extra,
             jwtScopes: updateUserTool.requiredApiScopes,
             callback: async (restApi) => {
-              const evidence = new RegistryEvidence();
               const binding = `${args.userId}:${args.siteRole}`;
+
+              // The retry of an elicited preview carries the signed state and the human's answer.
+              // With the flag off, an echoed state is ignored and the call is a plain preview.
+              const elicitationEnabled = !args.confirm && (await isElicitationEnabled());
+              const approvalState = elicitationEnabled
+                ? extra.requestState<ElicitationApprovalState>()
+                : undefined;
+              const elicit =
+                approvalState !== undefined ||
+                (elicitationEnabled &&
+                  supportsFormElicitation(extra.clientCapabilities ?? extra.server.capabilities));
+              let accepted = false;
+              if (approvalState !== undefined) {
+                const answer = inputResponse(extra.inputResponses, 'confirm');
+                accepted =
+                  answer.kind === 'elicit' &&
+                  answer.action === 'accept' &&
+                  elicitedConfirmSchema.safeParse(answer.content).data?.confirm === true;
+                if (!accepted) {
+                  return new Ok(
+                    `No change made: the user did not approve changing user '${args.userId}' ` +
+                      `to ${args.siteRole}.`,
+                  );
+                }
+              }
+              const evidence = elicit
+                ? new ElicitationApprovalEvidence({ state: approvalState, accepted })
+                : new RegistryEvidence();
+              const phase = args.confirm || accepted ? 'confirm' : 'preview';
 
               let cachedUser: Awaited<
                 ReturnType<typeof restApi.usersMethods.queryUserOnSite>
@@ -128,7 +190,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                 tool: 'update-user',
                 action: 'update',
                 mode: 'preview-confirm',
-                phase: args.confirm ? 'confirm' : 'preview',
+                phase,
                 evidence,
                 resolveTarget,
                 confirmationToken: args.confirmationToken,
@@ -139,7 +201,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
               }
               const { target, recordOutcome } = guardResult.value;
 
-              if (!args.confirm) {
+              if (phase === 'preview') {
                 // In production, guardMutation always calls resolveTarget on success, so
                 // cachedUser is guaranteed set. Fallback retained for unit tests that mock
                 // guardMutation (bypassing resolveTarget).
@@ -150,6 +212,26 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                     userId: args.userId,
                   }));
                 const currentRole = user.siteRole ?? 'unknown';
+                if (evidence instanceof ElicitationApprovalEvidence) {
+                  const state: ElicitationApprovalState = {
+                    tool: 'update-user',
+                    targetId: target.id,
+                    binding,
+                  };
+                  await extra.requestInput(
+                    {
+                      confirm: inputRequired.elicit({
+                        message:
+                          `Change user '${target.name ?? args.userId}' ` +
+                          `(${user.email ?? 'no email'}) from ${currentRole} to ${args.siteRole}?`,
+                        requestedSchema: elicitedConfirmSchema,
+                      }),
+                    },
+                    state,
+                  );
+                  // Replaced by the input_required result; the client answers and retries.
+                  return new Ok("Awaiting the user's approval to change the site role.");
+                }
                 const nonce = evidence.getEstablishedNonce()!;
                 return new Ok(
                   `Preview — user '${target.name ?? args.userId}' (${user.email ?? 'no email'}) ` +

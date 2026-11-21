@@ -368,6 +368,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  REQUEST_STATE_SECRET: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Request State Secret',
+    description:
+      'The key, at least 32 bytes, used to sign state that the server returns to the client between rounds of a multi-round tool call.',
+    required: false,
+    sensitive: true,
+  },
   SSL_KEY: {
     includeInUserConfig: false,
     type: 'string',
