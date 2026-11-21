@@ -38,9 +38,9 @@ describe('isStrictScopeMatchEnabled', () => {
     expect(mocks.mockIsFeatureEnabled).not.toHaveBeenCalled();
   });
 
-  it('ships with the disable-strict-scope-match flag off', () => {
-    // Either input alone turns strict off, so shipping the flag on would make subset the default.
-    expect(features['disable-strict-scope-match']).toBe(false);
+  it('ships with the disable-strict-scope-match flag on', () => {
+    // Shipping the flag on makes subset matching the default.
+    expect(features['disable-strict-scope-match']).toBe(true);
   });
 });
 

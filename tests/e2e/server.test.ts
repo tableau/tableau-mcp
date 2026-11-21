@@ -96,7 +96,7 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (data-apps feature flag)
+      // Data-app tools are gated by the data-apps feature flag.
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedToolNames = [...webToolNames];
@@ -296,7 +296,7 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (data-apps feature flag)
+      // Data-app tools are gated by the data-apps feature flag.
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedWebToolNames = [...webToolNames];
@@ -361,7 +361,10 @@ describe('server', () => {
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
       );
       expect(expectedDesktopToolNames).toContain('bind-template');
-      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
+      // Both variants define scaffold-data-app; the combined server exposes Desktop's tool once.
+      const expectedToolNames = [
+        ...new Set([...expectedDesktopToolNames, ...expectedWebToolNames]),
+      ];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });

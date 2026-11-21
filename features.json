@@ -12,12 +12,12 @@
   "view-file-mode": false,
   "view-data-file-mode": false,
   "workbook-file-mode": true,
-  "data-apps": false,
+  "data-apps": true,
   "view-all-data": false,
   "skills-over-mcp": false,
   "authoring-with-slack": false,
   "activity-log": false,
   "admin-tools": false,
-  "disable-strict-scope-match": false,
+  "disable-strict-scope-match": true,
   "mcp-protocol-2026": false
 }
