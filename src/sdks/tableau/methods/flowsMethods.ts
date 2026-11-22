@@ -1,4 +1,5 @@
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowsApis } from '../apis/flowsApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -19,6 +20,38 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }
+
+  /** Standard native download, bounded for the optional local authoring workflow. */
+  downloadFlowContent = async ({
+    siteId,
+    flowId,
+    signal,
+  }: {
+    siteId: string;
+    flowId: string;
+    signal?: AbortSignal;
+  }): Promise<Buffer> => {
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      buildRestPath(
+        'sites',
+        assertLuid('siteId', siteId),
+        'flows',
+        assertLuid('flowId', flowId),
+        'content',
+      ),
+      {
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+        maxContentLength: 32 * 1024 * 1024,
+        maxRedirects: 0,
+        signal,
+      },
+    );
+    const content = Buffer.from(response.data);
+    if (!content.length || content.length > 32 * 1024 * 1024)
+      throw new Error('Native flow download exceeds the authoring limit or is empty.');
+    return content;
+  };
 
   /**
    * Returns the flows on a site.

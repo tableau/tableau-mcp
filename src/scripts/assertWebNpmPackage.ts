@@ -25,6 +25,7 @@ const expectedBuildFiles = [
   'build/features/featureGateProvider.d.ts',
   'build/index.js',
   'build/index.js.map',
+  'build/prep-authoring-worker.cjs',
   'build/sessionStore/sessionStore.d.ts',
   'build/telemetry/telemetryProvider.d.ts',
   'build/telemetry/tracing.js',
