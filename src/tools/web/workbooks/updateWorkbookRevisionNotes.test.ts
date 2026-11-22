@@ -3,7 +3,10 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../../../server/oauth/scopes.js';
+import {
+  getRequiredScopesForTool,
+  RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+} from '../../../server/oauth/scopes.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -17,12 +20,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
-  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
-    callback({
-      workbooksMethods: { updateWorkbookRevisionNotes: mocks.updateNotes },
-      siteId: 'test-site-id',
-    }),
-  ),
+  useRestApi: vi.fn(),
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -42,6 +40,12 @@ const args = {
 describe('update-workbook-revision-notes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useRestApi).mockImplementation(async ({ callback }) =>
+      callback({
+        workbooksMethods: { updateWorkbookRevisionNotes: mocks.updateNotes },
+        siteId: 'test-site-id',
+      } as unknown as Parameters<typeof callback>[0]),
+    );
     stubDefaultEnvVars();
     vi.spyOn(RestApi, 'versionIsAtLeast').mockReturnValue(true);
     vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
@@ -60,7 +64,7 @@ describe('update-workbook-revision-notes', () => {
     expect(webToolFactories).toContain(getUpdateWorkbookRevisionNotesTool);
     expect(tool.name).toBe('update-workbook-revision-notes');
     expect(tool.minRequiredRole).toBe(SiteRole.EXPLORER_CAN_PUBLISH);
-    expect(tool.requiredMcpScopes).toEqual(['tableau:mcp:workbook:write']);
+    expect(getRequiredScopesForTool(tool.name)).toEqual(['tableau:mcp:workbook:write']);
     expect(tool.requiredApiScopes).toEqual([
       'tableau:workbooks:update',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
@@ -109,9 +113,9 @@ describe('update-workbook-revision-notes', () => {
     });
     expect(JSON.stringify(result)).not.toContain('Exact replacement');
     expect(
-      vi.mocked(loggerModule.log).mock.calls.some(([entry]) =>
-        JSON.stringify(entry).includes('Exact replacement'),
-      ),
+      vi
+        .mocked(loggerModule.log)
+        .mock.calls.some(([entry]) => JSON.stringify(entry).includes('Exact replacement')),
     ).toBe(false);
   });
 
@@ -129,9 +133,9 @@ describe('update-workbook-revision-notes', () => {
     expect(JSON.stringify(result)).toContain('permissions');
     expect(JSON.stringify(result)).not.toContain('Exact replacement');
     expect(
-      vi.mocked(loggerModule.log).mock.calls.some(([entry]) =>
-        JSON.stringify(entry).includes('Exact replacement'),
-      ),
+      vi
+        .mocked(loggerModule.log)
+        .mock.calls.some(([entry]) => JSON.stringify(entry).includes('Exact replacement')),
     ).toBe(false);
   });
 

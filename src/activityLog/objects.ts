@@ -46,6 +46,7 @@ function typedIdIn(typeArg: string, idArg: string): ObjectSource {
 export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> = {
   'list-workbook-revisions': idIn('workbook', 'workbookId'),
   'download-workbook-revision': idIn('workbook', 'workbookId'),
+  'update-workbook-revision-notes': idIn('workbook', 'workbookId'),
   'list-datasources': null,
   'list-extract-refresh-tasks': null,
   'update-cloud-extract-refresh-task': idIn('extract-refresh-task', 'taskId'),

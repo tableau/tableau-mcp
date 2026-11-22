@@ -1,3 +1,4 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -20,7 +21,9 @@ const MIN_REST_VERSION = '3.30';
 const paramsSchema = {
   workbookId: luidSchema.describe('The LUID of the workbook whose revision notes to replace.'),
   revisionNumber: revisionNumberSchema.describe('The exact positive workbook revision number.'),
-  notes: z.string().describe('The full replacement revision notes. Existing notes are overwritten.'),
+  notes: z
+    .string()
+    .describe('The full replacement revision notes. Existing notes are overwritten.'),
 };
 
 type UpdateWorkbookRevisionNotesResult = {
@@ -49,7 +52,7 @@ export const getUpdateWorkbookRevisionNotesTool = (
       openWorldHint: true,
     },
     disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('data-apps'))),
-    callback: async ({ workbookId, revisionNumber, notes }, extra) =>
+    callback: async ({ workbookId, revisionNumber, notes }, extra): Promise<CallToolResult> =>
       await tool.logAndExecute<UpdateWorkbookRevisionNotesResult>({
         extra,
         args: { workbookId, revisionNumber, notes: '<redacted>' },
