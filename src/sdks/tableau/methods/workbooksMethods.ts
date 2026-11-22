@@ -354,6 +354,35 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Replaces the notes on a specific workbook revision (REST API 3.30 or later).
+   * Requires the `tableau:workbooks:update` scope. A successful response has no body.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_revisions.htm#update_workbook_revision_notes
+   */
+  updateWorkbookRevisionNotes = async ({
+    siteId,
+    workbookId,
+    revisionNumber,
+    notes,
+  }: {
+    siteId: string;
+    workbookId: string;
+    revisionNumber: number;
+    notes: string;
+  }): Promise<void> => {
+    if (!revisionNumberSchema.safeParse(revisionNumber).success) {
+      throw new Error('revisionNumber must be a positive integer.');
+    }
+
+    await this._apiClient.updateWorkbookRevisionNotes(
+      { notes },
+      {
+        params: { siteId, workbookId, revisionNumber: String(revisionNumber) },
+        ...this.authHeader,
+      },
+    );
+  };
+
+  /**
    * Publishes a workbook on the specified site, committing a file previously uploaded
    * via `validateWorkbookAndUpload`.
    * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the

@@ -55,6 +55,7 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 import { getMoveWorkbookTool } from './workbooks/moveWorkbook.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
+import { getUpdateWorkbookRevisionNotesTool } from './workbooks/updateWorkbookRevisionNotes.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
@@ -98,6 +99,7 @@ export const webToolFactories = [
   getRequestWorkbookUploadTool,
   getPublishWorkbookTool,
   getMoveWorkbookTool,
+  getUpdateWorkbookRevisionNotesTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,

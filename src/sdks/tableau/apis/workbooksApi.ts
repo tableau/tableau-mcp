@@ -127,6 +127,25 @@ const updateWorkbookEndpoint = makeEndpoint({
   response: z.object({ workbook: workbookSchema.partial() }),
 });
 
+/**
+ * Update Workbook Revision Notes (REST API 3.30+).
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_revisions.htm#update_workbook_revision_notes
+ */
+const updateWorkbookRevisionNotesEndpoint = makeEndpoint({
+  method: 'patch',
+  path: '/sites/:siteId/workbooks/:workbookId/revisions/:revisionNumber/metadata',
+  alias: 'updateWorkbookRevisionNotes',
+  description: 'Replaces the notes on one workbook revision.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
+    pathParam('revisionNumber', 'segment'),
+    { name: 'body', type: 'Body', schema: z.object({ notes: z.string() }) },
+  ],
+  // Axios exposes Tableau's HTTP 204 empty body as an empty string.
+  response: z.union([z.void(), z.literal('')]),
+});
+
 const deleteTagFromWorkbookEndpoint = makeEndpoint({
   method: 'delete',
   path: '/sites/:siteId/workbooks/:workbookId/tags/:tagName',
@@ -167,6 +186,7 @@ const workbooksApi = makeApi([
   addTagsToWorkbookEndpoint,
   deleteTagFromWorkbookEndpoint,
   updateWorkbookEndpoint,
+  updateWorkbookRevisionNotesEndpoint,
 ]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

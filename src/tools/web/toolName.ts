@@ -22,6 +22,7 @@ export const webToolNames = [
   'download-workbook',
   'list-workbook-revisions',
   'download-workbook-revision',
+  'update-workbook-revision-notes',
   'move-workbook',
   'get-view',
   'get-flow',
@@ -90,6 +91,7 @@ export const webToolGroups = {
     'move-workbook',
     'list-workbook-revisions',
     'download-workbook-revision',
+    'update-workbook-revision-notes',
   ],
   authoring: [
     'request-workbook-upload',
