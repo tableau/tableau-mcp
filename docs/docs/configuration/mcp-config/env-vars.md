@@ -555,6 +555,17 @@ separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the 
 
 <hr />
 
+## `LOCAL_FLOW_ROOTS`
+
+Optional operator-controlled roots for local TFL/TFLX lineage in self-hosted stdio. The default is
+`[]`, which disables local file access. Supply a JSON array of at most 20 absolute directories, for
+example `["C:/Prep/flows"]` or `["/home/me/prep-flows"]`. This setting never permits HTTP clients to
+read files. Canonical containment, regular-file checks and size/complexity limits apply; network
+paths and links are rejected. The tools perform static analysis without executing or publishing a
+flow. See [Get Data Lineage](../../tools/lineage/get-data-lineage.md#local-tfl-and-tflx-files).
+
+<hr />
+
 ## `FLOW_READ_TOOLS_ENABLED`
 
 Controls the read-only Tableau Prep flow tools. They are enabled by default.

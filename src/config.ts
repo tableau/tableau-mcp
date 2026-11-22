@@ -101,6 +101,7 @@ export class Config extends BaseConfig {
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
   flowReadToolsEnabled: boolean | undefined;
+  localFlowRoots: string[];
   flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
@@ -116,6 +117,23 @@ export class Config extends BaseConfig {
     super();
 
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
+    this.localFlowRoots = [];
+    if (cleansedVars.LOCAL_FLOW_ROOTS) {
+      try {
+        const roots: unknown = JSON.parse(cleansedVars.LOCAL_FLOW_ROOTS);
+        if (
+          !Array.isArray(roots) ||
+          roots.length > 20 ||
+          !roots.every((root) => typeof root === 'string' && root.length > 0 && root.length <= 4096)
+        )
+          throw new Error('invalid');
+        this.localFlowRoots = roots;
+      } catch {
+        throw new Error(
+          'LOCAL_FLOW_ROOTS must be a JSON array of at most 20 nonempty directory paths.',
+        );
+      }
+    }
     const {
       AUTH: auth,
       SERVER: server,

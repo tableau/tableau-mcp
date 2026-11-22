@@ -55,6 +55,9 @@ const publishedDatasourceSchema = z.object({
 });
 
 export const graphqlResponse = z.object({
+  // Preserve partial GraphQL failures for callers that need completeness
+  // guarantees. A successful HTTP response can still contain GraphQL errors.
+  errors: z.array(z.object({ message: z.string() }).passthrough()).optional(),
   data: z
     .object({
       publishedDatasources: z.array(publishedDatasourceSchema).optional(),

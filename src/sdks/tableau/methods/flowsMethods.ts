@@ -1,4 +1,5 @@
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowsApis } from '../apis/flowsApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -7,6 +8,7 @@ import { Flow, FlowConnection, FlowOutputStep, FlowRun } from '../types/flow.js'
 import { RunFlowJob } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+import { MAX_FLOW_FILE_BYTES } from './flowPackage.js';
 
 /**
  * Flows methods of the Tableau Server REST API
@@ -16,6 +18,32 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm
  */
 export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis> {
+  /** Read-only native package for attached script metadata. No files are written. */
+  downloadFlowContent = async ({
+    siteId,
+    flowId,
+    signal,
+  }: {
+    siteId: string;
+    flowId: string;
+    signal?: AbortSignal;
+  }): Promise<Buffer> => {
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      buildRestPath('sites', siteId, 'flows', assertLuid('flowId', flowId), 'content'),
+      {
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+        maxContentLength: MAX_FLOW_FILE_BYTES,
+        maxBodyLength: MAX_FLOW_FILE_BYTES,
+        maxRedirects: 0,
+        signal,
+      },
+    );
+    const content = Buffer.from(response.data);
+    if (content.length > MAX_FLOW_FILE_BYTES)
+      throw new Error('Flow package exceeds its byte limit.');
+    return content;
+  };
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }

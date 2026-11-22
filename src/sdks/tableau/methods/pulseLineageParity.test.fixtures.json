@@ -1,0 +1,944 @@
+[
+  {
+    "name": "definition-list",
+    "kind": "definitions",
+    "payload": {
+      "definitions": [
+        {
+          "metadata": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "Sales Pulse"
+          },
+          "specification": {
+            "datasource": {
+              "id": "11111111-1111-4111-8111-111111111111"
+            },
+            "basic_specification": {
+              "measure": {
+                "field": "B",
+                "aggregation": "SUM"
+              },
+              "time_dimension": {
+                "field": "Date"
+              },
+              "filters": [
+                {
+                  "field": "B",
+                  "operator": "=",
+                  "categorical_values": [
+                    {
+                      "number_value": 2
+                    },
+                    {
+                      "bool_value": false
+                    },
+                    {
+                      "null_value": null
+                    },
+                    {
+                      "string_value": ""
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "extension_options": {
+            "allowed_dimensions": [
+              "B",
+              "Region"
+            ]
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "definition-single",
+    "kind": "definitions",
+    "payload": {
+      "definition": {
+        "metadata": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "name": "Sales Pulse"
+        },
+        "specification": {
+          "datasource": {
+            "id": "11111111-1111-4111-8111-111111111111"
+          },
+          "basic_specification": {
+            "measure": {
+              "field": "B",
+              "aggregation": "SUM"
+            },
+            "time_dimension": {
+              "field": "Date"
+            },
+            "filters": [
+              {
+                "field": "B",
+                "operator": "=",
+                "categorical_values": [
+                  {
+                    "number_value": 2
+                  },
+                  {
+                    "bool_value": false
+                  },
+                  {
+                    "null_value": null
+                  },
+                  {
+                    "string_value": ""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "extension_options": {
+          "allowed_dimensions": [
+            "B",
+            "Region"
+          ]
+        }
+      }
+    },
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/definition/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definition/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definition/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definition/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definition/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "definition-direct",
+    "kind": "definitions",
+    "payload": {
+      "metadata": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse"
+      },
+      "specification": {
+        "datasource": {
+          "id": "11111111-1111-4111-8111-111111111111"
+        },
+        "basic_specification": {
+          "measure": {
+            "field": "B",
+            "aggregation": "SUM"
+          },
+          "time_dimension": {
+            "field": "Date"
+          },
+          "filters": [
+            {
+              "field": "B",
+              "operator": "=",
+              "categorical_values": [
+                {
+                  "number_value": 2
+                },
+                {
+                  "bool_value": false
+                },
+                {
+                  "null_value": null
+                },
+                {
+                  "string_value": ""
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "extension_options": {
+        "allowed_dimensions": [
+          "B",
+          "Region"
+        ]
+      }
+    },
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "definition-array",
+    "kind": "definitions",
+    "payload": [
+      {
+        "metadata": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "name": "Sales Pulse"
+        },
+        "specification": {
+          "datasource": {
+            "id": "11111111-1111-4111-8111-111111111111"
+          },
+          "basic_specification": {
+            "measure": {
+              "field": "B",
+              "aggregation": "SUM"
+            },
+            "time_dimension": {
+              "field": "Date"
+            },
+            "filters": [
+              {
+                "field": "B",
+                "operator": "=",
+                "categorical_values": [
+                  {
+                    "number_value": 2
+                  },
+                  {
+                    "bool_value": false
+                  },
+                  {
+                    "null_value": null
+                  },
+                  {
+                    "string_value": ""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "extension_options": {
+          "allowed_dimensions": [
+            "B",
+            "Region"
+          ]
+        }
+      }
+    ],
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/0/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/0/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/0/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/0/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/0/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "nested-goal-scope",
+    "kind": "definitions",
+    "payload": {
+      "definitions": [
+        {
+          "metadata": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "Sales Pulse"
+          },
+          "specification": {
+            "datasource": {
+              "id": "11111111-1111-4111-8111-111111111111"
+            },
+            "basic_specification": {
+              "measure": {
+                "field": "B",
+                "aggregation": "SUM"
+              },
+              "time_dimension": {
+                "field": "Date"
+              },
+              "filters": [
+                {
+                  "field": "B",
+                  "operator": "=",
+                  "categorical_values": [
+                    {
+                      "number_value": 2
+                    },
+                    {
+                      "bool_value": false
+                    },
+                    {
+                      "null_value": null
+                    },
+                    {
+                      "string_value": ""
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "extension_options": {
+            "allowed_dimensions": [
+              "B",
+              "Region"
+            ]
+          },
+          "goals": [
+            {
+              "specification": {
+                "datasource": {
+                  "id": "44444444-4444-4444-8444-444444444444"
+                },
+                "measure": {
+                  "field": "B"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/goals/0/specification/measure/field",
+            "datasourceLuid": "44444444-4444-4444-8444-444444444444",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "row-identifiers-and-names",
+    "kind": "definitions",
+    "payload": {
+      "definitions": [
+        {
+          "metadata": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "Sales Pulse"
+          },
+          "specification": {
+            "datasource": {
+              "id": "11111111-1111-4111-8111-111111111111"
+            },
+            "basic_specification": {
+              "measure": {
+                "field": "B",
+                "aggregation": "SUM"
+              },
+              "time_dimension": {
+                "field": "Date"
+              },
+              "filters": [
+                {
+                  "field": "B",
+                  "operator": "=",
+                  "categorical_values": [
+                    {
+                      "number_value": 2
+                    },
+                    {
+                      "bool_value": false
+                    },
+                    {
+                      "null_value": null
+                    },
+                    {
+                      "string_value": ""
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "extension_options": {
+            "allowed_dimensions": [
+              "B",
+              "Region"
+            ]
+          },
+          "representation_options": {
+            "row_level_id_field": {
+              "identifier_col": "ID",
+              "name_col": "Label"
+            },
+            "row_level_name_field": {
+              "name_col": "Name"
+            }
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/representation_options/row_level_id_field/identifier_col",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "ID",
+            "role": "pulse-field",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/representation_options/row_level_id_field/name_col",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Label",
+            "role": "pulse-field",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/representation_options/row_level_name_field/name_col",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Name",
+            "role": "pulse-field",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "embedded-metric",
+    "kind": "definitions",
+    "payload": {
+      "definitions": [
+        {
+          "metadata": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "Sales Pulse"
+          },
+          "specification": {
+            "datasource": {
+              "id": "11111111-1111-4111-8111-111111111111"
+            },
+            "basic_specification": {
+              "measure": {
+                "field": "B",
+                "aggregation": "SUM"
+              },
+              "time_dimension": {
+                "field": "Date"
+              },
+              "filters": [
+                {
+                  "field": "B",
+                  "operator": "=",
+                  "categorical_values": [
+                    {
+                      "number_value": 2
+                    },
+                    {
+                      "bool_value": false
+                    },
+                    {
+                      "null_value": null
+                    },
+                    {
+                      "string_value": ""
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "extension_options": {
+            "allowed_dimensions": [
+              "B",
+              "Region"
+            ]
+          },
+          "metrics": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "definition_id": "22222222-2222-4222-8222-222222222222",
+              "datasource_luid": "11111111-1111-4111-8111-111111111111",
+              "specification": {
+                "filters": [
+                  {
+                    "field": "B",
+                    "categorical_values": [
+                      {
+                        "number_value": 3
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expected": [
+      {
+        "kind": "pulse-definition",
+        "luid": "22222222-2222-4222-8222-222222222222",
+        "name": "Sales Pulse",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": null,
+        "uses": [
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/0",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/extension_options/allowed_dimensions/1",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Region",
+            "role": "pulse-allowed-dimension",
+            "values": [],
+            "evidence": "possible"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              2,
+              false,
+              null,
+              ""
+            ],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/measure/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-measure",
+            "values": [],
+            "evidence": "direct"
+          },
+          {
+            "path": "/definitions/0/specification/basic_specification/time_dimension/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "Date",
+            "role": "pulse-time",
+            "values": [],
+            "evidence": "direct"
+          }
+        ]
+      },
+      {
+        "kind": "pulse-metric",
+        "luid": "33333333-3333-4333-8333-333333333333",
+        "name": "33333333-3333-4333-8333-333333333333",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": "22222222-2222-4222-8222-222222222222",
+        "uses": [
+          {
+            "path": "/definitions/0/metrics/0/specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              3
+            ],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "metric-list",
+    "kind": "metrics",
+    "payload": {
+      "metrics": [
+        {
+          "id": "33333333-3333-4333-8333-333333333333",
+          "definition_id": "22222222-2222-4222-8222-222222222222",
+          "datasource_luid": "11111111-1111-4111-8111-111111111111",
+          "specification": {
+            "filters": [
+              {
+                "field": "B",
+                "categorical_values": [
+                  {
+                    "number_value": 3
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "kind": "pulse-metric",
+        "luid": "33333333-3333-4333-8333-333333333333",
+        "name": "33333333-3333-4333-8333-333333333333",
+        "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+        "definitionLuid": "22222222-2222-4222-8222-222222222222",
+        "uses": [
+          {
+            "path": "/metrics/0/specification/filters/0/field",
+            "datasourceLuid": "11111111-1111-4111-8111-111111111111",
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              3
+            ],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "metric-inherited-scope",
+    "kind": "metrics",
+    "payload": {
+      "metric": {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "definition_id": "22222222-2222-4222-8222-222222222222",
+        "specification": {
+          "filters": [
+            {
+              "field": "B",
+              "categorical_values": [
+                {
+                  "number_value": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "expected": [
+      {
+        "kind": "pulse-metric",
+        "luid": "33333333-3333-4333-8333-333333333333",
+        "name": "33333333-3333-4333-8333-333333333333",
+        "datasourceLuid": null,
+        "definitionLuid": "22222222-2222-4222-8222-222222222222",
+        "uses": [
+          {
+            "path": "/metric/specification/filters/0/field",
+            "datasourceLuid": null,
+            "selector": "B",
+            "role": "pulse-filter",
+            "values": [
+              3
+            ],
+            "evidence": "direct"
+          }
+        ]
+      }
+    ]
+  }
+]
