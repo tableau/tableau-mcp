@@ -8,34 +8,29 @@ export function getHeader(headers: Record<string, unknown>, name: string): strin
   return typeof value === 'string' ? value : undefined;
 }
 
-/** Parses UTF-8, quoted and unquoted filenames without changing malformed encoded values. */
+/** Prefers an extended UTF-8 filename, independently of parameter order. */
 export function getFilenameFromContentDisposition(
   contentDispositionHeader: string | undefined,
 ): string | undefined {
-  if (!contentDispositionHeader) {
-    return undefined;
-  }
+  if (!contentDispositionHeader) return undefined;
 
-  const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(
-    contentDispositionHeader,
-  );
-  const encodedOrQuotedOrRaw = match?.[1] ?? match?.[2] ?? match?.[3];
-  if (!encodedOrQuotedOrRaw) {
-    return undefined;
-  }
-
-  const filename = encodedOrQuotedOrRaw.trim();
-  if (!filename) {
-    return undefined;
-  }
-
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(filename);
-    } catch {
-      return filename;
+  let legacyFilename: string | undefined;
+  const parameter = /(?:^|;)\s*([^\s=;]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/g;
+  for (const [, name, quoted, unquoted] of contentDispositionHeader.matchAll(parameter)) {
+    const value = (quoted ?? unquoted).trim();
+    if (!value) continue;
+    const normalized = name.toLowerCase();
+    if (normalized === 'filename') {
+      legacyFilename ??= value;
+    } else if (normalized === 'filename*') {
+      const extended = /^UTF-8'[^']*'(.+)$/i.exec(value);
+      if (!extended) continue;
+      try {
+        return decodeURIComponent(extended[1]);
+      } catch {
+        return extended[1];
+      }
     }
   }
-
-  return filename;
+  return legacyFilename;
 }

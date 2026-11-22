@@ -37,6 +37,14 @@ const resources = [
 describe.each(resources)('$kind download response metadata', ({ create }) => {
   it.each([
     { header: "attachment; filename*=UTF-8''Example%20File.tfl", filename: 'Example File.tfl' },
+    {
+      header: "attachment; filename=Flow.tfl; filename*=UTF-8''%E3%83%95%E3%83%AD%E3%83%BC.tfl",
+      filename: 'フロー.tfl',
+    },
+    {
+      header: "attachment; filename*=UTF-8''%E3%83%95%E3%83%AD%E3%83%BC.tfl; filename=Flow.tfl",
+      filename: 'フロー.tfl',
+    },
     { header: 'attachment; filename=" Example File.tfl "', filename: 'Example File.tfl' },
     { header: 'attachment; filename= Example File.tfl ; size=3', filename: 'Example File.tfl' },
     { header: "attachment; filename*=UTF-8''Broken%ZZ.tfl", filename: 'Broken%ZZ.tfl' },
