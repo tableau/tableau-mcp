@@ -162,6 +162,46 @@ describe('source-bound compact YAML workflow', () => {
       true,
     );
   });
+  it('keeps both reviewed YAML previews available when their native artifacts match', async () => {
+    const handle = await prepare();
+    const candidates = [
+      { yaml: 'compact: yaml', id: previewId },
+      { yaml: 'compact: other', id: '33333333-3333-4333-8333-333333333333' },
+    ];
+
+    for (const { yaml, id } of candidates) {
+      mocks.engine.mockResolvedValueOnce({
+        ok: true,
+        valid: true,
+        previewId: id,
+        previewSha256: sha,
+      });
+      await expect(api.generatePrepFlow(args(handle, { yaml }), extra())).resolves.toMatchObject({
+        valid: true,
+        previewSha256: sha,
+      });
+    }
+
+    for (const { yaml, id } of candidates) {
+      mocks.engine.mockResolvedValue({
+        ok: true,
+        valid: true,
+        path: `.tableau-prep-mcp/${handle}/${id}/generated.tflx`,
+        sha256: sha,
+      });
+      await expect(
+        api.generatePrepFlow(
+          args(handle, { yaml, mode: 'generate', expectedPreviewSha256: sha }),
+          extra(),
+        ),
+      ).resolves.toMatchObject({ valid: true, sha256: sha });
+      expect(mocks.engine.mock.calls.at(-1)?.[1]).toMatchObject({
+        operation: 'generate',
+        previewId: id,
+        previewSha256: sha,
+      });
+    }
+  });
   it('checks the published boundary again before processing a saved handle', async () => {
     const handle = await prepare({ type: 'published', flowId });
     mocks.allowed.mockResolvedValue({ allowed: false, message: 'boundary changed' });

@@ -76,11 +76,15 @@ type Prepared = {
   projectSha256: string;
   sourceFlowId?: string;
   expires: number;
-  previews: Map<string, { id: string; yamlSha256: string; format: string }>;
+  previews: Map<string, string>;
   attempts: number;
 };
 const handles = new Map<string, Prepared>();
 const yamlHash = (yaml: string): string => createHash('sha256').update(yaml).digest('hex');
+
+function previewKey(previewSha256: string, yamlSha256: string, format: string): string {
+  return `${previewSha256}:${yamlSha256}:${format}`;
+}
 
 async function authorize(flowId: string, extra: TableauWebRequestHandlerExtra): Promise<void> {
   if (!(await isFlowReadToolsEnabled(getConfig())))
@@ -163,16 +167,16 @@ async function generate(
     state.attempts++;
     request = { operation: 'preview', previewId: randomUUID(), yaml: args.yaml };
   } else {
-    const previous = args.expectedPreviewSha256
-      ? state.previews.get(args.expectedPreviewSha256)
+    const previewId = args.expectedPreviewSha256
+      ? state.previews.get(previewKey(args.expectedPreviewSha256, sha, args.format))
       : undefined;
-    if (!previous || previous.yamlSha256 !== sha || previous.format !== args.format)
+    if (!previewId)
       throw new ArgsValidationError(
         'Generate requires the successful preview fingerprint for this exact YAML and format.',
       );
     request = {
       operation: 'generate',
-      previewId: previous.id,
+      previewId,
       previewSha256: args.expectedPreviewSha256,
       yamlSha256: sha,
     };
@@ -193,11 +197,7 @@ async function generate(
   )
     throw new ArgsValidationError('The engine did not return the exact reviewed native artifact.');
   if (args.mode === 'preview' && result.valid && result.previewSha256 && result.previewId)
-    state.previews.set(result.previewSha256, {
-      id: result.previewId,
-      yamlSha256: sha,
-      format: args.format,
-    });
+    state.previews.set(previewKey(result.previewSha256, sha, args.format), result.previewId);
   return {
     ...result,
     ...(result.valid && result.summary
