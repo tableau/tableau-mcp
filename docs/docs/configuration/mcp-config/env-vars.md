@@ -717,17 +717,11 @@ Enables admin-only tools that require site administrator permissions.
 
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
-  - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
-  - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
-  - [`list-jobs`](../../tools/jobs/list-jobs.md)
-  - [`list-users`](../../tools/users/list-users.md)
-  - [`list-groups`](../../tools/users/list-groups.md)
-  - [`delete-content`](../../tools/content/delete-content.md)
-  - [`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md)
   - [`list-extract-refresh-tasks`](../../web-tools/tasks/list-extract-refresh-tasks.md)
   - [`update-cloud-extract-refresh-task`](../../web-tools/tasks/update-cloud-extract-refresh-task.md)
   - [`list-jobs`](../../web-tools/jobs/list-jobs.md)
   - [`list-users`](../../web-tools/users/list-users.md)
+  - [`list-groups`](../../web-tools/users/list-groups.md)
   - [`delete-content`](../../web-tools/content/delete-content.md)
   - [`query-admin-insights`](../../web-tools/admin-insights/query-admin-insights.md)
 - These tools require the user to have one of the following site roles:
