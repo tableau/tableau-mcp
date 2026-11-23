@@ -1,6 +1,7 @@
 import features from '../../features.json';
 import pkg from '../../package.json';
 import { Config } from '../../src/config.js';
+import { EXPERTISE_TOOL_NAMES } from '../../src/desktop/instructions.js';
 import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
@@ -225,8 +226,8 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const expectedToolNames = desktopToolNames.filter((name) =>
-        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      const expectedToolNames = desktopToolNames.filter(
+        (name) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(name) && !EXPERTISE_TOOL_NAMES.has(name),
       );
       expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
@@ -357,8 +358,8 @@ describe('server', () => {
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
 
-      const expectedDesktopToolNames = desktopToolNames.filter((name) =>
-        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      const expectedDesktopToolNames = desktopToolNames.filter(
+        (name) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(name) && !EXPERTISE_TOOL_NAMES.has(name),
       );
       expect(expectedDesktopToolNames).toContain('bind-template');
       const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
