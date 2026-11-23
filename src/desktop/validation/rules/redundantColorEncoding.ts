@@ -1,6 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { expertiseReference } from './expertiseReference.js';
 import { parseXml } from './parseXml.js';
 
 function norm(ref: string): string {
@@ -49,7 +50,11 @@ export const redundantColorEncodingRule: ValidationRule = {
           xpath: '//encodings/color/@column',
           suggestion:
             'If the goal is distinct groups (top/bottom/tier), color by a DISCRETE dimension calc that buckets rows into ' +
-            'named groups (see expertise://tableau/tactics/viz/marks-and-encodings → "Discrete-tier color"), not by ' +
+            'named groups' +
+            expertiseReference(
+              ' (see expertise://tableau/tactics/viz/marks-and-encodings → "Discrete-tier color")',
+            ) +
+            ', not by ' +
             'the raw measure. If a gradient is genuinely intended, color by a DIFFERENT measure than the one on the axis.',
         });
       }

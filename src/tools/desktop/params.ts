@@ -19,7 +19,9 @@ export function sessionParam(options: { max?: number } = {}): z.ZodOptional<z.Zo
   return base.optional().describe('Session ID; optional if pinned or unique.');
 }
 
-export function xmlModeParam(): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'inline']>>> {
+export function xmlModeParam(): z.ZodDefault<
+  z.ZodOptional<z.ZodEnum<{ file: 'file'; inline: 'inline' }>>
+> {
   return z
     .enum(['file', 'inline'])
     .optional()

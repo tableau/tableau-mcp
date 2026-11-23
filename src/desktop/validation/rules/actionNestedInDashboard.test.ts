@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { getExpertiseCorpusEntryCount } from '../../expertise/index.js';
 import { runValidation } from '../registry.js';
 import { actionNestedInDashboardRule } from './actionNestedInDashboard.js';
 
@@ -16,6 +17,8 @@ const topLevel = `<workbook><worksheets><worksheet name="Period Selector"/></wor
     <source worksheet="Period Selector"/><params><param name="target-parameter" value="[Parameters].[Period]"/></params>
   </edit-parameter-action></actions></workbook>`;
 
+vi.mock('../../expertise/index.js', () => ({ getExpertiseCorpusEntryCount: vi.fn(() => 1) }));
+
 describe('action-nested-in-dashboard rule', () => {
   it('errors when a parameter action is nested inside a dashboard', () => {
     const issues = actionNestedInDashboardRule.validate(nested);
@@ -24,6 +27,16 @@ describe('action-nested-in-dashboard rule', () => {
     expect(issues[0].ruleId).toBe('action-nested-in-dashboard');
     expect(issues[0].severity).toBe('error');
     expect(issues[0].suggestion).toMatch(/WORKBOOK ROOT|top-level <actions>|sibling/);
+    expect(issues[0].suggestion).toContain('expertise://tableau/tactics/dashboard/zones');
+  });
+
+  it('omits the expertise reference when the corpus is empty', () => {
+    vi.mocked(getExpertiseCorpusEntryCount).mockReturnValueOnce(0);
+    const issues = actionNestedInDashboardRule.validate(nested);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('error');
+    expect(issues[0].suggestion).not.toContain('expertise://');
+    expect(issues[0].suggestion).toMatch(/only its LOCATION is wrong\.$/);
   });
 
   it('does not fire when the action is a top-level actions sibling of dashboards', () => {

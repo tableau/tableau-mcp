@@ -1,0 +1,839 @@
+{
+  "$schema": "https://tableau.github.io/tableau-mcp/schemas/toolTaxonomy.json",
+  "$comment": "Docs category assignment for every documented tool. This is the single source of truth for where a tool page lives and how its category is labelled; it is deliberately NOT derived from the source tree, so a source reorganization (such as the desktop api/ + authoring/ + local/ restructure) does not move or relabel a single page. Adding a tool here is an editorial decision — the sync tooling proposes a category for a new tool but never invents one.",
+  "version": 1,
+  "sections": {
+    "web-tools": {
+      "toolType": "Web Tools"
+    },
+    "desktop-tools": {
+      "toolType": "Desktop Tools"
+    }
+  },
+  "categories": [
+    {
+      "id": "desktop-tools/expertise",
+      "section": "desktop-tools",
+      "folder": "expertise",
+      "label": "Expertise",
+      "position": 9,
+      "description": "Tools for searching and reading the authoring guidance library.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/workspace",
+      "section": "desktop-tools",
+      "folder": "workspace",
+      "label": "Workspace",
+      "position": 18,
+      "description": "Tools for listing and reloading workspace extensions installed in Tableau Studio.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/admin-insights",
+      "section": "web-tools",
+      "folder": "admin-insights",
+      "label": "Admin Insights",
+      "position": 7,
+      "description": "Admin-only tools that query Tableau Cloud Admin Insights datasources via the VizQL Data Service. Gated by the `ADMIN_TOOLS_ENABLED` environment variable and a request-time site-role check.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/content",
+      "section": "web-tools",
+      "folder": "content",
+      "label": "Content Management",
+      "position": 8,
+      "description": "Admin-only tools for managing content lifecycle on Tableau Cloud — deletion, archival, and recycle-bin operations. Gated by the `ADMIN_TOOLS_ENABLED` environment variable and a request-time site-role check.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/content-exploration",
+      "section": "web-tools",
+      "folder": "content-exploration",
+      "label": "Content Exploration",
+      "position": 6,
+      "description": "Tools for exploring content in a Tableau Site.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/data-apps",
+      "folder": "data-apps",
+      "label": "Data Apps",
+      "position": 10,
+      "description": "Tools for scaffolding workbook data apps.",
+      "section": "web-tools",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/data-qna",
+      "section": "web-tools",
+      "folder": "data-qna",
+      "label": "Data Q&A",
+      "position": 1,
+      "description": "Tools for querying published data sources.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/flows",
+      "section": "web-tools",
+      "folder": "flows",
+      "label": "Flows",
+      "position": 6,
+      "description": "Tools for retrieving information about Tableau Prep flows.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/jobs",
+      "section": "web-tools",
+      "folder": "jobs",
+      "label": "Jobs",
+      "position": 4,
+      "description": "Tools for monitoring background jobs such as extract refreshes, subscriptions, and flow runs.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/knowledge",
+      "folder": "knowledge",
+      "label": "Tableau Knowledge",
+      "position": 9,
+      "description": "Tools for reading and updating Tableau Knowledge.",
+      "section": "web-tools",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/projects",
+      "section": "web-tools",
+      "folder": "projects",
+      "label": "Projects",
+      "position": 4,
+      "description": "Tools for retrieving information about projects.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/pulse",
+      "section": "web-tools",
+      "folder": "pulse",
+      "label": "Pulse",
+      "position": 5,
+      "description": "Tools for retrieving information about Pulse metrics.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/tasks",
+      "section": "web-tools",
+      "folder": "tasks",
+      "label": "Tasks",
+      "position": 4,
+      "description": "Tools for managing and monitoring extract refresh tasks.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/token-management",
+      "section": "web-tools",
+      "folder": "token-management",
+      "label": "Token Management",
+      "position": 7,
+      "description": "Tools for managing OAuth token and consent state for the current MCP session.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/users",
+      "section": "web-tools",
+      "folder": "users",
+      "label": "Users",
+      "position": 8,
+      "description": "Tools for retrieving information about users on the Tableau site.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/views",
+      "section": "web-tools",
+      "folder": "views",
+      "label": "Views",
+      "position": 3,
+      "description": "Tools for retrieving information about views within workbooks.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "web-tools/workbooks",
+      "section": "web-tools",
+      "folder": "workbooks",
+      "label": "Workbooks",
+      "position": 2,
+      "description": "Tools for retrieving information about workbooks.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/binder",
+      "section": "desktop-tools",
+      "folder": "binder",
+      "label": "Binder",
+      "position": 10,
+      "description": "Tools for listing, proposing, validating, and binding reusable authoring templates.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/cache",
+      "section": "desktop-tools",
+      "folder": "cache",
+      "label": "Cache",
+      "position": 16,
+      "description": "Tools for reading, writing, and validating cached workbook and worksheet XML.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/dashboard",
+      "section": "desktop-tools",
+      "folder": "dashboard",
+      "label": "Dashboards",
+      "position": 4,
+      "description": "Tools for building, applying, and inspecting dashboards in the open workbook.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/data-source",
+      "section": "desktop-tools",
+      "folder": "data-source",
+      "label": "Data Sources",
+      "position": 6,
+      "description": "Tools for authoring calculations, parameters, sets, and actions, and for inventorying datasources and workbooks.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/dialogs",
+      "section": "desktop-tools",
+      "folder": "dialogs",
+      "label": "Dialogs",
+      "position": 16,
+      "description": "Tools for listing modal dialogs in Tableau Studio and invoking a specific dialog action.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/external-api",
+      "section": "desktop-tools",
+      "folder": "external-api",
+      "label": "External API",
+      "position": 15,
+      "description": "Passthrough tools that expose the Tableau Studio external API surface (capabilities, workbook diagnostics, and operations).",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/fields",
+      "section": "desktop-tools",
+      "folder": "fields",
+      "label": "Fields",
+      "position": 7,
+      "description": "Tools for listing, adding, removing, and resolving fields on a worksheet.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/interaction",
+      "section": "desktop-tools",
+      "folder": "interaction",
+      "label": "Interaction",
+      "position": 14,
+      "description": "Tools for user interaction and authoring-episode lifecycle management.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/session",
+      "section": "desktop-tools",
+      "folder": "session",
+      "label": "Session",
+      "position": 1,
+      "description": "Tools for discovering local Tableau Studio instances and reading app and session state.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/storyboard",
+      "section": "desktop-tools",
+      "folder": "storyboard",
+      "label": "Storyboards",
+      "position": 5,
+      "description": "Tools for listing, inspecting, applying, and exporting storyboards in the open workbook.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/tableau-agent",
+      "section": "desktop-tools",
+      "folder": "tableau-agent",
+      "label": "Tableau Agent",
+      "position": 17,
+      "description": "Tools that control Tableau Agent chrome: the start-page visibility.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/template",
+      "section": "desktop-tools",
+      "folder": "template",
+      "label": "Templates",
+      "position": 11,
+      "description": "Tools for building worksheet artifacts from templates.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/workbook",
+      "section": "desktop-tools",
+      "folder": "workbook",
+      "label": "Workbooks",
+      "position": 2,
+      "description": "Tools for reading and applying workbook XML, listing worksheets and dashboards, and activating sheets in the open workbook.",
+      "collapsed": null,
+      "hasOverview": false
+    },
+    {
+      "id": "desktop-tools/worksheet",
+      "section": "desktop-tools",
+      "folder": "worksheet",
+      "label": "Worksheets",
+      "position": 3,
+      "description": "Tools for creating, applying, refining, and deleting worksheets in the open workbook.",
+      "collapsed": null,
+      "hasOverview": false
+    }
+  ],
+  "tools": {
+    "activate-sheet": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 2
+    },
+    "add-dashboard": {
+      "category": "desktop-tools/dashboard",
+      "sidebarPosition": 1
+    },
+    "add-field": {
+      "category": "desktop-tools/fields",
+      "sidebarPosition": 2
+    },
+    "add-storyboard": {
+      "category": "desktop-tools/storyboard",
+      "sidebarPosition": 5
+    },
+    "add-worksheet": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 1
+    },
+    "apply-dashboard": {
+      "category": "desktop-tools/dashboard",
+      "sidebarPosition": 2
+    },
+    "apply-datasource": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 16
+    },
+    "apply-storyboard": {
+      "category": "desktop-tools/storyboard",
+      "sidebarPosition": 4
+    },
+    "apply-workbook": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 3
+    },
+    "apply-worksheet": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 2
+    },
+    "ask-user": {
+      "category": "desktop-tools/interaction",
+      "sidebarPosition": 2
+    },
+    "author-action": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 2
+    },
+    "author-calc": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 3
+    },
+    "author-parameter": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 4
+    },
+    "author-set": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 5
+    },
+    "bind-template": {
+      "category": "desktop-tools/binder",
+      "sidebarPosition": 2
+    },
+    "build-worksheets-from-templates": {
+      "category": "desktop-tools/template",
+      "sidebarPosition": 3
+    },
+    "cancel-flow-run": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 3
+    },
+    "capture-window-screenshot": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 19
+    },
+    "close-workbook": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 20
+    },
+    "compose-story": {
+      "category": "desktop-tools/storyboard",
+      "sidebarPosition": 7
+    },
+    "delete-content": {
+      "category": "web-tools/content",
+      "sidebarPosition": 1
+    },
+    "delete-sheet": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 1
+    },
+    "describe-flow": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 4
+    },
+    "download-workbook": {
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 3
+    },
+    "export-dashboard-image": {
+      "category": "desktop-tools/dashboard",
+      "sidebarPosition": 10
+    },
+    "export-storyboard-image": {
+      "category": "desktop-tools/storyboard",
+      "sidebarPosition": 6
+    },
+    "export-worksheet-image": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 6
+    },
+    "format-dashboard-zones": {
+      "category": "desktop-tools/dashboard",
+      "sidebarPosition": 11
+    },
+    "format-worksheets": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 7
+    },
+    "generate-insight-cards": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 8
+    },
+    "generate-pulse-insight-brief": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 7
+    },
+    "generate-pulse-metric-value-insight-bundle": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 6
+    },
+    "get-active-dialogs": {
+      "category": "desktop-tools/dialogs",
+      "sidebarPosition": 1
+    },
+    "get-app-info": {
+      "category": "desktop-tools/session",
+      "sidebarPosition": 7
+    },
+    "get-capabilities": {
+      "category": "desktop-tools/external-api",
+      "sidebarPosition": 1
+    },
+    "get-custom-view-data": {
+      "category": "web-tools/views",
+      "sidebarPosition": 5
+    },
+    "get-custom-view-image": {
+      "category": "web-tools/views",
+      "sidebarPosition": 6
+    },
+    "get-datasource-metadata": {
+      "category": "web-tools/data-qna",
+      "sidebarPosition": 2
+    },
+    "get-datasource-underlying-data": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 19
+    },
+    "get-datasources": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 10
+    },
+    "get-desktop-state": {
+      "category": "desktop-tools/session",
+      "sidebarPosition": 4
+    },
+    "get-diagnostics": {
+      "category": "desktop-tools/external-api",
+      "sidebarPosition": 2
+    },
+    "get-flow": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 2
+    },
+    "get-flow-task": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 5
+    },
+    "get-operations": {
+      "category": "desktop-tools/external-api",
+      "sidebarPosition": 5
+    },
+    "get-sheets": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 11
+    },
+    "get-show-me-options": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 9
+    },
+    "get-summary-data": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 8
+    },
+    "get-view": {
+      "category": "web-tools/views",
+      "sidebarPosition": 7
+    },
+    "get-view-data": {
+      "category": "web-tools/views",
+      "sidebarPosition": 3
+    },
+    "get-view-image": {
+      "category": "web-tools/views",
+      "sidebarPosition": 2
+    },
+    "get-workbook": {
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 2
+    },
+    "get-workbook-extensions": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 21
+    },
+    "get-worksheet-underlying-data": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 1
+    },
+    "get-workspace-extensions": {
+      "category": "desktop-tools/workspace",
+      "sidebarPosition": 1
+    },
+    "get-xml": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 17
+    },
+    "inspect-knowledge-context": {
+      "category": "web-tools/knowledge",
+      "sidebarPosition": 1
+    },
+    "invoke-dialog-action": {
+      "category": "desktop-tools/dialogs",
+      "sidebarPosition": 2
+    },
+    "list-all-pulse-metric-definitions": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 1
+    },
+    "list-available-fields": {
+      "category": "desktop-tools/fields",
+      "sidebarPosition": 3
+    },
+    "list-custom-views": {
+      "category": "web-tools/views",
+      "sidebarPosition": 4
+    },
+    "list-datasource-logical-tables": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 20
+    },
+    "list-datasources": {
+      "category": "web-tools/data-qna",
+      "sidebarPosition": 1
+    },
+    "list-extract-refresh-tasks": {
+      "category": "web-tools/tasks",
+      "sidebarPosition": 1
+    },
+    "list-flow-runs": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 6
+    },
+    "list-flow-tasks": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 7
+    },
+    "list-flows": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 1
+    },
+    "list-instances": {
+      "category": "desktop-tools/session",
+      "sidebarPosition": 3
+    },
+    "list-jobs": {
+      "category": "web-tools/jobs",
+      "sidebarPosition": 1
+    },
+    "list-projects": {
+      "category": "web-tools/projects",
+      "sidebarPosition": 1
+    },
+    "list-pulse-metric-definitions-from-definition-ids": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 2
+    },
+    "list-pulse-metric-subscriptions": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 5
+    },
+    "list-pulse-metrics-from-metric-definition-id": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 3
+    },
+    "list-pulse-metrics-from-metric-ids": {
+      "category": "web-tools/pulse",
+      "sidebarPosition": 4
+    },
+    "list-saved-datasources": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 21
+    },
+    "list-templates": {
+      "category": "desktop-tools/binder",
+      "sidebarPosition": 3
+    },
+    "list-users": {
+      "category": "web-tools/users",
+      "sidebarPosition": 1
+    },
+    "list-views": {
+      "category": "web-tools/views",
+      "sidebarPosition": 1
+    },
+    "list-workbooks": {
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 1
+    },
+    "list-worksheet-logical-tables": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 13
+    },
+    "manage-knowledge-context": {
+      "category": "web-tools/knowledge",
+      "sidebarPosition": 2
+    },
+    "move-workbook": {
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 4
+    },
+    "open-file": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 9
+    },
+    "publish-datasource": {
+      "category": "web-tools/data-qna",
+      "sidebarPosition": 4
+    },
+    "publish-workbook": {
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 18
+    },
+    "query-admin-insights": {
+      "category": "web-tools/admin-insights",
+      "sidebarPosition": 5
+    },
+    "query-datasource": {
+      "category": "web-tools/data-qna",
+      "sidebarPosition": 3
+    },
+    "query-knowledge-context": {
+      "category": "web-tools/knowledge",
+      "sidebarPosition": 3
+    },
+    "read-cached-xml": {
+      "category": "desktop-tools/cache",
+      "sidebarPosition": 2
+    },
+    "read-expertise-resource": {
+      "category": "desktop-tools/expertise",
+      "sidebarPosition": 2
+    },
+    "refine-worksheet": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 5
+    },
+    "refresh-auto-updates": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 18
+    },
+    "refresh-datasource": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 24
+    },
+    "reload-extensions": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 22
+    },
+    "reload-workspace-extension": {
+      "category": "desktop-tools/workspace",
+      "sidebarPosition": 2
+    },
+    "remove-field": {
+      "category": "desktop-tools/fields",
+      "sidebarPosition": 5
+    },
+    "rename-sheet": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 11
+    },
+    "render-interactive-viz": {
+      "category": "web-tools/views",
+      "sidebarPosition": 8
+    },
+    "request-datasource-upload": {
+      "category": "web-tools/data-qna",
+      "sidebarPosition": 5
+    },
+    "request-workbook-upload": {
+      "category": "web-tools/workbooks",
+      "sidebarPosition": 5
+    },
+    "reset-consent": {
+      "category": "web-tools/token-management",
+      "sidebarPosition": 1
+    },
+    "resolve-field": {
+      "category": "desktop-tools/fields",
+      "sidebarPosition": 6
+    },
+    "revoke-access-token": {
+      "category": "web-tools/token-management",
+      "sidebarPosition": 2
+    },
+    "run-dashboard-batch": {
+      "category": "desktop-tools/dashboard",
+      "sidebarPosition": 9
+    },
+    "run-flow": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 8
+    },
+    "run-flow-task": {
+      "category": "web-tools/flows",
+      "sidebarPosition": 9
+    },
+    "save-workbook": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 13
+    },
+    "scaffold-data-app": {
+      "category": "web-tools/data-apps",
+      "sidebarPosition": 1
+    },
+    "search-content": {
+      "category": "web-tools/content-exploration",
+      "sidebarPosition": 1
+    },
+    "search-expertise": {
+      "category": "desktop-tools/expertise",
+      "sidebarPosition": 1
+    },
+    "search-workbook-fields": {
+      "category": "desktop-tools/fields",
+      "sidebarPosition": 6
+    },
+    "set-auto-updates-paused": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 15
+    },
+    "set-data-source-page-active": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 22
+    },
+    "set-member-colors": {
+      "category": "desktop-tools/fields",
+      "sidebarPosition": 7
+    },
+    "set-start-page-visibility": {
+      "category": "desktop-tools/tableau-agent",
+      "sidebarPosition": 2
+    },
+    "show-me": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 10
+    },
+    "sort-worksheet": {
+      "category": "desktop-tools/worksheet",
+      "sidebarPosition": 3
+    },
+    "tableau-begin-episode": {
+      "category": "desktop-tools/interaction",
+      "sidebarPosition": 3
+    },
+    "tableau-end-episode": {
+      "category": "desktop-tools/interaction",
+      "sidebarPosition": 4
+    },
+    "undo-redo-workbook": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 16
+    },
+    "update-cloud-extract-refresh-task": {
+      "category": "web-tools/tasks",
+      "sidebarPosition": 3
+    },
+    "update-user": {
+      "category": "web-tools/users",
+      "sidebarPosition": 2
+    },
+    "validate-calculated-field": {
+      "category": "desktop-tools/data-source",
+      "sidebarPosition": 23
+    },
+    "validate-workbook-xml": {
+      "category": "desktop-tools/cache",
+      "sidebarPosition": 3
+    },
+    "validate-worksheet-xml": {
+      "category": "desktop-tools/cache",
+      "sidebarPosition": 4
+    },
+    "workbook-export-as": {
+      "category": "desktop-tools/workbook",
+      "sidebarPosition": 14
+    },
+    "write-cached-xml": {
+      "category": "desktop-tools/cache",
+      "sidebarPosition": 5
+    }
+  }
+}

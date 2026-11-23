@@ -1,4 +1,4 @@
-import { type ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ReadResourceResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { Config, getConfig } from '../config.js';
@@ -83,7 +83,7 @@ export const registerPrompts = async (server: WebMcpServer): Promise<void> => {
       {
         title: prompt.title,
         description: prompt.description,
-        argsSchema: prompt.argsSchema,
+        argsSchema: prompt.argsSchema ? z.object(prompt.argsSchema) : undefined,
       },
       // The MCP SDK's PromptCallback type discriminates on whether argsSchema is provided.
       // Our registration always provides one for argument-bearing prompts; cast through any

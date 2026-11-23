@@ -1,8 +1,0 @@
-{
-  "label": "Tools",
-  "position": 4,
-  "link": {
-    "type": "generated-index",
-    "description": "Reference documentation for each tool exposed by Tableau MCP."
-  }
-}

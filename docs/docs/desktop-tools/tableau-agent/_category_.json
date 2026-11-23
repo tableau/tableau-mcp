@@ -1,0 +1,8 @@
+{
+  "label": "Tableau Agent",
+  "position": 17,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools that control Tableau Agent chrome: the start-page visibility."
+  }
+}

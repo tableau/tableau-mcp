@@ -657,7 +657,7 @@ describe('Tool', () => {
           type: 'Bearer',
           clientId: 'https://claude.ai/client',
         } as TableauAuthInfo,
-        requestInfo: { headers: { 'user-agent': 'test-agent/1.0' } },
+        requestInfo: { headers: new Headers({ 'user-agent': 'test-agent/1.0' }) },
       });
 
       await tool.logAndExecute({
@@ -917,7 +917,7 @@ describe('Tool', () => {
         {
           code: 'invalid_type',
           expected: 'string',
-          received: 'object',
+          input: {},
           path: ['parameters', 0, 'members', 0],
           message: 'Expected string, received object',
         },

@@ -12,22 +12,28 @@ import { z } from 'zod';
  * base a transform returning `undefined` still *succeeds*, so `.catch()` never
  * sees a failure, and `.default()` only substitutes for an `undefined` input.
  *
+ * `.optional()` keeps an absent key from failing in zod 4, where an unknown-based
+ * transform otherwise reports the key as non-optional.
+ *
  * Because the transform's output type is `boolean`, a field using this schema
  * infers as a REQUIRED `boolean` on the output side while still accepting an
  * absent key on the input side.
  */
-export const looseBooleanFalsy = z.unknown().transform((value) => {
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'true') {
-      return true;
+export const looseBooleanFalsy = z
+  .unknown()
+  .optional()
+  .transform((value) => {
+    if (typeof value === 'boolean') {
+      return value;
     }
-    if (normalized === 'false') {
-      return false;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') {
+        return true;
+      }
+      if (normalized === 'false') {
+        return false;
+      }
     }
-  }
-  return false;
-});
+    return false;
+  });

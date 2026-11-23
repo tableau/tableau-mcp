@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResultSchema } from '@modelcontextprotocol/core';
 
 import {
   desktopStateSchema,
@@ -683,7 +683,6 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     try {
       await requireClient().client.callTool(
         { name: 'get-desktop-state', arguments: { session: SESSION } },
-        undefined,
         { timeout: 100 },
       );
     } catch (error) {
@@ -705,7 +704,6 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     try {
       await requireClient().client.callTool(
         { name: 'get-desktop-state', arguments: { session: SESSION } },
-        undefined,
         { signal: controller.signal, timeout: 5000 },
       );
     } catch (error) {

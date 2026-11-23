@@ -1,9 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { getExpertiseCorpusEntryCount } from '../../expertise/index.js';
 import { selfReferentialFixedLodRule as rule } from './selfReferentialFixedLod.js';
+
+vi.mock('../../expertise/index.js', () => ({ getExpertiseCorpusEntryCount: vi.fn(() => 1) }));
 
 describe('self-referential-fixed-lod rule', () => {
   it('flags a nested FIXED-in-FIXED rank-by-count membership calc', () => {
@@ -15,6 +18,15 @@ describe('self-referential-fixed-lod rule', () => {
     expect(issues[0].severity).toBe('warning');
     expect(issues[0].suggestion).toMatch(/lod-membership-tier-calc/);
     expect(issues[0].suggestion).not.toMatch(/Top-tab|sets-usage-and-creation/);
+  });
+
+  it('omits the expertise reference when the corpus is empty', () => {
+    vi.mocked(getExpertiseCorpusEntryCount).mockReturnValueOnce(0);
+    const [issue] = rule.validate(
+      '<calculation formula="{ FIXED [Sub-Category] : COUNTD(IF { FIXED [Sub-Category] : SUM([Profit]) } >= [x] THEN [Sub-Category] END) }"/>',
+    );
+    expect(issue.suggestion).not.toContain('expertise://');
+    expect(issue.suggestion).toContain('Sets do NOT survive MCP apply');
   });
 
   it('flags two FIXED LODs compared for membership', () => {

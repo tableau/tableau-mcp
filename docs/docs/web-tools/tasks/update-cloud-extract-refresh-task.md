@@ -1,0 +1,230 @@
+---
+sidebar_position: 3
+---
+
+# Update Cloud Extract Refresh Task
+
+{/* availability */}
+<span className="toolAvailability">Available June 2026 and later.</span>
+{/* /availability */}
+
+Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often a refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task. Because the update overwrites the task's schedule, it is **two-phase**: a preview call (`confirm` omitted or `false`) reports the schedule that would be applied and returns a single-use confirmation token, and a confirm call (`confirm: true` with that token) applies it.
+
+:::warning[Admin Only]
+Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#admin_tools_enabled)`=true`. The tool is restricted to Tableau site administrators, and the caller's site role (`SiteAdministratorCreator`, `SiteAdministratorExplorer`, or `ServerAdministrator`) is verified at request time.
+:::
+
+:::info[Tableau Cloud Only]
+This tool calls the **Cloud variant** of the update endpoint and is not appropriate for Tableau Server, whose variant has a different payload shape.
+:::
+
+## APIs called
+
+This tool talks to the **Tableau REST API** (Tableau Cloud). At the MCP layer it is gated on the `tableau:mcp:tasks:write` scope; the underlying REST calls require the `tableau:tasks:write` and `tableau:users:read` OAuth scopes. It follows a two-phase preview → confirm flow: the preview phase only reads (to authorize the caller and describe the change), and the write is issued only on the confirm phase.
+
+- Authorize the caller and describe the change (read-only; runs on every call and is the whole of a `confirm`-omitted preview). Verifies the caller holds a site-administrator role and, for the audit trail, resolves the task's underlying data source or workbook (and, best-effort, its owner) before reporting the schedule that would be applied. Nothing is changed on this phase.
+  - `GET /api/{version}/sites/{siteId}/users/{userId}` — look up the caller's site role for the admin check (and, best-effort, the underlying content's owner for the audit record). Issued against the REST API; requires the `tableau:users:read` OAuth scope. [Query User On Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#query_user_on_site)
+  - `GET /api/{version}/sites/{siteId}/tasks/extractRefreshes` — list the site's extract refresh tasks to identify this task's underlying data source or workbook for the audit record. Issued against the REST API; covered by the `tableau:tasks:write` scope the tool holds. [Get Extract Refresh Tasks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#list_extract_refresh_tasks_in_site)
+- Apply the schedule change (confirm phase only — `confirm: true` with a valid confirmation token). Overwrites the task's schedule wholesale with the supplied one.
+  - `POST /api/{version}/sites/{siteId}/tasks/extractRefreshes/{taskId}` — update the task's schedule. Issued against the REST API (Tableau Cloud only); requires the `tableau:tasks:write` OAuth scope. [Update Cloud Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task)
+
+## Required arguments
+
+### `taskId`
+
+The ID of the extract refresh task to update, as a UUID string. Obtain it from [`list-extract-refresh-tasks`](./list-extract-refresh-tasks.md).
+
+#### Example
+
+```json
+{ "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+```
+
+<hr />
+
+### `schedule`
+
+The new schedule to apply, as an object. It replaces the existing schedule **wholesale** — partial-field merging is not supported by the Tableau API, so send the full schedule you want.
+
+:::note[Reverting a change]
+Because the schedule is replaced wholesale, to revert an update call the tool again with the prior schedule values.
+:::
+
+#### Schedule shape
+
+| Field                                | Type     | Required | Description                                                                                              |
+| ------------------------------------ | -------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `frequency`                          | enum     | Yes      | One of `Hourly`, `Daily`, `Weekly`, `Monthly`.                                                           |
+| `frequencyDetails.start`             | string   | Yes      | Start time in 24-hour `HH:mm:ss` format, e.g. `"06:00:00"`.                                              |
+| `frequencyDetails.end`               | string   | Hourly only | End time in 24-hour `HH:mm:ss` format. **Required** for `Hourly` (minute portion must match `start`, must be strictly after `start`). Omit for `Daily`/`Weekly`/`Monthly` — Tableau ignores it. |
+| `frequencyDetails.intervals.interval` | array    | No       | Recurrence intervals. Each entry can specify `weekDay` (Sunday..Saturday), `monthDay`, `hours`, or `minutes` depending on the frequency. |
+
+#### Schedule constraints
+
+The schema enforces these rules — invalid input is rejected before any Tableau API call:
+
+- **Time format** – `start` and `end` must be zero-padded `HH:mm:ss` (e.g. `"06:00:00"`, not `"6:00:00"`).
+- **Minute boundary** – The minute portion of `start` (and `end`, when present) must be on a 5-minute boundary: `00`, `05`, `10`, `15`, `20`, `25`, `30`, `35`, `40`, `45`, `50`, or `55`, with seconds = `00`. `07:26:00` is rejected; `07:25:00` and `07:30:00` are accepted.
+- **Hourly** – `start` and `end` must share the same minute portion (e.g. `06:00:00`/`18:00:00` ✓, `06:00:00`/`18:30:00` ✗); `end` must be strictly after `start` (numeric comparison, not lexical).
+- **Daily / Weekly / Monthly** – `end` is ignored — omit it.
+- **Hourly** and **Daily** require at least one interval with `weekDay` (Tableau rejects them otherwise with `409004`).
+- **Weekly** requires at least one interval with `weekDay`; **Monthly** requires at least one interval with `monthDay`.
+
+:::note[Site-specific rejection]
+Tableau may still reject a schema-valid request with `409004 Conflict` (`Invalid subscription schedule`) for site-specific rules. In that case the tool surfaces Tableau's structured error verbatim — e.g. `Tableau 409 [409004]: Conflict: Invalid subscription schedule. (...)` — so callers can recover without parsing raw errors.
+:::
+
+#### Example
+
+Daily → Weekly Sunday at 06:00:
+
+```json
+{
+  "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "schedule": {
+    "frequency": "Weekly",
+    "frequencyDetails": {
+      "start": "06:00:00",
+      "intervals": { "interval": [{ "weekDay": "Sunday" }] }
+    }
+  }
+}
+```
+
+Hourly between 08:00 and 18:00 every 2 hours, Mondays:
+
+```json
+{
+  "taskId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "schedule": {
+    "frequency": "Hourly",
+    "frequencyDetails": {
+      "start": "08:00:00",
+      "end": "18:00:00",
+      "intervals": { "interval": [{ "hours": 2 }, { "weekDay": "Monday" }] }
+    }
+  }
+}
+```
+
+## Optional arguments
+
+### `confirm`
+Boolean that selects the phase. When omitted or `false`, runs a non-destructive **preview**: reports the new schedule that would be applied and returns a single-use confirmation token, changing nothing. When `true`, **applies** the update — but only if the `confirmationToken` from a prior preview of this same `taskId` and `schedule` is also supplied. Present the previewed change to the user and get explicit approval before calling again with `confirm: true`.
+
+:::note[MCP-Apps confirm panel]
+When the [`mcp-apps`](../../developers/feature-flags.md) feature flag is enabled, the preview phase renders an in-app **confirm panel** describing the schedule change (new frequency and time window, plus a live countdown) instead of returning preview text the model could act on. The change is then applied only when a person clicks **Apply schedule change** in that panel, which invokes the model-invisible `confirm-update-cloud-extract-refresh-task` tool — the model-driven `confirm: true` path is **closed** while the flag is on, so the assistant cannot apply the change on the user's behalf. This is cooperative human-in-the-loop: it relies on the MCP client hiding the confirm tool from the model and rendering the panel, so a non-cooperating client could still drive preview → confirm without a human gesture. When the flag is off, the tool behaves exactly as the two-phase `confirm`/`confirmationToken` flow.
+:::
+
+#### Example
+
+```json
+{ "confirm": true }
+```
+
+<hr />
+
+### `confirmationToken`
+The single-use token returned by a prior preview call for this same `taskId` and `schedule`. Required when `confirm` is `true`; ignored otherwise.
+
+This token is minted, held, verified, and consumed by **this MCP server's in-process mutation guard** — it is **not** a Tableau REST API feature, and the underlying REST calls have no knowledge of it. The guard binds the token to a fingerprint of the previewed `taskId` and `schedule`, so a token minted while previewing schedule A cannot confirm an update to schedule B, and a `confirm: true` with no prior preview (no valid token) is rejected. On confirm, the guard re-checks live Tableau state, so a forged or precomputed token — or a target that drifted since the preview — is rejected as well.
+
+#### Example
+
+```json
+{ "confirmationToken": "b7e2c1a0-3f4d-4e8a-9c1b-2d5f6a7b8c90" }
+```
+
+## Notes and caveats
+
+- The confirmation token is held only in memory by this MCP server, so it does not outlive the preview session; it is valid for [`MUTATION_PREVIEW_TTL_MINUTES`](../../configuration/mcp-config/env-vars.md#mutation_preview_ttl_minutes) (default 5). If a confirm is rejected for a missing or expired token, re-run the preview to mint a fresh one.
+- Calling against a Tableau Server site — or with a stale `taskId` — returns a 404, which the tool surfaces as a Tableau Cloud-only hint pointing at [`list-extract-refresh-tasks`](./list-extract-refresh-tasks.md) rather than a bare "Not Found".
+- Every attempt — the preview and the confirmed update, and both allowed and denied attempts (for example a non-admin caller) — emits a structured authoritative audit record to this MCP server's audit log sink (logger `audit`, level `notice`), not just to the tool-response text. Each record captures the actor identity, the tool, the action (`update`), the phase, the target id, the confirmation-evidence kind, and the result; a confirmed update additionally records a terminal `completed` or `failed` outcome reflecting the REST result.
+
+## Example result
+
+On a confirmed update, a confirmation message describing the updated task and its new schedule:
+
+```
+Extract refresh task 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' has been successfully updated. New schedule: Weekly (start 06:00:00).
+```
+
+On a preview (`confirm` omitted or `false`), a message describing the schedule that would be applied, plus the single-use confirmation token to supply on the confirmed call.
+
+## Related
+
+- [`list-extract-refresh-tasks`](./list-extract-refresh-tasks.md) — list the site's extract refresh tasks and obtain a `taskId`
+- [`delete-content`](../content/delete-content.md) — delete content, including extract refresh tasks
+
+{/* tool-details */}
+## Confirm and audit
+
+This mutation is **two-phase**, gated on a server-generated single-use confirmation token:
+
+1. **Preview** (default — `confirm` omitted or `false`): reports the new schedule that would be
+   applied without changing anything, and returns a single-use `confirmationToken`.
+2. **Update** (`confirm: true` + `confirmationToken`): applies the schedule update. The server
+   verifies and consumes the token first.
+
+The token is server-generated and **bound to the previewed `taskId` and `schedule`**: a token minted
+prior preview (no valid token) is rejected server-side. This gate genuinely requires the preview
+phase to have run for exactly this change; it cannot be bypassed by computing a value. Present the
+change to the user and get explicit approval before confirming.
+
+### MCP-Apps confirm panel (cooperative human-in-the-loop)
+
+When the `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+preview phase renders an in-iframe **confirm panel** describing the schedule change (new frequency and
+schedule change is then applied only when a person clicks **Apply schedule change** in that panel,
+(`visibility: ['app']`), passing the task id and the full structured schedule. With the flag on, the
+model-driven `confirm: true` path is **closed** — the assistant cannot apply the change on the user's
+behalf; the only route is the human gesture. The confirm tool verifies a fresh, single-use human
+approval recorded during the preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
+expired approval rejects the update. When the flag is off the tool behaves exactly as the two-phase
+`confirm`/`confirmationToken` flow described above.
+
+:::warning[Cooperative, not server-enforced]
+This is **cooperative** human-in-the-loop: it depends on the MCP client honoring `visibility: ['app']`
+(hiding the `confirm-*` tool from the model) and rendering the confirm panel. The human approval is
+recorded during the model-driven preview phase, so a **non-cooperating** client that ignores the
+visibility hint could still drive `preview → confirm-*` back-to-back with no human gesture. This task
+tool has **no tag layer** — the app approval is the only gate — so a non-cooperating client has nothing
+else to clear (the schedule-bound registry nonce still proves a preview *ran*, but not that a human
+approved). Server-enforced HITL (an approval primitive the model cannot forge or reach) is tracked as
+follow-up work (W-23125362).
+:::
+
+:::note[Authoritative audit]
+Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for
+example a non-admin caller) — emits a structured authoritative audit record to the server's durable
+the actor identity, the tool, action (`update`), phase, the target id, the confirmation evidence kind
+(`registry-nonce` for this tool), and the result. A confirmed update emits an `allowed` record when
+authorized, then a terminal `completed` (or `failed`, with `failureDetail`) record reflecting the
+REST outcome — so the trail records what actually happened, not just intent. This routing is
+centralized in the shared mutation guard so every TMCP mutation tool audits identically.
+:::
+
+## Use cases
+
+Use this tool when you need to:
+- Reduce the frequency of an under-used extract refresh (e.g. Hourly → Daily, Daily → Weekly)
+- Move a refresh window to off-peak hours
+- Change the recurrence intervals (e.g. weekday → weekend)
+
+## Configuration
+
+Enable this tool by setting:
+
+See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
+
+## Error cases
+
+| Scenario                          | Behavior                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| Task ID does not exist            | Returns a 404 error                                                            |
+| User is not a site administrator  | Returns an error indicating admin permissions are required                     |
+| `ADMIN_TOOLS_ENABLED` not set     | Tool is not registered and unavailable to the client                           |
+| Invalid `frequency` value         | Schema-level rejection before any API call                                     |
+| Missing `frequencyDetails.start`  | Schema-level rejection before any API call                                     |
+| Tableau Server (not Cloud)        | This tool is Cloud-only; calling it against a Server site is not supported     |
+{/* /tool-details */}
