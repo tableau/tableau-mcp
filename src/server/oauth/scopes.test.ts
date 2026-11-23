@@ -883,12 +883,7 @@ describe('scopes', () => {
     // Registration-condition probe scopes must be advertised too, or the token minted from this
     // metadata lacks them and the probe fails closed, hiding the very tools it gates. The Pulse
     // premium probe reads `tableau:entitlements:read`, which no tool declares in its own scope set.
-    // They are advertised only when `enforce-registration-conditions` is on, since that flag is what
-    // makes the probes actually run.
-    it('should advertise tableau:entitlements:read for the RequiresPulsePremium probe when enforce-registration-conditions is enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'enforce-registration-conditions',
-      );
+    it('should advertise tableau:entitlements:read for the RequiresPulsePremium probe with all feature flags disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
@@ -897,22 +892,19 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:entitlements:read');
     });
 
-    it('should NOT advertise condition probe scopes when enforce-registration-conditions is disabled', async () => {
-      // Default mock: every feature (including enforce-registration-conditions) is off.
+    it('should advertise condition probe scopes even when optional scopes are excluded', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
 
-      const scopes = await getSupportedApiScopes();
-      // `tableau:entitlements:read` is only ever contributed by the RequiresPulsePremium condition,
-      // so its absence proves condition scopes are not advertised when the flag is off.
-      expect(scopes).not.toContain('tableau:entitlements:read');
+      const scopes = await getSupportedApiScopes(undefined, { includeOptionalScopes: false });
+      expect(scopes).toContain('tableau:insight_definitions_metrics:read');
+      expect(scopes).toContain('tableau:entitlements:read');
     });
 
-    it('should advertise the Knowledge availability probe scope when knowledge-tools and enforce-registration-conditions are enabled', async () => {
+    it('should advertise the Knowledge availability probe scope when knowledge-tools is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) =>
-          featureName === 'knowledge-tools' || featureName === 'enforce-registration-conditions',
+        async (featureName: string) => featureName === 'knowledge-tools',
       );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,

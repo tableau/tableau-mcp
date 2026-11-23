@@ -482,25 +482,10 @@ export class WebMcpServer extends Server {
       webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
 
-    // The registration-time role check is gated behind `enforce-role-requirements`. When it's off
-    // (the default), tools register regardless of the caller's site role and no /users call is made.
-    const enforceRoleRequirements = await getFeatureGate().isFeatureEnabled(
-      'enforce-role-requirements',
-    );
-
-    // When this feature is off, no conditions are checked before registering a tool.
-    const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
-      'enforce-registration-conditions',
-    );
-
-    // Stores context that is used for determining if registration conditions have been met.
-    // Registration context is uninitialized, but then gets populated with each condition checked.
-    const registrationContext: RegistrationContext = {};
-
-    // Fetching site role for user
-    if (enforceRoleRequirements) {
-      registrationContext.siteRole = await getCurrentUserSiteRole(restApiArgs);
-    }
+    // Share role and capability results across this registration pass.
+    const registrationContext: RegistrationContext = {
+      siteRole: await getCurrentUserSiteRole(restApiArgs),
+    };
 
     // Names of role-gated tools hidden specifically because the role fetch FAILED
     // rather than because the caller's role was genuinely too low.
@@ -527,11 +512,7 @@ export class WebMcpServer extends Server {
     const checkMcpScopes = hasExplicitScopeGrant;
     const checkApiScopes =
       hasExplicitScopeGrant && config.oauth.enforceScopes && config.oauth.advertiseApiScopes;
-    // Condition-probe scopes are only advertised when conditions are enforced (see getSupportedApiScopes),
-    // so only hold the caller to them in that same mode — otherwise we'd omit every conditional tool for a
-    // scope that was never offered. Omitting here (over letting the probe run) keeps the message honest: a
-    // missing probe scope reads as "you didn't grant this" rather than being mislabeled as "feature absent".
-    const checkConditionApiScopes = checkApiScopes && enforceRegistrationConditions;
+    // Probe scopes follow the same enforcement rules as the tools' other API scopes.
     const grantedScopeSet = new Set(grantedScopes ?? []);
 
     const toolsToRegister: typeof allTools = [];
@@ -541,11 +522,10 @@ export class WebMcpServer extends Server {
       if (!this.ownsMcpServer && tool.name === 'scaffold-data-app') continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
-      if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {
+      if (roleRequiresEnforcement(tool.minRequiredRole)) {
         const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
-          // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during
-          // registration if a user does not have the minimum role or if their role is unable to be fetched.
+          // Omit tools when the caller is below the minimum role or their role cannot be fetched.
           // An `undefined` role means the fetch failed.
           if (siteRole === undefined) {
             toolsOmittedForRoleFetchFailure.push(tool.name);
@@ -559,13 +539,13 @@ export class WebMcpServer extends Server {
       const missingScope =
         (checkMcpScopes && tool.requiredMcpScopes.some((scope) => !grantedScopeSet.has(scope))) ||
         (checkApiScopes && tool.requiredApiScopes.some((scope) => !grantedScopeSet.has(scope))) ||
-        (checkConditionApiScopes &&
+        (checkApiScopes &&
           tool.requiredConditionApiScopes.some((scope) => !grantedScopeSet.has(scope)));
       if (missingScope) {
         toolsOmittedForMissingScopes.push(tool.name);
         continue;
       }
-      if (enforceRegistrationConditions && tool.registrationConditions.length > 0) {
+      if (tool.registrationConditions.length > 0) {
         const conditionCheckResult = await checkRegistrationConditions(
           tool.registrationConditions,
           registrationContext,

@@ -5,6 +5,11 @@ import { stubDefaultEnvVars } from './testShared.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolGroups } from './tools/web/toolName.js';
 
+vi.mock('./tools/web/registrationConditions.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./tools/web/registrationConditions.js')>()),
+  checkRegistrationConditions: vi.fn().mockResolvedValue({ registrationConditionsMet: true }),
+}));
+
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: vi.fn(() => false) })),
 }));

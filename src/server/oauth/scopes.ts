@@ -690,9 +690,6 @@ export async function getSupportedApiScopes(
 ): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
-  const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
-    'enforce-registration-conditions',
-  );
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
@@ -704,11 +701,9 @@ export async function getSupportedApiScopes(
           scopes.add(scope);
         }
       }
-      // adding api scopes needed to check the registration conditions required by this tool
-      if (enforceRegistrationConditions) {
-        for (const scope of scopeConfig.conditionApiScopes ?? []) {
-          scopes.add(scope);
-        }
+      // Include the scopes needed to check this tool's registration conditions.
+      for (const scope of scopeConfig.conditionApiScopes ?? []) {
+        scopes.add(scope);
       }
     }
   }
