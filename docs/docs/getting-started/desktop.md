@@ -42,9 +42,6 @@ path; otherwise the cache sits inside npm's own cache folder.
 
 The package reads its settings from the environment only. It does not read a `.env` file.
 
-The server can start before %product_name% does. Each tool checks the External Client API version
-of the instance it calls, and tells you to update %product_name% if that instance is too old.
-
 ## Build and run from source
 
 Requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later.

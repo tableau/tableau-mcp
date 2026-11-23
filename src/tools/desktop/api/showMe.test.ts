@@ -323,7 +323,7 @@ describe('show-me tool', () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(sessionResolution.resolveSession).toHaveBeenCalledTimes(2);
+    expect(sessionResolution.resolveSession).toHaveBeenCalledTimes(1);
     expect(resultBody(result)).toMatchObject({ showMeRequested: true, operationStatus: 'running' });
     expect(String(resultBody(result).message)).toContain('still applying');
   });
