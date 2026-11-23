@@ -21,8 +21,8 @@ describe('isMcpWildcardScopeEnabled', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('mcp-wildcard-scope');
   });
 
-  it('ships with the mcp-wildcard-scope flag on', () => {
-    // Clients request tableau:mcp:*, so every authorization server must issue it before release.
-    expect(features['mcp-wildcard-scope']).toBe(true);
+  it('ships with the mcp-wildcard-scope flag off', () => {
+    // Clients would request tableau:mcp:*, which an authorization server may not issue yet.
+    expect(features['mcp-wildcard-scope']).toBe(false);
   });
 });
