@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import features from '../../features.json';
 import pkg from '../../package.json';
 import { Config } from '../../src/config.js';
@@ -5,7 +9,7 @@ import { EXPERTISE_TOOL_NAMES } from '../../src/desktop/instructions.js';
 import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
@@ -232,6 +236,45 @@ describe('server', () => {
       expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    it('should not mention expertise in instructions', async () => {
+      expect(await client.getInstructions()).not.toContain('search-expertise');
+    });
+  });
+
+  describe('desktop variant with an expertise folder', () => {
+    let client: McpClient;
+    let expertiseDir: string;
+
+    beforeAll(async () => {
+      await buildVariant('desktop');
+      expertiseDir = await mkdtemp(join(tmpdir(), 'tableau-mcp-expertise-'));
+      await writeFile(join(expertiseDir, 'chart-selection.md'), '# Chart selection\nPick a chart.');
+      client = new McpClient({
+        variant: 'desktop',
+        env: { ...getDefaultEnv(), TABLEAU_EXPERTISE_DIR: expertiseDir },
+      });
+      await client.connect();
+    });
+
+    afterAll(async () => {
+      await client?.close();
+      await rm(expertiseDir, { recursive: true, force: true });
+    });
+
+    it('should list the expertise tools', async () => {
+      const names = await client.listTools();
+      const expectedToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedToolNames).toEqual(expect.arrayContaining([...EXPERTISE_TOOL_NAMES]));
+      expect(names).toEqual(expect.arrayContaining(expectedToolNames));
+      expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    it('should mention expertise in instructions', async () => {
+      expect(await client.getInstructions()).toContain('search-expertise');
     });
   });
 
