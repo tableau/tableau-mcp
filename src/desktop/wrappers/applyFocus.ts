@@ -26,7 +26,7 @@ export type ApplyFocus =
  * recover the pre-apply sheet for a restore — free, because every write path builds that
  * document from a live read.
  */
-export function activeWindowName(workbookXml: string): string | undefined {
+function activeWindowName(workbookXml: string): string | undefined {
   let workbook: ParsedWorkbook;
   try {
     workbook = parseXML(workbookXml);

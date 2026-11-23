@@ -22,7 +22,7 @@ import { tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 import { pollReadback } from './pollReadback.js';
 import { qualifyDatasourceColumn } from './qualifyDatasourceColumn.js';
 
-export type ApplyRoundedStackedBarOutcome =
+type ApplyRoundedStackedBarOutcome =
   | {
       state: 'applied';
       mutation: 'sent';

@@ -159,7 +159,7 @@ const SUMMARY_DATA_PENDING_DEFAULT_DELAY_MS = 1_000;
 const SUMMARY_DATA_PENDING_MIN_DELAY_MS = 100;
 const SUMMARY_DATA_PENDING_MAX_WAIT_MS = 5_000;
 
-export type ExternalApiToolExecutorDeps = {
+type ExternalApiToolExecutorDeps = {
   /** Returns candidate live instances, newest-first. Re-invoked on rescan. */
   discover: () => Array<ExternalApiInstance> | Promise<Array<ExternalApiInstance>>;
   /** Preferred instance pid (e.g. the MCP session id). Falls back to newest. */
