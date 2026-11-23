@@ -241,11 +241,11 @@ export async function getOAuthChallenge(
 }
 
 async function formatChallengeScopes(scopes: string[], clientId?: string): Promise<string> {
-  if (!(await isMcpWildcardScopeEnabled())) {
-    return formatScopes(scopes);
+  if (await isMcpWildcardScopeEnabled()) {
+    return formatScopes(collapseMcpScopes(scopes, await getSupportedMcpScopes(clientId)));
   }
 
-  return formatScopes(collapseMcpScopes(scopes, await getSupportedMcpScopes(clientId)));
+  return formatScopes(scopes);
 }
 
 async function getRequiredMcpScopesForRequest(
