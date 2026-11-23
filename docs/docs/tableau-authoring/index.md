@@ -62,7 +62,9 @@ flowchart LR
 For an unfamiliar or non-trivial authoring ask, the agent runs
 [`search-expertise`](../desktop-tools/expertise/search-expertise.md) first, then
 [`read-expertise-resource`](../desktop-tools/expertise/read-expertise-resource.md) on the
-top hit, and only then proceeds.
+top hit, and only then proceeds. When no expertise library is configured
+([`TABLEAU_EXPERTISE_DIR`](../configuration/mcp-config/env-vars.md#tableau_expertise_dir)), the
+server leaves out both tools and this route, and the agent goes straight to the authoring paths.
 
 ### Fall back to prompt the model with expertise (list, then build, then apply)
 

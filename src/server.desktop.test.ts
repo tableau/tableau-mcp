@@ -5,6 +5,7 @@ import * as episodeEvents from './desktop/episode-events.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
+  EXPERTISE_TOOL_NAMES,
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './desktop/instructions.js';
@@ -21,6 +22,7 @@ import {
   resolveConnectedApiVersion,
   selectToolsForProfile,
   stripEmptySchemaNoise,
+  withoutUnservedExpertiseTools,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -36,6 +38,12 @@ const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
     isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
+  expertiseCorpusEntryCount: vi.fn(() => 1),
+}));
+
+vi.mock('./desktop/expertise/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./desktop/expertise/index.js')>()),
+  getExpertiseCorpusEntryCount: mocks.expertiseCorpusEntryCount,
 }));
 
 vi.mock('./features/init.js', () => ({
@@ -49,6 +57,7 @@ beforeEach(() => {
 describe('DesktopMcpServer', () => {
   beforeEach(() => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.expertiseCorpusEntryCount.mockReturnValue(1);
   });
 
   it('should register tools', async () => {
@@ -135,6 +144,7 @@ describe('DesktopMcpServer', () => {
     const desktopInstructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
       profile: config.toolProfile,
+      expertiseAvailable: true,
     });
     const combinedInstructions = `${buildWebInstructions()} ${desktopInstructions}`;
     const sharedMcpServer = new McpServer(
@@ -168,6 +178,7 @@ describe('DesktopMcpServer', () => {
       const instructions = buildDesktopInstructions({
         sessionPinned: base.desktopSessionId !== undefined,
         profile: 'unexpected-profile',
+        expertiseAvailable: true,
       });
 
       await server.registerTools();
@@ -199,7 +210,7 @@ describe('DesktopMcpServer', () => {
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   it('serves the modern instructions for the default profile', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
-      buildDesktopInstructions({ sessionPinned: false, profile: '' }),
+      buildDesktopInstructions({ sessionPinned: false, profile: '', expertiseAvailable: true }),
     );
     expect(DESKTOP_INSTRUCTIONS).toContain('build-worksheets-from-templates');
     expect(DESKTOP_INSTRUCTIONS).toContain('bind-template');
@@ -211,7 +222,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   });
 
   it('keeps pin-aware session guidance (list-instances, target another) when pinned', () => {
-    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    const pinned = buildDesktopInstructions({ sessionPinned: true, expertiseAvailable: true });
     expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
     expect(pinned).toContain('list-instances');
     expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
@@ -975,6 +986,65 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.2.18')).toContain('get-show-me-options');
     expect(namesAt('0.3.0')).toContain('get-show-me-options');
     expect(namesAt(undefined)).toContain('get-show-me-options');
+  });
+});
+
+describe('DesktopMcpServer without an expertise corpus', () => {
+  afterEach(() => {
+    mocks.expertiseCorpusEntryCount.mockReturnValue(1);
+  });
+
+  it('withoutUnservedExpertiseTools drops only the expertise tools', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+
+    expect(withoutUnservedExpertiseTools(tools, true)).toEqual(tools);
+    expect(withoutUnservedExpertiseTools(tools, false).map((tool) => tool.name)).toEqual(
+      tools.map((tool) => tool.name).filter((name) => !EXPERTISE_TOOL_NAMES.has(name)),
+    );
+  });
+
+  it.each(['', 'full'])(
+    'registers no expertise tool for TOOL_PROFILE=%j and keeps the rest of the profile',
+    async (profile) => {
+      vi.stubEnv('TOOL_PROFILE', profile);
+      mocks.expertiseCorpusEntryCount.mockReturnValue(0);
+      const server = getServer();
+      await server.registerTools();
+
+      const registeredNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of EXPERTISE_TOOL_NAMES) {
+        expect(registeredNames).not.toContain(name);
+      }
+      expect(registeredNames).toContain('bind-template');
+      expect(registeredNames).toContain('author-calc');
+    },
+  );
+
+  it('sends instructions that name no expertise tool', () => {
+    mocks.expertiseCorpusEntryCount.mockReturnValue(0);
+    new DesktopMcpServer();
+    const [, options] = vi.mocked(McpServer).mock.calls.at(-1)!;
+
+    expect(options?.instructions).toBe(
+      buildDesktopInstructions({ sessionPinned: false, expertiseAvailable: false }),
+    );
+  });
+
+  it('registers the expertise resource template only when the corpus has entries', async () => {
+    const register = async (count: number): Promise<string[]> => {
+      mocks.expertiseCorpusEntryCount.mockReturnValue(count);
+      const server = new DesktopMcpServer();
+      server.mcpServer.registerResource = vi.fn();
+      await server.registerResources();
+      return vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.map((call) => call[0] as string);
+    };
+
+    expect(await register(0)).toEqual(['dashboard-xml-guide']);
+    expect(await register(3)).toEqual(['dashboard-xml-guide', 'tableau-expertise']);
   });
 });
 
