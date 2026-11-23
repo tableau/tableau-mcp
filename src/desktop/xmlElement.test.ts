@@ -168,12 +168,24 @@ describe('xmlElement', () => {
 
   describe('sliceBytes', () => {
     it('returns a byte-accurate slice of the content', () => {
-      expect(sliceBytes('abcdef', 2, 4)).toBe('cd');
+      expect(sliceBytes('abcdef', 2, 4)).toEqual({ text: 'cd', bytes: 2 });
     });
 
     it('defaults start to 0 and end to the length', () => {
-      expect(sliceBytes('abcdef')).toBe('abcdef');
-      expect(sliceBytes('abcdef', 3)).toBe('def');
+      expect(sliceBytes('abcdef')).toEqual({ text: 'abcdef', bytes: 6 });
+      expect(sliceBytes('abcdef', 3)).toEqual({ text: 'def', bytes: 3 });
+    });
+
+    it('counts UTF-8 bytes, not characters, for multi-byte content', () => {
+      expect(sliceBytes('aéb', 0, 3)).toEqual({ text: 'aé', bytes: 3 });
+    });
+
+    it('reports the bytes cut when a boundary splits a multi-byte character', () => {
+      expect(sliceBytes('aéb', 0, 2).bytes).toBe(2);
+    });
+
+    it('clamps the byte count to the end of the content', () => {
+      expect(sliceBytes('aé', 1, 100)).toEqual({ text: 'é', bytes: 2 });
     });
   });
 });
