@@ -31,7 +31,7 @@ import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
 import { discoverInstances } from './desktop/externalApi/discovery.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
-import { buildDesktopInstructions } from './desktop/instructions.js';
+import { buildDesktopInstructions, EXPERTISE_TOOL_NAMES } from './desktop/instructions.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
@@ -69,10 +69,9 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * native authoring surface: the author-* tools (calcs, sets, parameters, actions),
  * format-worksheets, ask-user, bind-template for single-view asks, the guarded
  * template artifact fallback, and refine-worksheet for top-N and sort edits in place. It also
- * includes the two expertise tools (search-expertise and read-expertise-resource), because the
- * instructions tell the model to consult the expertise library before authoring and these are
- * the only way it can read that library. Workbook and data reads, navigation, dialog handling
- * and scoped cached-XML fallbacks are included. Clients that need more can use TOOL_PROFILE=full.
+ * includes search-expertise and read-expertise-resource, which are dropped when the expertise
+ * library is empty. Workbook and data reads, navigation, dialog handling and scoped cached-XML
+ * fallbacks are included. Clients that need more can use TOOL_PROFILE=full.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
@@ -207,6 +206,13 @@ function selectDefaultTools<T extends { name: DesktopToolName }>(tools: T[]): T[
   return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
 }
 
+export function withoutUnservedExpertiseTools<T extends { name: DesktopToolName }>(
+  tools: T[],
+  expertiseAvailable: boolean,
+): T[] {
+  return expertiseAvailable ? tools : tools.filter((tool) => !EXPERTISE_TOOL_NAMES.has(tool.name));
+}
+
 /**
  * The External Client API version the registration gate compares tool floors against: the
  * pinned instance's version when pinned, otherwise the highest version among live instances
@@ -258,7 +264,10 @@ export { DATA_ROOT, RESOURCES_ROOT };
 // get routing for the template fast path. The server builds per-session text at connect time,
 // and demo gets different text. Generated from the typed route table so route
 // edits are pinned by tests instead of drifting as prose.
-export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: false });
+export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({
+  sessionPinned: false,
+  expertiseAvailable: true,
+});
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
@@ -273,6 +282,7 @@ export class DesktopMcpServer extends Server {
       instructions: buildDesktopInstructions({
         sessionPinned: getDesktopConfig().desktopSessionId !== undefined,
         profile: getDesktopConfig().toolProfile,
+        expertiseAvailable: getExpertiseCorpusEntryCount() > 0,
       }),
     });
   }
@@ -292,7 +302,9 @@ export class DesktopMcpServer extends Server {
       }
     }
     await this._registerDashboardXmlGuide();
-    this._registerExpertiseResources();
+    if (getExpertiseCorpusEntryCount() > 0) {
+      this._registerExpertiseResources();
+    }
   };
 
   registerTools = async (): Promise<void> => {
@@ -349,6 +361,7 @@ export class DesktopMcpServer extends Server {
     const instructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
       profile: config.toolProfile,
+      expertiseAvailable: getExpertiseCorpusEntryCount() > 0,
     });
     await emitEpisodeEvent(config, {
       type: 'tool_schemas_registered',
@@ -379,7 +392,10 @@ export class DesktopMcpServer extends Server {
       ...(config.episodeEventsEnabled ? episodeToolFactories : []),
     ];
     const allTools = factories.map((toolFactory) => toolFactory(this));
-    const profileTools = selectToolsForProfile(allTools, config.toolProfile);
+    const profileTools = withoutUnservedExpertiseTools(
+      selectToolsForProfile(allTools, config.toolProfile),
+      getExpertiseCorpusEntryCount() > 0,
+    );
 
     const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
     const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);

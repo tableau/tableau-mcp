@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { getExpertiseCorpusEntryCount } from '../../expertise/index.js';
 import { runValidation } from '../registry.js';
 import { categoricalFilterProliferationRule } from './categoricalFilterProliferation.js';
+
+vi.mock('../../expertise/index.js', () => ({ getExpertiseCorpusEntryCount: vi.fn(() => 1) }));
 
 function enable(): void {
   vi.stubEnv('ENABLE_FILTER_GUARDRAIL', 'true');
@@ -43,6 +46,13 @@ describe('categorical-filter-proliferation rule', () => {
     expect(issues[0].severity).toBe('error');
     expect(issues[0].message).toContain('7 categorical filter controls');
     expect(issues[0].message).toContain('dashboard-performance-efficient-workbooks');
+  });
+
+  it('omits the expertise reference when the corpus is empty', () => {
+    enable();
+    vi.mocked(getExpertiseCorpusEntryCount).mockReturnValueOnce(0);
+    const [issue] = categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7));
+    expect(issue.message).toMatch(/Do not apply the oversized filter set\.$/);
   });
 
   it('blocks validation for 7 categorical filters when enabled', () => {
