@@ -8,7 +8,7 @@ sidebar_position: 1
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Searches the authoring-guidance library by concept — chart choice, calculation patterns, workbook structure, and dashboard layout — and returns the closest modules as JSON. The library is the markdown under [`TABLEAU_EXPERTISE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_expertise_dir); with no root set, the library is empty. The search runs in-process, does not use a %product_name% session, and does not change the library. When the result includes `topHitBody`, that text is the top module and no follow-up read is needed, unless the text was shortened to the 6,144-byte cap described under `query`. Otherwise read the top hit's `mustReadUri` with [`read-expertise-resource`](./read-expertise-resource.md).
+Searches the authoring-guidance library by concept — chart choice, calculation patterns, workbook structure, and dashboard layout — and returns the closest modules as JSON. The library is the markdown under [`TABLEAU_EXPERTISE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_expertise_dir). When the library is empty, the server does not register this tool. The search runs in-process, does not use a %product_name% session, and does not change the library. When the result includes `topHitBody`, that text is the top module and no follow-up read is needed, unless the text was shortened to the 6,144-byte cap described under `query`. Otherwise read the top hit's `mustReadUri` with [`read-expertise-resource`](./read-expertise-resource.md).
 
 ## APIs called
 
@@ -92,7 +92,7 @@ The tool returns this JSON as pretty-printed text. Every hit includes `score`, a
 
 ### No module text (`query`: "pie chart of countries", `limit`: 3)
 
-`topHitBody` is omitted when the top hit is not confident, so read `mustReadUri`. The hit below is a chart-selection match in that situation. Its `sections` list is the module's level-1 and level-2 heading slugs; the next example shows that field.
+`topHitBody` is omitted when the top hit is not confident, so read `mustReadUri`. The first hit below is a chart-selection match in that situation. Its `sections` list is the module's level-1 and level-2 heading slugs; the next example shows that field.
 
 ```json
 {
@@ -106,6 +106,14 @@ The tool returns this JSON as pretty-printed text. Every hit includes `score`, a
       "match": "keyword",
       "mustReadUri": "expertise://tableau/strategy/viz-design/chart-selection",
       "instruction": "snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module"
+    },
+    {
+      "uri": "expertise://tableau/tactics/viz/marks-and-encodings",
+      "slug": "tactics/viz/marks-and-encodings",
+      "title": "Marks and Encodings",
+      "score": 0.88,
+      "snippet": "Pick the mark type and encodings for each field.",
+      "match": "keyword"
     }
   ]
 }

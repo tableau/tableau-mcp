@@ -84,7 +84,7 @@ The %product_name% session to render from. Omit it when the session is unambiguo
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 ## Notes and caveats
 
@@ -130,7 +130,7 @@ The %product_name% session to render from. Omit it when the session is unambiguo
   "content": [
     {
       "type": "text",
-      "text": "Worksheet image is 2097152 bytes, over the 1048576-byte inline cap. Written to a file instead of returned inline to keep large images out of the conversation.\n\nImage file: /Users/me/.tableau-mcp/cache/worksheet-image-abc123.png"
+      "text": "Worksheet image is 2097152 bytes, over the 1048576-byte inline cap. Written to a file instead of returned inline to keep large images out of the conversation.\n\nImage file: /Users/me/.tableau-mcp/cache/worksheet-image-abc123.png\n\nOpen the file to view the image. This local cache file remains until manually removed. To get a smaller inline image next time, request a worksheet instead of a whole dashboard, or pass a filePath to have Tableau write the image directly to a location of your choosing."
     }
   ]
 }

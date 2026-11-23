@@ -22,7 +22,7 @@ const suggestionSchema = z.object({
   recommended_action: z.string(),
   severity: severitySchema,
   target_ids: z.array(z.string()),
-  metadata: z.record(z.unknown()),
+  metadata: z.record(z.string(), z.unknown()),
 });
 
 const categoryGroupSchema = z.object({
@@ -62,10 +62,10 @@ export const suggestionReportSchema = z.object({
   ),
   summary: z.object({
     total: z.number().int(),
-    by_severity: z.record(z.number().int()),
-    by_type: z.record(z.number().int()),
-    by_category: z.record(z.number().int()),
-    by_topic: z.record(z.number().int()),
+    by_severity: z.record(z.string(), z.number().int()),
+    by_type: z.record(z.string(), z.number().int()),
+    by_category: z.record(z.string(), z.number().int()),
+    by_topic: z.record(z.string(), z.number().int()),
     errors: z.number().int(),
   }),
   errors: z.array(z.object({ type: z.string(), message: z.string() })),
@@ -106,7 +106,7 @@ export const knowledgeSourcesSchema = z.array(
       id: z.string(),
       type: nodeTypeSchema,
       name: z.string(),
-      properties: z.record(z.unknown()),
+      properties: z.record(z.string(), z.unknown()),
       last_synced_at: z.string().nullable().optional(),
     })
     .passthrough(),
@@ -125,7 +125,7 @@ export const knowledgeNodeCandidateSchema = z
     id: z.string(),
     type: nodeTypeSchema,
     name: z.string(),
-    properties: z.record(z.unknown()),
+    properties: z.record(z.string(), z.unknown()),
     score: z.number(),
     certified: z.unknown().optional(),
     semantic_statements: z.array(scoredStatementSchema),
@@ -137,7 +137,7 @@ export const knowledgeNodeSchema = z
     id: z.string(),
     type: nodeTypeSchema,
     name: z.string(),
-    properties: z.record(z.unknown()),
+    properties: z.record(z.string(), z.unknown()),
     sync_status: z.string().optional(),
     last_synced_at: nullableStringSchema.optional(),
   })
@@ -149,7 +149,7 @@ export const knowledgeEdgeSchema = z
     type: edgeTypeSchema,
     source_id: z.string(),
     target_id: z.string(),
-    properties: z.record(z.unknown()),
+    properties: z.record(z.string(), z.unknown()),
     connected_node: z
       .object({ id: z.string(), name: nullableStringSchema, type: nodeTypeSchema.nullable() })
       .optional(),
@@ -250,7 +250,7 @@ export const knowledgeNodeContextSchema = z
     id: z.string(),
     type: nodeTypeSchema,
     name: z.string(),
-    properties: z.record(z.unknown()),
+    properties: z.record(z.string(), z.unknown()),
     semantic_statements: z.array(storedSemanticStatementSchema),
     connected_nodes: z.array(connectedNodeWithEdgeSchema),
   })

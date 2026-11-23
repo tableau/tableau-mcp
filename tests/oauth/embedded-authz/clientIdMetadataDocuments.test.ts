@@ -391,7 +391,7 @@ describe('clientIdMetadataDocuments', () => {
     expect(response.body).toEqual({
       error: 'invalid_client_metadata',
       error_description:
-        'Client metadata is invalid: Validation error: Required at "client_id"; Required at "redirect_uris"',
+        'Client metadata is invalid: Validation error: Invalid input: expected string, received undefined at "client_id"; Invalid input: expected array, received undefined at "redirect_uris"',
     });
   });
 

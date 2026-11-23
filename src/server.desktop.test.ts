@@ -1,17 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import {
-  CallToolResult,
-  ListToolsRequestSchema,
-  Tool as McpTool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
+  EXPERTISE_TOOL_NAMES,
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './desktop/instructions.js';
@@ -27,18 +21,29 @@ import {
   getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
+  stripEmptySchemaNoise,
+  withoutUnservedExpertiseTools,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
+
+type ToolsListHandler = (params: unknown, ctx: unknown) => Promise<unknown>;
 
 const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
     isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
+  expertiseCorpusEntryCount: vi.fn(() => 1),
+}));
+
+vi.mock('./desktop/expertise/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./desktop/expertise/index.js')>()),
+  getExpertiseCorpusEntryCount: mocks.expertiseCorpusEntryCount,
 }));
 
 vi.mock('./features/init.js', () => ({
@@ -52,6 +57,7 @@ beforeEach(() => {
 describe('DesktopMcpServer', () => {
   beforeEach(() => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.expertiseCorpusEntryCount.mockReturnValue(1);
   });
 
   it('should register tools', async () => {
@@ -72,7 +78,7 @@ describe('DesktopMcpServer', () => {
         {
           title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
+          inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)),
           annotations: await Provider.from(tool.annotations),
           ...(ALWAYS_LOAD_TOOL_NAMES.has(tool.name) && {
             _meta: { 'anthropic/alwaysLoad': true },
@@ -119,12 +125,10 @@ describe('DesktopMcpServer', () => {
     await server.registerTools();
 
     const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
-    const listToolsCall = setRequestHandler.mock.calls.find(
-      ([requestSchema]) => requestSchema === ListToolsRequestSchema,
-    );
+    const listToolsCall = setRequestHandler.mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeDefined();
 
-    const result = await listToolsCall![1]({} as never, {} as never);
+    const result = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
     const tools = (result as { tools: Array<Record<string, unknown>> }).tools;
     expect(tools.length).toBeGreaterThan(0);
     for (const tool of tools) {
@@ -140,6 +144,7 @@ describe('DesktopMcpServer', () => {
     const desktopInstructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
       profile: config.toolProfile,
+      expertiseAvailable: true,
     });
     const combinedInstructions = `${buildWebInstructions()} ${desktopInstructions}`;
     const sharedMcpServer = new McpServer(
@@ -155,7 +160,7 @@ describe('DesktopMcpServer', () => {
     expect(server.ownsMcpServer).toBe(false);
     const listToolsCall = vi
       .mocked(sharedMcpServer.server.setRequestHandler)
-      .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      .mock.calls.find(([method]) => method === 'tools/list');
     expect(listToolsCall).toBeUndefined();
   });
 
@@ -173,13 +178,14 @@ describe('DesktopMcpServer', () => {
       const instructions = buildDesktopInstructions({
         sessionPinned: base.desktopSessionId !== undefined,
         profile: 'unexpected-profile',
+        expertiseAvailable: true,
       });
 
       await server.registerTools();
       const listToolsCall = vi
         .mocked(server.mcpServer.server.setRequestHandler)
-        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
-      const listResult = await listToolsCall![1]({} as never, {} as never);
+        .mock.calls.find(([method]) => method === 'tools/list');
+      const listResult = await (listToolsCall![1] as unknown as ToolsListHandler)({}, {});
       const listedTools = (listResult as { tools: McpTool[] }).tools;
 
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
@@ -204,7 +210,7 @@ describe('DesktopMcpServer', () => {
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   it('serves the modern instructions for the default profile', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
-      buildDesktopInstructions({ sessionPinned: false, profile: '' }),
+      buildDesktopInstructions({ sessionPinned: false, profile: '', expertiseAvailable: true }),
     );
     expect(DESKTOP_INSTRUCTIONS).toContain('build-worksheets-from-templates');
     expect(DESKTOP_INSTRUCTIONS).toContain('bind-template');
@@ -216,7 +222,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   });
 
   it('keeps pin-aware session guidance (list-instances, target another) when pinned', () => {
-    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    const pinned = buildDesktopInstructions({ sessionPinned: true, expertiseAvailable: true });
     expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
     expect(pinned).toContain('list-instances');
     expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
@@ -285,12 +291,7 @@ async function collectDesktopToolVocabularySurface(): Promise<string[]> {
     const description = await Provider.from(tool.description);
     if (typeof title === 'string') values.push(title);
     values.push(description);
-    const paramsSchema = await Provider.from(tool.paramsSchema);
-    const obj = normalizeObjectSchema(paramsSchema as any);
-    const inputSchema = obj
-      ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-      : { type: 'object', properties: {} };
-    collectSchemaDescriptions(inputSchema);
+    collectSchemaDescriptions((await getDesktopToolListEntry(tool)).inputSchema);
   }
 
   return values;
@@ -304,6 +305,47 @@ describe('desktop tools/list Tableau vocabulary', () => {
       .sort();
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('stripEmptySchemaNoise', () => {
+  it('drops empty descriptions and string-only propertyNames at any depth', () => {
+    const schema = {
+      type: 'object',
+      description: '',
+      properties: {
+        caption: { type: 'string', description: '' },
+        filters: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string', description: '' }] },
+      },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      properties: {
+        caption: { type: 'string' },
+        filters: { type: 'object', additionalProperties: {} },
+        list: { type: 'array', items: [{ type: 'string' }] },
+      },
+    });
+  });
+
+  it('keeps real descriptions and constrained propertyNames', () => {
+    const schema = {
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    };
+
+    stripEmptySchemaNoise(schema);
+
+    expect(schema).toEqual({
+      type: 'object',
+      description: 'Kept.',
+      propertyNames: { type: 'string', pattern: '^[a-z]+$' },
+    });
   });
 });
 
@@ -322,16 +364,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2651], // raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
-    ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
-    ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
-    ['run-dashboard-batch', 1302], // remeasured after accepting an empty KPI list
-    ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
-    // Approved with the tool-search transition: the per-sheet schema prevents partial
-    // cross-field bulk edits; preserve that contract instead of compressing its names.
-    ['format-worksheets', 1097],
+    ['bind-template', 2620], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-11-10 for keep_large_pie: the user-confirmed way to keep a pie the slice gate blocked (#1203)
+    ['add-field', 1367], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
+    ['apply-worksheet', 1489], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
+    ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
+    ['author-action', 2546], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -947,6 +986,65 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.2.18')).toContain('get-show-me-options');
     expect(namesAt('0.3.0')).toContain('get-show-me-options');
     expect(namesAt(undefined)).toContain('get-show-me-options');
+  });
+});
+
+describe('DesktopMcpServer without an expertise corpus', () => {
+  afterEach(() => {
+    mocks.expertiseCorpusEntryCount.mockReturnValue(1);
+  });
+
+  it('withoutUnservedExpertiseTools drops only the expertise tools', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+
+    expect(withoutUnservedExpertiseTools(tools, true)).toEqual(tools);
+    expect(withoutUnservedExpertiseTools(tools, false).map((tool) => tool.name)).toEqual(
+      tools.map((tool) => tool.name).filter((name) => !EXPERTISE_TOOL_NAMES.has(name)),
+    );
+  });
+
+  it.each(['', 'full'])(
+    'registers no expertise tool for TOOL_PROFILE=%j and keeps the rest of the profile',
+    async (profile) => {
+      vi.stubEnv('TOOL_PROFILE', profile);
+      mocks.expertiseCorpusEntryCount.mockReturnValue(0);
+      const server = getServer();
+      await server.registerTools();
+
+      const registeredNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of EXPERTISE_TOOL_NAMES) {
+        expect(registeredNames).not.toContain(name);
+      }
+      expect(registeredNames).toContain('bind-template');
+      expect(registeredNames).toContain('author-calc');
+    },
+  );
+
+  it('sends instructions that name no expertise tool', () => {
+    mocks.expertiseCorpusEntryCount.mockReturnValue(0);
+    new DesktopMcpServer();
+    const [, options] = vi.mocked(McpServer).mock.calls.at(-1)!;
+
+    expect(options?.instructions).toBe(
+      buildDesktopInstructions({ sessionPinned: false, expertiseAvailable: false }),
+    );
+  });
+
+  it('registers the expertise resource template only when the corpus has entries', async () => {
+    const register = async (count: number): Promise<string[]> => {
+      mocks.expertiseCorpusEntryCount.mockReturnValue(count);
+      const server = new DesktopMcpServer();
+      server.mcpServer.registerResource = vi.fn();
+      await server.registerResources();
+      return vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.map((call) => call[0] as string);
+    };
+
+    expect(await register(0)).toEqual(['dashboard-xml-guide']);
+    expect(await register(3)).toEqual(['dashboard-xml-guide', 'tableau-expertise']);
   });
 });
 

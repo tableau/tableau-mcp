@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import {
@@ -31,7 +31,7 @@ const paramsSchema = {
       'The image format to return. Use "PNG" (default) when the image will be analyzed or interpreted. Use "SVG" when the image will be displayed to the user — SVG is scalable and produces smaller file sizes.',
     ),
   viewFilters: z
-    .record(z.string())
+    .record(z.string(), z.string())
     .optional()
     .describe('Optional map of view filter field names to values.'),
 };

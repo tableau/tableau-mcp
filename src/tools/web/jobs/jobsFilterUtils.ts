@@ -4,6 +4,7 @@ import {
   FilterOperator,
   FilterOperatorSchema,
   isISO8601DateTime,
+  parseFilterPart,
 } from '../../../utils/parseAndValidateFilterString.js';
 
 // Fields and operators the Tableau REST API documents as filterable for the Jobs
@@ -95,12 +96,12 @@ export function parseAndValidateJobsFilterString(filterString: string): string {
     }
 
     const value = valueParts.join(':');
-    const field = FilterFieldSchema.parse(fieldRaw);
+    const field = parseFilterPart('field', FilterFieldSchema, fieldRaw);
     const operator = operatorRaw as FilterOperator | 'has';
 
     // Validate the operator
     if (operator !== 'has') {
-      FilterOperatorSchema.parse(operator);
+      parseFilterPart('operator', FilterOperatorSchema, operator);
     }
 
     const allowed = allowedOperatorsByField[field];

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import dotenv from 'dotenv';
 
 import pkg from '../package.json';
@@ -19,7 +18,7 @@ const serverVersion = pkg.version;
 const DESKTOP_LOG_RETENTION_DAYS = 14;
 
 // The shipped tableau-mcp-desktop binary now serves BOTH profiles from one artifact,
-// selected purely by TRANSPORT — so tab-agent-south can spawn the web/insights profile
+// selected purely by TRANSPORT — so Tableau Agent can spawn the web/insights profile
 // from the very same installed binary it launches for desktop authoring, without a
 // second bundled artifact (Chiron insights "B1"):
 //
@@ -50,7 +49,7 @@ async function startDesktopProfile(): Promise<void> {
   const server = new DesktopMcpServer();
   await server.registerTools();
   await server.registerResources();
-  server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+  server.mcpServer.server.setRequestHandler('logging/setLevel', async (request) => {
     setNotificationLevel(server.mcpServer, request.params.level);
     return {};
   });

@@ -1,4 +1,4 @@
-import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptResult } from '@modelcontextprotocol/server';
 import { z, ZodRawShape } from 'zod';
 
 import { Config } from '../config.js';
@@ -12,7 +12,12 @@ export type WebPromptRegistration<Args extends ZodRawShape = ZodRawShape> = {
   // Returns (or resolves to) true if the prompt should be skipped for the current server config.
   disabled: (config: Config) => boolean | Promise<boolean>;
   callback: (
-    args: Args extends ZodRawShape ? z.objectOutputType<Args, z.ZodTypeAny> : Record<string, never>,
+    // Factories type against the wide ZodRawShape; zod 4 infers that as {}, so keep v3's loose args.
+    args: ZodRawShape extends Args
+      ? Record<string, any>
+      : Args extends ZodRawShape
+        ? z.output<z.ZodObject<Args>>
+        : Record<string, never>,
   ) => GetPromptResult | Promise<GetPromptResult>;
 };
 

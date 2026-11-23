@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { resolve } from 'path';
 
 import * as configModule from '../../../../config.desktop.js';

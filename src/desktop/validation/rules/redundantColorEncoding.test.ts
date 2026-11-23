@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { getExpertiseCorpusEntryCount } from '../../expertise/index.js';
 import { redundantColorEncodingRule } from './redundantColorEncoding.js';
+
+vi.mock('../../expertise/index.js', () => ({ getExpertiseCorpusEntryCount: vi.fn(() => 1) }));
 
 function ws(
   colorRef: string,
@@ -22,6 +25,18 @@ describe('redundant-color-encoding rule', () => {
     expect(issues[0].severity).toBe('warning');
     expect(issues[0].message).toMatch(/\[DS\]\.\[sum:Profit:qk\]/);
     expect((issues[0].suggestion ?? '').toLowerCase()).toMatch(/discrete|group|tier/);
+    expect(issues[0].suggestion).toContain('expertise://tableau/tactics/viz/marks-and-encodings');
+  });
+
+  it('omits the expertise reference when the corpus is empty', () => {
+    vi.mocked(getExpertiseCorpusEntryCount).mockReturnValueOnce(0);
+    const issues = redundantColorEncodingRule.validate(ws('[DS].[sum:Profit:qk]'));
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('warning');
+    expect(issues[0].suggestion).not.toContain('expertise://');
+    expect(issues[0].suggestion).toContain(
+      'named groups, not by the raw measure. If a gradient is genuinely intended',
+    );
   });
 
   it('flags color by the same field already on rows', () => {

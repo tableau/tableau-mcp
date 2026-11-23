@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 

@@ -5,22 +5,27 @@ title: Tableau Authoring
 # Tableau Authoring
 
 For authoring, the %coming_release% release Tableau MCP ships with more than a set of
-**[Desktop Tools](./category/desktop-tools)**. It also carries expertise and
-the authoring engine that helps an agent turn a plain request such as *"show me sales by region
-over time"* into a correct, well-designed Tableau workbook.
+**[Desktop Tools](./category/desktop-tools)**. It also carries the authoring engine that helps
+an agent turn a plain request such as *"show me sales by region over time"* into a correct,
+well-designed Tableau workbook, and it can serve an expertise library to guide that agent.
+
+The MCP package does not include the expertise library. Tableau Agent supplies it, and any
+client can point the server at one with
+[`TABLEAU_EXPERTISE_DIR`](../configuration/mcp-config/env-vars.md#tableau_expertise_dir).
+Everything on this page that mentions expertise applies only when a library is configured.
 
 The clean mental model is: **chart templates** provide reusable Tableau structure, **expertise**
 guides analytical decisions, and **guardrails** prevent unsafe or unsupported changes.
 
 The engine tries a known path first. If that is not enough, it prompts the model with
-shipped expertise. If that still has no matching path, it asks the model to use its own
+expertise from the configured library. If that still has no matching path, it asks the model to use its own
 expertise and do what it can — not to invent an unsupported write.
 
 :::danger[In progress]
 Implementation of some aspects of the final expertise design is still in progress. Information
 on this page may change for GA release.
 
-Customizing the shipped expertise and skills and adding your own skills in your local fork of the
+Customizing the expertise and skills and adding your own skills in your local fork of the
 MCP will be supported in the %coming_release% release.
 :::
 
@@ -35,8 +40,8 @@ a model to invent a decision path, and it moves on to involving the model rather
 | --- | --- |
 | Recognizable single-view chart | [`bind-template`](../desktop-tools/binder/bind-template.md). One call can bind and apply. |
 | Calculated metric, no chart named (margin %, ratio, growth) | Create the calculation first ([`author-calc`](../desktop-tools/data-source/author-calc.md)), then follow the chart path above. [`bind-template`](../desktop-tools/binder/bind-template.md) can also author those fields in the same call via `calcs`. |
-| Unfamiliar, calculation-heavy, or "which chart?" | Search the expertise library ([Expertise tools](../desktop-tools/expertise/search-expertise.md)) *before* building |
-| Dashboard | Finish each worksheet, then assemble (`compose-dashboard` when the sheets are already live, or [`run-dashboard-batch`](../desktop-tools/dashboard/run-dashboard-batch.md) when applying a queue of built artifacts) |
+| Unfamiliar, calculation-heavy, or "which chart?" | When an expertise library is configured, search it ([Expertise tools](../desktop-tools/expertise/search-expertise.md)) *before* building |
+| Dashboard | Finish each worksheet, then assemble with [`run-dashboard-batch`](../desktop-tools/dashboard/run-dashboard-batch.md) (`existingWorksheetNames` when the sheets are already live, or `artifactIds` when applying a queue of built artifacts) |
 | Change to an existing sheet | Edit in place: [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) (top-N / sort) or [`add-field`](../desktop-tools/fields/add-field.md). New sheets only if asked |
 | Number or data question against an existing sheet | Read that worksheet's summary rows ([`get-summary-data`](../desktop-tools/data-source/get-summary-data.md)). This is not a general datasource-query tool, and the row order it returns does not prove the chart's visual order |
 
@@ -62,7 +67,9 @@ flowchart LR
 For an unfamiliar or non-trivial authoring ask, the agent runs
 [`search-expertise`](../desktop-tools/expertise/search-expertise.md) first, then
 [`read-expertise-resource`](../desktop-tools/expertise/read-expertise-resource.md) on the
-top hit, and only then proceeds.
+top hit, and only then proceeds. When no expertise library is configured
+([`TABLEAU_EXPERTISE_DIR`](../configuration/mcp-config/env-vars.md#tableau_expertise_dir)), the
+server leaves out both tools and this route, and the agent goes straight to the authoring paths.
 
 ### Fall back to prompt the model with expertise (list, then build, then apply)
 
@@ -126,7 +133,7 @@ Drop to the smaller tools — [`author-calc`](../desktop-tools/data-source/autho
 [`author-parameter`](../desktop-tools/data-source/author-parameter.md),
 [`author-set`](../desktop-tools/data-source/author-set.md),
 [`author-action`](../desktop-tools/data-source/author-action.md),
-`format-labels` — then the template
+[`format-worksheets`](../desktop-tools/worksheet/format-worksheets.md) — then the template
 path. Small in-place edits (top-N, sort) have a narrow
 [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) fast lane;
 anything outside that lane should be **refused, not attempted**. Asks the binder has no fast
@@ -144,10 +151,9 @@ Whether a write is checked afterward depends on the tool, not the size or comple
 The single-worksheet paths and the smaller tools re-read what they wrote to confirm it stuck.
 Worksheet apply paths that advertise host verification —
 [`apply-worksheet`](../desktop-tools/worksheet/apply-worksheet.md),
-`build-and-apply-worksheet`,
 [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) — re-read the
 affected sheet and treat a failed readback as a failure, not a success.
-`compose-dashboard` and the smaller
+The smaller
 authoring tools (`author-calc`, `author-parameter`, `author-set`, `author-action`) also verify
 the write on readback.
 
@@ -164,8 +170,8 @@ block a write.** Warnings and info messages do not.
 ### Expertise library
 
 The library is found by **tags** and short "when to use" notes, not by searching the full
-text. So the tags matter a lot. The agent is instructed to read the matching module before
-authoring.
+text. So the tags matter a lot. When a library is configured, the agent is instructed to read
+the matching module before authoring.
 
 It is split three ways — this is the split forks depend on:
 
@@ -182,7 +188,7 @@ guarantee that the current build enforces them. See also
 
 ### Local templates win (overriding shipped templates)
 
-_coming in %coming-release% release_
+_coming in %coming_release% release_
 
 If you have a template with the same name in your local %product_name% repository, that one
 wins over the bundled one. [`list-templates`](../desktop-tools/binder/list-templates.md)
@@ -208,10 +214,7 @@ Where the corpus informs judgment, these assets are consumed directly by the aut
 | Asset | What it is | Surfaced through |
 | --- | --- | --- |
 | **Chart templates** | Reusable worksheet structure. Each template's chart *family*, intent keywords, and field *slots* are available to the tools at bind time. | [`list-templates`](../desktop-tools/binder/list-templates.md), [`bind-template`](../desktop-tools/binder/bind-template.md), [`build-worksheets-from-templates`](../desktop-tools/template/build-worksheets-from-templates.md) |
-| **Curated examples + diff corpus** | Named feature examples (calcs, LOD, dual-axis, parameters, …) and a corpus of before/after XML diffs for common transformations. | `search-examples`, `search-workbook-examples` |
-| **Commands reference** | The catalog of %product_name% commands, marked by whether an agent may invoke them. Loaded from the live %ecapi_name% registry, not a snapshot bundled into the MCP server. | `search-commands` |
-| **Workbook schema reference** | The TWB element/enum reference for raw XML authoring. | `lookup-workbook-schema` |
-| **Dashboard guide** | Guidance on the dashboard zone tree, coordinate system, and layout patterns. | `get-dashboard-guide` |
+| **Dashboard guide** | Guidance on the dashboard zone tree, coordinate system, and layout patterns. | MCP resource `tableau://docs/dashboard-xml-guide` |
 
 Chart templates are grouped into a small **family taxonomy** — `time-series`, `ranking`,
 `part-to-whole`, `correlation`, `distribution`, `deviation`, `magnitude`, `spatial`, `kpi`, and
@@ -263,8 +266,7 @@ Template and corpus layout, for local forks and reviewers.
 | --- | --- |
 | Chart template bookmarks | `src/desktop/data/templates/*.tbm` |
 | Curated examples + diff corpus | `src/desktop/data/examples/` and `src/desktop/data/corpus.json` |
-| Commands reference | Live registry at `TABLEAU_COMMANDS_REGISTRY_DIR` (`command_param_registry.json`) |
-| Workbook schema reference | `src/desktop/data/workbook-schema-reference.json` |
+| Workbook schema reference | `src/desktop/data/twb_2026.2.0.xsd` |
 | Dashboard guide | `resources/desktop/dashboard-xml-guide.md` |
 | Validation rule registry | `src/desktop/validation/registry.ts`; individual rules under `src/desktop/validation/rules/` |
 
@@ -291,7 +293,7 @@ sheets placed on a dashboard with real data. | _What skills do:_ Do not call
 dashboard-bound sheets. Use [`list-available-fields`](../desktop-tools/fields/list-available-fields.md)
 formula text plus dashboard XML hints as the fallback (Logic Explainer HC#7).
 
-**`build-and-apply-worksheet` corrupts parameter-referencing calcs**  Formula text reads back
+**[`apply-worksheet`](../desktop-tools/worksheet/apply-worksheet.md) corrupts parameter-referencing calcs**  Formula text reads back
 unchanged while live behavior is broken. Readback cannot detect this. | _What skills do:_
 Hard-stop on any worksheet-shelf-mutating tool call when the data source contains
 parameter-referencing calcs. Calc Translator and Data Scribe already enforce this.
@@ -322,7 +324,7 @@ Spellcheck, i18n Scanner). Deliver findings, let the user apply them.
 product behavior, not an MCP bug. | _What skills do:_ For testing, use runtime-error calcs
 (division by zero, DATEPARSE with bad input) instead of broken-field references.
 
-**Missing lifecycle commands**  No `calc-delete`, `parameter-delete`, `worksheet-delete`,
+**Missing lifecycle commands**  No `calc-delete`, `parameter-delete`,
 `set-delete`, or `hierarchy-delete` tools exist. | _What skills do:_ Advise the user on
 cleanup manually. Do not promise deletion.
 

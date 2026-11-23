@@ -1,5 +1,4 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AuthInfo, CallToolResult } from '@modelcontextprotocol/server';
 
 import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';

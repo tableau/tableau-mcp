@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult as SdkCallToolResult } from '@modelcontextprotocol/server';
 import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -33,6 +33,11 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockContainedCacheReadFromFs } from './applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from './applyWorksheet.js';
+
+// The SDK types `structuredContent` as `unknown`; these tests read named fields from it.
+type CallToolResult = SdkCallToolResult & {
+  structuredContent?: Record<string, any>;
+};
 
 vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
   ...(await importOriginal<typeof cachePathModule>()),
@@ -2125,7 +2130,7 @@ async function getArtifactToolResult(
 ): Promise<CallToolResult> {
   const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
   const callback = await Provider.from(tool.callback);
-  return await callback(
+  return (await callback(
     {
       session,
       artifactId,
@@ -2138,7 +2143,7 @@ async function getArtifactToolResult(
       ...(customSignal ? { signal: customSignal } : {}),
       getExecutor: vi.fn().mockResolvedValue({}),
     },
-  );
+  )) as CallToolResult;
 }
 
 type ArtifactApplyMode = 'artifactId' | 'templatePlan';
@@ -2372,8 +2377,8 @@ async function getToolResult({
   };
   extra.config = { ...extra.config, ...configOverrides };
 
-  return await callback(
+  return (await callback(
     { session, artifactId: undefined, templatePlan: undefined, worksheetName, worksheetFile },
     extra,
-  );
+  )) as CallToolResult;
 }

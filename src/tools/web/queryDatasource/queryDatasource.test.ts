@@ -1,6 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
@@ -18,6 +16,7 @@ import {
 } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { toStandardSchema } from '../../toolContext.js';
 import {
   getEmbeddedDatasourceVersionHint,
   getVizqlDataServiceDisabledError,
@@ -205,15 +204,15 @@ describe('queryDatasourceTool', () => {
   ] as const)(
     'advertises name mode according to version %s over MCP',
     async (productVersion, supported) => {
-      const { McpServer } = await vi.importActual<
-        typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-      >('@modelcontextprotocol/sdk/server/mcp.js');
+      const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+        '@modelcontextprotocol/server',
+      );
       const server = new McpServer({ name: 'test', version: '0.0.0' });
       const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
       const callback = await Provider.from(tool.callback);
       server.registerTool(
         tool.name,
-        { inputSchema: await Provider.from(tool.paramsSchema) },
+        { inputSchema: toStandardSchema(await Provider.from(tool.paramsSchema)) },
         (args) => callback(args, getMockRequestHandlerExtra()),
       );
       const client = new Client({ name: 'test-client', version: '0.0.0' });
@@ -673,7 +672,7 @@ describe('queryDatasourceTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
       data: badResponse.toString(),
-      warning: 'Validation error: Expected array, received string at "data"',
+      warning: 'Validation error: Invalid input: expected array, received string at "data"',
     });
   });
 
