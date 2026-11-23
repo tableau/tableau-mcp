@@ -162,15 +162,14 @@ describe('restApiInstance', () => {
         siteId: string,
         signOut = vi.fn().mockResolvedValue(undefined),
       ): typeof signOut {
-        vi.mocked(RestApi).mockImplementationOnce(
-          () =>
-            ({
-              signIn: vi.fn().mockResolvedValue(undefined),
-              signOut,
-              siteId,
-              userId: 'admin-b-luid',
-            }) as unknown as RestApi,
-        );
+        vi.mocked(RestApi).mockImplementationOnce(function () {
+          return {
+            signIn: vi.fn().mockResolvedValue(undefined),
+            signOut,
+            siteId,
+            userId: 'admin-b-luid',
+          } as unknown as RestApi;
+        });
         return signOut;
       }
 

@@ -94,6 +94,48 @@ describe('validateFilterValues', () => {
     expect(result.isOk()).toBe(true);
   });
 
+  it('should skip null SET values and still validate the rest', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Sales' }],
+      filters: [
+        { field: { fieldCaption: 'Region' }, filterType: 'SET', values: ['East', null, 'Wset'] },
+      ],
+    };
+
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(new Ok({ data: [{ DistinctValues: 'East' }, { DistinctValues: 'West' }] }));
+
+    const result = await validateFilterValues(
+      new WebMcpServer(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error[0].invalidValues).toEqual(['Wset']);
+    }
+  });
+
+  it('should not query distinct values for a SET filter with only null', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Sales' }],
+      filters: [{ field: { fieldCaption: 'Region' }, filterType: 'SET', values: [null] }],
+    };
+
+    const result = await validateFilterValues(
+      new WebMcpServer(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(mockVizqlDataServiceMethods.queryDatasource).not.toHaveBeenCalled();
+  });
+
   it('should return error for SET filter with invalid values and suggest fuzzy matches', async () => {
     const query: Query = {
       fields: [{ fieldCaption: 'Sales' }],

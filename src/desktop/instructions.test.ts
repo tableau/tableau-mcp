@@ -5,6 +5,7 @@ import {
   buildDesktopInstructions,
   DESKTOP_ROUTE_TABLE,
   DesktopInstructionRoute,
+  EXPERTISE_TOOL_NAMES,
   generateDesktopInstructions,
   renderInstructionEntry,
   SESSION_RESOLUTION_ID,
@@ -127,7 +128,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Dense scatter/bubble + categorical color');
     expect(rendered).toContain('overrides terminal bind');
     expect(rendered).toContain(
-      'get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet',
+      'get-xml(kind:worksheet, mode:inline) → list-available-fields → add-field → apply-worksheet',
     );
     expect(rendered).toContain('Replace/supplement with bounded semantic discrete Detail');
     expect(rendered).toContain('finer than Color');
@@ -161,8 +162,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.action).toContain('explicit mark-type changes');
     expect(editInPlace?.action).toContain('Never use shell commands or raw whole-workbook XML');
     expect(editInPlace?.toolSequence).toEqual([
-      'list-worksheets',
-      'list-dashboards',
+      'get-sheets',
       'ask-user',
       'refine-worksheet',
       'set-member-colors',
@@ -188,7 +188,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(roundedCorners?.trigger).toContain('rounded corners');
     expect(roundedCorners?.action).toContain('If the tool refuses, report the reason and stop');
     expect(roundedCorners?.action).toContain(
-      'dashboard or container corners, call list-dashboards, then call format-dashboard-zones',
+      'dashboard or container corners, call get-sheets with kind=dashboard, then call format-dashboard-zones',
     );
     expect(roundedCorners?.action).toContain(
       'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
@@ -196,7 +196,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(roundedCorners?.action).toContain(
       'Never use shell commands, raw whole-workbook XML, or cached XML for this ask',
     );
-    expect(roundedCorners?.toolSequence).toEqual(['list-dashboards', 'format-dashboard-zones']);
+    expect(roundedCorners?.toolSequence).toEqual(['get-sheets', 'format-dashboard-zones']);
     expect(roundedCorners?.requiredEvidence).toEqual([
       'dashboard-zone readback receipt when dashboard corners were requested',
     ]);
@@ -445,15 +445,15 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'an existing dashboard edit the bounded batch cannot express',
     );
     expect(dashboardEdit?.action).toContain(
-      'list-dashboards -> format-worksheets for constituent worksheet properties',
+      'get-sheets(kind:dashboard) -> format-worksheets for constituent worksheet properties',
     );
     expect(dashboardEdit?.action).toContain(
       'reserve cached dashboard editing for dashboard-level properties',
     );
     expect(dashboardEdit?.toolSequence).toEqual([
-      'list-dashboards',
+      'get-sheets',
       'format-worksheets',
-      'get-dashboard-xml',
+      'get-xml',
       'read-cached-xml',
       'write-cached-xml',
       'apply-dashboard',
@@ -474,7 +474,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       trigger: 'an existing story edit',
       toolSequence: [
         'compose-story',
-        'get-storyboard-xml',
+        'get-xml',
         'read-cached-xml',
         'write-cached-xml',
         'apply-storyboard',
@@ -492,7 +492,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(workbookFallback).toMatchObject({
       trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
-      toolSequence: ['get-workbook-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
+      toolSequence: ['get-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
       stopConditions: [
         'use only for datasource definitions or cross-artifact changes',
         'prefer a scoped apply whenever possible',
@@ -539,14 +539,14 @@ describe('buildDesktopInstructions', () => {
   );
 
   it('keeps the unpinned session-resolution guidance when no session is pinned', () => {
-    const unpinned = buildDesktopInstructions({ sessionPinned: false });
+    const unpinned = buildDesktopInstructions({ sessionPinned: false, expertiseAvailable: true });
     expect(unpinned).toBe(generateDesktopInstructions(DESKTOP_ROUTE_TABLE));
     expect(unpinned).toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
     expect(unpinned).toContain('list-instances');
   });
 
   it('swaps in pin-aware session guidance when a session is pinned', () => {
-    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    const pinned = buildDesktopInstructions({ sessionPinned: true, expertiseAvailable: true });
     expect(sessionResolutionEntry?.kind).toBe('prose');
     expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
     // Still names list-instances — the pin is a default, and the agent may target another Desktop.
@@ -557,7 +557,11 @@ describe('buildDesktopInstructions', () => {
   });
 
   it('uses binder-first explicit charts with a guarded artifact fallback for the default profile', () => {
-    const instructions = buildDesktopInstructions({ sessionPinned: false, profile: '' });
+    const instructions = buildDesktopInstructions({
+      sessionPinned: false,
+      profile: '',
+      expertiseAvailable: true,
+    });
 
     expect(instructions).toContain(
       'list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet',
@@ -579,8 +583,47 @@ describe('buildDesktopInstructions', () => {
     );
   });
 
+  it.each([false, true])(
+    'names no expertise tool when the corpus is empty, sessionPinned=%s',
+    (sessionPinned) => {
+      const instructions = buildDesktopInstructions({ sessionPinned, expertiseAvailable: false });
+
+      expect(instructions).not.toMatch(/expertise/i);
+      expect(instructions).toContain(
+        'Do not create or change workbook content for an analytical question alone. Use only the author-* verbs the request needs',
+      );
+      expect(instructions).toContain(
+        sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
+      );
+    },
+  );
+
+  it('keeps every non-expertise entry when the corpus is empty', () => {
+    const withCorpus = buildDesktopInstructions({ sessionPinned: false, expertiseAvailable: true });
+    const withoutCorpus = buildDesktopInstructions({
+      sessionPinned: false,
+      expertiseAvailable: false,
+    });
+    const expertiseEntryIds = new Set(
+      routes
+        .filter((route) => route.toolSequence.some((tool) => EXPERTISE_TOOL_NAMES.has(tool)))
+        .map((route) => route.id),
+    );
+
+    expect([...expertiseEntryIds].sort()).toEqual(['dynamic-authoring', 'expertise-consult']);
+    for (const entry of DESKTOP_ROUTE_TABLE.filter((e) => !expertiseEntryIds.has(e.id))) {
+      expect(withoutCorpus).toContain(renderInstructionEntry(entry));
+    }
+    expect(withCorpus).toContain('FIRST search-expertise');
+    expect(withoutCorpus).not.toContain('FIRST search-expertise');
+  });
+
   it('keeps legacy template guidance only for demo', () => {
-    const demo = buildDesktopInstructions({ sessionPinned: false, profile: 'demo' });
+    const demo = buildDesktopInstructions({
+      sessionPinned: false,
+      profile: 'demo',
+      expertiseAvailable: true,
+    });
 
     expect(demo).toContain('bind-template');
     expect(demo).toContain('run-dashboard-batch');
@@ -592,7 +635,11 @@ describe('buildDesktopInstructions', () => {
   it.each(['dynamic-authoring', 'full', 'combined-lean'])(
     'serves binder-first charts with the modern artifact fallback for profile %s',
     (profile) => {
-      const instructions = buildDesktopInstructions({ sessionPinned: false, profile });
+      const instructions = buildDesktopInstructions({
+        sessionPinned: false,
+        profile,
+        expertiseAvailable: true,
+      });
       expect(instructions).toContain('build-worksheets-from-templates');
       expect(instructions).toContain('bind-template');
     },
@@ -601,7 +648,11 @@ describe('buildDesktopInstructions', () => {
   it.each(['', 'dynamic-authoring', 'full'])(
     'advertises explicit workbook-change scope for profile %s',
     (profile) => {
-      const instructions = buildDesktopInstructions({ sessionPinned: false, profile });
+      const instructions = buildDesktopInstructions({
+        sessionPinned: false,
+        profile,
+        expertiseAvailable: true,
+      });
 
       expect(instructions).toContain(
         'For an explicit request to create or change a conventional derived metric, or a visualization using one',
@@ -652,10 +703,17 @@ type Variant = { name: string; text: string; profile: string; sessionPinned: boo
 const variants = (profiles: readonly string[]): Variant[] =>
   profiles.flatMap((profile) =>
     [false, true].flatMap((sessionPinned) => {
-      const desktop = buildDesktopInstructions({ sessionPinned, profile });
+      const desktop = buildDesktopInstructions({
+        sessionPinned,
+        profile,
+        expertiseAvailable: true,
+      });
       return [
         { name: 'standalone', text: desktop },
-        { name: 'combined', text: buildCombinedInstructions({ sessionPinned, profile }) },
+        {
+          name: 'combined',
+          text: buildCombinedInstructions({ sessionPinned, profile, expertiseAvailable: true }),
+        },
       ].map(({ name, text }) => ({
         name: `${name} profile=${JSON.stringify(profile)} pinned=${sessionPinned}`,
         text,

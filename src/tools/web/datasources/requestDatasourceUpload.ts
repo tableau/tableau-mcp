@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -38,7 +38,7 @@ export const getRequestDatasourceUploadTool = (
     name: 'request-datasource-upload',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Creates a short-lived staged upload URL for a Tableau TDS or TDSX data source. PUT exactly fileSizeBytes bytes to the returned URL with the returned requiredHeaders, then call publish-datasource with the returned datasourceUploadId.',
+      'Creates a short-lived staged upload URL for a Tableau TDS or TDSX data source. PUT exactly fileSizeBytes bytes to the returned URL with the returned requiredHeaders, then call publish-datasource with the returned datasourceUploadId. Each upload id can be published once.',
     paramsSchema,
     annotations: {
       title: 'Request Data Source Upload',

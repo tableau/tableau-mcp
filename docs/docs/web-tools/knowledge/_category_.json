@@ -1,0 +1,8 @@
+{
+  "label": "Tableau Knowledge",
+  "position": 9,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for reading and updating Tableau Knowledge."
+  }
+}

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 
 import * as loggerModule from '../../../../logging/logger.js';
 import { WebMcpServer } from '../../../../server.web.js';
@@ -146,7 +146,7 @@ describe('listFlowTasksTool', () => {
     const result = await getToolResult({ filter: 'bogus:eq:x' });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Invalid enum value');
+    expect(result.content[0].text).toContain("Invalid filter field 'bogus'");
     expect(mocks.mockGetFlowRunTasks).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,5 @@
 import { Ok } from 'ts-results-es';
+import type { Mock } from 'vitest';
 
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
 import {
@@ -151,7 +152,7 @@ describe('paginate', () => {
         pageConfig: { pageSize: 0, pageNumber: 1 },
         getDataFn,
       }),
-    ).rejects.toThrow('Number must be greater than 0');
+    ).rejects.toThrow('Too small: expected number to be >0');
 
     // Test with invalid pageNumber (0)
     await expect(
@@ -159,7 +160,7 @@ describe('paginate', () => {
         pageConfig: { pageSize: 10, pageNumber: 0 },
         getDataFn,
       }),
-    ).rejects.toThrow('Number must be greater than 0');
+    ).rejects.toThrow('Too small: expected number to be >0');
 
     // Test with invalid limit (0)
     await expect(
@@ -167,7 +168,7 @@ describe('paginate', () => {
         pageConfig: { pageSize: 10, pageNumber: 1, limit: 0 },
         getDataFn,
       }),
-    ).rejects.toThrow('Number must be greater than 0');
+    ).rejects.toThrow('Too small: expected number to be >0');
 
     // Test with negative values
     await expect(
@@ -175,7 +176,7 @@ describe('paginate', () => {
         pageConfig: { pageSize: -1, pageNumber: 1 },
         getDataFn,
       }),
-    ).rejects.toThrow('Number must be greater than 0');
+    ).rejects.toThrow('Too small: expected number to be >0');
 
     expect(getDataFn).not.toHaveBeenCalled();
   });
@@ -844,15 +845,17 @@ describe('getPage', () => {
 
     // pageNumber must be > 0
     await expect(getPage({ pageNumber: 0, getDataFn })).rejects.toThrow(
-      'Number must be greater than 0',
+      'Too small: expected number to be >0',
     );
 
     // limit must be > 0
-    await expect(getPage({ limit: 0, getDataFn })).rejects.toThrow('Number must be greater than 0');
+    await expect(getPage({ limit: 0, getDataFn })).rejects.toThrow(
+      'Too small: expected number to be >0',
+    );
 
     // limit may not exceed MAX_PAGE_SIZE (1000)
     await expect(getPage({ limit: 1001, getDataFn })).rejects.toThrow(
-      'Number must be less than or equal to 1000',
+      'Too big: expected number to be <=1000',
     );
 
     expect(getDataFn).not.toHaveBeenCalled();
@@ -867,7 +870,12 @@ describe('getPage', () => {
       pageNumber: number;
       count: number;
       rawTotal: number;
-    }): ReturnType<typeof vi.fn> {
+    }): Mock<
+      (page: {
+        pageSize: number;
+        pageNumber: number;
+      }) => Promise<{ pagination: Pagination; data: Array<{ id: number }> }>
+    > {
       const start = (pageNumber - 1) * 1000;
       return vi.fn().mockResolvedValue({
         pagination: { pageNumber, pageSize: 1000, totalAvailable: rawTotal },
@@ -1147,7 +1155,7 @@ describe('pulsePaginate', () => {
         config: { limit: 0 },
         getDataFn,
       }),
-    ).rejects.toThrow('Number must be greater than 0');
+    ).rejects.toThrow('Too small: expected number to be >0');
 
     // Test with negative limit
     await expect(
@@ -1155,7 +1163,7 @@ describe('pulsePaginate', () => {
         config: { limit: -1 },
         getDataFn,
       }),
-    ).rejects.toThrow('Number must be greater than 0');
+    ).rejects.toThrow('Too small: expected number to be >0');
 
     expect(getDataFn).not.toHaveBeenCalled();
   });

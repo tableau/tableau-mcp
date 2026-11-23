@@ -231,7 +231,7 @@ export function bindExplicitTemplate(
     templateSlots: contract.slots,
     ...(built.derivationOverrides ? { derivationOverrides: built.derivationOverrides } : {}),
     optionalFieldPrunes: optionalFieldPrunesFor(contract, built.fieldBySlot),
-    warnings: [...warnings, ...(validation.warnings ?? [])],
+    warnings: [...warnings, ...(validation.warnings ?? []), ...(validation.advisories ?? [])],
     passthrough: false,
   };
 }

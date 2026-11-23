@@ -1,14 +1,14 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 
 import { getDesktopConfig } from './config.desktop.js';
+import { getExpertiseCorpusEntryCount } from './desktop/expertise/index.js';
 import { buildCombinedInstructions } from './instructions.combined.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
 
-vi.unmock('@modelcontextprotocol/sdk/server/mcp.js');
+vi.unmock('@modelcontextprotocol/server');
 
 const mocks = vi.hoisted(() => ({
   siteRole: vi.fn(),
@@ -48,6 +48,7 @@ describe('combined initialize instruction visibility', () => {
       const baseInstructions = buildCombinedInstructions({
         sessionPinned: config.desktopSessionId !== undefined,
         profile: config.toolProfile,
+        expertiseAvailable: getExpertiseCorpusEntryCount() > 0,
       });
       const mcpServer = new McpServer(
         { name: 'combined-instructions-test', version: '0.0.0' },

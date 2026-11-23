@@ -1,9 +1,5 @@
-import {
-  objectFromShape,
-  safeParse,
-  ZodRawShapeCompat,
-} from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -136,7 +132,7 @@ describe('manageKnowledgeContextTool', () => {
     // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
     // flat raw shape this tool now uses does not have that problem.
     const paramsSchema = await Provider.from(getTool().paramsSchema);
-    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const jsonSchema = advertisedInputSchema(paramsSchema);
     const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
 
     expect(properties).toBeTruthy();
@@ -146,13 +142,13 @@ describe('manageKnowledgeContextTool', () => {
 
   it('enforces the one-to-100 statement array bound at the schema level', async () => {
     const paramsSchema = await Provider.from(getTool().paramsSchema);
-    const objectSchema = objectFromShape(paramsSchema as ZodRawShapeCompat);
+    const objectSchema = z.object(paramsSchema);
 
     expect(
-      safeParse(objectSchema, { action: 'create', statements: [], isGlobal: true }).success,
+      objectSchema.safeParse({ action: 'create', statements: [], isGlobal: true }).success,
     ).toBe(false);
     expect(
-      safeParse(objectSchema, {
+      objectSchema.safeParse({
         action: 'create',
         statements: [{ statement: 'AOV = revenue / orders' }],
         isGlobal: true,

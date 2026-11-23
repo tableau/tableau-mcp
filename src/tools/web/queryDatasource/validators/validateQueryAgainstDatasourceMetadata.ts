@@ -8,6 +8,7 @@ import {
   QueryParameter,
 } from '../../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
+import { isTableCalcField } from './validateFields.js';
 
 export type FieldValidationError = {
   field: string;
@@ -94,7 +95,11 @@ export function validateFieldsAgainstDatasourceMetadata(
 
       // In order to create a new bin field, the query must also have the corresponding measure field.
       const measureField = fields.find(
-        (f) => f.fieldCaption === field.fieldCaption && 'function' in f && f.function,
+        (f) =>
+          f.fieldCaption === field.fieldCaption &&
+          !isTableCalcField(f) &&
+          'function' in f &&
+          f.function,
       );
 
       if (!measureField) {
@@ -138,7 +143,8 @@ export function validateFieldsAgainstDatasourceMetadata(
     }
 
     // For measure fields, validate that the function applied is valid given the field's data type.
-    if ('function' in field) {
+    // A table calc on a datasource table calc field has no function.
+    if ('function' in field && field.function) {
       switch (matchingField.dataType) {
         case 'INTEGER':
         case 'REAL':

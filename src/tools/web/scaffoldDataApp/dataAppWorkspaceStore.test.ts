@@ -23,9 +23,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: vi.fn().mockImplementation(() => ({ send: mocks.send })),
-  PutObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'put', input })),
-  GetObjectCommand: vi.fn().mockImplementation((input) => ({ __command: 'get', input })),
+  S3Client: vi.fn().mockImplementation(function () {
+    return { send: mocks.send };
+  }),
+  PutObjectCommand: vi.fn().mockImplementation(function (input) {
+    return { __command: 'put', input };
+  }),
+  GetObjectCommand: vi.fn().mockImplementation(function (input) {
+    return { __command: 'get', input };
+  }),
+  DeleteObjectCommand: vi.fn().mockImplementation(function (input) {
+    return { __command: 'delete', input };
+  }),
 }));
 
 vi.mock('@aws-sdk/s3-request-presigner', () => ({

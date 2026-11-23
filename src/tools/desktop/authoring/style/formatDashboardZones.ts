@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { DOMParser, Element as XmlElement, Node as XmlNode } from '@xmldom/xmldom';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -31,8 +31,7 @@ export type DashboardZoneFormatRequest = {
 };
 
 export type FormatDashboardZonesDocumentResult =
-  | { ok: true; xml: string; targetZoneIds: string[] }
-  | { ok: false; message: string };
+  { ok: true; xml: string; targetZoneIds: string[] } | { ok: false; message: string };
 
 type ZoneFormatReceipt = {
   dashboard: string;

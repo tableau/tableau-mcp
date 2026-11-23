@@ -74,6 +74,7 @@ const NON_TOOL_VOCABULARY = [
   'data-source',
   'data-source-order',
   'datasource-dependencies',
+  'datasource-not-found',
   'datatype-customized',
   'date-time',
   'dates-and-times',
@@ -143,7 +144,6 @@ const NON_TOOL_VOCABULARY = [
   'no-desktop-instances-found',
   'non-empty',
   'non-string',
-  'non-template',
   'not-applied',
   'not-found',
   'on-empty',
@@ -153,6 +153,8 @@ const NON_TOOL_VOCABULARY = [
   'order-dependent',
   'packaged-workbook',
   'param-domain-type',
+  // Template id compared in code, not emitted guidance.
+  'part-to-whole-pie-chart',
   // Field resolver transformation marker, not a callable tool.
   'part-to-whole-waterfall',
   'percent-encoded',
@@ -167,6 +169,8 @@ const NON_TOOL_VOCABULARY = [
   'print-prepared',
   'prior-version',
   'quantitative-or-categorical',
+  // Template id compared in code, not emitted guidance.
+  'ranking-ordered-bar',
   're-call',
   're-enables',
   're-read',

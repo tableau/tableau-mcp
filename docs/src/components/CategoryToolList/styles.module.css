@@ -1,0 +1,31 @@
+/* List styling matches the tool list in docs/src/components/ToolCatalog, kept as its
+   own module (CSS modules must not be cross-imported between components). */
+
+.root {
+  margin-top: 1rem;
+}
+
+.heading {
+  font-size: 1.25rem;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.8rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.list > li {
+  margin-bottom: 0.4rem;
+  line-height: 1.55;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.summary {
+  color: var(--ifm-color-content-secondary);
+}

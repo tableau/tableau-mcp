@@ -38,18 +38,14 @@ export const SkillEntrySchema = z.object({
 
 export type SkillEntry = z.infer<typeof SkillEntrySchema>;
 
-/**
- * `skills/list` request. The `method` literal is what the SDK routes on.
- */
+/** `skills/list` request. */
 export const SkillsListRequestSchema = z.object({
   method: z.literal('skills/list'),
   params: z.object({ cursor: z.string().optional() }).passthrough().optional(),
 });
 
-// Defer params validation to the handler so a malformed cursor returns -32602 instead of -32603.
-export const SkillsListHandlerRequestSchema = SkillsListRequestSchema.omit({
-  params: true,
-}).passthrough();
+// Handlers take any params and validate them themselves, so bad params return our -32602 message.
+export const SkillsHandlerParamsSchema = z.unknown();
 
 export const SkillsListResultSchema = z.object({
   resultType: z.literal('complete'),
@@ -64,11 +60,6 @@ export const SkillsGetRequestSchema = z.object({
   method: z.literal('skills/get'),
   params: z.object({ uri: z.string() }).passthrough(),
 });
-
-// Defer params validation to the handler so invalid params return -32602 instead of -32603.
-export const SkillsGetHandlerRequestSchema = SkillsGetRequestSchema.omit({
-  params: true,
-}).passthrough();
 
 export const SkillsGetResultSchema = z.object({
   resultType: z.literal('complete'),

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { readFile } from 'fs/promises';
 import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
@@ -22,6 +22,7 @@ import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/sc
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
+import { deleteStagedUpload } from '../stagedUpload.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
@@ -42,7 +43,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path.',
+      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path. Each upload id can be published once.',
     ),
   workbookFilePath: z
     .string()
@@ -86,7 +87,6 @@ const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true
 // schema has no personalSpace, so it is optional on the shared output type.
 type PublishWorkbookParamsSchema = z.ZodType<
   Omit<z.output<typeof personalSpaceParamsSchema>, 'personalSpace'> & { personalSpace?: boolean },
-  z.ZodTypeDef,
   z.input<typeof personalSpaceParamsSchema>
 >;
 
@@ -256,6 +256,12 @@ export const getPublishWorkbookTool = (
                 }
                 throw error;
               }
+
+              await deleteStagedUpload(
+                resolvedWorkbookFile.stagedKey,
+                extra.config.bucketS3,
+                'publish-workbook',
+              );
 
               if (personalSpaceTarget !== undefined) {
                 const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');

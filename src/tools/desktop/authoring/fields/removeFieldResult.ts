@@ -32,7 +32,7 @@ export function removeFieldResult(
         `Updated file: ${worksheetFile}. ` +
         'These draft edits have not been applied. Current placements are included below ' +
         '(encodings cover the first pane). If further verification is needed, use read-cached-xml ' +
-        'with filePath set to this file. Do not use get-worksheet-xml to verify pending edits; ' +
+        'with filePath set to this file. Do not use get-xml to verify pending edits; ' +
         'it reads live state and resets the edit buffer. ' +
         'Use apply-worksheet with this file to apply changes.',
       file: worksheetFile,

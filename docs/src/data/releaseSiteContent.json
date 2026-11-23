@@ -1,0 +1,46 @@
+[
+  {
+    "date": "2026-11-01",
+    "summary": "Added Custom Theme tools for Tableau Studio: inspect and export a theme, then apply it to the open workbook with Preserve conflict handling, plus a Publish Workbook dialog launcher."
+  },
+  {
+    "date": "2026-11-01",
+    "summary": "Added live datasource refresh and extract refresh, and a search over fields and calculations in the live open workbook that reports Rows, Columns, and Marks placements."
+  },
+  {
+    "date": "2026-11-01",
+    "summary": "Added formatting and composition tools: set rounded corners on dashboard zones, set mark labels and number formats across up to 12 worksheets at once, and compose the ordered points of an existing story."
+  },
+  {
+    "date": "2026-11-01",
+    "summary": "Parameters now apply in place without reopening the session. Workbook datasource listings include type and extract flags, and Get App Info reports live Start Page, Data Source page, and presentation-mode state."
+  },
+  {
+    "date": "2026-11-01",
+    "summary": "Added datasource apply and inspect tools, plus Dialogs and Tableau Agent groups: replace a datasource document in the open workbook, read datasource metadata or XML, list and invoke Studio dialogs, refresh automatic updates, and show or hide the Start Page."
+  },
+  {
+    "date": "2026-09-01",
+    "summary": "Added Desktop Tools — a new family of 57 tools for authoring directly in Tableau Studio, spanning 12 groups including Binder, Dashboards, Worksheets, and Data Sources."
+  },
+  {
+    "date": "2026-09-01",
+    "summary": "Expanded sheet lifecycle and workbook I/O: add, rename, and delete worksheets, dashboards, and storyboards; open, save, and export the workbook; pause and resume automatic updates; and read a worksheet's underlying data."
+  },
+  {
+    "date": "2026-09-01",
+    "summary": "Updated the Web Tools documentation and split the tool reference into dedicated Web Tools and Desktop Tools home pages, each with an auto-updating, filterable tool catalog."
+  },
+  {
+    "date": "2026-09-01",
+    "summary": "Added inline availability notes so every tool page shows the release it first became available."
+  },
+  {
+    "date": "2026-06-01",
+    "summary": "General availability of Tableau MCP — 32 tools for exploring and managing published Tableau content, spanning 13 groups including Data Q&A, Pulse, Workbooks, Views, and Admin Insights."
+  },
+  {
+    "date": "2026-06-01",
+    "summary": "Introduced the Web Tools reference: a page per tool documenting its arguments, results, and the Tableau APIs it calls, with a filterable tool catalog."
+  }
+]

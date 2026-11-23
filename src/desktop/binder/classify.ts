@@ -4541,7 +4541,7 @@ export function buildLlmInput(
   ask: string,
   manifests: Map<string, TemplateManifest>,
   summary: SchemaSummary,
-  opts?: { maxFields?: number },
+  opts?: { maxFields?: number; alsoOffer?: readonly string[] },
 ): LlmProposeInput {
   const maxFields = opts?.maxFields ?? DEFAULT_MAX_FIELDS;
   const routable = [...manifests.values()].filter((m) => m.fast_path_eligible);
@@ -4591,6 +4591,14 @@ export function buildLlmInput(
     pickedTemplates.add(c.m.template);
   }
   top.sort((a, b) => b.score - a.score || a.m.template.localeCompare(b.m.template));
+  // Caller-requested extra choices (e.g. the bar a declined pie should become); the agent still picks.
+  for (const name of opts?.alsoOffer ?? []) {
+    const extra = routable.find((m) => m.template === name);
+    if (extra && !pickedTemplates.has(name)) {
+      top.push({ m: extra, score: 0 });
+      pickedTemplates.add(name);
+    }
+  }
 
   // FIELD-NARROWING: rank the schema against the shortlisted
   // candidates' required slot kinds + the ask, and cap at maxFields so a wide

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -132,7 +132,7 @@ export const getReadCachedXmlTool = (
             if (!match) {
               return new ArgsValidationError(
                 `No <worksheet name="${worksheetSelector}"> element found in ${filePath}. ` +
-                  'The selector is the plain worksheet name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-worksheets to get exact names.',
+                  'The selector is the plain worksheet name (A & B), not the XML-escaped form from the raw file (A &amp; B); use get-sheets to get exact names.',
               ).toErr();
             }
             slice = match.text;
@@ -142,7 +142,7 @@ export const getReadCachedXmlTool = (
             if (!match) {
               return new ArgsValidationError(
                 `No <dashboard name="${dashboardSelector}"> element found in ${filePath}. ` +
-                  'The selector is the plain dashboard name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-dashboards to get exact names.',
+                  'The selector is the plain dashboard name (A & B), not the XML-escaped form from the raw file (A &amp; B); use get-sheets to get exact names.',
               ).toErr();
             }
             slice = match.text;

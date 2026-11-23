@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "6.1.1",
+  "version": "7.1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -77,9 +77,12 @@
     "@aws-sdk/client-s3": "^3.1095.0",
     "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@mjackson/multipart-parser": "^0.10.1",
-    "@modelcontextprotocol/ext-apps": "^1.7.2",
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "@xmldom/xmldom": "^0.9.10",
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@modelcontextprotocol/core": "^2.4.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@xmldom/xmldom": "^0.9.12",
     "@zodios/core": "^10.9.6",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -93,7 +96,7 @@
     "ts-results-es": "^7.1.0",
     "uuid": "^14.0.1",
     "xpath": "^0.0.34",
-    "zod": "^3.24.3",
+    "zod": "^4.2.0",
     "zod-validation-error": "^4.0.1"
   },
   "devDependencies": {
@@ -114,9 +117,9 @@
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
-    "@vitest/coverage-v8": "^3.1.3",
+    "@vitest/coverage-v8": "^5.1.0",
     "archiver": "^8.0.0",
-    "esbuild": "^0.25.5",
+    "esbuild": "^0.28.2",
     "eslint": "^9.25.1",
     "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-prettier": "^5.2.6",
@@ -126,16 +129,34 @@
     "jsdom": "^29.1.1",
     "npm-run-all": "^4.1.5",
     "openai": "^5.23.2",
-    "prettier": "^3.5.3",
+    "prettier": "^3.10.1",
     "probe-image-size": "7.4.0",
     "supertest": "^7.1.4",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1",
+    "vite": "^7.3.8",
     "vite-plugin-singlefile": "^2.3.3",
-    "vitest": "^3.1.3"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=22.7.5"
+  },
+  "overrides": {
+    "@zodios/core": {
+      "zod": "$zod"
+    },
+    "@openai/agents": {
+      "zod": "$zod"
+    },
+    "@openai/agents-core": {
+      "zod": "$zod"
+    },
+    "@openai/agents-openai": {
+      "zod": "$zod"
+    },
+    "openai": {
+      "zod": "$zod"
+    }
   }
 }

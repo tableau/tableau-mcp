@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResultSchema } from '@modelcontextprotocol/core';
 
 import {
   desktopStateSchema,
@@ -490,7 +490,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         await waitUntil(() =>
           requests.some(({ method, url }) => method === 'POST' && url === '/v0/workbook:save'),
         );
-        const listed = await requireClient().callTool('list-operations', {
+        const listed = await requireClient().callTool('get-operations', {
           schema: operationListSchema,
           toolArgs: { session: SESSION },
         });
@@ -499,12 +499,12 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         expect(operationId).toBe(origin.operation.id);
         expect(listed.operations[0].kind).toBe('save-workbook');
         const readOperation = async (): Promise<OperationEnvelope> =>
-          await requireClient().callTool('get-operation', {
+          await requireClient().callTool('get-operations', {
             schema: operationEnvelopeSchema,
             toolArgs: { session: SESSION, operationId },
           });
         const readInventory = async (): Promise<WorkbookInventory> =>
-          await requireClient().callTool('get-workbook-inventory', {
+          await requireClient().callTool('get-sheets', {
             schema: workbookInventorySchema,
             toolArgs: { session: SESSION },
           });
@@ -683,7 +683,6 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     try {
       await requireClient().client.callTool(
         { name: 'get-desktop-state', arguments: { session: SESSION } },
-        undefined,
         { timeout: 100 },
       );
     } catch (error) {
@@ -705,7 +704,6 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     try {
       await requireClient().client.callTool(
         { name: 'get-desktop-state', arguments: { session: SESSION } },
-        undefined,
         { signal: controller.signal, timeout: 5000 },
       );
     } catch (error) {

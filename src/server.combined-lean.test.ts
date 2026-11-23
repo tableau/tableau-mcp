@@ -1,5 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 
 import { buildWebInstructions, LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
@@ -52,6 +51,7 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
   });
 
   afterEach(() => {

@@ -23,6 +23,7 @@
 //   manifestHash  = sha256(stableStringify(sorted manifest entries))  // every manifest's full content
 //   normalizedAsk = ask.trim().replace(/\s+/g," ")             // whitespace-only normalization; CASE PRESERVED
 //   key           = [schemaHash, manifestHash, String(minConfidence), normalizedAsk].join("\u0000")
+//                   plus a trailing "keep_large_pie" part when that flag is set
 //
 // The whole bind result is a pure function of (ask, SchemaSummary, manifests,
 // proposal, minConfidence) — `bindTemplate` reads the workbook XML ONLY through
@@ -175,6 +176,7 @@ export interface BindArgs {
   proposal?: BindingProposal;
   llmPropose?: LlmProposeFn;
   minConfidence?: number;
+  keepLargePie?: boolean;
 }
 
 export interface BindMemoStats {
@@ -225,7 +227,14 @@ export function createMemoizedBinder(opts: MemoizedBinderOptions = {}): Memoized
     const manifestHash = hashManifests(args.manifests);
     const minConf = args.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
     const normalizedAsk = normalizeAsk(args.ask);
-    const key = [schemaHash, manifestHash, String(minConf), normalizedAsk].join(SEP);
+    // A user-confirmed large pie must never be served to a plain Call 1 for the same ask.
+    const key = [
+      schemaHash,
+      manifestHash,
+      String(minConf),
+      normalizedAsk,
+      ...(args.keepLargePie === true ? ['keep_large_pie'] : []),
+    ].join(SEP);
     return { key, schemaHash, manifestHash, normalizedAsk };
   }
 

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -104,7 +104,7 @@ describe('removeFieldTool', () => {
       encodingType: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
-    for (const name of ['get-worksheet-xml', 'read-cached-xml', 'remove-field'] as const) {
+    for (const name of ['get-xml', 'read-cached-xml', 'remove-field'] as const) {
       expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has(name)).toBe(true);
     }
   });
@@ -180,7 +180,7 @@ describe('removeFieldTool', () => {
       expect(result.content[0].text).toContain('"cols":["[Sample].[none:Category:nk]"]');
       expect(result.content[0].text).toContain('"color":["[Sample].[none:Category:nk]"]');
       expect(result.content[0].text).toContain('read-cached-xml');
-      expect(result.content[0].text).toContain('get-worksheet-xml');
+      expect(result.content[0].text).toContain('get-xml');
       expect(writeFileSync).not.toHaveBeenCalled();
       expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     },
@@ -309,7 +309,7 @@ describe('removeFieldTool', () => {
     expect(body).toMatchObject({ file: WORKSHEET_FILE, applied: false });
     expect(body.message).toContain('read-cached-xml');
     expect(body.message).toContain('filePath set to this file');
-    expect(body.message).toContain('Do not use get-worksheet-xml');
+    expect(body.message).toContain('Do not use get-xml');
     expect(body.message).toContain('resets the edit buffer');
     expect(result.structuredContent).toMatchObject({
       file: WORKSHEET_FILE,
@@ -596,7 +596,7 @@ describe('removeFieldTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Could not resolve a stable id for worksheet "Ghost"');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('get-sheets');
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(metadataModule.removeFieldFromRows).not.toHaveBeenCalled();
@@ -646,7 +646,7 @@ describe('removeFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('get-sheets');
     expect(result.content[0].text).toContain('retry');
     expect(result.content[0].text).not.toContain('get-app-info');
     expect(writeFileSync).not.toHaveBeenCalled();

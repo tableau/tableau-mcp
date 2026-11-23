@@ -1,7 +1,7 @@
 import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
 
+import { formatZodError } from '../utils/formatZodError.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { EXTERNAL_API_ACCESS_HOW_TO_FIX } from './externalApiAccess.js';
 
@@ -322,8 +322,14 @@ export class ZodiosValidationError extends McpToolError {
       message: error.message,
       statusCode: 400,
       internalError: error.data?.toString(),
-      internalErrorDetails: fromError(error.cause).toString(),
+      internalErrorDetails: formatZodError(error.cause),
     });
+  }
+}
+
+export class McpSiteSettingsUnavailableError extends McpToolError {
+  constructor(message: string, statusCode: number) {
+    super({ type: 'mcp-site-settings-unavailable', message, statusCode });
   }
 }
 

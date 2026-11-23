@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { decodeJwt, exportPKCS8, generateKeyPair } from 'jose';
 
 import { WebMcpServer } from '../../../server.web.js';

@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -26,7 +26,7 @@ export const getAddDashboardTool = (server: DesktopMcpServer): DesktopTool<typeo
     minApiVersion: '0.2.6',
     title,
     description:
-      'Add a blank dashboard to the open workbook. It becomes the active sheet; get its id from get-workbook-inventory.',
+      'Add a blank dashboard to the open workbook. It becomes the active sheet; get its id from get-sheets.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

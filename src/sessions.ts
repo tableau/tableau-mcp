@@ -1,4 +1,4 @@
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { randomUUID } from 'crypto';
 
 import { log } from './logging/logger.js';
@@ -6,7 +6,7 @@ import { ClientInfo } from './server.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 
 export type Session = {
-  transport: StreamableHTTPServerTransport;
+  transport: NodeStreamableHTTPServerTransport;
   clientInfo: ClientInfo;
   capabilities: ClientCapabilitiesWithUiExtension;
   clientId: string | undefined;
@@ -25,8 +25,8 @@ export const createSession = ({
   capabilities: ClientCapabilitiesWithUiExtension;
   clientId: string | undefined;
   authBinding: string;
-}): StreamableHTTPServerTransport => {
-  const transport = new StreamableHTTPServerTransport({
+}): NodeStreamableHTTPServerTransport => {
+  const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (sessionId) => {
       sessions[sessionId] = { transport, clientInfo, capabilities, clientId, authBinding };

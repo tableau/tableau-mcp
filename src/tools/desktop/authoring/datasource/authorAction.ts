@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -855,8 +855,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           let filterDependencies:
-            | { datasourceName: string; datasourceXml: string; columnsXml: string[] }
-            | undefined;
+            { datasourceName: string; datasourceXml: string; columnsXml: string[] } | undefined;
           let targetDatasource: DatasourceElement | undefined;
           let resolvedFields: ResolvedFilterField[] | undefined;
           let filterLinkExpression: string | undefined;

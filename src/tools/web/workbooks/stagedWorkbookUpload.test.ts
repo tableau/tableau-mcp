@@ -126,6 +126,7 @@ describe('resolveStagedWorkbookUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.twb`,
       bytes: Buffer.from('<workbook />'),
+      stagedKey: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
     });
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledWith({
       key: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
@@ -145,6 +146,7 @@ describe('resolveStagedWorkbookUpload', () => {
     ).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
       bytes: Buffer.from('PK\x03\x04'),
+      stagedKey: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twbx`,
     });
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(1, {
       key: `mcp/workbook-uploads/${tenantPrefix}/${uploadId}/workbook.twb`,
@@ -165,7 +167,9 @@ describe('resolveStagedWorkbookUpload', () => {
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config, tenant }),
-    ).rejects.toThrow('Workbook upload not found. Upload the workbook bytes before publishing.');
+    ).rejects.toThrow(
+      'Workbook upload not found: it was never uploaded, has expired, or was deleted after prior publish. Check whether the workbook already exists before requesting a new upload.',
+    );
   });
 
   it.each([

@@ -1,0 +1,8 @@
+{
+  "label": "Interaction",
+  "position": 14,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for user interaction and authoring-episode lifecycle management."
+  }
+}
