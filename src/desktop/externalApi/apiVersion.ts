@@ -1,6 +1,5 @@
 export type ApiVersionFloor = `${number}.${number}.${number}`;
 
-/** The External Client API version of the oldest Desktop build this server supports. */
 export const MIN_SUPPORTED_API_VERSION: ApiVersionFloor = '0.2.34';
 
 /**

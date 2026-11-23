@@ -258,7 +258,6 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
   );
 }
 
-/** Tools stay registered on an older Desktop; endpoints that build does not serve fail per call. */
 export function warnIfUnsupportedApiVersion(connectedApiVersion: string | undefined): void {
   if (
     connectedApiVersion === undefined ||
