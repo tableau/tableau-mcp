@@ -1441,45 +1441,93 @@ describe('queryDatasourceTool', () => {
       );
     });
 
-    it('never logs or forwards caller-supplied connection credentials', async () => {
+    describe('caller-supplied credentials', () => {
       const password = 'caller-secret-password';
-      const recordToolCallSpy = vi.spyOn(activityLogModule, 'recordToolCall');
-      const notifyInvocationSpy = vi.spyOn(WebTool.prototype, 'notifyInvocation');
+      const connections = [{ connectionUsername: 'u', connectionPassword: password }];
 
-      const parsed = await getParsed({
-        datasourceLuid: null,
-        query: {
-          fields: [{ fieldCaption: 'Category' }],
-          filters: [{ field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['C0'] }],
-        },
-        extraArgs: {
-          datasource: {
-            datasourceLuid,
-            connections: [{ connectionUsername: 'u', connectionPassword: password }],
-          },
-        },
-      });
-
-      expect(parsed.mcp.warnings).toContainEqual(
-        expect.objectContaining({ affectedProperties: ['datasource.connections'] }),
-      );
-      // The SET filter adds a distinct-values query, so both VDS request paths are covered.
-      expect(mocks.mockQueryDatasource.mock.calls.length).toBeGreaterThan(1);
-      const sinks = [
-        vi.mocked(loggerModule.log).mock.calls,
-        notifyInvocationSpy.mock.calls,
-        recordToolCallSpy.mock.calls,
-        mocks.mockReadMetadata.mock.calls,
-        mocks.mockQueryDatasource.mock.calls,
-      ];
-      for (const calls of sinks) {
-        expect(calls.length).toBeGreaterThan(0);
-        expect(JSON.stringify(calls)).not.toContain(password);
+      function getLogSinks(): unknown[][] {
+        return [
+          vi.mocked(loggerModule.log).mock.calls,
+          vi.mocked(WebTool.prototype.notifyInvocation).mock.calls,
+          vi.mocked(activityLogModule.recordToolCall).mock.calls,
+        ];
       }
-      // An envelope-only LUID still identifies the datasource in the activity log.
-      expect(recordToolCallSpy.mock.calls[0][0]).toMatchObject({
-        object: { type: 'datasource', luid: datasourceLuid },
+
+      beforeEach(() => {
+        vi.spyOn(activityLogModule, 'recordToolCall');
+        vi.spyOn(WebTool.prototype, 'notifyInvocation');
       });
+
+      it('never logs or forwards datasource.connections', async () => {
+        const parsed = await getParsed({
+          datasourceLuid: null,
+          query: {
+            fields: [{ fieldCaption: 'Category' }],
+            filters: [{ field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['C0'] }],
+          },
+          extraArgs: { datasource: { datasourceLuid, connections } },
+        });
+
+        expect(parsed.mcp.warnings).toContainEqual(
+          expect.objectContaining({ affectedProperties: ['datasource.connections'] }),
+        );
+        // The SET filter adds a distinct-values query, so both VDS request paths are covered.
+        expect(mocks.mockQueryDatasource.mock.calls.length).toBeGreaterThan(1);
+        const sinks = [
+          ...getLogSinks(),
+          mocks.mockReadMetadata.mock.calls,
+          mocks.mockQueryDatasource.mock.calls,
+        ];
+        for (const calls of sinks) {
+          expect(calls.length).toBeGreaterThan(0);
+          expect(JSON.stringify(calls)).not.toContain(password);
+        }
+        // An envelope-only LUID still identifies the datasource in the activity log.
+        expect(vi.mocked(activityLogModule.recordToolCall).mock.calls[0][0]).toMatchObject({
+          object: { type: 'datasource', luid: datasourceLuid },
+        });
+      });
+
+      // Logging runs before the unknown-key check, so these reach the logs before the error.
+      it.each([
+        {
+          name: 'a top-level connections',
+          extraArgs: { connections },
+          unknownKey: '`connections`',
+          loggedArgs: { connections: '[redacted]' },
+        },
+        {
+          name: 'an unknown options key',
+          extraArgs: { options: { disaggregate: true, connectionPassword: password } },
+          unknownKey: '`options.connectionPassword`',
+          loggedArgs: { options: { disaggregate: true, connectionPassword: '[redacted]' } },
+        },
+        {
+          name: 'an unknown datasource key',
+          extraArgs: { datasource: { datasourceLuid, connectionPassword: password } },
+          unknownKey: '`datasource.connectionPassword`',
+          loggedArgs: { datasource: { datasourceLuid, connectionPassword: '[redacted]' } },
+        },
+      ])(
+        'redacts $name in logs and still rejects it',
+        async ({ extraArgs, unknownKey, loggedArgs }) => {
+          const result = await getToolResult({ query, extraArgs });
+
+          expect(result.isError).toBe(true);
+          invariant(result.content[0].type === 'text');
+          expect(result.content[0].text).toContain(unknownKey);
+          for (const calls of getLogSinks()) {
+            expect(calls.length).toBeGreaterThan(0);
+            expect(JSON.stringify(calls)).not.toContain(password);
+          }
+          // The key name stays visible so the debug log shows what was rejected.
+          expect(vi.mocked(WebTool.prototype.notifyInvocation).mock.calls[0][0].args).toMatchObject(
+            loggedArgs,
+          );
+          expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+          expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+        },
+      );
     });
   });
 

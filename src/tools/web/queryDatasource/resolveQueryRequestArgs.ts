@@ -77,7 +77,7 @@ export type ResolvedQueryRequestArgs = {
   warnings: IgnoredRequestPropertyWarning[];
 };
 
-const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
+export const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
   'datasourceLuid',
   'workbookLuid',
   'query',
@@ -124,7 +124,7 @@ const IGNORED_READ_METADATA_OPTIONS: ReadonlySet<string> = new Set([
   'includeRemoteDatabaseNames',
 ]);
 
-const KNOWN_OPTION_KEYS: ReadonlySet<string> = new Set([
+export const KNOWN_OPTION_KEYS: ReadonlySet<string> = new Set([
   'rowLimit',
   'interpretFieldCaptionsAsFieldNames',
   ...FORWARDED_OPTION_KEYS,

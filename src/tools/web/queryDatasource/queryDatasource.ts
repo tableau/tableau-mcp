@@ -42,6 +42,8 @@ import { validateQuery } from './queryDatasourceValidator.js';
 import {
   datasourceEnvelopeSchema,
   IgnoredRequestPropertyWarning,
+  KNOWN_OPTION_KEYS,
+  KNOWN_TOP_LEVEL_KEYS,
   queryOptionsArgSchema,
   resolveQueryRequestArgs,
 } from './resolveQueryRequestArgs.js';
@@ -96,8 +98,9 @@ const fieldNameParamsSchema = z.object(paramsSchema).passthrough();
 const captionParamsSchema = fieldNameParamsSchema
   .omit({ interpretFieldCaptionsAsFieldNames: true })
   .passthrough();
+type QueryDatasourceArgs = z.output<typeof fieldNameParamsSchema>;
 type QueryDatasourceParamsSchema = z.ZodType<
-  z.output<typeof fieldNameParamsSchema>,
+  QueryDatasourceArgs,
   z.ZodTypeDef,
   z.input<typeof fieldNameParamsSchema>
 >;
@@ -148,7 +151,7 @@ export const getQueryDatasourceTool = (
       const { workbookLuid, query } = args;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: getLoggableArgs(args),
+        args: redactArgsForLogging(args),
         callback: async () => {
           const resolvedArgs = resolveQueryRequestArgs(args, rules);
           if (resolvedArgs.isErr()) {
@@ -329,26 +332,33 @@ export const getQueryDatasourceTool = (
   return queryDatasourceTool;
 };
 
-// Logged args feed debug logs and activity telemetry, which don't mask passwords. Keep the LUID and
-// workbookDatasourceId of the datasource envelope and redact every other key in it.
-// The result is only logged, so the cast back to T is safe.
-function getLoggableArgs<T extends { datasourceLuid?: unknown; datasource?: unknown }>(args: T): T {
-  const { datasource, ...rest } = args;
-  if (typeof datasource !== 'object' || datasource === null || Array.isArray(datasource)) {
-    return (datasource === undefined ? rest : { ...rest, datasource: '[redacted]' }) as T;
-  }
-  const envelopeLuid = 'datasourceLuid' in datasource ? datasource.datasourceLuid : undefined;
+const LOGGABLE_DATASOURCE_KEYS: ReadonlySet<string> = new Set([
+  'datasourceLuid',
+  'workbookDatasourceId',
+]);
+
+// Logged args feed debug logs, invocation notifications, and activity telemetry, which don't mask
+// passwords. Logging runs before resolveQueryRequestArgs rejects unknown keys, so a key outside the
+// allowlist keeps its name but its value is redacted, at every level.
+function redactArgsForLogging(args: QueryDatasourceArgs): QueryDatasourceArgs {
+  const { datasource, options } = args;
+  // The result is only logged, so casting the redacted values back to the args type is safe.
   return {
-    ...rest,
+    ...redactValuesExcept(args, KNOWN_TOP_LEVEL_KEYS),
     // The activity log reads the top-level datasourceLuid.
-    datasourceLuid: rest.datasourceLuid ?? envelopeLuid,
-    datasource: Object.fromEntries(
-      Object.entries(datasource).map(([key, value]) => [
-        key,
-        key === 'datasourceLuid' || key === 'workbookDatasourceId' ? value : '[redacted]',
-      ]),
-    ),
-  } as T;
+    datasourceLuid: args.datasourceLuid ?? datasource?.datasourceLuid,
+    ...(datasource && { datasource: redactValuesExcept(datasource, LOGGABLE_DATASOURCE_KEYS) }),
+    ...(options && { options: redactValuesExcept(options, KNOWN_OPTION_KEYS) }),
+  } as QueryDatasourceArgs;
+}
+
+function redactValuesExcept(
+  object: Record<string, unknown>,
+  keysToKeep: ReadonlySet<string>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(object).map(([key, value]) => [key, keysToKeep.has(key) ? value : '[redacted]']),
+  );
 }
 
 function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
