@@ -81,15 +81,9 @@ const paramsSchema = {
     ),
   caption: z.string().optional().describe('Name of the action; must be unique in the workbook.'),
   sourceWorksheet: z.string().optional().describe(''),
-  sourceField: z
-    .string()
-    .optional()
-    .describe('In parameter mode, the field whose value sets the parameter.'),
+  sourceField: z.string().optional().describe('Field whose value sets targetParameter.'),
   targetParameter: z.string().optional().describe('[Parameters].[Name].'),
-  targetSet: z
-    .string()
-    .optional()
-    .describe('In set mode, the name or caption of the set to change.'),
+  targetSet: z.string().optional().describe('Name or caption of the set to change.'),
   targetSheet: z.string().optional().describe('filter/highlight.'),
   filterFields: z.array(z.string()).optional().describe(''),
   highlightFields: z.array(z.string()).optional().describe('Captions.'),

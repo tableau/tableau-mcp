@@ -370,7 +370,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
-    ['author-action', 2712], // raised 2026-11-23: caption, sourceField and targetSet get full-sentence describes (#1285); ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
+    ['author-action', 2674], // raised 2026-11-23: caption, sourceField and targetSet get full-sentence describes (#1285); ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
