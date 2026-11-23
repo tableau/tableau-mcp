@@ -6,11 +6,11 @@ import {
   getAdvertisedScopes,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
-  getScopeGrantCheck,
   getScopeInfo,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
+  isScopeGranted,
   isValidScope,
   MCP_WILDCARD_SCOPE,
 } from './scopes.js';
@@ -1229,50 +1229,28 @@ describe('scopes', () => {
     );
   });
 
-  describe('getScopeGrantCheck', () => {
-    it('grants a scope the token lists explicitly', async () => {
-      const isGranted = await getScopeGrantCheck([
-        'tableau:mcp:datasource:read',
-        'tableau:content:read',
-      ]);
+  describe('isScopeGranted', () => {
+    it('grants a scope the token lists explicitly', () => {
+      const granted = ['tableau:mcp:datasource:read', 'tableau:content:read'];
 
-      expect(isGranted('tableau:mcp:datasource:read')).toBe(true);
-      expect(isGranted('tableau:content:read')).toBe(true);
+      expect(isScopeGranted('tableau:mcp:datasource:read', granted)).toBe(true);
+      expect(isScopeGranted('tableau:content:read', granted)).toBe(true);
     });
 
-    it('does not grant a scope the token lacks', async () => {
-      const isGranted = await getScopeGrantCheck(['tableau:mcp:datasource:read']);
-
-      expect(isGranted('tableau:mcp:workbook:read')).toBe(false);
+    it('does not grant a scope the token lacks', () => {
+      expect(isScopeGranted('tableau:mcp:workbook:read', ['tableau:mcp:datasource:read'])).toBe(
+        false,
+      );
     });
 
-    describe('with the mcp-wildcard-scope flag on', () => {
-      beforeEach(() => {
-        mocks.mockIsFeatureEnabled.mockImplementation(
-          async (featureName: string) => featureName === 'mcp-wildcard-scope',
-        );
-      });
-
-      it('grants every MCP scope to a token with the MCP wildcard', async () => {
-        const isGranted = await getScopeGrantCheck([MCP_WILDCARD_SCOPE]);
-
-        expect(isGranted('tableau:mcp:datasource:read')).toBe(true);
-        expect(isGranted('tableau:mcp:content:delete')).toBe(true);
-      });
-
-      it('does not grant Tableau API scopes to a token with the MCP wildcard', async () => {
-        const isGranted = await getScopeGrantCheck([MCP_WILDCARD_SCOPE]);
-
-        expect(isGranted('tableau:content:read')).toBe(false);
-        expect(isGranted('tableau:mcp_site_settings:read')).toBe(false);
-      });
+    it('grants every MCP scope to a token with the MCP wildcard', () => {
+      expect(isScopeGranted('tableau:mcp:datasource:read', [MCP_WILDCARD_SCOPE])).toBe(true);
+      expect(isScopeGranted('tableau:mcp:content:delete', [MCP_WILDCARD_SCOPE])).toBe(true);
     });
 
-    it('grants nothing through the MCP wildcard when the flag is off', async () => {
-      const isGranted = await getScopeGrantCheck([MCP_WILDCARD_SCOPE]);
-
-      expect(isGranted('tableau:mcp:datasource:read')).toBe(false);
-      expect(isGranted(MCP_WILDCARD_SCOPE)).toBe(true);
+    it('does not grant Tableau API scopes to a token with the MCP wildcard', () => {
+      expect(isScopeGranted('tableau:content:read', [MCP_WILDCARD_SCOPE])).toBe(false);
+      expect(isScopeGranted('tableau:mcp_site_settings:read', [MCP_WILDCARD_SCOPE])).toBe(false);
     });
   });
 

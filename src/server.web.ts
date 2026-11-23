@@ -18,6 +18,7 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { isAdminToolsEnabled } from './features/adminTools.js';
 import { getFeatureGate } from './features/init.js';
+import { isMcpWildcardScopeEnabled } from './features/mcpWildcardScope.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
@@ -27,7 +28,7 @@ import { ClientInfo, Server } from './server.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { getScopeGrantCheck } from './server/oauth/scopes.js';
+import { isScopeGranted } from './server/oauth/scopes.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
@@ -533,8 +534,10 @@ export class WebMcpServer extends Server {
     // scope that was never offered. Omitting here (over letting the probe run) keeps the message honest: a
     // missing probe scope reads as "you didn't grant this" rather than being mislabeled as "feature absent".
     const checkConditionApiScopes = checkApiScopes && enforceRegistrationConditions;
-    const isGranted = await getScopeGrantCheck(grantedScopes ?? []);
-    const isMissing = (scope: string): boolean => !isGranted(scope);
+    const wildcardEnabled = await isMcpWildcardScopeEnabled();
+    const scopes = grantedScopes ?? [];
+    const isMissing = (scope: string): boolean =>
+      !(wildcardEnabled ? isScopeGranted(scope, scopes) : scopes.includes(scope));
 
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {

@@ -19,9 +19,9 @@ import {
   formatScopes,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
-  getScopeGrantCheck,
   getSupportedApiScopes,
   getSupportedMcpScopes,
+  isScopeGranted,
   MCP_SITE_SETTINGS_READ_SCOPE,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
@@ -128,7 +128,9 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         strict,
         authInfo.clientId,
       );
-      const isGranted = await getScopeGrantCheck(authInfo.scopes);
+      const wildcardEnabled = await isMcpWildcardScopeEnabled();
+      const isGranted = (scope: string): boolean =>
+        wildcardEnabled ? isScopeGranted(scope, authInfo.scopes) : authInfo.scopes.includes(scope);
       const missingMcpScopes = requiredMcpScopes.filter((scope) => !isGranted(scope));
       const shouldCheckApiScopes = advertiseApiScopes;
       const missingApiScopes = shouldCheckApiScopes

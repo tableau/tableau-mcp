@@ -232,23 +232,15 @@ export function isMcpScope(scope: string): boolean {
   return scope.startsWith(MCP_SCOPE_PREFIX);
 }
 
-function isScopeGranted(scope: string, grantedScopes: ReadonlyArray<string>): boolean {
+/**
+ * Whether `grantedScopes` grant a scope: explicitly, or for an MCP scope through
+ * {@link MCP_WILDCARD_SCOPE}. Does not check the wildcard feature flag; callers must.
+ */
+export function isScopeGranted(scope: string, grantedScopes: ReadonlyArray<string>): boolean {
   return (
     grantedScopes.includes(scope) ||
     (isMcpScope(scope) && grantedScopes.includes(MCP_WILDCARD_SCOPE))
   );
-}
-
-/**
- * Returns a check for whether `grantedScopes` grant a scope: explicitly, or for an MCP scope through
- * {@link MCP_WILDCARD_SCOPE} when that is enabled.
- */
-export async function getScopeGrantCheck(
-  grantedScopes: ReadonlyArray<string>,
-): Promise<(scope: string) => boolean> {
-  return (await isMcpWildcardScopeEnabled())
-    ? (scope) => isScopeGranted(scope, grantedScopes)
-    : (scope) => grantedScopes.includes(scope);
 }
 
 /**
