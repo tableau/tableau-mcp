@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -79,7 +79,6 @@ const captionParamsSchema = fieldNameParamsSchema
   .passthrough();
 type QueryDatasourceParamsSchema = z.ZodType<
   z.output<typeof fieldNameParamsSchema>,
-  z.ZodTypeDef,
   z.input<typeof fieldNameParamsSchema>
 >;
 

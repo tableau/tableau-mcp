@@ -2,6 +2,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { expertiseReference } from './expertiseReference.js';
 
 export const actionNestedInDashboardRule: ValidationRule = {
   id: 'action-nested-in-dashboard',
@@ -44,9 +45,11 @@ export const actionNestedInDashboardRule: ValidationRule = {
         suggestion:
           'Move the <actions> block OUT of the <dashboard> element to the WORKBOOK ROOT, as a direct child sibling of ' +
           "<worksheets> and <dashboards> (a single top-level <actions>…</actions>). The action's shape (activation, " +
-          'source worksheet, target-parameter) can stay identical — only its LOCATION is wrong. ' +
-          'See expertise://tableau/tactics/dashboard/zones ("Actions live in a top-level <actions> element … NOT inside ' +
-          'the dashboard element itself").',
+          'source worksheet, target-parameter) can stay identical — only its LOCATION is wrong.' +
+          expertiseReference(
+            ' See expertise://tableau/tactics/dashboard/zones ("Actions live in a top-level <actions> element … NOT ' +
+              'inside the dashboard element itself").',
+          ),
       },
     ];
   },

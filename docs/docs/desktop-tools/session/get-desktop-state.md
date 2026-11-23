@@ -2,7 +2,7 @@
 sidebar_position: 4
 ---
 
-# Get Workbook State
+# Get %product_name% State
 
 {/* availability */}
 <span className="toolAvailability">Available November 2026 and later.</span>
@@ -12,7 +12,7 @@ Report whether %product_name% is idle or blocked, the strongest observed blockin
 
 ## APIs called
 
-Talks to the open %product_name% workbook through the External Client API.
+Talks to the running %product_name% instance through the External Client API.
 
 - Report whether %product_name% is idle or blocked, the strongest observed blocking cause, all active native activities, UI snapshot completeness, and visible modal or progress window content.
 

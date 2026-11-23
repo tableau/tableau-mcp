@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult as SdkCallToolResult } from '@modelcontextprotocol/server';
 import { createHash } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
 import type { Mock } from 'vitest';
@@ -46,6 +46,11 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { getBindTemplateTool, POST_APPLY_UNCERTAINTY_GUIDANCE } from './bindTemplate.js';
 import { proposalSignature } from './proposalSignature.js';
+
+// The SDK types `structuredContent` as `unknown`; these tests read named fields from it.
+type CallToolResult = SdkCallToolResult & {
+  structuredContent?: Record<string, any>;
+};
 
 // Auto-mock the live-read command. Partial-mock the binder core so the pure
 // DERIVATION_* exports used to build the zod schema stay intact while only
@@ -4426,7 +4431,7 @@ async function getToolResult({
     ...(customSignal && { signal: customSignal }),
   };
 
-  return await callback(
+  return (await callback(
     {
       session,
       ask,
@@ -4441,7 +4446,7 @@ async function getToolResult({
       keep_large_pie,
     } as any,
     extra,
-  );
+  )) as CallToolResult;
 }
 
 function datasourceBlock(xml: string, datasourceName: string): string {

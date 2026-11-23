@@ -32,7 +32,9 @@ describe('remove-field stale placement recovery (eval)', () => {
   it.each(removeFieldCases)('$name', async (testCase) => {
     const scenario = new RemoveFieldScenario(testCase);
     const agent = await getRemoveFieldEvalAgent(mcpServer, getModel(), scenario);
-    agent.on('agent_tool_start', (_context, _tool, { toolCall }) => {
+    agent.on('agent_tool_start', (_context, _tool, details) => {
+      // ToolCallItem resolves to unknown under zod 4.
+      const toolCall = details.toolCall as { type?: string; callId?: string; name?: string };
       if (toolCall.type === 'function_call') {
         log(JSON.stringify({ case: testCase.name, callId: toolCall.callId, name: toolCall.name }));
       }

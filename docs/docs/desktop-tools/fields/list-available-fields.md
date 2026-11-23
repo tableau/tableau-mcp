@@ -39,7 +39,7 @@ Identifier of the target %product_name% session. When omitted, the session is re
 
 #### Example
 
-`"studio-1"`
+`"12345"`
 
 #### Refreshing a cache file
 
@@ -86,7 +86,7 @@ Defaults to `full`. `hasLuid` and `luids` are accepted only alongside `slim`; su
 The two verbosities return different result shapes:
 
 - `full` produces `{ message, fields }` — `message` is a formatted dimensions/measures table (or a "no fields found" note for an empty workbook), and `fields` is a flat array spanning all datasources, each field carrying its own `datasource`, `column_ref`, and (for a published datasource) `contentUrl`.
-- `slim` produces `{ datasources }` — one group per datasource, in first-seen order, so the datasource identity is carried once per group rather than repeated on every field. A single-datasource workbook is still one group, so callers always parse the same structure. Each group holds three arrays of positional tuples: `measures` (`[caption, localName, aggregation, "base" | "aggregatedCalc"]`) for numeric measures, `timeDimensions` (`[caption, localName, "date" | "datetime"]`), and `breakdownDimensions` (`[caption, localName, "nominal" | "ordinal"]`). A field that fits none of those three buckets is left out of the slim result entirely. When `hasLuid` is set, each surviving group also carries `luid` and the datasource's friendly `name`.
+- `slim` produces `{ datasources }` — one group per datasource, in first-seen order, so the datasource identity is carried once per group rather than repeated on every field. A single-datasource workbook is still one group, so callers always parse the same structure. Each group holds three arrays of positional tuples: `measures` (`[caption, localName, aggregation, "base" | "aggregatedCalc"]`) for numeric measures, `timeDimensions` (`[caption, localName, "date" | "datetime"]`), and `breakdownDimensions` (`[caption, localName, "nominal" | "ordinal"]`). A field that fits none of those three buckets is left out of the slim result entirely. Each group also carries `fieldTables`, a map from a field's local name to its logical table id, for the listed fields that belong to a logical table. When `hasLuid` is set, each surviving group also carries `luid` and the datasource's friendly `name`.
 
 :::note
 `hasLuid` and `luids` require `verbosity: slim`. Supplying either with `full` is refused with `hasLuid and luids require verbosity: slim.`
@@ -176,6 +176,11 @@ If any LUID in the array matches no datasource in the open workbook, the whole c
   "datasources": [
     {
       "datasource": "federated.0abc123",
+      "fieldTables": {
+        "Profit": "Orders_ECFCA1FB690A41FE803BC071773BA862",
+        "Order Date": "Orders_ECFCA1FB690A41FE803BC071773BA862",
+        "Category": "Orders_ECFCA1FB690A41FE803BC071773BA862"
+      },
       "measures": [["Profit", "Profit", "Sum", "base"]],
       "timeDimensions": [["Order Date", "Order Date", "date"]],
       "breakdownDimensions": [["Category", "Category", "nominal"]]
@@ -193,6 +198,11 @@ Each surviving group gains the datasource's `luid` and its friendly `name`; data
   "datasources": [
     {
       "datasource": "federated.0abc123",
+      "fieldTables": {
+        "Profit": "Orders_ECFCA1FB690A41FE803BC071773BA862",
+        "Order Date": "Orders_ECFCA1FB690A41FE803BC071773BA862",
+        "Category": "Orders_ECFCA1FB690A41FE803BC071773BA862"
+      },
       "measures": [["Profit", "Profit", "Sum", "base"]],
       "timeDimensions": [["Order Date", "Order Date", "date"]],
       "breakdownDimensions": [["Category", "Category", "nominal"]],

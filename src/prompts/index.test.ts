@@ -1,8 +1,10 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { McpServer as McpServerType } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { UriTemplate } from '@modelcontextprotocol/sdk/shared/uriTemplate.js';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { Client } from '@modelcontextprotocol/client';
+import {
+  InMemoryTransport,
+  type McpServer as McpServerType,
+  ProtocolErrorCode,
+  UriTemplate,
+} from '@modelcontextprotocol/server';
 
 import { WebMcpServer } from '../server.web.js';
 import { stubDefaultEnvVars } from '../testShared.js';
@@ -33,9 +35,9 @@ const adminPromptNames = [
 // testSetup.ts globally mocks McpServer; these tests need the real SDK so resources/list and
 // resources/read go through the SDK's actual request handlers.
 async function getRealMcpServer(): Promise<McpServerType> {
-  const { McpServer } = await vi.importActual<
-    typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-  >('@modelcontextprotocol/sdk/server/mcp.js');
+  const { McpServer } = await vi.importActual<typeof import('@modelcontextprotocol/server')>(
+    '@modelcontextprotocol/server',
+  );
   return new McpServer({ name: 'test', version: '0.0.0' });
 }
 
@@ -153,7 +155,7 @@ describe('admin workflow prompts and resources', () => {
 
     await expect(
       client.readResource({ uri: getAdminWorkflowResourceUri('not-a-workflow') }),
-    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+    ).rejects.toMatchObject({ code: ProtocolErrorCode.InvalidParams });
   });
 
   it('is idempotent on a shared McpServer (no duplicate-registration throw)', async () => {

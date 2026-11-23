@@ -210,7 +210,7 @@ describe('notification', () => {
       });
 
       const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
-        .calls[0][0] as NotificationPayloadWithData;
+        .calls[0][0] as unknown as NotificationPayloadWithData;
       const notificationData = JSON.parse(notificationPayload.params.data);
       expect(notificationData.message).toEqual({
         type: 'response',
@@ -237,7 +237,7 @@ describe('notification', () => {
       await notifier.info(server.mcpServer, message, { notifier: 'rest-api' });
 
       const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
-        .calls[0][0] as NotificationPayloadWithData;
+        .calls[0][0] as unknown as NotificationPayloadWithData;
       const notificationData = JSON.parse(notificationPayload.params.data);
       expect(notificationData.message).toEqual(message);
     });
@@ -257,7 +257,7 @@ describe('notification', () => {
       );
 
       const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
-        .calls[0][0] as NotificationPayloadWithData;
+        .calls[0][0] as unknown as NotificationPayloadWithData;
       const notificationData = JSON.parse(notificationPayload.params.data);
       expect(notificationData.message).toEqual({
         type: 'response',

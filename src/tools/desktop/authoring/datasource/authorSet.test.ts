@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';

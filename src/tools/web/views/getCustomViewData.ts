@@ -1,4 +1,4 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../../errors/mcpToolError.js';
@@ -17,7 +17,7 @@ import {
 const paramsSchema = {
   customViewId: luidSchema,
   viewFilters: z
-    .record(z.string())
+    .record(z.string(), z.string())
     .optional()
     .describe('Optional map of view filter field names to values.'),
 };

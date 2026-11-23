@@ -1,4 +1,4 @@
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema } from '@modelcontextprotocol/core';
 import type { Request } from 'express';
 
 import { isRequestOverridableVariable } from '../overridableConfig.js';

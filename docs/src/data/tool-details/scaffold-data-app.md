@@ -3,7 +3,8 @@
 From `datappName` the tool derives the following identity:
 
 - **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
-  to a single hyphen.
+  to a single hyphen. A slug longer than 32 characters is split at hyphens into dot-separated parts
+  of at most 32 characters.
 - **display name**: `datappName` verbatim.
 
 - **version**: `1.0.0`.
@@ -11,7 +12,7 @@ From `datappName` the tool derives the following identity:
 
 The version and author are fixed defaults, not derived per call. All four values are placeholders
 in the template (`TODO-MANIFEST-ID`, `TODO App Name`, `TODO-MANIFEST-VERSION`, `TODO Author Name`),
-filled by the `postUnzip` edits in `data-app.trex` and `manifest.json` (the version also in the
+filled by the `postUnzip` edits in `data-app.trex` and `manifest.json` (all but the author also in the
 `.twb`), so they always agree.
 
 ## Package manifest
@@ -92,6 +93,7 @@ client steps.
       {
         "file": "Data App Name/Data App Name.twb",
         "replacements": [
+          { "find": "TODO-SOURCE-BUILD", "replace": "2026.3.2 (20263.26.1027.1340)" },
           { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
           { "find": "TODO App Name", "replace": "Sales Demo" },
           { "find": "TODO Sheet Name", "replace": "Sales Demo" },
@@ -143,6 +145,7 @@ client steps.
       {
         "file": "Data App Name/Data App Name.twb",
         "replacements": [
+          { "find": "TODO-SOURCE-BUILD", "replace": "2026.3.2 (20263.26.1027.1340)" },
           { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
           { "find": "TODO App Name", "replace": "Sales Demo" },
           { "find": "TODO Sheet Name", "replace": "Sales Demo" },

@@ -1,5 +1,6 @@
 import { decodeXmlEntities } from '../../xmlElement.js';
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { expertiseReference } from './expertiseReference.js';
 
 type Lod = { start: number; end: number; dims: string; body: string };
 
@@ -179,7 +180,8 @@ export const selfReferentialFixedLodRule: ValidationRule = {
           'For top/bottom-N membership, do not nest a FIXED LOD over the same dimension list, or compare two FIXED LODs over the same dimension list. ' +
           'Use the LOD membership tier calc pattern: a per-member value calc via FIXED LOD, compared against GLOBAL ' +
           'threshold LODs with no dimensions (e.g. { FIXED : PERCENTILE([Member Value], 0.80) }), then a tier label calc. ' +
-          'See expertise://tableau/tactics/data/lod-membership-tier-calc. (Sets do NOT survive MCP apply — use LOD calcs.)',
+          expertiseReference('See expertise://tableau/tactics/data/lod-membership-tier-calc. ') +
+          '(Sets do NOT survive MCP apply — use LOD calcs.)',
       });
     }
 

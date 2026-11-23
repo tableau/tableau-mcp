@@ -1,4 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 
 import type { BindingProposal } from '../../../../desktop/binder/binder.js';

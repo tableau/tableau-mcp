@@ -26,6 +26,38 @@ export const REMOVED_TOOL_NAMES = [
   // Consolidated into `query-admin-insights` (kind: "stale-content"); the
   // standalone tool was removed in PR #860.
   'get-stale-content-report',
+  // Merged into get-operations, undo-redo-workbook, set-auto-updates-paused,
+  // refresh-auto-updates, get-datasources and refresh-datasource.
+  'list-operations',
+  'get-operation',
+  'undo-workbook',
+  'redo-workbook',
+  'pause-auto-updates',
+  'resume-auto-updates',
+  'refresh-dashboard-auto-updates',
+  'refresh-storyboard-auto-updates',
+  'get-datasource-info',
+  'refresh-datasource-data',
+  'refresh-datasource-extract',
+  // Merged into get-sheets, get-xml and get-datasources.
+  'get-workbook-xml',
+  'get-worksheet-xml',
+  'get-dashboard-xml',
+  'get-storyboard-xml',
+  'get-datasource-xml',
+  'list-worksheets',
+  'list-dashboards',
+  'list-storyboards',
+  'get-sheet-info',
+  'get-workbook-inventory',
+  'list-workbook-datasources',
+  // Retired Desktop and Web tools with no direct successor.
+  'propose-template',
+  'validate-proposal',
+  'list-xml-templates',
+  'dashboard-auto-apply',
+  'check-for-user-changes',
+  'resolve-datasource-luid',
 ];
 
 const DOC_EXTENSIONS = ['.md', '.mdx'];
