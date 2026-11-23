@@ -79,24 +79,17 @@ const paramsSchema = {
     .describe(
       'parameter:sourceField+targetParameter;set:targetSet;url;filter/highlight:targetSheet',
     ),
-  caption: z
-    .string()
-    .optional()
-    .describe('Action display name; must be unique in the workbook. Required for create and edit.'),
+  caption: z.string().optional().describe('Name of the action; must be unique in the workbook.'),
   sourceWorksheet: z.string().optional().describe(''),
   sourceField: z
     .string()
     .optional()
-    .describe(
-      'Field on the source worksheet whose value sets the target parameter. Required in parameter mode.',
-    ),
+    .describe('In parameter mode, the field whose value sets the parameter.'),
   targetParameter: z.string().optional().describe('[Parameters].[Name].'),
   targetSet: z
     .string()
     .optional()
-    .describe(
-      'Name or caption of an existing set whose membership the action changes. Required in set mode.',
-    ),
+    .describe('In set mode, the name or caption of the set to change.'),
   targetSheet: z.string().optional().describe('filter/highlight.'),
   filterFields: z.array(z.string()).optional().describe(''),
   highlightFields: z.array(z.string()).optional().describe('Captions.'),
