@@ -1275,7 +1275,7 @@ describe('ExternalApiToolExecutor', () => {
           error: {
             code: 'operation-failed',
             message: 'Storyboard refresh failed.',
-            'tableau-error-code': '0x4D60D278',
+            tableauErrorCode: '0x4D60D278',
           },
         }),
       });
@@ -1316,7 +1316,7 @@ describe('ExternalApiToolExecutor', () => {
             error: {
               code: 'operation-failed',
               message: 'Storyboard refresh failed.',
-              'tableau-error-code': '0x4D60D278',
+              tableauErrorCode: '0x4D60D278',
             },
           },
         ],
