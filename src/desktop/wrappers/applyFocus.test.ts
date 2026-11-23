@@ -56,18 +56,13 @@ describe('dispatchApplyFocus Start Page hide', () => {
   // Desktop lands on Sheet 1 after the POST; a goto moves the live document.
   function recordingExecutor(
     options: {
-      desktopApiVersion?: string | undefined;
       setStartPageVisibility?: ExternalApiToolExecutor['setStartPageVisibility'];
     } = {},
   ): { executor: ExternalApiToolExecutor; calls: string[] } {
     const { setStartPageVisibility } = options;
-    const desktopApiVersion = Object.hasOwn(options, 'desktopApiVersion')
-      ? options.desktopApiVersion
-      : '0.2.11';
     const calls: string[] = [];
     let maximized = 'Sheet 1';
     const executor = makeExecutorMock({
-      desktopApiVersion,
       setStartPageVisibility: vi.fn(async (isStartPageVisible: boolean, s: AbortSignal) => {
         calls.push(`start-page:${isStartPageVisible}`);
         return setStartPageVisibility
@@ -157,22 +152,6 @@ describe('dispatchApplyFocus Start Page hide', () => {
     },
   );
 
-  it.each([
-    { desktopApiVersion: '0.2.10' },
-    { desktopApiVersion: '0.1.0' },
-    { desktopApiVersion: undefined },
-  ])(
-    'skips the hide below the Start Page API floor ($desktopApiVersion) and still navigates',
-    async ({ desktopApiVersion }) => {
-      const { executor, calls } = recordingExecutor({ desktopApiVersion });
-
-      await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
-
-      expect(executor.setStartPageVisibility).not.toHaveBeenCalled();
-      expect(calls).toEqual(['read', 'goto:Sheet 2', 'read']);
-    },
-  );
-
   it('keeps navigating and logs when the hide returns Err', async () => {
     const error = { type: 'command-timed-out' as const, error: 'start page timeout' };
     const { executor, calls } = recordingExecutor({
@@ -215,7 +194,6 @@ describe('dispatchApplyFocus Start Page hide', () => {
 
   it('uses the default executor mock without awaiting undefined', async () => {
     const executor = makeExecutorMock({
-      desktopApiVersion: '0.2.16',
       getWorkbookDocument: vi.fn(async () =>
         Ok({
           xml: workbookDoc('Sheet 2'),

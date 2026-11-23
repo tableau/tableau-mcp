@@ -63,13 +63,11 @@ describe('workspace extension tools', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('gates both tools at External API 0.2.34', () => {
+  it('declares the annotations for both tools', () => {
     const server = new DesktopMcpServer();
     const list = getWorkspaceExtensionsTool(server);
     const reload = getReloadWorkspaceExtensionTool(server);
-    expect(list.minApiVersion).toBe('0.2.34');
     expect(list.annotations).toMatchObject({ readOnlyHint: true });
-    expect(reload.minApiVersion).toBe('0.2.34');
     expect(reload.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
   });
 

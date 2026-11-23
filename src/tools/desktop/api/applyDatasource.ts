@@ -42,7 +42,6 @@ export const getApplyDatasourceTool = (
       'Replace an existing datasource definition in the open workbook using a document previously retrieved from that workbook. ' +
       'Does not add datasources or import .tds/.tdsx files.',
     paramsSchema,
-    minApiVersion: '0.2.10',
     annotations: {
       readOnlyHint: false,
       openWorldHint: false,

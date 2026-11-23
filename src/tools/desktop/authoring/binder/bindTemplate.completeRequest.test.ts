@@ -53,7 +53,6 @@ describe('bind-template public complete-request callback', () => {
     });
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument,
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),

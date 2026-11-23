@@ -41,7 +41,6 @@ describe('get-datasources tool', () => {
     const tool = getDatasourcesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-datasources');
-    expect(tool.minApiVersion).toBeUndefined();
     expect(tool.description).toContain('including ones no sheet uses');
     expect(tool.description).toContain('isExtract');
     expect(tool.description).toContain('percent-encoded');

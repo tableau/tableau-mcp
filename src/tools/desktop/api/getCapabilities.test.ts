@@ -18,11 +18,10 @@ describe('get-capabilities tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.25 API floor', () => {
+  it('declares the read contract', () => {
     const tool = getCapabilitiesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-capabilities');
-    expect(tool.minApiVersion).toBe('0.2.25');
     expect(tool.description).toContain('requiresServer');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toEqual({

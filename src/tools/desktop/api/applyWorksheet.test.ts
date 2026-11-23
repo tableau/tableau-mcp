@@ -91,8 +91,8 @@ describe('applyWorksheetTool', () => {
       {
         severity: 'warning' as const,
         source: 'used-field-validity' as const,
-        message: 'Field verification requires External Client API 0.2.16 or newer.',
-        reason: 'unsupported-api',
+        message: 'Field verification was unavailable.',
+        reason: 'diagnostics-unavailable',
       },
     ],
   };
@@ -239,65 +239,7 @@ describe('applyWorksheetTool', () => {
     ).toBeUndefined();
   });
 
-  it.each<[string, VerificationFinding[]]>([
-    ['passed', []],
-    [
-      'warning',
-      [
-        {
-          severity: 'warning' as const,
-          source: 'readback' as const,
-          message: 'A non-critical formatting node changed.',
-        },
-      ],
-    ],
-  ])(
-    'keeps a structurally %s templatePlan terminal when only native validation is unsupported',
-    async (_structuralStatus, structuralFindings) => {
-      const artifact = templateArtifact('direct-plan');
-      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
-        args.artifactApply!.dispatchState.attempted = true;
-        return Ok({
-          readbackWarnings: [],
-          readbackVerification: {
-            ok: true,
-            status: 'skipped',
-            findings: [
-              ...structuralFindings,
-              {
-                severity: 'warning' as const,
-                source: 'used-field-validity' as const,
-                message: 'Field verification requires External Client API 0.2.16 or newer.',
-                reason: 'unsupported-api',
-              },
-            ],
-          },
-        });
-      });
-
-      const result = await getDirectTemplateToolResult({
-        buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
-        getExecutor: vi.fn().mockResolvedValue({
-          getWorkbookDocument: vi.fn().mockResolvedValue(
-            Ok({
-              xml: '<workbook><worksheets/><windows/></workbook>',
-              instanceId: 'inst-build',
-            }),
-          ),
-        }),
-      });
-
-      expect(result.isError).toBe(false);
-      expect(result.structuredContent).toMatchObject({
-        applied: true,
-        retrySafe: false,
-        verification: { status: 'skipped' },
-        nextAction: { kind: 'done' },
-      });
-    },
-  );
-
-  it('keeps a structurally failed templatePlan failed when native validation is unsupported', async () => {
+  it('keeps a structurally failed templatePlan failed when native validation is unavailable', async () => {
     const artifact = templateArtifact('direct-plan');
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;
@@ -311,8 +253,8 @@ describe('applyWorksheetTool', () => {
             {
               severity: 'warning',
               source: 'used-field-validity',
-              message: 'Field verification requires External Client API 0.2.16 or newer.',
-              reason: 'unsupported-api',
+              message: 'Field verification was unavailable.',
+              reason: 'diagnostics-unavailable',
             },
           ],
         },
@@ -1026,7 +968,7 @@ describe('applyWorksheetTool', () => {
           }),
           expect.objectContaining({
             source: 'used-field-validity',
-            reason: 'unsupported-api',
+            reason: 'diagnostics-unavailable',
           }),
         ]),
       },
@@ -1183,7 +1125,7 @@ describe('applyWorksheetTool', () => {
           }),
           expect.objectContaining({
             source: 'used-field-validity',
-            reason: 'unsupported-api',
+            reason: 'diagnostics-unavailable',
           }),
         ]),
       },

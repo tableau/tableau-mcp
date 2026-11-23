@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
 import {
   endpointNotInThisBuild,
   isRouteMissing,
@@ -56,8 +55,6 @@ type GetXmlToolResult =
       datasourceXml?: string;
     }
   | XmlReadFileResult;
-
-const DATASOURCE_DOCUMENT_MIN_API_VERSION: ApiVersionFloor = '0.2.10';
 
 const XML_READ_ANNOTATIONS = {
   readOnlyHint: false, // Writes to a cache file
@@ -356,14 +353,6 @@ async function readDatasourceXml({
     session,
     extra,
     callback: async (executor, _signal, read, resolvedSession) => {
-      const apiVersion = executor.desktopApiVersion;
-      if (
-        apiVersion !== undefined &&
-        !apiVersionAtLeast(apiVersion, DATASOURCE_DOCUMENT_MIN_API_VERSION)
-      ) {
-        return endpointNotInThisBuild('datasource document').toErr();
-      }
-
       const list = await read(
         'workbook datasources',
         async (executor, signal) => await executor.listWorkbookDatasources(signal),

@@ -73,8 +73,6 @@ describe('show-me tool', () => {
   it('declares the route floor, workflow guidance, and an extensible Show Me type', async () => {
     const tool = getShowMeTool(new DesktopMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
-
-    expect(tool.minApiVersion).toBe('0.2.11');
     expect(tool.description).toContain('First call get-show-me-options');
     expect(tool.description).toContain('marked applicable');
     expect(tool.description).toContain('reuse its worksheet, data source, and selected fields');

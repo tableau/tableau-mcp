@@ -45,7 +45,6 @@ describe('list-saved-datasources tool', () => {
     const tool = getListSavedDatasourcesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('list-saved-datasources');
-    expect(tool.minApiVersion).toBe('0.2.6');
     expect(tool.description).toContain('open-file');
     expect(tool.annotations).toMatchObject({ readOnlyHint: true });
   });

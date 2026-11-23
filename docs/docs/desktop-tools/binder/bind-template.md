@@ -35,7 +35,7 @@ This tool acts on the workbook open in the local %product_name% instance, commun
 - Applies the bound chart to the live workbook (only when `auto_apply: true`, the result is `bound`, and the matched template is fast-path eligible): the template is injected and any sort/top-N is spliced into the workbook XML, the whole document is validated in-process (not an API call), then posted back. On any inject/validation/apply failure the tool falls back gracefully — the bound arguments are returned intact so no bind is lost.
   - `POST /v<x>/workbook/document` (`Content-Type: application/xml`) — apply the updated workbook XML. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/applyWorkbookDocument)
 - Navigates to the newly applied sheet (best-effort follow-up after a successful apply; a failure here never changes the applied result).
-  - `POST /v<x>/app:toggleStartPage` — hide the Start Page (skipped on API versions before 0.2.11). [API reference](ext://eca/reference/index.html#tag/Application/operation/toggleStartPage)
+  - `POST /v<x>/app:toggleStartPage` — hide the Start Page. [API reference](ext://eca/reference/index.html#tag/Application/operation/toggleStartPage)
   - `GET /v<x>/workbook` — resolve the sheet name to its id. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbook)
   - `POST /v<x>/workbook:goToSheet` — focus the newly applied sheet. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/goToSheet)
   - `GET /v<x>/workbook/document` — re-read to verify the sheet took focus. [API reference](ext://eca/reference/index.html#tag/Workbook/operation/getWorkbookDocument)

@@ -585,42 +585,38 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
-  it.each([
-    ['0.2.24', '[Sample - Superstore].[Sales]'],
-    ['0.2.25', '[federated.abc].[Sales]'],
-  ])(
-    'get-worksheet-underlying-data on API %s qualifies a bare column name as %s',
-    async (apiVersion, expectedColumn) => {
-      const harness = await startHarness(getWorksheetUnderlyingDataTool, apiVersion);
-      try {
-        harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
-          status: 200,
-          contentType: 'application/xml',
-          body: WORKSHEET_DOCUMENT_XML.replace(
-            '<datasource name="Sample - Superstore" />',
-            '<datasource caption="Sample - Superstore" name="federated.abc" />',
+  it('get-worksheet-underlying-data qualifies a bare column name with the datasource internal name', async () => {
+    const harness = await startHarness(getWorksheetUnderlyingDataTool);
+    try {
+      harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+        status: 200,
+        contentType: 'application/xml',
+        body: WORKSHEET_DOCUMENT_XML.replace(
+          '<datasource name="Sample - Superstore" />',
+          '<datasource caption="Sample - Superstore" name="federated.abc" />',
+        ),
+      });
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        logicalTable: LOGICAL_TABLE_ID,
+        columns: ['Sales'],
+      });
+      expect(result.isError).toBeFalsy();
+      const got = harness.server.requests.filter(
+        (r) =>
+          r.method === 'GET' &&
+          r.path.startsWith(
+            `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables/${LOGICAL_TABLE_ID}/data`,
           ),
-        });
-        const { result } = await run(harness, {
-          worksheet: WORKSHEET_NAME,
-          logicalTable: LOGICAL_TABLE_ID,
-          columns: ['Sales'],
-        });
-        expect(result.isError).toBeFalsy();
-        const got = harness.server.requests.filter(
-          (r) =>
-            r.method === 'GET' &&
-            r.path.startsWith(
-              `/v0/workbook/worksheets/${WORKSHEET_ID}/logicalTables/${LOGICAL_TABLE_ID}/data`,
-            ),
-        );
-        expect(got).toHaveLength(1);
-        expect(got[0].searchParams).toMatchObject({ columnsToIncludeByFieldName: expectedColumn });
-      } finally {
-        await harness.close();
-      }
-    },
-  );
+      );
+      expect(got).toHaveLength(1);
+      expect(got[0].searchParams).toMatchObject({
+        columnsToIncludeByFieldName: '[federated.abc].[Sales]',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
 
   it('delete-sheet refuses to delete the last remaining worksheet without POSTing', async () => {
     const deleteSheet = vi.fn();

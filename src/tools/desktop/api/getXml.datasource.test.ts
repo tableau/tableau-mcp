@@ -99,18 +99,6 @@ describe('getXmlTool kind=datasource', () => {
     },
   );
 
-  it('rejects a Desktop below 0.2.10 without a request', async () => {
-    const { result, order } = await invoke({
-      datasourceId: 'Sales%20Extract',
-      mode: 'inline',
-      apiVersion: '0.2.9',
-    });
-
-    expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain('datasource document endpoint');
-    expect(order).toEqual([]);
-  });
-
   it.each([
     { args: { kind: 'datasource' }, message: 'datasourceId is required with kind datasource.' },
     {
@@ -305,7 +293,6 @@ describe('getXmlTool kind=datasource', () => {
     xml,
     capBytes,
     documentError,
-    apiVersion,
     signal,
   }: {
     datasourceId: string;
@@ -314,7 +301,6 @@ describe('getXmlTool kind=datasource', () => {
     xml?: string;
     capBytes?: number;
     documentError?: ExecuteCommandError;
-    apiVersion?: string;
     signal?: AbortSignal;
   }): Promise<{
     result: CallToolResult;
@@ -337,9 +323,6 @@ describe('getXmlTool kind=datasource', () => {
           });
     });
     const executor = makeExecutorMock({ listWorkbookDatasources, getDatasourceDocument });
-    if (apiVersion !== undefined) {
-      Object.assign(executor, { desktopApiVersion: apiVersion });
-    }
     const tool = getXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const base = getMockRequestHandlerExtra();

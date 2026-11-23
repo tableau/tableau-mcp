@@ -17,11 +17,10 @@ describe('get-desktop-state tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.14 API floor', () => {
+  it('declares the read contract', () => {
     const tool = getDesktopStateTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-desktop-state');
-    expect(tool.minApiVersion).toBe('0.2.14');
     expect(tool.description).toContain('strongest observed blocking cause');
     expect(tool.description).toContain('fresh exact identity and actions from get-active-dialogs');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });

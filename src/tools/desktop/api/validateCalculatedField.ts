@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
-import { DATASOURCE_CALC_VALIDATION_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -36,7 +35,6 @@ export const getValidateCalculatedFieldTool = (
   const tool = new DesktopTool({
     server,
     name: 'validate-calculated-field',
-    minApiVersion: DATASOURCE_CALC_VALIDATION_MIN_API_VERSION,
     title,
     description:
       'Check a new or edited calculated field against a datasource without changing the workbook. Returns isValid, errors (position, length, message), and if valid dataType and isAggregate.',
@@ -59,11 +57,7 @@ export const getValidateCalculatedFieldTool = (
           if (resolved.isErr()) {
             return resolved;
           }
-          const {
-            id: datasourceId,
-            name: internalName,
-            caption: datasourceCaption,
-          } = resolved.value;
+          const { id: datasourceId, name: internalName } = resolved.value;
 
           return await runExternalApiReadTool({
             session: resolved.value.resolvedSession,
@@ -73,11 +67,7 @@ export const getValidateCalculatedFieldTool = (
               const qualifiedFieldName =
                 field === undefined || isDatasourceQualified(field)
                   ? field
-                  : qualifyDatasourceColumn(
-                      activeExecutor.desktopApiVersion,
-                      { internalName, caption: datasourceCaption },
-                      field,
-                    );
+                  : qualifyDatasourceColumn(internalName, field);
               return await read(
                 'calculated field validation',
                 async (executor, signal) =>

@@ -152,7 +152,7 @@ describe('run-dashboard-batch transactional apply', () => {
   });
 
   it('hides the Start Page before activating the built dashboard', async () => {
-    const harness = statefulExecutor({ desktopApiVersion: '0.2.11' });
+    const harness = statefulExecutor();
 
     const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
 
@@ -1331,7 +1331,6 @@ function statefulExecutor({
   readbackTransform,
   staleReadbackCount = 0,
   afterApplyDispatch,
-  desktopApiVersion,
 }: {
   initialXml?: string;
   guardedReadXml?: string;
@@ -1351,7 +1350,6 @@ function statefulExecutor({
   readbackTransform?: (xml: string) => string;
   staleReadbackCount?: number;
   afterApplyDispatch?: () => void;
-  desktopApiVersion?: string;
 } = {}): {
   executor: ExternalApiToolExecutor;
   posts: string[];
@@ -1466,7 +1464,6 @@ function statefulExecutor({
     goToSheet: vi.fn(async () =>
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
     ),
-    desktopApiVersion,
     setStartPageVisibility: vi.fn(async (isStartPageVisible: boolean) =>
       Ok({ isStartPageVisible }),
     ),

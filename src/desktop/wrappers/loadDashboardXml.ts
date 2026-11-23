@@ -3,7 +3,6 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
-import { supportsDashboardVisualRegistration } from '../externalApi/apiVersion.js';
 import {
   ExecuteCommandError,
   type ExecuteCommandWarning,
@@ -390,7 +389,6 @@ export async function loadDashboardXml({
       }
       const referencedNames = dashboardWorksheetNames(checked.fragmentXml);
       const names = [...new Set([...referencedNames, ...worksheetNames])];
-      const supportsRegistration = supportsDashboardVisualRegistration(executor.desktopApiVersion);
       let requiresRegistrationReadback = false;
       if (kind === 'dashboard' && snapshot !== null) {
         let missing: string[];
@@ -402,14 +400,11 @@ export async function loadDashboardXml({
             error: { type: 'invalid-response', error },
           });
         }
-        requiresRegistrationReadback = supportsRegistration && missing.length > 0;
+        requiresRegistrationReadback = missing.length > 0;
         if (
-          missing.length > 0 &&
-          (!supportsRegistration ||
-            missing.some(
-              (name) =>
-                !referencedNames.some((referenced) => parsedXmlNamesEqual(name, referenced)),
-            ))
+          missing.some(
+            (name) => !referencedNames.some((referenced) => parsedXmlNamesEqual(name, referenced)),
+          )
         ) {
           return Err({
             type: 'load-dashboard-xml-error',
@@ -418,9 +413,7 @@ export async function loadDashboardXml({
               worksheetNames: missing,
               message:
                 `Dashboard "${checked.name}" needs worksheet view registrations for ${missing.join(', ')}. ` +
-                (supportsRegistration
-                  ? 'Native registration only covers worksheets referenced by the submitted dashboard zones. '
-                  : 'This Desktop API cannot add them through the dashboard-only endpoint. ') +
+                'Native registration only covers worksheets referenced by the submitted dashboard zones. ' +
                 'A whole-workbook replacement could overwrite concurrent edits. ' +
                 'Add the worksheets to this dashboard in Desktop, then re-read the dashboard before retrying the layout edit. ' +
                 'Do not change worksheet zone types or retry with a whole-workbook replacement. No changes were sent to Tableau.',
@@ -436,7 +429,6 @@ export async function loadDashboardXml({
             snapshot.xml,
             checked.name,
             checked.fragmentXml,
-            { useNativeViewpointDefaults: supportsRegistration },
           );
           if (expected.isErr())
             return Err({

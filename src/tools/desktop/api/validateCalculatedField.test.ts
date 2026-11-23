@@ -27,7 +27,6 @@ describe('validate-calculated-field tool', () => {
     const tool = getValidateCalculatedFieldTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('validate-calculated-field');
-    expect(tool.minApiVersion).toBe('0.2.30');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       datasourceName: expect.any(Object),

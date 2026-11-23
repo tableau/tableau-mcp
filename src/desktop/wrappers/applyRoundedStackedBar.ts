@@ -128,7 +128,7 @@ export async function applyRoundedStackedBar({
     }
 
     const qualify = (column: string): string =>
-      qualifyDatasourceColumn(executor.desktopApiVersion, contract.datasource, column);
+      qualifyDatasourceColumn(contract.datasource.internalName, column);
     const requestedUnderlyingColumns = unique([
       qualify(contract.category.column),
       ...(contract.segment ? [qualify(contract.segment.column)] : []),

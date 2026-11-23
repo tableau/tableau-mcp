@@ -19,7 +19,6 @@ import {
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
 import { runAlwaysBlockingValidation } from '../validation/registry.js';
-import { apiVersionAtLeast } from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
@@ -198,7 +197,6 @@ type RawOutcome = {
   createdAt: string | undefined;
   completedAt: string | undefined;
   operationId: string | undefined;
-  apiVersion: string | undefined;
 };
 
 /**
@@ -259,10 +257,6 @@ export class ExternalApiToolExecutor {
 
   get desktopInstanceId(): string | undefined {
     return this.http?.instanceId;
-  }
-
-  get desktopApiVersion(): string | undefined {
-    return this.http?.apiVersion;
   }
 
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
@@ -1159,7 +1153,7 @@ export class ExternalApiToolExecutor {
       if (result.isErr()) {
         return Err(result.error);
       }
-      return Ok(normalizeEnvelope(result.value, http.apiVersion));
+      return Ok(normalizeEnvelope(result.value));
     });
 
     if (outcomeResult.isErr()) {
@@ -1292,7 +1286,7 @@ async function runOp<T>(
   }
 }
 
-function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
+function normalizeEnvelope(envelope: OperationEnvelope): RawOutcome {
   const hasDiagnostics = Object.hasOwn(envelope, 'diagnostics');
   const parsedDiagnostics = hasDiagnostics
     ? workbookDiagnosticsSchema.safeParse(envelope['diagnostics'])
@@ -1308,7 +1302,6 @@ function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): Ra
     createdAt: envelope.createdAt,
     completedAt: envelope.completedAt,
     operationId: envelope.id,
-    apiVersion,
   };
 }
 
@@ -1346,17 +1339,13 @@ function buildCommandStatus(
   }
 
   const now = new Date().toISOString();
-  const resultPayload =
-    outcome.result !== undefined || supportsOperationResult(outcome.apiVersion)
-      ? { result: outcome.result }
-      : {};
   return Ok({
     command_id: outcome.operationId ?? `ext_external-api:${command}_${Date.now()}`,
     status: 'completed',
     submitted_at: outcome.createdAt ?? now,
     started_at: outcome.createdAt ?? now,
     completed_at: outcome.completedAt ?? now,
-    ...resultPayload,
+    result: outcome.result,
     ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
     ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
     ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
@@ -1366,10 +1355,6 @@ function buildCommandStatus(
 function getTableauErrorCode(error: OperationError | undefined): string | undefined {
   const value = error?.tableauErrorCode ?? error?.['tableau-error-code'];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function supportsOperationResult(apiVersion: string | undefined): boolean {
-  return apiVersionAtLeast(apiVersion, '0.1.1');
 }
 
 function summaryDataRetryDelayMs(retryAfterSeconds: number | undefined): number | undefined {

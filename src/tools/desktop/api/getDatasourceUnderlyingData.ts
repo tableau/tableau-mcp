@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
-import { DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { DatasourceLogicalTableDataQuery } from '../../../desktop/externalApi/types.js';
 import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
@@ -36,7 +35,6 @@ export const getDatasourceUnderlyingDataTool = (
   const getDatasourceUnderlyingData = new DesktopTool({
     server,
     name: 'get-datasource-underlying-data',
-    minApiVersion: DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION,
     title,
     description:
       "Read raw row-level data for one of a datasource's logical tables (see list-datasource-logical-tables), independent of any worksheet.",
@@ -59,7 +57,7 @@ export const getDatasourceUnderlyingDataTool = (
           if (resolved.isErr()) {
             return resolved;
           }
-          const { id: datasourceId, name: internalName, caption } = resolved.value;
+          const { id: datasourceId, name: internalName } = resolved.value;
 
           return await runExternalApiReadTool({
             session: resolved.value.resolvedSession,
@@ -91,11 +89,7 @@ export const getDatasourceUnderlyingDataTool = (
                         const column = raw.trim();
                         return isDatasourceQualified(column)
                           ? column
-                          : qualifyDatasourceColumn(
-                              activeExecutor.desktopApiVersion,
-                              { internalName, caption },
-                              column,
-                            );
+                          : qualifyDatasourceColumn(internalName, column);
                       }),
                     }
                   : {}),

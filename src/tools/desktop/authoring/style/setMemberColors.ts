@@ -74,7 +74,6 @@ export const getSetMemberColorsTool = (
     title,
     description: "Set colors for members of the discrete field on a worksheet's Color.",
     paramsSchema,
-    minApiVersion: '0.2.10',
     annotations: {
       readOnlyHint: false,
       openWorldHint: false,

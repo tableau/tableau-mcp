@@ -24,7 +24,6 @@ export const getReloadExtensionsTool = (
   const reloadExtensionsTool = new DesktopTool({
     server,
     name: 'reload-extensions',
-    minApiVersion: '0.2.25',
     title,
     description:
       'Reload the extension on a worksheet, or every extension on a dashboard. Storyboards are not supported. Succeeds without reloading anything when the sheet hosts no extension.',

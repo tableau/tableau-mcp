@@ -237,8 +237,7 @@ export const getApplyWorksheetTool = (
                   // A 'done' marker tells the agent to stop; an observed FAILED readback
                   // is the one outcome where stopping buries the failure, so that branch
                   // points at the follow-up work instead of minting a terminal receipt.
-                  verification.status === 'skipped' &&
-                    !isUnsupportedUsedFieldValidation(verification)
+                  verification.status === 'skipped'
                     ? prefillNextAction('Verification unavailable — inspect live worksheet state')
                     : verification.status === 'failed'
                       ? prefillNextAction('Verification failed — diagnose listed findings')
@@ -338,7 +337,7 @@ export const getApplyWorksheetTool = (
                   retrySafe: false as const,
                   verification,
                 },
-                verification.status === 'skipped' && !isUnsupportedUsedFieldValidation(verification)
+                verification.status === 'skipped'
                   ? prefillNextAction('Verification unavailable — inspect live worksheet state')
                   : verification.status === 'failed'
                     ? prefillNextAction('Verification failed — diagnose listed findings')
@@ -508,7 +507,7 @@ export const getApplyWorksheetTool = (
                   message: 'Post-apply verification was unavailable.',
                 },
               },
-              readback?.status === 'skipped' && !isUnsupportedUsedFieldValidation(readback)
+              readback?.status === 'skipped'
                 ? prefillNextAction('Verification unavailable — inspect live worksheet state')
                 : readback?.status === 'failed'
                   ? prefillNextAction('Verification failed — diagnose listed findings')
@@ -567,19 +566,4 @@ function artifactApplyError(
       ),
     ),
   ).toErr();
-}
-
-function isUnsupportedUsedFieldValidation(
-  verification: ReadbackVerificationResult | undefined,
-): boolean {
-  const findings = verification?.findings ?? [];
-  return (
-    findings.some(
-      (finding) => finding.source === 'used-field-validity' && finding.reason === 'unsupported-api',
-    ) &&
-    !findings.some(
-      (finding) =>
-        finding.source === 'readback' && finding.reason === 'structural-readback-unavailable',
-    )
-  );
 }

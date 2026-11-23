@@ -29,10 +29,10 @@ ship in the default surface).
 
 ## Native dialog actions
 
-`get-active-dialogs` and `invoke-dialog-action` share the session-safe dialog contract introduced in
-API 0.2.26. Later builds add file, color, and print providers. Use the capabilities returned for the
-current dialog rather than assuming provider support from the platform or API version. Preparing,
-suspended, and closing panels are blockers; they do not authorize an action.
+`get-active-dialogs` and `invoke-dialog-action` share a session-safe dialog contract. Later builds
+may add providers. Use the capabilities returned for the current dialog rather than assuming
+provider support from the platform or API version. Preparing, suspended, and closing panels are
+blockers; they do not authorize an action.
 
 Copy `objectName`, `title`, `className`, `sessionId`, and `revision` exactly. Generate one
 `requestId` for a logical action. If its outcome is uncertain, poll `recentActions` in the same

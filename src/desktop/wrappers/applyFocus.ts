@@ -1,6 +1,5 @@
 import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import { log } from '../../logging/logger.js';
-import { apiVersionAtLeast, START_PAGE_MIN_API_VERSION } from '../externalApi/apiVersion.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow, ParsedWorkbook } from '../metadata/types.js';
@@ -70,10 +69,6 @@ export async function hideStartPage({
   executor,
   signal,
 }: WithExecutorAndAbortSignal): Promise<void> {
-  if (!apiVersionAtLeast(executor.desktopApiVersion, START_PAGE_MIN_API_VERSION)) {
-    return;
-  }
-
   try {
     const result = await executor.setStartPageVisibility(false, signal);
     if (result.isErr()) {

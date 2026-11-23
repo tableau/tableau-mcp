@@ -28,12 +28,11 @@ describe('setStartPageVisibilityTool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the required boolean, API floor, and idempotent mutation metadata', () => {
+  it('declares the required boolean and idempotent mutation metadata', () => {
     const tool = getSetStartPageVisibilityTool(new DesktopMcpServer());
     const params = tool.paramsSchema as Record<string, z.ZodTypeAny>;
 
     expect(tool.name).toBe('set-start-page-visibility');
-    expect(tool.minApiVersion).toBe('0.2.11');
     expect(params).toMatchObject({
       session: expect.any(Object),
       isStartPageVisible: expect.any(Object),

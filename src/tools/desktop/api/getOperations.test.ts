@@ -65,7 +65,6 @@ describe('get-operations tool', () => {
     const tool = getOperationsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-operations');
-    expect(tool.minApiVersion).toBe('0.2.0');
     expect(tool.description).toContain('progressWindows');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),

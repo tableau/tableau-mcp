@@ -172,13 +172,12 @@ describe('set-member-colors tool', () => {
     vi.useRealTimers();
   });
 
-  it('has a lean description, no tool names in params, and the datasource-route API floor', () => {
+  it('has a lean description and no tool names in params', () => {
     const tool = getSetMemberColorsTool(new DesktopMcpServer());
     expect(tool.name).toBe('set-member-colors');
     expect(tool.description).toBe(
       "Set colors for members of the discrete field on a worksheet's Color.",
     );
-    expect(tool.minApiVersion).toBe('0.2.10');
     expect(Object.keys(tool.paramsSchema)).toEqual(['session', 'worksheetName', 'colors', 'field']);
   });
 

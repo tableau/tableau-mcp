@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
 import {
   ExecuteCommandError,
   ExecuteCommandWarning,
@@ -47,12 +46,6 @@ type RefreshToolResult = {
   warnings?: ExecuteCommandWarning[];
 };
 
-const MIN_API_VERSION: Record<SheetKind, ApiVersionFloor> = {
-  worksheet: '0.2.13',
-  dashboard: '0.2.19',
-  storyboard: '0.2.20',
-};
-
 const MULTI_TARGET = {
   dashboard: {
     review: 'Review failed dashboard refresh targets',
@@ -76,7 +69,6 @@ export const getRefreshAutoUpdatesTool = (
   const refreshAutoUpdatesTool = new DesktopTool({
     server,
     name: 'refresh-auto-updates',
-    minApiVersion: MIN_API_VERSION.worksheet,
     title,
     description:
       "Run pending automatic updates now, without changing the active sheet: for one worksheet, every worksheet in a dashboard's current device layout, or the current point of a storyboard. " +
@@ -100,11 +92,6 @@ export const getRefreshAutoUpdatesTool = (
           }
 
           const executor = await extra.getExecutor(sessionResult.value);
-          const apiVersion = executor.desktopApiVersion;
-          if (apiVersion !== undefined && !apiVersionAtLeast(apiVersion, MIN_API_VERSION[kind])) {
-            return endpointNotInThisBuild(`${kind} refresh`).toErr();
-          }
-
           const dispatched = await refreshByIdThenName({
             executor,
             session,

@@ -25,7 +25,6 @@ export const getSetDataSourcePageActiveTool = (
   const setDataSourcePageActiveTool = new DesktopTool({
     server,
     name: 'set-data-source-page-active',
-    minApiVersion: '0.2.25',
     title,
     description:
       'Switch Tableau Desktop to the Data Source page or back to a sheet, and return the page state read back. ' +

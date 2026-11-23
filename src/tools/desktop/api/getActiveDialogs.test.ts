@@ -55,11 +55,10 @@ describe('get-active-dialogs tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.26 API floor', () => {
+  it('declares the read contract', () => {
     const tool = getActiveDialogsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-active-dialogs');
-    expect(tool.minApiVersion).toBe('0.2.26');
     expect(tool.description).toContain('visible message and diagnostic text');
     expect(tool.description).toContain('Native panels advertise');
     expect(tool.description).toContain('act only when active; skip enabled=false');

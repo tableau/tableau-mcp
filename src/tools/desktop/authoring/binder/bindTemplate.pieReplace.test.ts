@@ -75,7 +75,6 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     });
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument,
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
@@ -179,7 +178,6 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     let liveXml = workbook;
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument: vi.fn(async (xml: string) => {
         liveXml = xml;
         return Ok({ command_id: 'apply', status: 'completed', submitted_at: '', result: {} });

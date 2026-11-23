@@ -287,7 +287,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     const getWorksheetDiagnostics = vi.fn();
     const executor = makeExecutorMock({
       desktopInstanceId: route === 'artifact' ? 'inst-build' : 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: liveWorksheetId, name: worksheetName }] })),
@@ -657,7 +656,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
@@ -729,7 +727,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
@@ -812,7 +809,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: appliedWorksheetId, name: worksheetName }] })),
@@ -869,7 +865,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
@@ -931,7 +926,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       );
       const executor = makeExecutorMock({
         desktopInstanceId: 'inst-test',
-        desktopApiVersion: '0.2.16',
         listWorksheets: vi
           .fn()
           .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
@@ -989,7 +983,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
@@ -1773,7 +1766,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
@@ -1821,7 +1813,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
           xml: liveWorkbook(['Sheet 1']),
@@ -1876,7 +1867,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       );
     const executor = makeExecutorMock({
       desktopInstanceId: 'inst-build',
-      desktopApiVersion: '0.2.16',
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       ),

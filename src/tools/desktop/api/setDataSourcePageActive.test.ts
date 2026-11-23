@@ -28,12 +28,11 @@ describe('setDataSourcePageActiveTool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the required boolean, API floor, and idempotent mutation metadata', () => {
+  it('declares the required boolean and idempotent mutation metadata', () => {
     const tool = getSetDataSourcePageActiveTool(new DesktopMcpServer());
     const params = tool.paramsSchema as Record<string, z.ZodTypeAny>;
 
     expect(tool.name).toBe('set-data-source-page-active');
-    expect(tool.minApiVersion).toBe('0.2.25');
     expect(params.session.safeParse(undefined).success).toBe(true);
     expect(params.isDataSourcePageActive.safeParse(undefined).success).toBe(false);
     expect(params.isDataSourcePageActive.safeParse('true').success).toBe(false);

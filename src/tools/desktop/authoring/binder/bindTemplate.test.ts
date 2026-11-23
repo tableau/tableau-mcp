@@ -4574,7 +4574,6 @@ function setupAutoApplyMocks({
   );
   const getExecutor = vi.fn<GetExecutor>().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: '0.2.16',
     goToSheet,
     getWorkbook,
     getWorkbookDocument,
@@ -4606,14 +4605,10 @@ function readbackExecutor(
     applyWorkbookDocument: ReturnType<typeof vi.fn>;
     getWorkbookDocument: ReturnType<typeof vi.fn>;
   },
-  options: {
-    apiVersion?: string;
-    fieldValidation?: ReturnType<typeof vi.fn>;
-  } = {},
+  options: { fieldValidation?: ReturnType<typeof vi.fn> } = {},
 ): TableauDesktopToolContext['getExecutor'] {
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: options.apiVersion ?? '0.2.16',
     goToSheet: base.goToSheet,
     getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
@@ -4638,7 +4633,7 @@ function summaryRowsExecutor(
     | { columns: Array<Record<string, unknown>>; rows: unknown[][] }
     | ReturnType<typeof Err>
     | 'pending',
-  options: { apiVersion?: string; worksheetName?: string; datasource?: string } = {},
+  options: { worksheetName?: string; datasource?: string } = {},
 ): TableauDesktopToolContext['getExecutor'] {
   const getWorksheetSummaryData =
     summary === 'pending'
@@ -4652,7 +4647,6 @@ function summaryRowsExecutor(
             );
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: options.apiVersion ?? '0.2.16',
     goToSheet: base.goToSheet,
     getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
@@ -9761,7 +9755,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
               [0, 4],
             ],
           },
-          { apiVersion: '0.2.15', worksheetName: ask, datasource },
+          { worksheetName: ask, datasource },
         ),
       });
       const applied = body(result);
@@ -9782,7 +9776,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
             template: 'distribution-histogram',
             sheetName: applied.sheet_name,
           },
-          caveats: ['field_validation_unverified', 'query_render_unverified'],
+          caveats: ['query_render_unverified'],
         });
         expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
       }
@@ -9825,7 +9819,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         session: `ordinary-line-${unitColumn}`,
         ask,
         auto_apply: true,
-        getExecutor: readbackExecutor(mocks, { apiVersion: '0.2.15' }),
+        getExecutor: readbackExecutor(mocks),
       });
       const applied = body(result);
       expect(applied.applied).toBe(true);
@@ -9844,7 +9838,6 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         },
         caveats: [
           ...(recognizedCurrency ? ['unconverted_currency'] : []),
-          'field_validation_unverified',
           'query_render_unverified',
           'summary_preview_unavailable',
         ],
@@ -9908,25 +9901,6 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(sendNotification.mock.invocationCallOrder[2]).toBeLessThan(
       vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock.invocationCallOrder.at(-1)!,
     );
-  });
-
-  it('keeps an old Desktop terminal but marks used-field validity unsupported', async () => {
-    const mocks = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
-    });
-    const result = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor: readbackExecutor(mocks, { apiVersion: '0.2.15' }),
-    });
-
-    const applied = body(result);
-    expect(applied.verification).toMatchObject({
-      status: 'skipped',
-      findings: [expect.objectContaining({ reason: 'unsupported-api' })],
-    });
-    expectStructuredBlock(result, COMPLETE_BIND_NEXT_ACTION);
   });
 
   it('keeps a failed native validation read non-retryable and non-terminal', async () => {

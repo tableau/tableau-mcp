@@ -60,7 +60,6 @@ describe('bind-template offered sorted-bar replacement on the full template cata
     let liveXml = workbook;
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument: vi.fn(async (xml: string) => {
         liveXml = xml;
         return Ok({ command_id: 'apply', status: 'completed', submitted_at: '', result: {} });

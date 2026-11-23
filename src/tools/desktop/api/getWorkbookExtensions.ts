@@ -18,7 +18,6 @@ export const getWorkbookExtensionsTool = (
   const tool = new DesktopTool({
     server,
     name: 'get-workbook-extensions',
-    minApiVersion: '0.2.27',
     title,
     description:
       'Lists viz and dashboard extensions in the open workbook. Reload one with its sheet id.',

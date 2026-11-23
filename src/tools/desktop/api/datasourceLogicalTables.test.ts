@@ -33,7 +33,6 @@ describe('datasource logical table tools', () => {
     const tool = factory(new DesktopMcpServer());
 
     expect(tool.name).toBe(name);
-    expect(tool.minApiVersion).toBe('0.2.31');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,

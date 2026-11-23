@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 
-import { DIALOG_SESSION_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { DialogList } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -19,7 +18,6 @@ export const getActiveDialogsTool = (
   const tool = new DesktopTool({
     server,
     name: 'get-active-dialogs',
-    minApiVersion: DIALOG_SESSION_MIN_API_VERSION,
     title,
     description:
       'List sessionId/revision, status, visible message and diagnostic text, and recentActions. Native panels advertise capabilities; act only when active; skip enabled=false. Files: path(s), filterId, overwriteConfirmed with user consent; color: red/green/blue, alpha if supported; print: printerId, range, sheetScope, firstPage/lastPage, copies, collate, exportSelection, optional outputPath. Respect advertised bounds/support flags. Empty dialogs proves clear only with uiSnapshotAvailable. Poll pending requestId; never use a new ID for uncertainty. Panel closure or print-prepared is not caller success; verify the originating operation.',

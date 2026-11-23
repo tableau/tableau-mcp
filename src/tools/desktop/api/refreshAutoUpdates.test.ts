@@ -36,7 +36,6 @@ describe('refresh-auto-updates', () => {
     const tool = getRefreshAutoUpdatesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('refresh-auto-updates');
-    expect(tool.minApiVersion).toBe('0.2.13');
     expect(tool.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: false,
@@ -70,32 +69,13 @@ describe('refresh-auto-updates', () => {
   });
 
   it.each([
-    ['dashboard', 'dash-exec', '0.2.18'],
-    ['storyboard', 'story-qbr', '0.2.19'],
-  ] as const)(
-    'reports a %s refresh as unavailable below its floor without dispatching',
-    async (kind, sheetId, apiVersion) => {
-      const harness = await startHarness(undefined, apiVersion);
-      try {
-        const result = await harness.callTool({ sheetId, kind });
-
-        expect(result.isError).toBe(true);
-        expect(errorText(result)).toContain('Desktop build does not serve');
-        expect(refreshRequests(harness.server)).toHaveLength(0);
-      } finally {
-        await harness.close();
-      }
-    },
-  );
-
-  it.each([
     ['worksheet', 'Sales by Region', '/v0/workbook/worksheets/sheet-sales:refreshNow'],
     ['dashboard', 'Executive Dashboard', '/v0/workbook/dashboards/dash-exec:refreshNow'],
     ['storyboard', 'QBR Story', '/v0/workbook/storyboards/story-qbr:refreshNow'],
   ] as const)(
     'falls back to a unique %s name after the id misses',
     async (kind, sheetId, resolvedRoute) => {
-      const harness = await startHarness(undefined, '0.2.20');
+      const harness = await startHarness();
       try {
         const result = await harness.callTool({ sheetId, kind });
 
@@ -246,12 +226,11 @@ type Harness = {
 
 async function startHarness(
   configure?: (server: MockExternalApiServer) => void | Promise<void>,
-  apiVersion = '0.2.13',
 ): Promise<Harness> {
   const server = await startMockExternalApiServer();
   await configure?.(server);
   const executor = new ExternalApiToolExecutor({
-    discover: () => [instanceFor(server, apiVersion)],
+    discover: () => [instanceFor(server)],
   });
   await executor.start();
   const tool = getRefreshAutoUpdatesTool(new DesktopMcpServer());
@@ -272,13 +251,12 @@ async function startHarness(
   };
 }
 
-function instanceFor(server: MockExternalApiServer, apiVersion: string): ExternalApiInstance {
+function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-refresh-auto-updates',
-    apiVersion,
   };
 }
 

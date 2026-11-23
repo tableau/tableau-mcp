@@ -22,7 +22,6 @@ export function makeExecutorMock(
     stop: vi.fn(),
     isAvailable: vi.fn(),
     desktopInstanceId: undefined,
-    desktopApiVersion: undefined,
     health: vi.fn(),
     getRoot: vi.fn(),
     getApp: vi.fn(),

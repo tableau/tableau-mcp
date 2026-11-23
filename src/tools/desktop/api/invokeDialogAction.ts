@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
-import { DIALOG_SESSION_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import {
   DialogActionInvocation,
   dialogActionInvocationSchema,
@@ -68,7 +67,6 @@ export const getInvokeDialogActionTool = (
   const tool = new DesktopTool({
     server,
     name: 'invoke-dialog-action',
-    minApiVersion: DIALOG_SESSION_MIN_API_VERSION,
     title,
     description:
       'Use get-active-dialogs context and exact identity. Never guess; act only with user intent. Reuse requestId; poll recentActions; verify caller completion.',

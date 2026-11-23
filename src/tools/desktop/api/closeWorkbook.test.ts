@@ -23,9 +23,8 @@ describe('close-workbook tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares a 0.2.32 destructive tool', () => {
+  it('declares a destructive tool', () => {
     const tool = getCloseWorkbookTool(new DesktopMcpServer());
-    expect(tool.minApiVersion).toBe('0.2.32');
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
