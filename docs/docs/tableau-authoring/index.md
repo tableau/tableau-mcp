@@ -5,22 +5,27 @@ title: Tableau Authoring
 # Tableau Authoring
 
 For authoring, the %coming_release% release Tableau MCP ships with more than a set of
-**[Desktop Tools](./category/desktop-tools)**. It also carries expertise and
-the authoring engine that helps an agent turn a plain request such as *"show me sales by region
-over time"* into a correct, well-designed Tableau workbook.
+**[Desktop Tools](./category/desktop-tools)**. It also carries the authoring engine that helps
+an agent turn a plain request such as *"show me sales by region over time"* into a correct,
+well-designed Tableau workbook, and it can serve an expertise library to guide that agent.
+
+The MCP package does not include the expertise library. Tableau Agent supplies it, and any
+client can point the server at one with
+[`TABLEAU_EXPERTISE_DIR`](../configuration/mcp-config/env-vars.md#tableau_expertise_dir).
+Everything on this page that mentions expertise applies only when a library is configured.
 
 The clean mental model is: **chart templates** provide reusable Tableau structure, **expertise**
 guides analytical decisions, and **guardrails** prevent unsafe or unsupported changes.
 
 The engine tries a known path first. If that is not enough, it prompts the model with
-shipped expertise. If that still has no matching path, it asks the model to use its own
+expertise from the configured library. If that still has no matching path, it asks the model to use its own
 expertise and do what it can — not to invent an unsupported write.
 
 :::danger[In progress]
 Implementation of some aspects of the final expertise design is still in progress. Information
 on this page may change for GA release.
 
-Customizing the shipped expertise and skills and adding your own skills in your local fork of the
+Customizing the expertise and skills and adding your own skills in your local fork of the
 MCP will be supported in the %coming_release% release.
 :::
 
@@ -35,7 +40,7 @@ a model to invent a decision path, and it moves on to involving the model rather
 | --- | --- |
 | Recognizable single-view chart | [`bind-template`](../desktop-tools/binder/bind-template.md). One call can bind and apply. |
 | Calculated metric, no chart named (margin %, ratio, growth) | Create the calculation first ([`author-calc`](../desktop-tools/data-source/author-calc.md)), then follow the chart path above. [`bind-template`](../desktop-tools/binder/bind-template.md) can also author those fields in the same call via `calcs`. |
-| Unfamiliar, calculation-heavy, or "which chart?" | Search the expertise library ([Expertise tools](../desktop-tools/expertise/search-expertise.md)) *before* building |
+| Unfamiliar, calculation-heavy, or "which chart?" | When an expertise library is configured, search it ([Expertise tools](../desktop-tools/expertise/search-expertise.md)) *before* building |
 | Dashboard | Finish each worksheet, then assemble with [`run-dashboard-batch`](../desktop-tools/dashboard/run-dashboard-batch.md) (`existingWorksheetNames` when the sheets are already live, or `artifactIds` when applying a queue of built artifacts) |
 | Change to an existing sheet | Edit in place: [`refine-worksheet`](../desktop-tools/worksheet/refine-worksheet.md) (top-N / sort) or [`add-field`](../desktop-tools/fields/add-field.md). New sheets only if asked |
 | Number or data question against an existing sheet | Read that worksheet's summary rows ([`get-summary-data`](../desktop-tools/data-source/get-summary-data.md)). This is not a general datasource-query tool, and the row order it returns does not prove the chart's visual order |
@@ -165,8 +170,8 @@ block a write.** Warnings and info messages do not.
 ### Expertise library
 
 The library is found by **tags** and short "when to use" notes, not by searching the full
-text. So the tags matter a lot. The agent is instructed to read the matching module before
-authoring.
+text. So the tags matter a lot. When a library is configured, the agent is instructed to read
+the matching module before authoring.
 
 It is split three ways — this is the split forks depend on:
 

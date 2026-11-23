@@ -18,7 +18,9 @@ describe('rank-as-membership rule', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].ruleId).toBe('rank-as-membership');
     expect(issues[0].severity).toBe('error');
-    expect(issues[0].suggestion).toMatch(/LOD membership tier calc|lod-membership-tier-calc/);
+    expect(issues[0].suggestion).toContain(
+      'expertise://tableau/tactics/data/lod-membership-tier-calc',
+    );
   });
 
   it('omits the expertise reference when the corpus is empty', () => {
