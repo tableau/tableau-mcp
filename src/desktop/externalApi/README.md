@@ -27,6 +27,19 @@ To expose it as an MCP tool, add a tool file under `src/tools/desktop/` and regi
 `toolName.ts` + `tools.ts` (and the default profile allowlist in `server.desktop.ts` if it should
 ship in the default surface).
 
+## Newer API versions
+
+`MIN_SUPPORTED_API_VERSION` in `apiVersion.ts` is the oldest External Client API version this server
+supports. Code does not check for anything older. When a feature needs a newer version:
+
+- For a new tool, set `minApiVersion` on it. Registration hides the tool when the connected Desktop
+  reports an older version.
+- For changed behavior in an existing tool, compare `executor.desktopApiVersion` with
+  `apiVersionAtLeast` and keep the older path until the minimum supported version catches up.
+
+When the minimum supported version is raised, remove the floors and branches it now covers. A test
+fails if a tool sets a floor that is not newer than the minimum.
+
 ## Native dialog actions
 
 `get-active-dialogs` and `invoke-dialog-action` share a session-safe dialog contract. Later builds

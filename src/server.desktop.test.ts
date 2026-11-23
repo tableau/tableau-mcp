@@ -2,6 +2,7 @@ import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcont
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
+import { apiVersionAtLeast, MIN_SUPPORTED_API_VERSION } from './desktop/externalApi/apiVersion.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
@@ -22,13 +23,14 @@ import {
   resolveConnectedApiVersion,
   selectToolsForProfile,
   stripEmptySchemaNoise,
+  warnIfUnsupportedApiVersion,
   withoutUnservedExpertiseTools,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
-import { desktopToolFactories } from './tools/desktop/tools.js';
+import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
 import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
@@ -783,6 +785,43 @@ describe('API-version tool gate', () => {
     it('fails open when the connected version is unknown — keeps everything unchanged', () => {
       expect(filterToolsByApiVersion(tools, undefined)).toBe(tools);
     });
+  });
+
+  describe('warnIfUnsupportedApiVersion', () => {
+    it.each(['0.2.33', '0.1.0'])('warns for a Desktop that serves %s', (version) => {
+      const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+      warnIfUnsupportedApiVersion(version);
+      expect(logSpy).toHaveBeenCalledOnce();
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining(`v${MIN_SUPPORTED_API_VERSION}`),
+        }),
+      );
+    });
+
+    it.each([MIN_SUPPORTED_API_VERSION, '0.2.35', '0.3.0', undefined])(
+      'stays quiet for %s',
+      (version) => {
+        const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+        warnIfUnsupportedApiVersion(version);
+        expect(logSpy).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it('only sets a tool floor that is newer than the oldest supported version', () => {
+    const tools = [...desktopToolFactories, ...episodeToolFactories].map((factory) =>
+      factory(new DesktopMcpServer()),
+    );
+    const redundant = tools
+      .filter(
+        (tool) =>
+          tool.minApiVersion !== undefined &&
+          apiVersionAtLeast(MIN_SUPPORTED_API_VERSION, tool.minApiVersion),
+      )
+      .map((tool) => tool.name);
+    expect(redundant).toEqual([]);
   });
 
   it('registers each individual datasource factory exactly once', () => {

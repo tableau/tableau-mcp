@@ -64,7 +64,8 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
 > {
   /**
    * Minimum External Client API version whose Desktop build serves the endpoint this tool
-   * drives; unset means no floor.
+   * drives. Set it only when that is newer than `MIN_SUPPORTED_API_VERSION`; unset means every
+   * supported build serves it.
    */
   readonly minApiVersion?: ApiVersionFloor;
 

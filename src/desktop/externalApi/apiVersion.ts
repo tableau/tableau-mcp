@@ -1,5 +1,8 @@
 export type ApiVersionFloor = `${number}.${number}.${number}`;
 
+/** The External Client API version of the oldest Desktop build this server supports. */
+export const MIN_SUPPORTED_API_VERSION: ApiVersionFloor = '0.2.34';
+
 /**
  * Numeric SemVer comparison ("0.2.6" >= "0.2.5"). Missing/unparseable parts read as 0,
  * so `undefined` and `""` compare as 0.0.0 — below every real floor.

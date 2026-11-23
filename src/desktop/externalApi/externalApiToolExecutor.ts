@@ -259,6 +259,10 @@ export class ExternalApiToolExecutor {
     return this.http?.instanceId;
   }
 
+  get desktopApiVersion(): string | undefined {
+    return this.http?.apiVersion;
+  }
+
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
     return this.readExternalApi(async (http) => {
       const probe = await http.getOk(EXTERNAL_API_ROUTES.health, signal, {
