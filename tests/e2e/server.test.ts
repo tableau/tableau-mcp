@@ -23,7 +23,6 @@ const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const knowledgeWriteToolsEnabled = Boolean(features['knowledge-write-tools']);
 let knowledgeReadExpected: boolean;
 let knowledgeWriteExpected: boolean;
-const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
@@ -101,8 +100,6 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // Data-app tools are gated by the data-apps feature flag.
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -137,11 +134,6 @@ describe('server', () => {
       }
       if (!knowledgeWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => name !== 'manage-knowledge-context');
-      }
-
-      // Filter out data-app tools if they are not enabled (data-apps feature flag)
-      if (!tableauDataAppsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
       // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
@@ -340,8 +332,6 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // Data-app tools are gated by the data-apps feature flag.
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -384,11 +374,6 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => name !== 'manage-knowledge-context',
         );
-      }
-
-      // Filter out data-app tools if they are not enabled (data-apps feature flag)
-      if (!tableauDataAppsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
       // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.

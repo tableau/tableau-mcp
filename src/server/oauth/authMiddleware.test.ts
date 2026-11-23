@@ -375,7 +375,6 @@ describe('initialize with optional post-publish permission disclosure', () => {
     vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
     vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
-    mocks.isFeatureEnabled.mockImplementation(async (flag: string) => flag === 'data-apps');
   });
 
   afterEach(() => {
@@ -626,9 +625,7 @@ describe('strict vs. subset scope matching', () => {
     vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false'); // enforceScopes on
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
     // Subset matching unless a test calls enableStrict().
-    mocks.isFeatureEnabled.mockImplementation(
-      async (flag: string) => flag === 'disable-strict-scope-match',
-    );
+    vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
   });
 
   afterEach(() => {
@@ -637,9 +634,9 @@ describe('strict vs. subset scope matching', () => {
     mocks.isFeatureEnabled.mockResolvedValue(false);
   });
 
-  // Strict is on unless the env var or the feature flag disables it; beforeEach disables it via the flag.
+  // Strict is on unless the environment variable disables it.
   function enableStrict(): void {
-    mocks.isFeatureEnabled.mockResolvedValue(false);
+    vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
   }
 
   // A proper subset of the supported MCP scopes: the full set minus its first scope.
@@ -688,7 +685,7 @@ describe('strict vs. subset scope matching', () => {
     expect(res.body.error).toBe('insufficient_scope');
   });
 
-  it('accepts a subset token at initialize when DISABLE_STRICT_SCOPE_MATCH=true, even with the flag off', async () => {
+  it('accepts a subset token at initialize when DISABLE_STRICT_SCOPE_MATCH=true', async () => {
     enableStrict();
     vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
     const { req, res, next, authInfo, middleware } = initializeReq([
