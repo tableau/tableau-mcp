@@ -55,6 +55,21 @@ jobs:
           npm pack --json > npm-pack.json
           npx tsx src/scripts/assertWebNpmPackage.ts npm-pack.json
 
+      - uses: actions/checkout@v7
+        with:
+          repository: tableau/tableau-plugin
+          path: tableau-plugin
+
+      # --dirty keeps build/index.js for the e2e suites below.
+      - name: Build Desktop NPM package
+        run: |
+          npx tsx src/scripts/build.ts --variant desktop --npm-package --dirty
+          npx tsx src/scripts/prepareDesktopNpmPackage.ts
+          npm pack ./build-pkg/desktop --pack-destination build-pkg --json > build-pkg/desktop-pack.json
+          npx tsx src/scripts/assertDesktopNpmPackage.ts build-pkg/desktop-pack.json
+          npx tsx src/scripts/assertNpmInstall.desktop.ts build-pkg/tableau-mcp-server-desktop-*.tgz --skills-dir tableau-plugin/src/plugin/skills/tableau-desktop-authoring
+          git diff --exit-code
+
       - name: Tests
         run: npx vitest run --config ./vitest.config.ts --maxWorkers=2
 
@@ -146,3 +161,4 @@ jobs:
             playwright-report/
             tableau-mcp.mcpb
             tableau-mcp-server-*.tgz
+            build-pkg/tableau-mcp-server-desktop-*.tgz

@@ -9,9 +9,10 @@ import {
   emitToolErrorEvent,
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
-import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { apiVersionAtLeast, ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { discoverInstances } from '../../desktop/externalApi/discovery.js';
 import { resolveSession } from '../../desktop/session/sessionResolution.js';
-import { McpToolError } from '../../errors/mcpToolError.js';
+import { DesktopApiVersionTooOldError, McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
@@ -30,10 +31,26 @@ export function resolveEpisodeKey(
   fallback: string,
 ): string {
   if (!config.episodeEventsEnabled) return fallback;
+  const resolved = resolveSession(sessionArg(args));
+  return resolved.isOk() ? resolved.value : fallback;
+}
+
+function sessionArg(args: unknown): string | undefined {
   const session =
     typeof args === 'object' && args !== null ? (args as { session?: unknown }).session : undefined;
-  const resolved = resolveSession(typeof session === 'string' ? session : undefined);
-  return resolved.isOk() ? resolved.value : fallback;
+  return typeof session === 'string' ? session : undefined;
+}
+
+// An unresolvable session or unknown version proceeds, so the call reports its own error.
+function targetedApiVersion(
+  config: TableauDesktopRequestHandlerExtra['config'],
+  args: unknown,
+): string | undefined {
+  const resolved = resolveSession(sessionArg(args));
+  if (resolved.isErr()) return undefined;
+  return discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }).find(
+    (instance) => String(instance.pid) === resolved.value,
+  )?.apiVersion;
 }
 
 /**
@@ -73,6 +90,25 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     this.minApiVersion = params.minApiVersion;
   }
 
+  private apiVersionError(
+    config: TableauDesktopRequestHandlerExtra['config'],
+    args: unknown,
+  ): DesktopApiVersionTooOldError | undefined {
+    if (this.minApiVersion === undefined) return undefined;
+    const desktopApiVersion = targetedApiVersion(config, args);
+    if (
+      desktopApiVersion === undefined ||
+      apiVersionAtLeast(desktopApiVersion, this.minApiVersion)
+    ) {
+      return undefined;
+    }
+    return new DesktopApiVersionTooOldError({
+      tool: this.name,
+      requiredApiVersion: this.minApiVersion,
+      desktopApiVersion,
+    });
+  }
+
   async logAndExecute<T>({
     extra,
     args,
@@ -106,7 +142,8 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     let errorType = '';
 
     try {
-      const result = await raceDeadline(extra, callback);
+      const versionError = this.apiVersionError(extra.config, args);
+      const result = versionError ? versionError.toErr() : await raceDeadline(extra, callback);
       if (result.isOk()) {
         toolResult = getSuccessResult
           ? getSuccessResult(result.value)
@@ -234,6 +271,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         // oauth is omitted due to using stdio for desktop
         oauth_client_id: '',
         oauth_client_display_name: '',
+        client: extra.config.userAgentPrefix?.split('/')[0] ?? '',
+        client_name: this.server.clientInfo?.name ?? '',
+        client_version: this.server.clientInfo?.version ?? '',
       });
     }
   }

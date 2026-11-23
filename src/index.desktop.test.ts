@@ -122,6 +122,8 @@ vi.mock('./transportProfile.js', () => ({
   resolveTransportProfile: vi.fn(() => startupState.profile),
 }));
 
+import dotenv from 'dotenv';
+
 import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
 import { initializeFeatureGate } from './features/init.js';
@@ -224,6 +226,25 @@ describe('desktop binary startup', () => {
     expect(startExpressServer).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
+  });
+
+  it('reads .env when built from source', async () => {
+    startupState.profile = 'desktop';
+
+    await import('./index.desktop.js');
+    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+
+    expect(dotenv.config).toHaveBeenCalledOnce();
+  });
+
+  it('does not read .env when built for the npm package', async () => {
+    startupState.profile = 'desktop';
+    vi.stubGlobal('NPM_PACKAGE', true);
+
+    await import('./index.desktop.js');
+    await vi.waitFor(() => expect(startupState.desktopConnected).toBe(true));
+
+    expect(dotenv.config).not.toHaveBeenCalled();
   });
 
   it('prunes Desktop logs older than 14 days at startup when the file logger is enabled', async () => {

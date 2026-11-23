@@ -498,11 +498,13 @@ LATENCY_METRIC_NAME=http_server_1agg1_request_duration
 
 Enables product telemetry for tool usage tracking.
 
-- Default: `true`. This applies to both the web (Tableau Server and Cloud) and the Desktop variants.
+- Default: `true`. This applies to both the web (Tableau Server and Cloud) and the Desktop variants,
+  including the `@tableau/mcp-server-desktop` npm package.
 - When `true`, the server sends one `tool_call` event to Tableau's telemetry endpoint for each tool
   call. See [Product telemetry fields](#product-telemetry-fields) for exactly what each variant
   sends.
-- Set to `false` to disable product telemetry. Only the exact value `false` disables it. Read
+- Set to `false` to disable product telemetry. For the npm packages, set it in the `env` block of
+  your MCP client's server config. Only the exact value `false` disables it. Read
   https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
   information
 
@@ -589,6 +591,8 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 | `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
 | `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
 | `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
+| `client`                                       | not sent                                                                                                                                    | name part of `TABLEAU_USER_AGENT_PREFIX` (for example `tableau-agent`), empty if unset |
+| `client_name`, `client_version`                | not sent                                                                                                                                    | MCP client's `clientInfo` from `initialize`, empty before it                          |
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
@@ -983,7 +987,8 @@ The Tableau Desktop authoring server (`build/index.desktop.js`) reads these vari
 the shared ones above (for example [`TRANSPORT`](#transport), which must be `stdio`,
 [`ENABLED_LOGGERS`](#enabled_loggers) and [`TOOL_PROFILE`](#tool_profile)). The combined variant
 reads them too. It builds the Desktop config at startup, so they apply there as well. Both entry
-points load a `.env` file from the working directory before reading the environment.
+points load a `.env` file from the working directory before reading the environment, except the
+`@tableau/mcp-server-desktop` npm package, which reads the environment only.
 
 This section is one table on purpose: most of these are set by the app that launches the server, not
 by end users. Each row is tagged:
@@ -1203,3 +1208,5 @@ other value, including `false`, `0` and `1`, leaves it off.
 The directory for cache files (cached XML and exported images) and the only place `read-cached-xml`
 and `write-cached-xml` accept. The default is `<bundle dir>/../cache`; a blank or relative path is
 ignored. Tableau Agent sets a per-session directory so concurrent sessions do not share cache files.
+When you run the npm package with `npx`, set this to a full path. Otherwise the bundle directory is
+inside npm's cache, and so is the cache.

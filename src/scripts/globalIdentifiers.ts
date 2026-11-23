@@ -2,7 +2,7 @@ import { BuildOptions } from 'esbuild';
 
 import { Variant } from './variants.js';
 
-export type GlobalIdentifierName = 'BUILD_VARIANT';
+export type GlobalIdentifierName = 'BUILD_VARIANT' | 'NPM_PACKAGE';
 
 type GlobalIdentifier = {
   name: GlobalIdentifierName;
@@ -28,5 +28,12 @@ export const globalIdentifiers: ReadonlyArray<GlobalIdentifier> = [
         outfile: `./build/index.${value}.js`,
       };
     },
+  },
+  {
+    name: 'NPM_PACKAGE',
+    defaultValue: 'false',
+    getBuildOptions: (value: string): BuildOptions | undefined => ({
+      define: { NPM_PACKAGE: value },
+    }),
   },
 ] as const;

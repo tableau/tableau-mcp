@@ -8,6 +8,8 @@ import { Config } from '../../config.desktop.js';
 import { createCallDeadline } from '../../desktop/callDeadline.js';
 import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
+import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import * as discovery from '../../desktop/externalApi/discovery.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import * as loggerModule from '../../logging/logger.js';
@@ -413,6 +415,9 @@ describe('DesktopTool product telemetry', () => {
       oauth_client_id: '',
       oauth_client_display_name: '',
       auth_type: 'desktop',
+      client: '',
+      client_name: 'test-client',
+      client_version: '1.0.0',
     });
   });
 
@@ -432,6 +437,53 @@ describe('DesktopTool product telemetry', () => {
         site_luid: '11111111-1111-1111-1111-111111111111',
         user_luid: '22222222-2222-2222-2222-222222222222',
       }),
+    );
+  });
+
+  it.each([
+    ['tableau-agent/2026.3.1', 'tableau-agent'],
+    ['tableau-desktop-plugin/1.2.3', 'tableau-desktop-plugin'],
+    ['tableau-desktop-plugin', 'tableau-desktop-plugin'],
+    [undefined, ''],
+  ])('sends client %s as %s', async (userAgentPrefix, client) => {
+    await makeTool().logAndExecute({
+      extra: extraWithConfig({ userAgentPrefix }),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ client }),
+    );
+  });
+
+  it('sends the MCP client name and version from clientInfo', async () => {
+    await makeTool().logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ client_name: 'test-client', client_version: '1.0.0' }),
+    );
+  });
+
+  it('sends empty client name and version before the client initializes', async () => {
+    const tool = makeTool();
+    vi.mocked(tool.server.mcpServer.server.getClientVersion).mockReturnValue(undefined);
+
+    await tool.logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ client_name: '', client_version: '' }),
     );
   });
 
@@ -666,10 +718,122 @@ describe('DesktopTool product telemetry', () => {
   });
 });
 
-function makeTool(name: DesktopToolName = 'ask-user'): DesktopTool<{ session: any }> {
+describe('DesktopTool API version check', () => {
+  function mockInstances(instances: Array<{ pid: number; apiVersion?: string }>): void {
+    vi.spyOn(discovery, 'discoverInstances').mockReturnValue(
+      instances.map((instance) => ({
+        baseUrl: 'http://127.0.0.1:1',
+        token: 't',
+        instanceId: `i${instance.pid}`,
+        ...instance,
+      })),
+    );
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('refuses a Desktop older than the tool needs without calling Desktop', async () => {
+    mockInstances([{ pid: 7, apiVersion: '0.2.10' }]);
+    const callback = vi.fn(async () => new Ok({ ok: true }));
+
+    const result = await makeTool('get-xml', '0.2.30').logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '7' },
+      callback,
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('0.2.30');
+    expect(text).toContain('0.2.10');
+    expect(text).toContain('most recent public Tableau Desktop release');
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        success: false,
+        error_code: '501',
+        error_message: 'desktop-api-version-too-old',
+      }),
+    );
+  });
+
+  it('calls Desktop when its API version meets the floor', async () => {
+    mockInstances([{ pid: 7, apiVersion: '0.2.30' }]);
+    const callback = vi.fn(async () => new Ok({ ok: true }));
+
+    const result = await makeTool('get-xml', '0.2.30').logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '7' },
+      callback,
+    });
+
+    expect(callback).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(false);
+  });
+
+  it('calls Desktop when its API version is unknown', async () => {
+    mockInstances([{ pid: 7 }]);
+    const callback = vi.fn(async () => new Ok({ ok: true }));
+
+    const result = await makeTool('get-xml', '0.2.30').logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '7' },
+      callback,
+    });
+
+    expect(callback).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(false);
+  });
+
+  it('checks each call against the Desktop it targets', async () => {
+    mockInstances([
+      { pid: 7, apiVersion: '0.2.10' },
+      { pid: 8, apiVersion: '0.2.34' },
+    ]);
+    const tool = makeTool('get-xml', '0.2.30');
+    const callback = vi.fn(async () => new Ok({ ok: true }));
+
+    const old = await tool.logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '7' },
+      callback,
+    });
+    expect(old.isError).toBe(true);
+    expect(callback).not.toHaveBeenCalled();
+
+    const current = await tool.logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '8' },
+      callback,
+    });
+    expect(current.isError).toBe(false);
+    expect(callback).toHaveBeenCalledOnce();
+  });
+
+  it('does not scan for Desktops when the tool has no floor', async () => {
+    const scan = vi.spyOn(discovery, 'discoverInstances');
+
+    await makeTool().logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: '7' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(scan).not.toHaveBeenCalled();
+  });
+});
+
+function makeTool(
+  name: DesktopToolName = 'ask-user',
+  minApiVersion?: ApiVersionFloor,
+): DesktopTool<{ session: any }> {
   return new DesktopTool({
     server: new DesktopMcpServer(),
     name,
+    minApiVersion,
     title: 'Ask User',
     description: 'Test tool',
     paramsSchema: { session: { _def: {} } as any },

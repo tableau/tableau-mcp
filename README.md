@@ -5,6 +5,7 @@
 [![Build and Test](https://github.com/tableau/tableau-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tableau/tableau-mcp/actions/workflows/ci.yml)
 
 [![npm](https://img.shields.io/npm/v/@tableau/mcp-server)](https://www.npmjs.com/package/@tableau/mcp-server)
+[![npm desktop](https://img.shields.io/npm/v/@tableau/mcp-server-desktop?label=npm%20desktop)](https://www.npmjs.com/package/@tableau/mcp-server-desktop)
 
 ## Overview
 
@@ -30,7 +31,7 @@ See [Popular Client Integrations](https://tableau.github.io/tableau-mcp/docs/hos
 ### Self-Hosted / Local (npx)
 
 The `@tableau/mcp-server` npm package contains the Web server for Tableau Cloud and Tableau
-Server. It does not contain the Tableau Desktop authoring server or its data.
+Server. The Tableau Desktop authoring server is a separate package, described below.
 
 This is the quickest way to run Tableau MCP locally. It requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
 
@@ -55,8 +56,22 @@ For Docker, building from source, and other self-hosted options, see the [Gettin
 
 ### Tableau Desktop Authoring Server
 
-The npm package is Web-only. The Desktop authoring server is a separate build from this repo; see the
-[Desktop quickstart](https://tableau.github.io/tableau-mcp/docs/getting-started/desktop).
+The `@tableau/mcp-server-desktop` npm package contains the authoring server for a running copy of
+Tableau Desktop. It needs Node.js 22.7.5 or later and the External Client API turned on in Desktop:
+
+```json
+{
+  "mcpServers": {
+    "tableau-desktop": {
+      "command": "npx",
+      "args": ["-y", "@tableau/mcp-server-desktop@latest"]
+    }
+  }
+}
+```
+
+See the [Desktop quickstart](https://tableau.github.io/tableau-mcp/docs/getting-started/desktop)
+for setup and for building it from source.
 
 ## Standalone Binaries (SEA)
 

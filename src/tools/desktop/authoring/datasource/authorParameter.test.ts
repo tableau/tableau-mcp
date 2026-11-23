@@ -434,9 +434,16 @@ async function getToolResult({
   };
   const server = new DesktopMcpServer();
   (
-    server as unknown as { mcpServer: { server: { notification: ReturnType<typeof vi.fn> } } }
+    server as unknown as {
+      mcpServer: {
+        server: {
+          notification: ReturnType<typeof vi.fn>;
+          getClientVersion: ReturnType<typeof vi.fn>;
+        };
+      };
+    }
   ).mcpServer = {
-    server: { notification: vi.fn() },
+    server: { notification: vi.fn(), getClientVersion: vi.fn() },
   };
   const tool = getAuthorParameterTool(server);
   const callback = await Provider.from(tool.callback);

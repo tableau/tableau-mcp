@@ -77,6 +77,14 @@ Then start a Claude Code session, type `/mcp`, select **Tableau**, and choose **
 
 You can verify the connection at any time with `claude mcp list` or within Claude Code with `/mcp`.
 
+To author workbooks in a running copy of %product_name% from Claude Code, add the Desktop server
+too. It needs Node.js 22.7.5 or later and the External Client API turned on (see the
+[Desktop quickstart](../getting-started/desktop.md)):
+
+```bash
+claude mcp add tableau-desktop -- npx -y @tableau/mcp-server-desktop@latest
+```
+
 ### Allow network egress for data apps and workbook publishing
 
 :::warning[Client configuration required]

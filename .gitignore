@@ -3,6 +3,7 @@
 .env.*
 .vscode/
 build/
+build-pkg/
 /cache/
 node_modules
 junit/

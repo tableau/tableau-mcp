@@ -204,6 +204,8 @@ export default [
     ignores: [
       'node_modules/**',
       'build/**',
+      'build-pkg/**',
+      'tableau-plugin/**',
       'docs/.docusaurus/**',
       'docs/build/**',
       // Migration snapshot workspace (local-only, git-excluded) — reference material

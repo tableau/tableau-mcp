@@ -1,83 +1,58 @@
-import { existsSync } from 'fs';
-import { copyFile, readFile, writeFile } from 'fs/promises';
+/* eslint-disable no-console */
+
+import { cp, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
-import { isVariant, Variant, variants } from './variants.js';
+import { desktopPackageFiles } from './desktopNpmPackage.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
-const packageJsonPath = join(repoRoot, 'package.json');
+const packageDir = join(repoRoot, 'build-pkg', 'desktop');
 
-const variant = process.argv.includes('--variant')
-  ? process.argv[process.argv.indexOf('--variant') + 1]
-  : 'default';
-
-if (!isVariant(variant)) {
-  throw new Error(`Invalid build variant: ${variant}. Expected one of: ${variants.join(', ')}`);
-}
-
-if (variant === 'default') {
-  throw new Error('The default variant needs no preparation');
-}
-
-type PackageVariant = Exclude<Variant, 'default'>;
-const variantPackageJsonOverrides = {
-  desktop: {
-    name: '@tableau/desktop-mcp-server',
-    description:
-      'MCP server for Tableau Desktop External Client API - enables AI agents to interact with Tableau workbooks',
-    bin: {
-      'tableau-desktop-mcp-server': './build/index.desktop.js',
-    },
-    exports: {
-      '.': './build/index.desktop.js',
-    },
-  },
-  combined: {
-    name: '@tableau/combined-mcp-server',
-    bin: {
-      'tableau-combined-mcp-server': './build/index.combined.js',
-    },
-    exports: {
-      '.': './build/index.combined.js',
-    },
-  },
-} satisfies Record<PackageVariant, Partial<PackageJson>>;
-
-const packageJsonSchema = z
-  .object({
-    name: z.string(),
-    description: z.string(),
-    bin: z.record(z.string(), z.string()),
-    exports: z.record(z.string(), z.string()),
-  })
-  .passthrough();
-
-type PackageJson = z.infer<typeof packageJsonSchema>;
+const rootPackageJsonSchema = z.object({
+  version: z.string(),
+  license: z.string(),
+  repository: z.unknown(),
+  homepage: z.string(),
+  engines: z.record(z.string(), z.string()),
+});
 
 (async () => {
-  const overrides = variantPackageJsonOverrides[variant];
-  const packageJson = { ...(await readPackageJson()), ...overrides };
-  await writePackageJson(packageJson);
+  const rootPackageJson = rootPackageJsonSchema.parse(
+    JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf-8')),
+  );
 
-  const variantReadme = join(repoRoot, 'docs', `README.${variant}.md`);
-  if (existsSync(variantReadme)) {
-    await copyFile(variantReadme, join(repoRoot, 'README.md'));
+  await rm(packageDir, { recursive: true, force: true });
+  await mkdir(packageDir, { recursive: true });
+
+  for (const path of desktopPackageFiles) {
+    await cp(join(repoRoot, path), join(packageDir, path), { recursive: true });
   }
+  await cp(join(repoRoot, 'docs', 'README.desktop.md'), join(packageDir, 'README.md'));
+  await cp(join(repoRoot, 'LICENSE.txt'), join(packageDir, 'LICENSE.txt'));
+
+  const packageJson = {
+    name: '@tableau/mcp-server-desktop',
+    version: rootPackageJson.version,
+    description: 'Tableau MCP server for Tableau Desktop, over the External Client API.',
+    license: rootPackageJson.license,
+    repository: rootPackageJson.repository,
+    homepage: rootPackageJson.homepage,
+    engines: rootPackageJson.engines,
+    bin: { 'tableau-mcp-server-desktop': 'build/index.desktop.js' },
+    files: [...desktopPackageFiles],
+  };
+  await writeFile(
+    join(packageDir, 'package.json'),
+    JSON.stringify(packageJson, null, 2) + '\n',
+    'utf-8',
+  );
+
+  console.log(`✅ Desktop npm package staged in ${packageDir}`);
 })().catch((error: unknown) => {
   console.error(error);
   process.exit(1);
 });
-
-async function readPackageJson(): Promise<PackageJson> {
-  const raw = await readFile(packageJsonPath, 'utf-8');
-  const parsed = JSON.parse(raw);
-  return packageJsonSchema.parse(parsed);
-}
-
-async function writePackageJson(data: PackageJson): Promise<void> {
-  await writeFile(packageJsonPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
-}
