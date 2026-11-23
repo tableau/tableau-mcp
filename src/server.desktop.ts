@@ -69,10 +69,9 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * native authoring surface: the author-* tools (calcs, sets, parameters, actions),
  * format-worksheets, ask-user, bind-template for single-view asks, the guarded
  * template artifact fallback, and refine-worksheet for top-N and sort edits in place. It also
- * includes the two expertise tools (search-expertise and read-expertise-resource), because the
- * instructions tell the model to consult the expertise library before authoring and these are
- * the only way it can read that library. Workbook and data reads, navigation, dialog handling
- * and scoped cached-XML fallbacks are included. Clients that need more can use TOOL_PROFILE=full.
+ * includes search-expertise and read-expertise-resource, which are dropped when the expertise
+ * library is empty. Workbook and data reads, navigation, dialog handling and scoped cached-XML
+ * fallbacks are included. Clients that need more can use TOOL_PROFILE=full.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([

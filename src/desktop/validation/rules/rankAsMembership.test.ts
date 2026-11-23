@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { getExpertiseCorpusEntryCount } from '../../expertise/index.js';
 import { rankAsMembershipRule } from './rankAsMembership.js';
+
+vi.mock('../../expertise/index.js', () => ({ getExpertiseCorpusEntryCount: vi.fn(() => 1) }));
 
 const wb = (formula: string): string =>
   `<workbook><datasources><datasource name="ds"><column name="[C]"><calculation class="tableau" formula='${formula}'/></column></datasource></datasources></workbook>`;
@@ -16,6 +19,17 @@ describe('rank-as-membership rule', () => {
     expect(issues[0].ruleId).toBe('rank-as-membership');
     expect(issues[0].severity).toBe('error');
     expect(issues[0].suggestion).toMatch(/LOD membership tier calc|lod-membership-tier-calc/);
+  });
+
+  it('omits the expertise reference when the corpus is empty', () => {
+    vi.mocked(getExpertiseCorpusEntryCount).mockReturnValueOnce(0);
+    const [issue] = rankAsMembershipRule.validate(
+      wb(
+        'IF RANK(SUM([Profit])) &lt;= [Parameters].[TopN] THEN &quot;Top&quot; ELSE &quot;Other&quot; END',
+      ),
+    );
+    expect(issue.suggestion).not.toContain('expertise://');
+    expect(issue.suggestion).toContain('Sets do NOT survive MCP apply');
   });
 
   it('flags the single-quote and integer-threshold variant too', () => {
