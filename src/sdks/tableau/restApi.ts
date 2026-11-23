@@ -393,6 +393,7 @@ export class RestApi {
         assertSafeRequestUrl(config.url, config.baseURL);
         this._requestInterceptor?.[0]({
           baseUrl,
+          rawConfig: config,
           ...getRequestInterceptorConfig(config),
         });
         return config;
@@ -407,6 +408,7 @@ export class RestApi {
       (response) => {
         this._responseInterceptor?.[0]({
           baseUrl,
+          rawConfig: response.config,
           ...getResponseInterceptorConfig(response),
         });
         return response;

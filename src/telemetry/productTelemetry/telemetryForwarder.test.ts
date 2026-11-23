@@ -1,6 +1,7 @@
 import os from 'os';
 
 import { log } from '../../logging/logger.js';
+import { getTelemetryProvider } from '../init.js';
 import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetryEndpoint.js';
 import {
   exportedForTesting,
@@ -9,6 +10,9 @@ import {
   TableauTelemetryJsonEvent,
 } from './telemetryForwarder.js';
 
+vi.mock('../init.js', () => ({
+  getTelemetryProvider: vi.fn(),
+}));
 vi.mock('../../logging/logger.js', () => ({ log: vi.fn() }));
 
 describe('DirectTelemetryForwarder', () => {
@@ -27,6 +31,12 @@ describe('DirectTelemetryForwarder', () => {
       return Promise.resolve(new Response('', { status: 200 }));
     });
     vi.stubGlobal('fetch', mockFetch);
+    vi.mocked(getTelemetryProvider).mockReturnValue({
+      initialize: vi.fn(),
+      recordMetric: vi.fn(),
+      recordHistogram: vi.fn(),
+      startSpan: vi.fn().mockReturnValue({ end: vi.fn() }),
+    });
   });
 
   afterEach(() => {
@@ -222,5 +232,49 @@ describe('DirectTelemetryForwarder', () => {
 
     expect(log).toHaveBeenCalledTimes(1);
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('starts and ends a span around the outbound telemetry fetch on success', async () => {
+    const mockSpan = { end: vi.fn() };
+    const mockProvider = {
+      initialize: vi.fn(),
+      recordMetric: vi.fn(),
+      recordHistogram: vi.fn(),
+      startSpan: vi.fn().mockReturnValue(mockSpan),
+    };
+    vi.mocked(getTelemetryProvider).mockReturnValue(mockProvider);
+
+    const forwarder = getProductTelemetry(endpoint, true, podName);
+    forwarder.send('tool_call', { foo: 'bar' });
+
+    // sendTelemetryRequest is fire-and-forget from send()'s perspective; flush microtasks.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockProvider.startSpan).toHaveBeenCalledWith(
+      'tableau.telemetry.forward',
+      expect.objectContaining({ url: expect.stringContaining(endpoint) }),
+    );
+    expect(mockSpan.end).toHaveBeenCalledWith(undefined);
+  });
+
+  it('ends the span with the error when the outbound telemetry fetch throws', async () => {
+    const mockSpan = { end: vi.fn() };
+    const mockProvider = {
+      initialize: vi.fn(),
+      recordMetric: vi.fn(),
+      recordHistogram: vi.fn(),
+      startSpan: vi.fn().mockReturnValue(mockSpan),
+    };
+    vi.mocked(getTelemetryProvider).mockReturnValue(mockProvider);
+
+    const fetchError = new Error('network error');
+    mockFetch.mockRejectedValueOnce(fetchError);
+
+    const forwarder = getProductTelemetry(endpoint, true, podName);
+    forwarder.send('tool_call', { foo: 'bar' });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockSpan.end).toHaveBeenCalledWith(fetchError);
   });
 });
