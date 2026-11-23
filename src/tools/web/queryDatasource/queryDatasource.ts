@@ -224,13 +224,17 @@ export const getQueryDatasourceTool = (
             jwtScopes: queryDatasourceTool.requiredApiScopes,
             callback: async (restApi) => {
               if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
-                // Validate query against metadata
+                // Validate query against metadata. A requested new session opens here, before the
+                // filter-value queries; the final query sends it again in case this read failed.
                 const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
                   query,
                   restApi.vizqlDataServiceMethods,
                   datasource,
                   interpretFieldCaptionsAsFieldNames,
-                  forwardedOptions.bypassMetadataCache,
+                  {
+                    bypassMetadataCache: forwardedOptions.bypassMetadataCache,
+                    withNewSession: forwardedOptions.withNewSession,
+                  },
                 );
 
                 if (metadataValidationResult.isErr()) {

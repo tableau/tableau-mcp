@@ -1142,7 +1142,7 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource.mock.calls[0][0].options.disaggregate).toBe(false);
     });
 
-    it('sends bypassMetadataCache to the metadata read but not withNewSession', async () => {
+    it('sends bypassMetadataCache and withNewSession to the metadata read', async () => {
       await getParsed({
         query,
         productVersion: productVersion2026_2,
@@ -1151,7 +1151,71 @@ describe('queryDatasourceTool', () => {
 
       expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
         datasource: { datasourceLuid },
-        options: { bypassMetadataCache: true },
+        options: { bypassMetadataCache: true, withNewSession: true },
+      });
+    });
+
+    describe('withNewSession and the validation reads', () => {
+      const newFieldQuery: Query = {
+        fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'New Field' }],
+      };
+
+      beforeEach(() => {
+        // The old session doesn't have the field yet; a new session does.
+        mocks.mockReadMetadata.mockImplementation(async (request) =>
+          Ok({
+            data: [
+              { fieldCaption: 'Category', fieldName: 'Category', dataType: 'STRING' },
+              ...(request.options?.withNewSession
+                ? [{ fieldCaption: 'New Field', fieldName: 'New Field', dataType: 'STRING' }]
+                : []),
+            ],
+          }),
+        );
+      });
+
+      it('validates against the new session, so a field only it knows reaches the query', async () => {
+        await getParsed({
+          query: newFieldQuery,
+          productVersion: productVersion2026_2,
+          extraArgs: { options: { withNewSession: true } },
+        });
+
+        expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+          expect.objectContaining({ query: newFieldQuery }),
+        );
+      });
+
+      it('still rejects a field the old session lacks when no new session is asked for', async () => {
+        const result = await getToolResult({
+          query: newFieldQuery,
+          productVersion: productVersion2026_2,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+      });
+
+      it('opens the session before the filter-value queries and sends it again on the query', async () => {
+        await getParsed({
+          query: {
+            fields: [{ fieldCaption: 'Category' }],
+            filters: [{ field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['C0'] }],
+          },
+          productVersion: productVersion2026_2,
+          extraArgs: { options: { withNewSession: true } },
+        });
+
+        const queryCalls = mocks.mockQueryDatasource.mock.calls;
+        expect(queryCalls.length).toBeGreaterThan(1);
+        expect(mocks.mockReadMetadata.mock.invocationCallOrder[0]).toBeLessThan(
+          mocks.mockQueryDatasource.mock.invocationCallOrder[0],
+        );
+        // One extra session open at most: filter-value queries reuse the one read-metadata opened.
+        for (const [request] of queryCalls.slice(0, -1)) {
+          expect(request.options).not.toHaveProperty('withNewSession');
+        }
+        expect(queryCalls.at(-1)?.[0].options.withNewSession).toBe(true);
       });
     });
 
@@ -1383,10 +1447,13 @@ describe('queryDatasourceTool', () => {
           await getParsed({ query, productVersion, extraArgs: { options: { [key]: false } } });
 
           const sent = mocks.mockQueryDatasource.mock.calls[0][0].options;
+          const sentToMetadataRead = mocks.mockReadMetadata.mock.calls[0][0].options ?? {};
           if (supported) {
             expect(sent[key]).toBe(false);
+            expect(sentToMetadataRead[key]).toBe(false);
           } else {
             expect(sent).not.toHaveProperty(key);
+            expect(sentToMetadataRead).not.toHaveProperty(key);
           }
         },
       );
@@ -1404,6 +1471,7 @@ describe('queryDatasourceTool', () => {
           if (supported) {
             expect(result.isError, result.content[0].text).toBe(false);
             expect(mocks.mockQueryDatasource.mock.calls[0][0].options[key]).toBe(true);
+            expect(mocks.mockReadMetadata.mock.calls[0][0].options[key]).toBe(true);
           } else {
             expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain(

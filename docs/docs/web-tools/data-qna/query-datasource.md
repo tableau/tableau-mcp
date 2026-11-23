@@ -138,7 +138,7 @@ The `options` object of a VizQL Data Service `QueryRequest`, accepted as-is.
 | `interpretFieldCaptionsAsFieldNames` | Same as the top-level argument; the two must not conflict. |
 | `disaggregate` | Forwarded. `true` returns one row per underlying record and ignores aggregation functions, though column names still show them (`SUM(Sales)` holds one record's value). |
 | `bypassMetadataCache` | Forwarded, and also used for the tool's own validation reads. Requires Tableau 2025.3 or later. |
-| `withNewSession` | Forwarded. Opens a new database session instead of reusing one. It doesn't bypass the query cache, so it doesn't guarantee fresh data. Requires Tableau 2026.2 or later. |
+| `withNewSession` | Forwarded, and also used for the tool's own validation reads, so a query is checked against the new session. Opens a new database session instead of reusing one, which adds latency. It doesn't bypass the query cache, so it doesn't guarantee fresh data. Requires Tableau 2026.2 or later. |
 | `returnFormat`, `debug`, `returnServerSentEvents` | Always set by the tool (`OBJECTS`, `true`, `false`). A different value is ignored, with a warning. |
 | `includeHiddenFields`, `includeGroupFormulas`, `includeRemoteDatabaseNames` | Apply only to reading metadata. Ignored, with a warning. |
 
