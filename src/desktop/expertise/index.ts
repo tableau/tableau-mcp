@@ -9,8 +9,11 @@ export interface ExpertiseResource {
   mimeType: 'text/markdown';
 }
 
+let _entryCount: number | null = null;
+
 export function getExpertiseCorpusEntryCount(): number {
-  return listExpertiseSlugs().length;
+  _entryCount ??= listExpertiseSlugs().length;
+  return _entryCount;
 }
 
 function extractMeta(content: string, fallbackName: string): { name: string; description: string } {
@@ -137,6 +140,7 @@ export function readExpertiseResource(uri: string): string | null {
 
 export function clearExpertiseCache(): void {
   _cache = null;
+  _entryCount = null;
 }
 
 interface ExpertiseDoc {

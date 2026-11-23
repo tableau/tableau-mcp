@@ -79,7 +79,7 @@ export class Config extends BaseConfig {
   userLuid: string;
 
   /**
-   * The agent's chat (conversation) id for this session, forwarded by tab-agent-south via
+   * The agent's chat (conversation) id for this session, forwarded by Tableau Agent via
    * `TABLEAU_CHAT_ID`. The agent spawns one desktop MCP child per chat, so this is stable for
    * the child's life. Sent as the product-telemetry `chat_id` to correlate a run's desktop tool
    * calls with the conversation that drove them. Empty string when the launcher did not provide it.

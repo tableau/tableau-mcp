@@ -33,6 +33,14 @@ export const SESSION_RESOLUTION_TEXT_UNPINNED =
 export const SESSION_RESOLUTION_TEXT_PINNED =
   'Session defaults to the current Tableau Desktop; use list-instances to see all open Desktops and pass session to target another.';
 
+export const EXPERTISE_TOOL_NAMES: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
+  'search-expertise',
+  'read-expertise-resource',
+]);
+
+const CONSULT_EXPERTISE_SENTENCE =
+  'Before authoring, consult the expertise docs via search-expertise. ';
+
 // Claude Code shows only the first 4,096 characters of server instructions by default, so the entries every client needs are ordered first.
 export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
@@ -253,8 +261,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dynamic-authoring',
     trigger:
       'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one (examples include running total, LOD, and interactivity on mark interaction such as by selecting or hovering over marks or selecting a link in a tooltip menu)',
-    action:
-      'Do not create or change workbook content for an analytical question alone. Before authoring, consult the expertise docs via search-expertise. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+    action: `Do not create or change workbook content for an analytical question alone. ${CONSULT_EXPERTISE_SENTENCE}Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.`,
     toolSequence: [
       'search-expertise',
       'author-parameter',
@@ -316,14 +323,17 @@ const DEMO_PROFILE_INSTRUCTIONS = [
 /**
  * Instructions for a given session-pinning state. When pinned, the session-resolution
  * prose switches to the pinned variant (pin is the default; the agent can still target
- * another open Desktop via list-instances) rather than being dropped.
+ * another open Desktop via list-instances) rather than being dropped. Without an expertise
+ * corpus the expertise tools are not registered, so routes stop naming them.
  */
 export function buildDesktopInstructions({
   sessionPinned,
   profile = '',
+  expertiseAvailable,
 }: {
   sessionPinned: boolean;
   profile?: string;
+  expertiseAvailable: boolean;
 }): string {
   const normalizedProfile = profile.trim().toLowerCase();
   if (normalizedProfile === 'demo') {
@@ -333,12 +343,24 @@ export function buildDesktopInstructions({
     ].join('\n\n');
   }
 
-  const table = sessionPinned
+  const pinAware = sessionPinned
     ? DESKTOP_ROUTE_TABLE.map((entry) =>
         entry.id === SESSION_RESOLUTION_ID
           ? { ...entry, text: SESSION_RESOLUTION_TEXT_PINNED }
           : entry,
       )
     : DESKTOP_ROUTE_TABLE;
-  return generateDesktopInstructions(table);
+  return generateDesktopInstructions(expertiseAvailable ? pinAware : withoutExpertise(pinAware));
+}
+
+function withoutExpertise(table: readonly DesktopInstructionEntry[]): DesktopInstructionEntry[] {
+  return table.flatMap((entry) => {
+    if (entry.kind !== 'route' || !entry.toolSequence.some((t) => EXPERTISE_TOOL_NAMES.has(t))) {
+      return [entry];
+    }
+    const toolSequence = entry.toolSequence.filter((t) => !EXPERTISE_TOOL_NAMES.has(t));
+    return toolSequence.length === 0
+      ? []
+      : [{ ...entry, action: entry.action.replace(CONSULT_EXPERTISE_SENTENCE, ''), toolSequence }];
+  });
 }

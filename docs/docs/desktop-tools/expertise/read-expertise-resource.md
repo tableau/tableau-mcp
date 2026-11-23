@@ -8,7 +8,7 @@ sidebar_position: 2
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Reads one module from the authoring-guidance library, or a single section of it, and returns the markdown. The library is the markdown under [`TABLEAU_EXPERTISE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_expertise_dir); with no root set, the library is empty. Pass a URI from [`search-expertise`](./search-expertise.md). The read runs in-process, does not use a %product_name% session, and does not change the library.
+Reads one module from the authoring-guidance library, or a single section of it, and returns the markdown. The library is the markdown under [`TABLEAU_EXPERTISE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_expertise_dir). When the library is empty, the server does not register this tool. Pass a URI from [`search-expertise`](./search-expertise.md). The read runs in-process, does not use a %product_name% session, and does not change the library.
 
 ## APIs called
 
