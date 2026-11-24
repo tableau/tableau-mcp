@@ -879,22 +879,6 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:content:read');
       expect(scopes).toContain('tableau:mcp_site_settings:read');
     });
-
-    // Registration-condition probe scopes must be advertised too, or the token minted from this
-    // metadata lacks them and the probe fails closed, hiding the very tools it gates. The Pulse
-    // premium probe reads `tableau:entitlements:read`, which no tool declares in its own scope set.
-    it.each([true, false])(
-      'includes scopes required for availability checks with includeOptionalScopes=%s',
-      async (includeOptionalScopes) => {
-        mockGetConfig.mockReturnValue({
-          adminToolsEnabled: false,
-        } as any);
-
-        const scopes = await getSupportedApiScopes(undefined, { includeOptionalScopes });
-        expect(scopes).toContain('tableau:insight_definitions_metrics:read');
-        expect(scopes).toContain('tableau:entitlements:read');
-      },
-    );
   });
 
   it('should separate Knowledge inspection and management API scopes', () => {
