@@ -76,8 +76,7 @@ describe('get-datasources tool', () => {
       expect(result.isError).toBe(false);
       // The published datasource surfaces its server LUID and a real hasDownloadFilePermission; the
       // embedded one (luid: null, hasDownloadFilePermission: null) omits both, keeping isExtract:
-      // false; the legacy one predates all three added fields (luid/type/isExtract/permission absent)
-      // and omits each. Only a non-null string luid and a real boolean permission are projected.
+      // false. Only a non-null string luid and a real boolean permission are projected.
       expect(parseResult(result).datasources).toEqual([
         {
           id: 'wb-ds-superstore',
@@ -95,7 +94,6 @@ describe('get-datasources tool', () => {
           type: 'federated',
           isExtract: false,
         },
-        { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
       ]);
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
     } finally {

@@ -1072,70 +1072,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  // apply-dashboard/apply-storyboard are pure per-sheet applies: any non-`applied` outcome errors and
-  // never falls back to the whole-workbook re-post. When the per-sheet route is unavailable
-  // (a list route returning `not-found` → route-missing) it must NOT quietly
-  // whole-workbook apply — even for an existing sheet.
-  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (absent name)', async () => {
-    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other DB']));
-
-    vi.mocked(executor.listDashboards).mockResolvedValue(
-      Err({
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'No route matches', recoverable: false },
-      }),
-    );
-    const result = await loadDashboardXml({
-      dashboardName,
-      xml: validXml,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-dashboard-xml-error');
-      expect(result.error.error.type).toBe('route-missing');
-      invariant(result.error.error.type === 'route-missing');
-      expect(result.error.error.message).not.toContain('create the dashboard');
-      expect(result.error.error.message).toContain('No changes were sent');
-    }
-    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
-  });
-
-  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (existing dashboard)', async () => {
-    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sales Dashboard', 'Other DB']));
-
-    vi.mocked(executor.listDashboards).mockResolvedValue(
-      Err({
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'No route matches', recoverable: false },
-      }),
-    );
-    const result = await loadDashboardXml({
-      dashboardName,
-      xml: validXml,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
-
-    // Even though the dashboard exists live, apply-dashboard requires the per-sheet route — it does not
-    // silently re-post the whole workbook instead.
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-dashboard-xml-error');
-      expect(result.error.error.type).toBe('route-missing');
-      invariant(result.error.error.type === 'route-missing');
-      expect(result.error.error.message).not.toContain('create the dashboard');
-      expect(result.error.error.message).toContain('No changes were sent');
-    }
-    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
-  });
-
   describe('refuses to rename (apply-dashboard / apply-storyboard never change the submitted name)', () => {
     const dashboardId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
     const doc = (name: string, kind: 'dashboard' | 'storyboard' = 'dashboard'): string =>
@@ -1430,17 +1366,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
     const mockExecutor = makeExecutorMock({
-      // A failed snapshot read must stop before resolving or applying the target.
-      listDashboards: vi.fn().mockResolvedValue(
-        Err({
-          type: 'command-failed',
-          error: {
-            code: 'not-found',
-            message: 'No route matches GET /v0/workbook/dashboards',
-            recoverable: false,
-          },
-        }),
-      ),
+      listDashboards: vi.fn().mockResolvedValue(Err(error)),
       getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     });
 

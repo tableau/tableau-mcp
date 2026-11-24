@@ -10,7 +10,6 @@ import {
   InvokeDialogActionResult,
 } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
-import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
@@ -45,17 +44,6 @@ const paramsSchema = {
 
 const title = 'Invoke Dialog Action';
 const REDACTED_DIALOG_VALUE = '[redacted]';
-
-function invokeDialogActionRouteMissingError(): McpToolError {
-  return new McpToolError({
-    type: 'endpoint-not-in-this-build',
-    message:
-      'This Tableau Desktop build does not serve POST /v0/app:invokeDialogAction. No dialog ' +
-      'action ran. Do not retry invoke-dialog-action. Ask the user to handle the dialog, or update ' +
-      'Tableau Desktop to a build that supports dialog actions.',
-    statusCode: 404,
-  });
-}
 
 type InvokeDialogActionToolArgs = InvokeDialogActionRequest & {
   session: string | undefined;
@@ -106,10 +94,6 @@ export const getInvokeDialogActionTool = (
               await call(
                 'invoke-dialog-action',
                 async (executor, signal) => await executor.invokeDialogAction(request, signal),
-                {
-                  routeMissingError: invokeDialogActionRouteMissingError,
-                  stableNotFoundMeansRouteMissing: true,
-                },
               ),
           }),
       });

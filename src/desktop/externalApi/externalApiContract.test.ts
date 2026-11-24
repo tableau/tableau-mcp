@@ -125,9 +125,9 @@ const declaredKeys = (schema: z.ZodObject): Array<string> => Object.keys(schema.
 const requiredKeys = (schema: z.ZodObject): Array<string> =>
   declaredKeys(schema).filter((key) => !(schema.shape[key] as z.ZodType).isOptional());
 
-// Read schemas parse fail-open: each keeps spec-`required` fields optional so an older Desktop
-// build that omits a field a newer spec marks required still parses. Each entry is the set of
-// spec-required keys the matching zod schema leaves optional (spec-required minus zod-required).
+// Read schemas parse fail-open: a missing field degrades one tool output instead of failing the
+// whole read. Each entry is the set of spec-required keys the matching zod schema leaves optional
+// (spec-required minus zod-required).
 const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly string[]>> = {
   ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
   AppInfo: [
@@ -337,16 +337,6 @@ describe('external client API contract (captured openapi fixture)', () => {
         const component = specSchema(name);
         expect(exceptions.every((key) => specRequiredKeys(component).includes(key))).toBe(true);
       }
-    });
-
-    it.each([
-      ['WorksheetItem', worksheetItemSchema],
-      ['DashboardItem', dashboardItemSchema],
-      ['StoryboardItem', storyboardItemSchema],
-    ] as const)('%s accepts a 0.2.4 item without isActiveSheet', (_name, schema) => {
-      expect(schema.safeParse({ id: 'sheet-1', name: 'Sheet 1', hidden: false }).success).toBe(
-        true,
-      );
     });
 
     it.each([

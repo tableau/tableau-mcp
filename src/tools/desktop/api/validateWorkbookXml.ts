@@ -6,7 +6,6 @@ import { ValidationResult } from '../../../desktop/externalApi/types.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { ValidationIssue } from '../../../desktop/validation/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
-import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
@@ -60,7 +59,6 @@ export const getValidateWorkbookXmlTool = (
               const result = await read(
                 'workbook validation',
                 async (executor, signal) => await executor.validateWorkbookDocument(xml, signal),
-                { routeMissingError: workbookValidationEndpointMissing },
               );
               if (result.isErr()) {
                 return result;
@@ -106,13 +104,3 @@ export const getValidateWorkbookXmlTool = (
   });
   return tool;
 };
-
-function workbookValidationEndpointMissing(): McpToolError {
-  return new McpToolError({
-    type: 'endpoint-not-in-this-build',
-    message:
-      'This Tableau Desktop build does not serve the workbook validation endpoint yet. ' +
-      'Use list-instances to see the API version of each running Desktop; this validation lights up on a newer Desktop update. Do not retry.',
-    statusCode: 404,
-  });
-}

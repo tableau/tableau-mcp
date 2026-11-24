@@ -136,19 +136,6 @@ describe('captureWindowScreenshotTool', () => {
 
   it.each([
     {
-      caseName: 'route-missing response',
-      error: {
-        type: 'command-failed' as const,
-        error: {
-          code: 'not-found',
-          message: 'No route matches /v0/app/screenshot',
-          recoverable: false,
-        },
-      },
-      message: 'Desktop build is too old',
-      extraMessage: 'Do not retry',
-    },
-    {
       caseName: 'command timeout',
       error: { type: 'command-timed-out' as const, error: 'Command timed out' },
       message: 'command-timed-out',

@@ -241,8 +241,7 @@ export function resolveConnectedApiVersion(
 
 /**
  * Drop tools whose {@link DesktopTool.minApiVersion} floor exceeds the connected Desktop's
- * API version. Fails open: an unknown connected version keeps every tool, leaving the
- * per-call `endpointNotInThisBuild` guard as the backstop.
+ * API version. Fails open: an unknown connected version keeps every tool.
  */
 export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
   tools: T[],

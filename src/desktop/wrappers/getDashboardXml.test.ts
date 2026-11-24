@@ -1,7 +1,6 @@
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
-import { ExecuteCommandError } from '../externalApi/executorTypes.js';
 import { getDashboardXml } from './getDashboardXml.js';
 
 describe('getDashboardXml', () => {
@@ -87,36 +86,5 @@ describe('getDashboardXml', () => {
       },
     });
     expect(executor.getDashboardDocument).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the External API whole-document read when the first-class route is missing', async () => {
-    const signal = new AbortController().signal;
-    const routeMissing = {
-      type: 'command-failed',
-      error: { code: 'not-found', message: 'No route matches /v0/workbook/dashboards' },
-    } as ExecuteCommandError;
-    const executor = makeExecutorMock({
-      listDashboards: vi.fn().mockResolvedValue(Err(routeMissing)),
-      getWorkbookDocument: vi.fn().mockResolvedValue(
-        Ok({
-          xml: `<workbook><dashboards>
-            <dashboard name="Sales"><zone /></dashboard>
-          </dashboards></workbook>`,
-          applicationVersion: undefined,
-          xsdPayloadVersion: undefined,
-        }),
-      ),
-    });
-
-    const result = await getDashboardXml({
-      executor,
-      signal,
-      dashboardName: 'Sales',
-    });
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().xml).toContain('<dashboard name="Sales">');
-    expect(result.unwrap().name).toBe('Sales');
-    expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

@@ -586,38 +586,6 @@ describe('invoke-dialog-action tool', () => {
       await harness.close();
     }
   });
-
-  it('maps a translated stable route 404 to action-specific no-retry guidance', async () => {
-    const harness = await startHarness();
-    harness.server.setOverride('POST /v0/app:invokeDialogAction', {
-      status: 404,
-      contentType: 'application/problem+json',
-      body: JSON.stringify({
-        type: 'problem',
-        title: 'Nicht gefunden',
-        status: 404,
-        instance: '/v0/app:invokeDialogAction',
-        code: 'not-found',
-        detail: 'Keine Route stimmt mit POST /v0/app:invokeDialogAction überein',
-      }),
-    });
-
-    try {
-      const result = await harness.callTool({ session: undefined, ...defaultRequest });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('POST /v0/app:invokeDialogAction');
-      expect(result.content[0].text).toContain('No dialog action ran');
-      expect(result.content[0].text).toContain('Do not retry invoke-dialog-action');
-      expect(result.content[0].text).toContain('Ask the user to handle the dialog');
-      expect(result.content[0].text).toContain('update Tableau Desktop');
-      expect(result.content[0].text).not.toContain('too old for this read');
-      expect(dialogPosts(harness.server)).toHaveLength(1);
-    } finally {
-      await harness.close();
-    }
-  });
 });
 
 function setSuccess(server: MockExternalApiServer, response: InvokeDialogActionResult): void {
@@ -678,6 +646,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-invoke-dialog-action',
-    apiVersion: '0.2.26',
+    apiVersion: '0.2.34',
   };
 }

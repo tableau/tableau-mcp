@@ -41,7 +41,6 @@ export const getWorkspaceExtensionsTool = (
               await call(
                 'GET /v0/app/extensions',
                 async (executor, signal) => await executor.listWorkspaceExtensions(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

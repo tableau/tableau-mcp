@@ -40,7 +40,6 @@ export const getActiveDialogsTool = (
               await call(
                 'active dialogs',
                 async (executor, signal) => await executor.getActiveDialogs(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

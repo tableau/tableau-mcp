@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
@@ -63,9 +62,6 @@ export const getReloadExtensionsTool = (
               ? await executor.reloadWorksheetExtension(ref.id, extra.signal)
               : await executor.reloadDashboardExtensions(ref.id, extra.signal);
           if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('reload-extensions').toErr();
-            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

@@ -40,7 +40,6 @@ export const getWorkbookExtensionsTool = (
               await call(
                 'GET /v0/workbook/extensions',
                 async (executor, signal) => await executor.listWorkbookExtensions(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

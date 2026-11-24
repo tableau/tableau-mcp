@@ -101,33 +101,6 @@ describe('setStartPageVisibilityTool', () => {
     }
   });
 
-  it('maps a missing route to endpoint-not-in-this-build', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('POST /v0/app:toggleStartPage', {
-        status: 404,
-        contentType: 'application/problem+json',
-        body: JSON.stringify({
-          code: 'not-found',
-          status: 404,
-          title: 'No route matches POST /v0/app:toggleStartPage',
-          detail: 'No route matches POST /v0/app:toggleStartPage',
-        }),
-      });
-    });
-    try {
-      const result = await harness.callTool({ isStartPageVisible: true });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(
-        'does not serve the start-page visibility endpoint yet',
-      );
-      expect(result.content[0].text).toContain('Do not retry');
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('surfaces an operation failure through the Desktop command error funnel', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('POST /v0/app:toggleStartPage', {
@@ -194,7 +167,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-start-page',
-    apiVersion: '0.2.11',
+    apiVersion: '0.2.34',
   };
 }
 

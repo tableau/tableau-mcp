@@ -328,29 +328,6 @@ describe('show-me tool', () => {
     expect(String(resultBody(result).message)).toContain('still applying');
   });
 
-  it('maps a missing endpoint to route-upgrade guidance', async () => {
-    const harness = await startHarness();
-    harness.server.setOverride(`POST /v0/workbook/worksheets/${WORKSHEET_ID}:showMe`, {
-      status: 404,
-      contentType: 'application/problem+json',
-      body: JSON.stringify({
-        code: 'not-found',
-        status: 404,
-        instance: '/v0/mock',
-        title: 'No route matches Show Me.',
-        detail: 'No route matches Show Me.',
-      }),
-    });
-    try {
-      const result = await harness.callTool({ worksheet: WORKSHEET_ID, showMeType: 'text' });
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('does not serve the show-me endpoint');
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('rejects an unknown worksheet without dispatching', async () => {
     const harness = await startHarness();
     try {
@@ -434,6 +411,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-show-me',
-    apiVersion: '0.2.11',
+    apiVersion: '0.2.34',
   };
 }

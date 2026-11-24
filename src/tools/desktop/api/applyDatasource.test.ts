@@ -50,11 +50,11 @@ function colorFixture(name: string): string {
   );
 }
 
-const routeMissing: ExecuteCommandError = {
+const readbackFailed: ExecuteCommandError = {
   type: 'command-failed',
   error: {
-    code: 'not-found',
-    message: 'No route matches POST /v0/workbook/datasources/target/document',
+    code: 'operation-failed',
+    message: 'Datasource document read failed.',
     recoverable: false,
   },
 };
@@ -351,7 +351,7 @@ describe('getApplyDatasourceTool', () => {
         datasourceName: 'superstore',
         datasources: superstore,
         file,
-        readbackError: routeMissing,
+        readbackError: readbackFailed,
       });
 
       expect(result.isError).toBe(false);
@@ -359,7 +359,7 @@ describe('getApplyDatasourceTool', () => {
       expect(structured.message).toContain('Successfully applied datasource update');
       expect(structured.message).toContain('Requested member colors are not verified');
       expect(structured.nextAction.receipt.unverified).toContain(
-        'whether the requested member colors took — color readback unavailable for datasource "superstore": No route matches POST /v0/workbook/datasources/target/document',
+        'whether the requested member colors took — color readback unavailable for datasource "superstore": Datasource document read failed.',
       );
     });
   });
@@ -471,28 +471,6 @@ describe('getApplyDatasourceTool', () => {
     expect(resultText(result)).toContain('different Tableau Desktop session');
     expect(order).toEqual(['list']);
     expect(executor.applyDatasourceDocument).not.toHaveBeenCalled();
-  });
-
-  it('maps missing inventory and granular routes separately', async () => {
-    const file = datasourceFile('route-missing');
-
-    const listFailure = await invoke({
-      datasourceName: 'Sales',
-      file,
-      listError: routeMissing,
-    });
-    expect(listFailure.result.isError).toBe(true);
-    expect(resultText(listFailure.result)).toContain('workbook datasources endpoint');
-    expect(listFailure.order).toEqual(['list']);
-
-    const applyFailure = await invoke({
-      datasourceName: 'Sales',
-      file,
-      applyError: routeMissing,
-    });
-    expect(applyFailure.result.isError).toBe(true);
-    expect(resultText(applyFailure.result)).toContain('datasource document endpoint');
-    expect(applyFailure.order).toEqual(['list', 'apply:Sales%20Extract']);
   });
 
   it.each([

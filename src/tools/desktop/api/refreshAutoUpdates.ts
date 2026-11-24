@@ -1,13 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  ExecuteCommandError,
-  ExecuteCommandWarning,
-} from '../../../desktop/externalApi/executorTypes.js';
+import { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
 import { DashboardRefreshOutcome, SheetKind } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
@@ -108,7 +104,7 @@ export const getRefreshAutoUpdatesTool = (
           if (dispatched.value.kind === 'worksheet') {
             const { result } = dispatched.value;
             if (result.isErr()) {
-              return refreshError(result.error, 'worksheet');
+              return new DesktopCommandExecutionError(result.error).toErr();
             }
             const completed = result.value.status === 'completed';
             const subject = completed
@@ -134,13 +130,12 @@ export const getRefreshAutoUpdatesTool = (
                 ),
               ).toErr();
             }
-            return refreshError(
+            return new DesktopCommandExecutionError(
               result.error,
-              kind,
               result.error.type === 'command-failed' && result.error.error?.code === spec.failedCode
                 ? spec.failedMessage
                 : undefined,
-            );
+            ).toErr();
           }
 
           if (result.value.status !== 'completed') {
@@ -168,17 +163,6 @@ export const getRefreshAutoUpdatesTool = (
 
   return refreshAutoUpdatesTool;
 };
-
-function refreshError(
-  error: ExecuteCommandError,
-  kind: SheetKind,
-  message?: string,
-): Err<McpToolError> {
-  if (error.type === 'command-failed' && error.error?.code === 'not-found') {
-    return endpointNotInThisBuild(`${kind} refresh`).toErr();
-  }
-  return new DesktopCommandExecutionError(error, message).toErr();
-}
 
 type Dispatched =
   | {

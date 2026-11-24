@@ -38,7 +38,6 @@ export const getCapabilitiesTool = (server: DesktopMcpServer): DesktopTool<typeo
               await call(
                 'Capabilities',
                 async (executor, signal) => await executor.getCapabilities(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

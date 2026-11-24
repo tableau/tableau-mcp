@@ -35,6 +35,7 @@ import { calcFieldNamesRule } from '../../../../desktop/validation/rules/calcFie
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import type { LoadWorkbookXmlError } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { NoDesktopInstancesFoundError } from '../../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../../logging/logger.js';
@@ -4579,7 +4580,7 @@ function setupAutoApplyMocks({
     getWorkbookDocument,
     applyWorkbookDocument,
     getWorksheetDiagnostics,
-    ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
+    ...(structuralReadback ? perSheetReads() : {}),
   } as unknown as Awaited<ReturnType<GetExecutor>>);
   return {
     goToSheet,
@@ -4591,12 +4592,28 @@ function setupAutoApplyMocks({
   };
 }
 
-// Route per-sheet readback through the whole-workbook fallback used by older Desktop hosts.
-const routeMissing = (): ReturnType<typeof Err> =>
-  Err({
-    type: 'command-failed',
-    error: { code: 'not-found', message: 'No route matches /worksheets' },
-  });
+function perSheetReads(): {
+  listWorksheets: ReturnType<typeof vi.fn>;
+  getWorksheetDocument: ReturnType<typeof vi.fn>;
+} {
+  const liveXml = (): ReturnType<typeof getWorkbookXmlModule.getWorkbookXml> =>
+    getWorkbookXmlModule.getWorkbookXml({} as never);
+  return {
+    listWorksheets: vi.fn(async () =>
+      (await liveXml()).map((xml) => ({
+        worksheets: [...xml.matchAll(/<worksheet name='([^']+)'/g)].map(([, encoded]) => {
+          const name = decodeXmlEntities(encoded);
+          return { id: sheetIdFor(name), name, hidden: false };
+        }),
+      })),
+    ),
+    getWorksheetDocument: vi.fn(async (id: string) =>
+      (await liveXml()).map((xml) => ({
+        xml: extractSheetXml(xml, id.replace(/^id-/, '')) ?? '',
+      })),
+    ),
+  };
+}
 
 function readbackExecutor(
   base: {
@@ -4613,7 +4630,7 @@ function readbackExecutor(
     getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
-    listWorksheets: vi.fn(routeMissing),
+    ...perSheetReads(),
     getWorksheetDiagnostics:
       options.fieldValidation ??
       vi.fn(async (worksheetId: string) =>
@@ -4665,7 +4682,11 @@ function summaryRowsExecutor(
     getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
       Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
     ),
-    getWorksheetDocument: vi.fn(routeMissing),
+    getWorksheetDocument: vi.fn(async () =>
+      (await getWorkbookXmlModule.getWorkbookXml({} as never)).map((xml) => ({
+        xml: extractSheetXml(xml, options.worksheetName ?? 'Sales by Region') ?? '',
+      })),
+    ),
     getWorksheetSummaryData,
     exportWorksheetImage: vi
       .fn()

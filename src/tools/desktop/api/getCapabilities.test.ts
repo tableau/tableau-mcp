@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
@@ -54,33 +54,6 @@ describe('get-capabilities tool', () => {
     expect(sessionResolution.resolveSession).toHaveBeenCalledWith(undefined);
     expect(extra.getExecutor).toHaveBeenCalledWith('999');
     expect(getCapabilities).toHaveBeenCalledExactlyOnceWith(controller.signal);
-  });
-
-  it('maps a stable 404 to a route-missing read error', async () => {
-    vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(
-        makeExecutorMock({
-          getCapabilities: vi.fn().mockResolvedValue(
-            Err({
-              type: 'command-failed' as const,
-              error: {
-                code: 'not-found',
-                message: 'No route matches GET /v0/capabilities',
-                recoverable: false,
-              },
-            }),
-          ),
-        }),
-      ),
-    };
-
-    const result = await invokeTool({ session: undefined }, extra);
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Capabilities endpoint');
   });
 
   it('rejects a non-string session', () => {

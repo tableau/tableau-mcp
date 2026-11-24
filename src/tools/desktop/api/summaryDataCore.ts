@@ -49,15 +49,12 @@ export async function fetchWorksheetSummaryData({
   maxRows,
   columns,
   materializeEmpty = false,
-  ignoreAliases,
 }: {
   read: SummaryDataRead;
   worksheet: string | undefined;
   maxRows: number;
   columns?: string[];
   materializeEmpty?: boolean;
-  /** API 0.2.25 and later always return raw values and ignore this; earlier builds honor it. */
-  ignoreAliases?: boolean;
 }): Promise<Result<WorksheetSummaryData, WorksheetSummaryDataError>> {
   const worksheetsResult = await read(
     'worksheet list',
@@ -94,7 +91,6 @@ export async function fetchWorksheetSummaryData({
           {
             maxRows,
             ignoreSelection: SUMMARY_DATA_READ_SCOPE.ignoreSelection,
-            ...(ignoreAliases === undefined ? {} : { ignoreAliases }),
           },
           activeSignal,
         ),

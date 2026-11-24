@@ -168,36 +168,6 @@ describe('get-active-dialogs tool', () => {
       await harness.close();
     }
   });
-
-  it('maps a translated stable 404 to the endpoint-unavailable read error', async () => {
-    vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
-    const harness = await startHarness();
-    harness.server.setOverride('GET /v0/app/dialogs', {
-      status: 404,
-      contentType: 'application/problem+json',
-      body: JSON.stringify({
-        type: 'problem',
-        title: 'Introuvable',
-        status: 404,
-        instance: '/v0/app/dialogs',
-        code: 'not-found',
-        detail: 'Aucune route ne correspond à GET /v0/app/dialogs',
-      }),
-    });
-
-    try {
-      const result = await harness.callTool({ session: undefined });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('active dialogs endpoint');
-      expect(result.content[0].text).toContain('too old for this read');
-      expect(result.content[0].text).toContain('Do not retry');
-      expect(dialogGets(harness.server)).toHaveLength(1);
-    } finally {
-      await harness.close();
-    }
-  });
 });
 
 function dialogGets(server: MockExternalApiServer): MockExternalApiServer['requests'] {
@@ -244,6 +214,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-get-active-dialogs',
-    apiVersion: '0.2.26',
+    apiVersion: '0.2.34',
   };
 }

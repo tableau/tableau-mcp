@@ -30,13 +30,12 @@ vi.mock('../../logging/logger.js');
 const instanceFor = (
   server: MockExternalApiServer,
   token = 'valid-token',
-  apiVersion = '0.1.1',
 ): ExternalApiInstance => ({
   baseUrl: server.baseUrl,
   token,
   pid: 999,
   instanceId: 'inst-exec',
-  apiVersion,
+  apiVersion: '0.2.34',
 });
 
 const invokeDialogActionRequest: InvokeDialogActionRequest = {
@@ -257,7 +256,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -283,7 +282,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -330,7 +329,7 @@ describe('ExternalApiToolExecutor', () => {
         ],
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -406,7 +405,7 @@ describe('ExternalApiToolExecutor', () => {
   describe('workbook diagnostics', () => {
     it('returns the default mock diagnostics for a known worksheet', async () => {
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -445,7 +444,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -500,7 +499,7 @@ describe('ExternalApiToolExecutor', () => {
         body: JSON.stringify(body),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -537,7 +536,7 @@ describe('ExternalApiToolExecutor', () => {
         body: JSON.stringify(body),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -551,13 +550,13 @@ describe('ExternalApiToolExecutor', () => {
         .fn()
         .mockReturnValueOnce([
           {
-            ...instanceFor(server, 'stale-token', '0.2.16'),
+            ...instanceFor(server, 'stale-token'),
             instanceId: 'inst-expected',
           },
         ])
         .mockReturnValue([
           {
-            ...instanceFor(server, 'valid-token', '0.2.16'),
+            ...instanceFor(server, 'valid-token'),
             instanceId: 'inst-restarted',
           },
         ]);
@@ -1341,7 +1340,7 @@ describe('ExternalApiToolExecutor', () => {
 
     it('refreshes a dashboard now and validates the typed aggregate outcome', async () => {
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -1375,7 +1374,7 @@ describe('ExternalApiToolExecutor', () => {
           body: JSON.stringify({ id: 'op-dashboard-pending', kind: 'dashboard.refreshNow', state }),
         });
         const executor = new ExternalApiToolExecutor({
-          discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+          discover: () => [instanceFor(server, 'valid-token')],
         });
         await executor.start();
 
@@ -1401,7 +1400,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -1441,7 +1440,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -1500,7 +1499,7 @@ describe('ExternalApiToolExecutor', () => {
         ],
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -1531,7 +1530,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -1554,7 +1553,7 @@ describe('ExternalApiToolExecutor', () => {
         }),
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        discover: () => [instanceFor(server, 'valid-token')],
       });
       await executor.start();
 
@@ -2564,11 +2563,9 @@ describe('ExternalApiToolExecutor', () => {
       const discover = vi
         .fn()
         .mockReturnValueOnce([
-          { ...instanceFor(server, 'stale-token', '0.2.28'), instanceId: 'inst-capture' },
+          { ...instanceFor(server, 'stale-token'), instanceId: 'inst-capture' },
         ])
-        .mockReturnValue([
-          { ...instanceFor(server, 'valid-token', '0.2.28'), instanceId: 'inst-restarted' },
-        ]);
+        .mockReturnValue([{ ...instanceFor(server, 'valid-token'), instanceId: 'inst-restarted' }]);
       const executor = new ExternalApiToolExecutor({ pid: 999, discover });
 
       const result = await executor.captureAppScreenshot('/tmp/capture', signal);
@@ -3064,7 +3061,7 @@ describe('ExternalApiToolExecutor artifact instance identity', () => {
     token,
     pid: 999,
     instanceId,
-    apiVersion: '0.1.1',
+    apiVersion: '0.2.34',
   });
 
   it('returns the instance identity from the client that served the workbook read', async () => {

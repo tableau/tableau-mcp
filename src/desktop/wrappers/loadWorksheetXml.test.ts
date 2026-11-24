@@ -191,22 +191,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         goToSheet,
         getWorkbookDocument,
         applyWorkbookDocument,
-        // This double implements the whole-workbook transport (getWorkbookDocument +
-        // applyWorkbookDocument) that flag-off callers (refine-worksheet)
-        // use directly — they never attempt the per-sheet route. Its list route returns `not-found`
-        // so the flag-on route-missing tests below (apply-worksheet, which DOES attempt the per-sheet
-        // route) see `route-missing`. The per-sheet 'applied' path is covered in
-        // perSheetDocumentApply.test.ts.
-        listWorksheets: vi.fn().mockResolvedValue(
-          Err({
-            type: 'command-failed',
-            error: {
-              code: 'not-found',
-              message: 'No route matches GET /v0/workbook/worksheets',
-              recoverable: false,
-            },
-          }),
-        ),
       }),
       calls,
     };
@@ -1184,53 +1168,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyCall?.xml).toContain('name="Some Other Sheet"');
   });
 
-  // apply-worksheet is a pure per-sheet apply: any non-`applied` outcome errors and never falls back to
-  // the whole-workbook re-post. When the per-sheet route is unavailable (dispatchingExecutor's list
-  // route returns `not-found` → route-missing) it must NOT quietly whole-workbook apply — even for an
-  // existing sheet.
-  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (absent name)', async () => {
-    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
-
-    const result = await loadWorksheetXml({
-      worksheetName,
-      xml: validXml,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-worksheet-xml-error');
-      expect(result.error.error.type).toBe('sheet-absent');
-    }
-    // The whole-workbook apply must NOT have run — apply-worksheet does not create a sheet.
-    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
-  });
-
-  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (existing sheet)', async () => {
-    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
-
-    const result = await loadWorksheetXml({
-      worksheetName,
-      xml: validXml,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
-
-    // Even though the sheet exists live, apply-worksheet requires the per-sheet route — it does not
-    // silently re-post the whole workbook instead.
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-worksheet-xml-error');
-      expect(result.error.error.type).toBe('sheet-absent');
-    }
-    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
-  });
-
   describe('refuses to rename', () => {
     const sheetId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
     const doc = (name: string): string =>
@@ -1367,17 +1304,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
     const mockExecutor = makeExecutorMock({
-      // Route-missing list defers to the whole-workbook path, where the fetch below fails.
-      listWorksheets: vi.fn().mockResolvedValue(
-        Err({
-          type: 'command-failed',
-          error: {
-            code: 'not-found',
-            message: 'No route matches GET /v0/workbook/worksheets',
-            recoverable: false,
-          },
-        }),
-      ),
+      listWorksheets: vi.fn().mockResolvedValue(Err(error)),
       getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     });
 

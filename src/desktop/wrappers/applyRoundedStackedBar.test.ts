@@ -489,7 +489,7 @@ describe('applyRoundedStackedBar', () => {
     expect(harness.getWorksheetSummaryData).toHaveBeenNthCalledWith(
       1,
       WORKSHEET_ID,
-      { maxRows: 1000, ignoreAliases: true, ignoreSelection: true },
+      { maxRows: 1000, ignoreSelection: true },
       SIGNAL,
     );
     expect(harness.getWorksheetUnderlyingData).toHaveBeenCalledWith(
@@ -497,7 +497,6 @@ describe('applyRoundedStackedBar', () => {
       'orders',
       {
         maxRows: 10_000,
-        ignoreAliases: true,
         ignoreSelection: true,
         columnsToIncludeByFieldName: [
           '[Sales].[Category]',
@@ -983,22 +982,9 @@ describe('applyRoundedStackedBar', () => {
     expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {
-      label: 'route-missing',
-      worksheets: Err({
-        type: 'command-failed' as const,
-        error: {
-          code: 'not-found',
-          message: 'No route matches /v0/workbook/worksheets',
-          recoverable: false,
-        },
-      }),
-    },
-    { label: 'sheet-absent', worksheets: Ok({ worksheets: [] }) },
-  ])('keeps $label before mutation', async ({ label, worksheets }) => {
+  it('keeps sheet-absent before mutation', async () => {
     const harness = successfulExecutor();
-    vi.mocked(harness.executor.listWorksheets).mockResolvedValue(worksheets);
+    vi.mocked(harness.executor.listWorksheets).mockResolvedValue(Ok({ worksheets: [] }));
 
     const outcome = await applyRoundedStackedBar({
       sourceWorksheetXml: sourceWorksheet(),
@@ -1015,7 +1001,7 @@ describe('applyRoundedStackedBar', () => {
       retrySafe: true,
       stage: 'apply-preflight',
     });
-    expect(outcome.state !== 'applied' && outcome.message).toContain(label);
+    expect(outcome.state !== 'applied' && outcome.message).toContain('sheet-absent');
     expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
   });
 

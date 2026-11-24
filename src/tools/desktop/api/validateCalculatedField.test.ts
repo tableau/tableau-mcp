@@ -183,6 +183,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-validate-calc',
-    apiVersion: '0.2.31',
+    apiVersion: '0.2.34',
   };
 }

@@ -554,53 +554,6 @@ describe('export-image tools', () => {
 
   it.each([
     {
-      makeTool: exportWorksheetImageTool,
-      args: { worksheetName: 'sheet-sales' },
-      overrideKey: 'GET /v0/workbook/worksheets/sheet-sales/image',
-      expectedMessage: 'does not serve the worksheet image endpoint',
-    },
-    {
-      makeTool: exportDashboardImageTool,
-      args: { dashboardName: 'dash-exec' },
-      overrideKey: 'GET /v0/workbook/dashboards/dash-exec/image',
-      expectedMessage: 'does not serve the dashboard image endpoint',
-    },
-    {
-      makeTool: exportStoryboardImageTool,
-      args: { storyboardName: 'story-qbr' },
-      overrideKey: 'GET /v0/workbook/storyboards/story-qbr/image',
-      expectedMessage: 'does not serve the storyboard image endpoint',
-    },
-  ])(
-    'reports an honest too-new endpoint 404 for $expectedMessage',
-    async ({ makeTool, args, overrideKey, expectedMessage }) => {
-      const harness = await startHarness(makeTool, (server) => {
-        server.setOverride(overrideKey, {
-          status: 404,
-          body: JSON.stringify({
-            code: 'not-found',
-            status: 404,
-            instance: '/v0/mock',
-            title: `No route matches ${overrideKey}`,
-            detail: `No route matches ${overrideKey}`,
-          }),
-        });
-      });
-      try {
-        const result = await harness.callTool(args);
-
-        expect(result.isError).toBe(true);
-        invariant(result.content[0].type === 'text');
-        expect(result.content[0].text).toContain(expectedMessage);
-        expect(result.content[0].text).toContain('Do not retry');
-      } finally {
-        await harness.close();
-      }
-    },
-  );
-
-  it.each([
-    {
       label: 'a relative worksheet filePath',
       makeTool: exportWorksheetImageTool,
       args: { worksheetName: 'sheet-sales', filePath: 'relative/report.png' },

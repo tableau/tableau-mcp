@@ -220,14 +220,10 @@ describe('dashboard membership apply', () => {
     },
   );
 
-  it.each(['absent', 'ambiguous', 'route-missing', 'list-error', 'post-error'] as const)(
+  it.each(['absent', 'ambiguous', 'list-error', 'post-error'] as const)(
     'never falls back to replacing the workbook when the helper target is %s',
     async (condition) => {
       const { executor, original, live } = fixture(['A']);
-      const missingRoute = {
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'No route matches', recoverable: false },
-      } as const;
       if (condition === 'absent')
         vi.mocked(executor.listDashboards).mockResolvedValue(Ok({ dashboards: [] }));
       if (condition === 'ambiguous')
@@ -239,14 +235,17 @@ describe('dashboard membership apply', () => {
             ],
           }),
         );
-      if (condition === 'route-missing')
-        vi.mocked(executor.listDashboards).mockResolvedValue(Err(missingRoute));
       if (condition === 'list-error')
         vi.mocked(executor.listDashboards).mockResolvedValue(
           Err({ type: 'invalid-response', error: new Error('unavailable') }),
         );
       if (condition === 'post-error')
-        vi.mocked(executor.applyDashboardDocument).mockResolvedValue(Err(missingRoute));
+        vi.mocked(executor.applyDashboardDocument).mockResolvedValue(
+          Err({
+            type: 'command-failed',
+            error: { code: 'operation-failed', message: 'failed', recoverable: false },
+          }),
+        );
       const result = await loadDashboardXml({
         dashboardName: 'D',
         xml: fragment(['A']).replace('<simple-id uuid="dash-1"/>', ''),

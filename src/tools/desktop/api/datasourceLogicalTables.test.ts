@@ -183,7 +183,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-datasource-logical-tables',
-    apiVersion: '0.2.31',
+    apiVersion: '0.2.34',
   };
 }
 

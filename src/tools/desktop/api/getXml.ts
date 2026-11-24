@@ -2,11 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from '../../../desktop/externalApi/toolUtils.js';
+import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind } from '../../../desktop/externalApi/types.js';
 import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { parseXML } from '../../../desktop/metadata/parser.js';
@@ -193,9 +189,6 @@ async function readWorksheetXml({
       case 'get-worksheet-xml-error':
         return new GetWorksheetXmlFailedError(error).toErr();
       case 'execute-command-error':
-        if (isRouteMissing(error)) {
-          return endpointNotInThisBuild('worksheet document').toErr();
-        }
         return new DesktopCommandExecutionError(error).toErr();
       default: {
         const _: never = type;
@@ -257,9 +250,6 @@ async function readDashboardXml({
       case 'get-dashboard-xml-error':
         return new GetDashboardXmlFailedError(error).toErr();
       case 'execute-command-error':
-        if (isRouteMissing(error)) {
-          return endpointNotInThisBuild('dashboard document').toErr();
-        }
         return new DesktopCommandExecutionError(error).toErr();
       default: {
         const _: never = type;

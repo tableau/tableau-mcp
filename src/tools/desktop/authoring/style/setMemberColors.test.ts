@@ -455,18 +455,6 @@ describe('set-member-colors tool', () => {
       expect(body(result).message).toContain('Mars was not found in the first 10000 rows read');
     });
 
-    it('reads underlying values, not display aliases', async () => {
-      const { executor } = await run(
-        { colors: [{ member: 'Europe', color: '#e15759' }] },
-        { ...region, datasource: regionDoc() },
-      );
-      expect(executor.getWorksheetSummaryData).toHaveBeenCalledWith(
-        'ws-1',
-        expect.objectContaining({ ignoreAliases: true, maxRows: 10000 }),
-        expect.anything(),
-      );
-    });
-
     it('reads the data before the datasource document it edits', async () => {
       const { executor, getDatasourceDocument } = await run(
         { colors: [{ member: 'Europe', color: '#e15759' }] },

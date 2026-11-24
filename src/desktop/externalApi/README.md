@@ -10,7 +10,7 @@ Client API ("Athena V0"), a loopback HTTP host discovered via per-instance `<pid
 | `externalApiToolExecutor.ts` | The one tool executor: instance discovery/pinning, 401 rescan, and **every tool endpoint method** |
 | `executorTypes.ts`           | Shared executor types (`ExecuteCommand*`, `WorkbookDocument`, …)                                  |
 | `discovery.ts`               | Discovery-file scanning (`TABLEAU_EXTERNAL_API_DISCOVERY_DIR` override)                           |
-| `toolUtils.ts`               | Error helpers shared with the tool layer (`isRouteMissing`, …)                                    |
+| `toolUtils.ts`               | Helpers shared with the tool layer (`resolveItemByNameOrId`, …)                                   |
 | `mockExternalApiServer.ts`   | Real-HTTP mock of the /v0 surface for tests                                                       |
 
 ## Adding awareness of a new API method

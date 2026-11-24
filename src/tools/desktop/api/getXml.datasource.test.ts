@@ -19,15 +19,6 @@ import { getXmlTool } from './getXml.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
-const routeMissing: ExecuteCommandError = {
-  type: 'command-failed',
-  error: {
-    code: 'not-found',
-    message: 'No route matches GET /v0/workbook/datasources/target/document',
-    recoverable: false,
-  },
-};
-
 describe('getXmlTool kind=datasource', () => {
   const writtenFiles: string[] = [];
 
@@ -245,18 +236,6 @@ describe('getXmlTool kind=datasource', () => {
     expect(body.instructions).toContain('startByte/endByte');
     expect(body.instructions).toContain('without a worksheet/dashboard selector');
     expect(body.instructions).toContain('datasourceFile');
-  });
-
-  it('maps a missing document route through the standard read harness', async () => {
-    const { result } = await invoke({
-      datasourceId: 'Sales%20Extract',
-      mode: 'inline',
-      documentError: routeMissing,
-    });
-
-    expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain('endpoint yet');
-    expect(resultText(result)).toContain('Do not retry');
   });
 
   it('returns the document error after resolving the datasource', async () => {

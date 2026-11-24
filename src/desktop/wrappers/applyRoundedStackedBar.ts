@@ -87,7 +87,7 @@ export async function applyRoundedStackedBar({
 
     const summary = await executor.getWorksheetSummaryData(
       contract.worksheetId,
-      { maxRows: 1000, ignoreAliases: true, ignoreSelection: true },
+      { maxRows: 1000, ignoreSelection: true },
       signal,
     );
     if (summary.isErr()) {
@@ -140,7 +140,6 @@ export async function applyRoundedStackedBar({
       logicalTableId,
       {
         maxRows: 10_000,
-        ignoreAliases: true,
         ignoreSelection: true,
         columnsToIncludeByFieldName: requestedUnderlyingColumns,
       },
@@ -252,7 +251,7 @@ export async function applyRoundedStackedBar({
             if (workbookDocument.isErr()) return Err(workbookDocument.error);
             const postSummary = await executor.getWorksheetSummaryData(
               applyOutcome.id,
-              { maxRows: 1000, ignoreAliases: true, ignoreSelection: true },
+              { maxRows: 1000, ignoreSelection: true },
               signal,
             );
             if (postSummary.isErr()) return Err(postSummary.error);

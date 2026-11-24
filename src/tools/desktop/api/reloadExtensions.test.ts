@@ -170,6 +170,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-reload-extensions',
-    apiVersion: '0.2.25',
+    apiVersion: '0.2.34',
   };
 }

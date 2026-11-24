@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 
-import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import {
   captureWindowScreenshot,
   type WindowScreenshotCapture,
@@ -59,9 +58,6 @@ export const getCaptureWindowScreenshotTool = (
 
               const error = result.error;
               if (error instanceof WindowScreenshotCaptureError) return error.toErr();
-              if (isRouteMissing(error)) {
-                return endpointNotInThisBuild('capture-window-screenshot').toErr();
-              }
               return new DesktopCommandExecutionError(error).toErr();
             },
           });

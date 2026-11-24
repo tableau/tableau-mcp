@@ -1,6 +1,5 @@
 import { Err, Ok } from 'ts-results-es';
 
-import { McpToolError } from '../../errors/mcpToolError.js';
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { ExecuteCommandError } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
@@ -67,138 +66,7 @@ describe('runExternalApiReadTool', () => {
     expect(extra.getExecutor).toHaveBeenCalledWith('999');
   });
 
-  it('maps route-missing command errors to honest endpoint 404s', async () => {
-    const executor = new ExternalApiToolExecutor({ discover: () => [] });
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(executor),
-    };
-    const routeMissing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No route matches GET /v0/workbook/widgets',
-        recoverable: false,
-      },
-    };
-
-    const errorContext = 'Operation: parent read attempted a widget lookup.';
-    const result = await runExternalApiReadTool({
-      session: undefined,
-      extra,
-      callback: async (_executor, _signal, read) =>
-        await read('widget list', async () => Err(routeMissing), { errorContext }),
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('endpoint-not-in-this-build');
-      expect(result.error.statusCode).toBe(404);
-      expect(result.error.message).toContain('widget list endpoint');
-      expect(result.error.message).toContain('Do not retry');
-      expect(result.error.message).not.toContain(errorContext);
-    }
-  });
-
-  it('uses stable not-found and a caller-supplied error for an endpoint with no resource 404', async () => {
-    const executor = new ExternalApiToolExecutor({ discover: () => [] });
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(executor),
-    };
-    const customError = new McpToolError({
-      type: 'dialog-action-unavailable',
-      message: 'This Desktop build cannot dismiss dialogs.',
-      statusCode: 404,
-    });
-    const routeMissing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'Ninguna ruta coincide con POST /v0/app:invokeDialogAction',
-        recoverable: false,
-      },
-    };
-
-    const result = await runExternalApiTool({
-      session: undefined,
-      extra,
-      callback: async (_executor, _signal, call) =>
-        await call('dialog action', async () => Err(routeMissing), {
-          routeMissingError: () => customError,
-          stableNotFoundMeansRouteMissing: true,
-        }),
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe(customError.type);
-      expect(result.error.message).toBe(customError.message);
-      expect(result.error.statusCode).toBe(customError.statusCode);
-    }
-  });
-
-  it('keeps translated resource not-found errors out of generic route-missing handling', async () => {
-    const executor = new ExternalApiToolExecutor({ discover: () => [] });
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(executor),
-    };
-    const resourceMissing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No se encontró la hoja solicitada.',
-        recoverable: false,
-      },
-    };
-
-    const result = await runExternalApiReadTool({
-      session: undefined,
-      extra,
-      callback: async (_executor, _signal, read) =>
-        await read('worksheet', async () => Err(resourceMissing)),
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('desktop-command-execution-error');
-      expect(result.error.message).toBe('No se encontró la hoja solicitada.');
-    }
-  });
-
-  it('does not broaden endpoint-scoped route handling beyond stable not-found', async () => {
-    const executor = new ExternalApiToolExecutor({ discover: () => [] });
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(executor),
-    };
-    const conflict: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'dialog-not-found',
-        message: 'The exact dialog identity is no longer active.',
-        recoverable: false,
-      },
-    };
-
-    const result = await runExternalApiTool({
-      session: undefined,
-      extra,
-      callback: async (_executor, _signal, call) =>
-        await call('dialog action', async () => Err(conflict), {
-          stableNotFoundMeansRouteMissing: true,
-        }),
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('desktop-command-execution-error');
-      expect(result.error.message).toBe('The exact dialog identity is no longer active.');
-    }
-  });
-
-  it('wraps non-route command errors as Desktop command execution errors', async () => {
+  it('wraps command errors as Desktop command execution errors', async () => {
     const executor = new ExternalApiToolExecutor({ discover: () => [] });
     const extra = {
       ...getMockRequestHandlerExtra(),
@@ -223,7 +91,7 @@ describe('runExternalApiReadTool', () => {
     }
   });
 
-  it('appends caller context to non-route errors without changing their classification', async () => {
+  it('appends caller context to errors without changing their classification', async () => {
     const executor = new ExternalApiToolExecutor({ discover: () => [] });
     const extra = {
       ...getMockRequestHandlerExtra(),
@@ -257,7 +125,7 @@ describe('runExternalApiReadTool', () => {
     }
   });
 
-  it('wraps non-route action errors as Desktop command execution errors', async () => {
+  it('wraps action errors as Desktop command execution errors', async () => {
     const executor = new ExternalApiToolExecutor({ discover: () => [] });
     const extra = {
       ...getMockRequestHandlerExtra(),

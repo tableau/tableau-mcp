@@ -132,45 +132,6 @@ describe('getXmlTool', () => {
   );
 
   it.each([
-    {
-      kind: 'worksheet',
-      sheetId: 'sheet-sales',
-      key: 'worksheetXml',
-      list: WORKSHEET_LIST,
-      path: WORKSHEET_DOCUMENT,
-    },
-    {
-      kind: 'dashboard',
-      sheetId: 'dash-exec',
-      key: 'dashboardXml',
-      list: DASHBOARD_LIST,
-      path: DASHBOARD_DOCUMENT,
-    },
-  ])(
-    'falls back to the whole workbook document when the $kind document route is missing',
-    async ({ kind, sheetId, key, list, path }) => {
-      const harness = await startHarness(
-        getXmlTool,
-        (server) => setRouteMissing(server, `GET ${path}`),
-        {
-          workbookXml:
-            '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sales by Region"><table /><simple-id uuid="sheet-sales" /></worksheet></worksheets>' +
-            '<dashboards><dashboard name="Executive Dashboard"><zones /><simple-id uuid="dash-exec" /></dashboard></dashboards></workbook>',
-        },
-      );
-      try {
-        const result = await harness.callTool({ kind, sheetId, mode: 'inline' });
-
-        expect(result.isError).toBe(false);
-        expect(parseResult(result)[key]).toBeDefined();
-        expect(requestPaths(harness.server)).toEqual([list, path, '/v0/workbook/document']);
-      } finally {
-        await harness.close();
-      }
-    },
-  );
-
-  it.each([
     { kind: 'worksheet', sheetId: 'sheet-sales', list: WORKSHEET_LIST, path: WORKSHEET_DOCUMENT },
     { kind: 'dashboard', sheetId: 'dash-exec', list: DASHBOARD_LIST, path: DASHBOARD_DOCUMENT },
   ])(
@@ -382,21 +343,6 @@ describe('getXmlTool', () => {
     }
   });
 
-  it('reports a too-new endpoint error when the storyboard document route is missing', async () => {
-    const harness = await startHarness(getXmlTool, (server) =>
-      setRouteMissing(server, `GET ${STORYBOARD_DOCUMENT}`),
-    );
-    try {
-      const result = await harness.callTool({ kind: 'storyboard', sheetId: 'story-qbr' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('storyboard document');
-      expect(errorText(result)).toContain('Do not retry');
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('writes the file and points at the matching apply tool in file mode', async () => {
     const harness = await startHarness(getXmlTool);
     try {
@@ -584,28 +530,13 @@ function setXml(server: MockExternalApiServer, path: string, xml: string): void 
   server.setOverride(`GET ${path}`, { status: 200, contentType: 'application/xml', body: xml });
 }
 
-function setRouteMissing(server: MockExternalApiServer, key: string): void {
-  server.setOverride(key, {
-    status: 404,
-    contentType: 'application/problem+json',
-    body: JSON.stringify({
-      type: 'problem',
-      title: `No route matches ${key}`,
-      status: 404,
-      instance: '/v0/mock',
-      detail: `No route matches ${key}`,
-      code: 'not-found',
-    }),
-  });
-}
-
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-get-xml',
-    apiVersion: '0.2.25',
+    apiVersion: '0.2.34',
   };
 }
 

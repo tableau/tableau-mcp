@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -104,27 +103,6 @@ describe('workspace extension tools', () => {
     } finally {
       await harness.close();
     }
-  });
-
-  it('reports a missing list route as a Desktop update', async () => {
-    const tool = getWorkspaceExtensionsTool(new DesktopMcpServer());
-    const extra = getMockRequestHandlerExtra();
-    const missing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No route matches GET /v0/app/extensions',
-        recoverable: false,
-      },
-    };
-    extra.getExecutor = vi.fn().mockResolvedValue({
-      listWorkspaceExtensions: vi.fn().mockResolvedValue(new Err(missing)),
-    });
-
-    const callback = await Provider.from(tool.callback);
-    const result = await callback({ session: '12345' }, extra);
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result)).toContain('too old');
   });
 
   it('POSTs the encoded :reload route with no body', async () => {

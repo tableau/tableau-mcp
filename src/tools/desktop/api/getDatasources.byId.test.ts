@@ -92,23 +92,6 @@ describe('get-datasources with datasourceId', () => {
     }
   });
 
-  it('reports a missing granular route through the standard endpoint error', async () => {
-    const harness = await startHarness([{ id: 'sales-id', name: 'Sales' }], (server) => {
-      setRouteMissing(server, 'GET /v0/workbook/datasources/sales-id');
-    });
-
-    try {
-      const result = await harness.callTool({ datasourceId: 'sales-id' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('does not serve the datasource metadata endpoint');
-      expect(errorText(result)).toContain('Do not retry');
-      expect(requestPaths(harness.server)).toEqual(['/v0/workbook/datasources/sales-id']);
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('keeps a real granular datasource-not-found distinct from route absence', async () => {
     const harness = await startHarness([{ id: 'stale-id', name: 'Stale source' }], (server) => {
       server.setOverride('GET /v0/workbook/datasources/stale-id', {
@@ -224,28 +207,13 @@ async function startHarness(
   };
 }
 
-function setRouteMissing(server: MockExternalApiServer, key: string): void {
-  server.setOverride(key, {
-    status: 404,
-    contentType: 'application/problem+json',
-    body: JSON.stringify({
-      type: 'problem',
-      title: `No route matches ${key}`,
-      status: 404,
-      instance: '/v0/mock',
-      detail: `No route matches ${key}`,
-      code: 'not-found',
-    }),
-  });
-}
-
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-datasource-by-id',
-    apiVersion: '0.2.10',
+    apiVersion: '0.2.34',
   };
 }
 

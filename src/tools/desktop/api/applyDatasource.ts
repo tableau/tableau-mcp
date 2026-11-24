@@ -4,7 +4,6 @@ import { Ok } from 'ts-results-es';
 import { checkCacheFileArg } from '../../../desktop/cachePath.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
-import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { formatColorMapCheck } from '../../../desktop/validation/colorMapReadback.js';
 import type { ReadbackVerificationResult } from '../../../desktop/validation/readback-verify.js';
 import { applyDatasourceXml } from '../../../desktop/wrappers/applyDatasourceXml.js';
@@ -99,9 +98,6 @@ export const getApplyDatasourceTool = (
             signal: extra.signal,
           });
           if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('datasource document').toErr();
-            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

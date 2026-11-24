@@ -1,7 +1,6 @@
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { resolveDatasourceRef } from './resolveDatasourceRef.js';
@@ -226,39 +225,6 @@ describe('resolveDatasourceRef', () => {
       expectNoGranularCall(executor);
     },
   );
-
-  it('maps a missing inventory route through the existing read error flow', async () => {
-    const routeMissing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No route matches GET /v0/workbook/datasources',
-        recoverable: false,
-      },
-    };
-    const executor = makeExecutorMock({
-      listWorkbookDatasources: vi.fn().mockResolvedValue(Err(routeMissing)),
-    });
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(executor),
-    };
-
-    const result = await resolveDatasourceRef({
-      session: undefined,
-      datasourceName: 'Sales',
-      extra,
-    });
-
-    expect(result.isErr()).toBe(true);
-    expect(result.unwrapErr()).toMatchObject({
-      type: 'endpoint-not-in-this-build',
-      statusCode: 404,
-    });
-    expect(result.unwrapErr().message).toContain('workbook datasources endpoint');
-    expect(executor.listWorkbookDatasources).toHaveBeenCalledOnce();
-    expectNoGranularCall(executor);
-  });
 });
 
 function harnessFor(datasources: Array<Record<string, unknown>>): {

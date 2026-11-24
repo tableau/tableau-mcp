@@ -116,7 +116,10 @@ describe('applyWorksheetTool', () => {
     vi.mocked(readFileSync).mockReset();
     mockContainedCacheReadFromFs();
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet' }] }),
+      Ok({
+        count: 1,
+        worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet', hidden: false }],
+      }),
     );
   });
 
@@ -460,7 +463,10 @@ describe('applyWorksheetTool', () => {
     const controller = new AbortController();
     vi.mocked(listWorksheetsModule.listWorksheets).mockImplementation(async ({ signal }) => {
       if (signal.aborted) throw new Error('aborted worksheet lookup');
-      return Ok({ count: 1, worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet' }] });
+      return Ok({
+        count: 1,
+        worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet', hidden: false }],
+      });
     });
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;
@@ -1521,7 +1527,7 @@ describe('applyWorksheetTool', () => {
   it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1' }] }),
+      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1', hidden: false }] }),
     );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [] }),
@@ -1546,7 +1552,10 @@ describe('applyWorksheetTool', () => {
     // fragment's absent simple-id skipped it, so a later name-only edit resumed the stale buffer.
     const mockXml = '<worksheet name="Old Name"><table></table></worksheet>';
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live' }] }),
+      Ok({
+        count: 1,
+        worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live', hidden: false }],
+      }),
     );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }),
@@ -1776,7 +1785,10 @@ describe('applyWorksheetTool', () => {
     const controller = new AbortController();
     vi.mocked(listWorksheetsModule.listWorksheets).mockImplementation(async ({ signal }) => {
       if (signal.aborted) throw new Error('aborted worksheet lookup');
-      return Ok({ count: 1, worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet' }] });
+      return Ok({
+        count: 1,
+        worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet', hidden: false }],
+      });
     });
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;

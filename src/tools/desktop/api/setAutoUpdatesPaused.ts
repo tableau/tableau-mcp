@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -70,9 +69,6 @@ export const getSetAutoUpdatesPausedTool = (
               ? await executor.resumeWorksheetAutoUpdates(id, extra.signal)
               : await executor.resumeDashboardAutoUpdates(id, extra.signal);
           if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild(`${kind} auto-updates`).toErr();
-            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

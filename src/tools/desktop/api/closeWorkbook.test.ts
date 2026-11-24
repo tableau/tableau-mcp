@@ -129,6 +129,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-close',
-    apiVersion: '0.2.32',
+    apiVersion: '0.2.34',
   };
 }

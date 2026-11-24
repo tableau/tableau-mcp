@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import { DesktopState } from '../../../desktop/externalApi/types.js';
@@ -88,35 +88,6 @@ describe('get-desktop-state tool', () => {
     };
 
     expect(parseResult(await invokeTool({ session: '999' }, extra))).toEqual(state);
-  });
-
-  it('maps a stable 404 to the endpoint-unavailable read error', async () => {
-    vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue(
-        makeExecutorMock({
-          getDesktopState: vi.fn().mockResolvedValue(
-            Err({
-              type: 'command-failed' as const,
-              error: {
-                code: 'not-found',
-                message: 'No route matches GET /v0/app/state',
-                recoverable: false,
-              },
-            }),
-          ),
-        }),
-      ),
-    };
-
-    const result = await invokeTool({ session: undefined }, extra);
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Desktop state endpoint');
-    expect(result.content[0].text).toContain('too old for this read');
-    expect(result.content[0].text).toContain('Do not retry');
   });
 });
 

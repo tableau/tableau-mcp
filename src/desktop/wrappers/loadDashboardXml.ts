@@ -60,9 +60,7 @@ export type LoadDashboardXmlError =
   // The fragment's <datasources> entry differs from the workbook's; Desktop would open a modal dialog.
   | { type: 'datasource-mismatch'; message: string }
   // All dashboard callers require an existing sheet; no whole-workbook fallback is safe here.
-  | { type: 'sheet-absent'; message: string }
-  // The Desktop build lacks the per-sheet document endpoint; nothing was sent.
-  | { type: 'route-missing'; message: string };
+  | { type: 'sheet-absent'; message: string };
 
 export interface LoadDashboardXmlOk {
   appliedName?: string;
@@ -528,17 +526,6 @@ export async function loadDashboardXml({
         message:
           `The ${kind} changed since this cache was read. Re-read it with get-xml (kind=${kind}), ` +
           `reapply your edit to the new cache file, then retry apply-${kind}. No changes were sent to Tableau.`,
-      },
-    });
-  }
-  if (outcome === 'route-missing') {
-    return Err({
-      type: 'load-dashboard-xml-error',
-      error: {
-        type: 'route-missing',
-        message:
-          `This Tableau Desktop build has no per-sheet ${kind} document endpoint, so "${canonicalName}" ` +
-          'cannot be updated in place. Update Tableau Desktop. No changes were sent to Tableau.',
       },
     });
   }

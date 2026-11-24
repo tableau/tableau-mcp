@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { Config } from '../../../../config.desktop.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -91,12 +91,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
       getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
         Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
       ),
-      // Older Desktop without the per-sheet route: readback falls back to the workbook document.
-      getWorksheetDocument: vi.fn(async () =>
-        Err({
-          type: 'command-failed' as const,
-          error: { code: 'not-found', message: 'No route matches /worksheets' },
-        }),
+      getWorksheetDocument: vi.fn(async (id: string) =>
+        Ok({ xml: extractSheetXml(liveXml, id.replace(/^id-/, '')) ?? '' }),
       ),
       getWorksheetSummaryData: vi.fn(async (_id: string, options: { maxRows: number }) =>
         Ok({
@@ -197,11 +193,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
       getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
         Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
       ),
-      getWorksheetDocument: vi.fn(async () =>
-        Err({
-          type: 'command-failed' as const,
-          error: { code: 'not-found', message: 'No route matches /worksheets' },
-        }),
+      getWorksheetDocument: vi.fn(async (id: string) =>
+        Ok({ xml: extractSheetXml(liveXml, id.replace(/^id-/, '')) ?? '' }),
       ),
       getWorksheetSummaryData: vi.fn(async (_id: string, options: { maxRows: number }) =>
         Ok({

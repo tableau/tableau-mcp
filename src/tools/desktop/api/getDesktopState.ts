@@ -38,7 +38,6 @@ export const getDesktopStateTool = (server: DesktopMcpServer): DesktopTool<typeo
               await call(
                 'Desktop state',
                 async (executor, signal) => await executor.getDesktopState(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

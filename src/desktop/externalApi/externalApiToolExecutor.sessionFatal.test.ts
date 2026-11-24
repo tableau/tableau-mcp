@@ -21,7 +21,7 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
           token: 'valid-token',
           pid: 999,
           instanceId: 'session-fatal-test',
-          apiVersion: '0.2.22',
+          apiVersion: '0.2.34',
         },
       ],
     });

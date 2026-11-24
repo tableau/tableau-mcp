@@ -127,28 +127,6 @@ describe('refresh-auto-updates', () => {
     }
   });
 
-  it('classifies route-missing by its stable code when the message is localized', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride(
-        `POST ${REFRESH_ROUTE}`,
-        problemResponse(
-          404,
-          'not-found',
-          'Aucune route ne correspond a POST /v0/workbook/worksheets/sheet-sales:refreshNow',
-        ),
-      );
-    });
-    try {
-      const result = await harness.callTool({ sheetId: WORKSHEET_ID, kind: 'worksheet' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('Desktop build does not serve');
-      expect(errorText(result)).toContain('Do not retry');
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('maps a failed Operation to DesktopCommandExecutionError', async () => {
     const harness = await startHarness((server) => {
       server.setOverride(`POST ${REFRESH_ROUTE}`, {
