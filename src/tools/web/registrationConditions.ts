@@ -340,8 +340,8 @@ async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean | un
  * or absent entitlement is treated as disabled.
  *
  * Note on scopes: this requests `tableau:entitlements:read`, and a Connected App rejects a JWT
- * mint that asks for a scope it has not granted. The Connected App must therefore grant that
- * scope, or the probe fails closed and hides the premium tools. That is why the condition is only
+ * mint that asks for a scope it has not granted. A deployment must therefore grant that scope,
+ * or the probe fails closed and hides the premium tools. That is why the condition is only
  * consulted for tools that declare it.
  */
 async function checkPulsePremium(
