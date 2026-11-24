@@ -303,9 +303,11 @@ Disable scope enforcement and scope challenges.
 
 - Default: `false`
 - Useful for Tableau Server deployments that do not want to enforce scopes yet.
-- When `false`, connections accept tokens with a subset of supported scopes. Tools outside the grant
-  are omitted from the tool list and named in the initialize instructions. Calling a tool without
-  its required scopes returns `403` `insufficient_scope`.
+- When `false`, connections accept tokens with a subset of supported scopes. The server enforces
+  each tool's MCP scopes and, when [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`, its
+  required Tableau API scopes. Tools missing these scopes are omitted from the tool list and named
+  in the initialize instructions. Calling a tool without the enforced scopes returns `403`
+  `insufficient_scope`. The [site-settings scope requirement](#advertise_api_scopes) still applies.
 - When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
   enforce scopes on incoming access tokens.
 - With [your own identity provider](#use-your-own-identity-provider-self-hosted-only), `true` is
@@ -500,12 +502,17 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
 - Default: `false`
 - When `true`, `scopes_supported` includes MCP + API scopes and scope challenges may include API
   scopes for step-up.
-- The check for AI-powered Pulse insight tools needs `tableau:entitlements:read`, so it is part of
-  the advertised set. Tools are left out when a token lacks their scopes.
+- When `true`, the advertised set also includes `tableau:entitlements:read` if AI-powered Pulse
+  insight tools are enabled and the `enforce-registration-conditions` feature flag is on.
 - When `true`, [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `false`, and
   [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
-  every token must carry `tableau:mcp_site_settings:read`. A token without it is rejected with
-  `403`, and the embedded authorization server refuses to issue one (`400` `invalid_scope`).
+  every access token used for MCP requests must carry `tableau:mcp_site_settings:read`. A token
+  without it is rejected with `403` `insufficient_scope`. The embedded authorization server also
+  rejects `/oauth2/authorize` requests and `client_credentials` token requests whose grants omit
+  the scope (`400` `invalid_scope`).
+- The embedded authorization server preserves the original scopes when refreshing a token. If an
+  older grant lacks the site-settings scope and the requirement above applies, reauthorize to add
+  it; refreshing does not add the missing scope.
 
 <hr />
 
