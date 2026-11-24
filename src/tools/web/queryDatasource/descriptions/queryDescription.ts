@@ -410,6 +410,14 @@ Filter relative date periods:
 }
 \`\`\`
 
+## Running a Stored VDS Request
+To run a VizQL Data Service QueryRequest, pass its \`datasource\`, \`query\`, and \`options\` as-is. Unknown keys at any level are rejected.
+- Forwarded options: \`disaggregate\`. \`bypassMetadataCache\` needs Tableau 2025.3 or later, and \`withNewSession\` 2026.2 or later.
+- \`options.rowLimit\` is applied by the tool on this server, not by VDS.
+- \`options.rowLimit\` acts like \`limit\`; the smaller wins.
+- The tool always sets \`returnFormat\`, \`debug\`, and \`returnServerSentEvents\` itself. Differing values are ignored with a warning in \`mcp.warnings\`, as are \`datasource.connections\` and \`datasource.workbookDatasourceId\`.
+- \`disaggregate: true\` returns one row per underlying record and ignores aggregation functions, though column names still show them (e.g. \`SUM(Sales)\` holds one record's value). Profile the record count first.
+
 ## Error Prevention and Data Management
 
 **When to profile data first:**
