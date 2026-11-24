@@ -1,7 +1,7 @@
 import { Config } from '../config.js';
 
 /**
- * Strict scope matching is on unless `DISABLE_STRICT_SCOPE_MATCH=true`.
+ * Subset scope matching is the default; `DISABLE_STRICT_SCOPE_MATCH=false` enables strict matching.
  * This is the single source of the rule; every enforcement site calls it.
  */
 export async function isStrictScopeMatchEnabled(config: Pick<Config, 'oauth'>): Promise<boolean> {

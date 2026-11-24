@@ -555,7 +555,8 @@ describe('server', () => {
       // Strict ON guarantees a full grant upstream (the gate rejects anything short), so discovery
       // omits nothing. server.web.ts has no strict branch — this pins that a full grant produces an
       // empty omission set and no missing-scopes note, regardless of the strict toggle.
-      vi.stubEnv('ADVERTISE_API_SCOPES', 'true'); // strict is on by default
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
       const server = getServer();
       await server.registerTools(bearerAuth, [
         ...allScopes('list-datasources'),
