@@ -52,3 +52,24 @@ still executes and returns data):
 If the intent is to find the Top values *within* the filtered subset, add `"context": true` to
 the affected dimension filter(s). If the intent is to find the Top values globally and then
 filter them, no change is needed — the warning can be ignored.
+
+### Ignored request properties
+
+When a [`datasource`](#datasource) or [`options`](#options) property is accepted but not used, the
+result carries an `IGNORED_REQUEST_PROPERTY` warning naming it. The query still runs:
+
+```json
+{
+  "data": [ /* ... */ ],
+  "mcp": {
+    "warnings": [
+      {
+        "type": "IGNORED_REQUEST_PROPERTY",
+        "severity": "WARNING",
+        "message": "The tool always uses returnFormat: \"OBJECTS\", so the values you passed were ignored.",
+        "affectedProperties": ["options.returnFormat"]
+      }
+    ]
+  }
+}
+```

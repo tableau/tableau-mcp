@@ -689,6 +689,13 @@ Filter relative date periods:
 
 Note: Calculated Fields created as part of a query cannot be referenced in other calculations or filters.
 
+## Running a Stored VDS Request
+To run a VizQL Data Service QueryRequest, pass its \`datasource\`, \`query\`, and \`options\` as-is. Unknown keys at any level are rejected.
+- Forwarded options: \`disaggregate\`, \`bypassMetadataCache\`. \`withNewSession\` needs Tableau 2026.2 or later.
+- \`options.rowLimit\` acts like \`limit\`; the smaller wins.
+- The tool always sets \`returnFormat\`, \`debug\`, and \`returnServerSentEvents\` itself. Differing values are ignored with a warning in \`mcp.warnings\`, as are \`datasource.connections\` and \`datasource.workbookDatasourceId\`.
+- \`disaggregate: true\` returns one row per underlying record and ignores aggregation functions, though column names still show them (e.g. \`SUM(Sales)\` holds one record's value). Profile the record count first.
+
 ## Error Prevention and Data Management
 
 **When to profile data first:**
