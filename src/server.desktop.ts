@@ -33,6 +33,7 @@ import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
 import { buildDesktopInstructions, EXPERTISE_TOOL_NAMES } from './desktop/instructions.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
+import { DesktopApiVersionTooOldError } from './errors/mcpToolError.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { registerSkills } from './skills/index.js';
@@ -257,6 +258,26 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
   );
 }
 
+/**
+ * Rejects a call whose target Desktop is older than the tool's floor. Registration can only
+ * hide a tool when no running Desktop serves it; this covers the instance the call reaches.
+ * An unknown version passes, so the call reports its own error.
+ */
+export function assertServesApiVersion(
+  tool: string,
+  minApiVersion: string | undefined,
+  desktopApiVersion: string | undefined,
+): void {
+  if (
+    minApiVersion === undefined ||
+    desktopApiVersion === undefined ||
+    apiVersionAtLeast(desktopApiVersion, minApiVersion)
+  ) {
+    return;
+  }
+  throw new DesktopApiVersionTooOldError({ tool, minApiVersion, desktopApiVersion });
+}
+
 export function warnIfUnsupportedApiVersion(connectedApiVersion: string | undefined): void {
   if (
     connectedApiVersion === undefined ||
@@ -331,7 +352,15 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
+    for (const {
+      name,
+      title,
+      description,
+      paramsSchema,
+      annotations,
+      callback,
+      minApiVersion,
+    } of tools) {
       const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
         const tableauToolCallback = await Provider.from(callback);
         // One clock per tool call, composed into extra.signal so the socket really aborts.
@@ -347,7 +376,9 @@ export class DesktopMcpServer extends Server {
             deadline,
             config,
             getExecutor: async (sessionId: string) => {
-              return await this.sessionManager.getExecutor(sessionId);
+              const executor = await this.sessionManager.getExecutor(sessionId);
+              assertServesApiVersion(name, minApiVersion, executor.desktopApiVersion);
+              return executor;
             },
             server: this,
           };

@@ -345,6 +345,26 @@ export class UnknownError extends McpToolError {
   }
 }
 
+export class DesktopApiVersionTooOldError extends McpToolError {
+  constructor({
+    tool,
+    minApiVersion,
+    desktopApiVersion,
+  }: {
+    tool: string;
+    minApiVersion: string;
+    desktopApiVersion: string;
+  }) {
+    super({
+      type: 'desktop-api-version-too-old',
+      message:
+        `${tool} needs External Client API version ${minApiVersion} or later, but this Tableau Desktop serves ${desktopApiVersion}. ` +
+        'Tell the user to update Tableau Desktop. Do not retry.',
+      statusCode: 501,
+    });
+  }
+}
+
 export class NoDesktopInstancesFoundError extends McpToolError {
   constructor() {
     super({

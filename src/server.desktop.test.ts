@@ -1,8 +1,10 @@
 import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
+import { Ok } from 'ts-results-es';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
 import { apiVersionAtLeast, MIN_SUPPORTED_API_VERSION } from './desktop/externalApi/apiVersion.js';
+import { makeExecutorMock } from './desktop/externalApi/executor.mock.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
@@ -10,9 +12,12 @@ import {
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './desktop/instructions.js';
+import { SessionManager } from './desktop/session/sessionManager.js';
+import { DesktopApiVersionTooOldError } from './errors/mcpToolError.js';
 import * as loggerModule from './logging/logger.js';
 import {
   ALWAYS_LOAD_TOOL_NAMES,
+  assertServesApiVersion,
   DEMO_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
@@ -784,6 +789,107 @@ describe('API-version tool gate', () => {
 
     it('fails open when the connected version is unknown — keeps everything unchanged', () => {
       expect(filterToolsByApiVersion(tools, undefined)).toBe(tools);
+    });
+  });
+
+  describe('assertServesApiVersion', () => {
+    it('throws when the Desktop is older than the floor', () => {
+      expect(() => assertServesApiVersion('story', '0.2.40', '0.2.34')).toThrow(
+        DesktopApiVersionTooOldError,
+      );
+    });
+
+    it('names the tool and both versions', () => {
+      expect(() => assertServesApiVersion('story', '0.2.40', '0.2.34')).toThrow(
+        'story needs External Client API version 0.2.40 or later, but this Tableau Desktop serves 0.2.34.',
+      );
+    });
+
+    it.each([
+      ['equal to the floor', '0.2.40', '0.2.40'],
+      ['newer than the floor', '0.2.40', '0.3.0'],
+      ['unknown', '0.2.40', undefined],
+      ['for a tool with no floor', undefined, '0.2.34'],
+    ])('passes when the Desktop version is %s', (_case, minApiVersion, desktopApiVersion) => {
+      expect(() => assertServesApiVersion('story', minApiVersion, desktopApiVersion)).not.toThrow();
+    });
+  });
+
+  describe('per-call API version gate', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function callGatedTool(desktopApiVersion: string | undefined): Promise<{
+      result: CallToolResult;
+      toolBody: ReturnType<typeof vi.fn>;
+    }> {
+      const server = getServer();
+      const toolBody = vi.fn();
+      const tool: DesktopTool<Record<string, never>> = new DesktopTool({
+        server,
+        name: 'get-sheets',
+        title: 'Gated',
+        description: 'Gated test tool',
+        paramsSchema: {},
+        annotations: {
+          title: 'Gated',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        minApiVersion: '0.2.40',
+        callback: new Provider(
+          async () =>
+            async (_args, extra): Promise<CallToolResult> =>
+              tool.logAndExecute({
+                extra,
+                args: {},
+                callback: async () => {
+                  await extra.getExecutor('4242');
+                  toolBody();
+                  return new Ok({});
+                },
+              }),
+        ),
+      });
+      vi.spyOn(
+        server as unknown as { _getToolsToRegister: () => unknown },
+        '_getToolsToRegister',
+      ).mockResolvedValue([tool]);
+      vi.spyOn(SessionManager.prototype, 'getExecutor').mockResolvedValue(
+        makeExecutorMock({ desktopApiVersion }),
+      );
+      await server.registerTools();
+      const [, , registered] = vi.mocked(server.mcpServer.registerTool).mock
+        .calls[0] as unknown as [
+        string,
+        unknown,
+        (args: unknown, ctx: unknown) => Promise<CallToolResult>,
+      ];
+      const result = await registered(
+        {},
+        { mcpReq: { signal: new AbortController().signal, id: 1, notify: vi.fn() } },
+      );
+      return { result, toolBody };
+    }
+
+    it('rejects a call to a Desktop older than the tool floor before the tool runs', async () => {
+      const { result, toolBody } = await callGatedTool('0.2.34');
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        'get-sheets needs External Client API version 0.2.40 or later',
+      );
+      expect(toolBody).not.toHaveBeenCalled();
+    });
+
+    it.each(['0.2.40', undefined])('lets a call through to a Desktop on %s', async (version) => {
+      const { result, toolBody } = await callGatedTool(version);
+
+      expect(result.isError).toBe(false);
+      expect(toolBody).toHaveBeenCalledOnce();
     });
   });
 
