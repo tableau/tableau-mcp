@@ -22,19 +22,32 @@ export type ParameterValidationError = {
 
 export type QueryValidationError = FieldValidationError | ParameterValidationError;
 
+export type ReadMetadataOptions = {
+  bypassMetadataCache?: boolean;
+  withNewSession?: boolean;
+};
+
 export async function validateQueryAgainstDatasourceMetadata(
   query: Query,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
   interpretFieldCaptionsAsFieldNames = false,
+  // The caller's cache and session options, so validation reads what the query will see: a stale
+  // cache or session would otherwise reject a field the query can reach.
+  { bypassMetadataCache, withNewSession }: ReadMetadataOptions = {},
 ): Promise<Result<void, QueryValidationError[]>> {
   const validationErrors: QueryValidationError[] = [];
+  const options = {
+    ...(bypassMetadataCache !== undefined && { bypassMetadataCache }),
+    ...(withNewSession !== undefined && { withNewSession }),
+  };
 
   try {
     const readMetadataResult = await vizqlDataServiceMethods.readMetadata({
       datasource: {
         datasourceLuid: datasource.datasourceLuid,
       },
+      ...(Object.keys(options).length > 0 && { options }),
     });
 
     if (readMetadataResult.isErr() || !readMetadataResult.value.data) {
