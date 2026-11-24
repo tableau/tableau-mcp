@@ -15,6 +15,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
 import {
   formatScopes,
+  getAdvertisedScopes,
   getSupportedScopes,
   MCP_SITE_SETTINGS_READ_SCOPE,
   parseScopes,
@@ -164,7 +165,7 @@ export function token(
             validScopes.length > 0
               ? validScopes
               : enforceScopes
-                ? await getSupportedScopes({
+                ? await getAdvertisedScopes({
                     includeApiScopes: advertiseApiScopes,
                     clientId: clientCredentialClientId,
                   })
