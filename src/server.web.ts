@@ -512,7 +512,7 @@ export class WebMcpServer extends Server {
     const checkMcpScopes = hasExplicitScopeGrant;
     const checkApiScopes =
       hasExplicitScopeGrant && config.oauth.enforceScopes && config.oauth.advertiseApiScopes;
-    // Probe scopes follow the same enforcement rules as the tools' other API scopes.
+    // API scope enforcement also covers permissions needed to check tool availability.
     const grantedScopeSet = new Set(grantedScopes ?? []);
 
     const toolsToRegister: typeof allTools = [];
