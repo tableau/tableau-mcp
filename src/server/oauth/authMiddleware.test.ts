@@ -373,7 +373,6 @@ describe('initialize with optional post-publish permission disclosure', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-    vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
     vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
   });
@@ -635,7 +634,7 @@ describe('strict vs. subset scope matching', () => {
     mocks.isFeatureEnabled.mockResolvedValue(false);
   });
 
-  // Explicit false enables strict matching.
+  // Strict is on unless the environment variable disables it.
   function enableStrict(): void {
     vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
   }
@@ -701,9 +700,8 @@ describe('strict vs. subset scope matching', () => {
     expect(res.statusCode).toBeUndefined();
   });
 
-  it('accepts a subset token at initialize by default', async () => {
-    vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', undefined);
-    // Site settings are on by default, so include the mandatory scope.
+  it('accepts a subset token at initialize when the feature flag is on', async () => {
+    // Env var unset (off by default), flag on; site settings on by default, so include the mandatory scope.
     const { req, res, next, authInfo, middleware } = initializeReq([
       ...(await mcpSubset()),
       MANDATORY_SCOPE,

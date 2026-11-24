@@ -729,7 +729,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
-      disableStrictScopeMatch: true,
+      disableStrictScopeMatch: false,
       external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -751,7 +751,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
-        disableStrictScopeMatch: true,
+        disableStrictScopeMatch: false,
         external: null,
         ...defaultOAuthTimeoutMs,
       });
@@ -1138,10 +1138,9 @@ describe('Config', () => {
     });
 
     describe('DISABLE_STRICT_SCOPE_MATCH', () => {
-      it('defaults disableStrictScopeMatch to true', () => {
-        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', undefined);
+      it('defaults disableStrictScopeMatch to false', () => {
         const config = new Config();
-        expect(config.oauth.disableStrictScopeMatch).toBe(true);
+        expect(config.oauth.disableStrictScopeMatch).toBe(false);
       });
 
       it('sets disableStrictScopeMatch to true when DISABLE_STRICT_SCOPE_MATCH is "true"', () => {
@@ -1150,8 +1149,8 @@ describe('Config', () => {
         expect(config.oauth.disableStrictScopeMatch).toBe(true);
       });
 
-      it('sets disableStrictScopeMatch to false when DISABLE_STRICT_SCOPE_MATCH is "false"', () => {
-        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
+      it('treats any non-"true" DISABLE_STRICT_SCOPE_MATCH as false', () => {
+        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'yes');
         const config = new Config();
         expect(config.oauth.disableStrictScopeMatch).toBe(false);
       });
@@ -1169,7 +1168,7 @@ describe('Config', () => {
         embeddedAuthzServer: true,
         enforceScopes: true,
         advertiseApiScopes: false,
-        disableStrictScopeMatch: true,
+        disableStrictScopeMatch: false,
       });
       expect(config.enableMcpSiteSettings).toBe(true);
     });
