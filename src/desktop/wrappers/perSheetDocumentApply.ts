@@ -9,7 +9,7 @@ import {
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
-import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import { resolveItemByNameOrId } from '../externalApi/toolUtils.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
 import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
@@ -41,7 +41,6 @@ export type PerSheetApplyOutcome =
     }
   | { type: 'dashboard-member-blank-transition'; dashboards: string[] }
   | 'sheet-absent'
-  | 'route-missing'
   | 'source-drift'
   | { type: 'validation-failed'; issues: ValidationIssue[] }
   | { type: 'name-differs'; submittedName: string; liveName: string };
@@ -88,10 +87,6 @@ export async function preparePerSheetApply({
 
   const listResult = await listSheetsOfKind(kind, client, signal);
   if (listResult.isErr()) {
-    // A missing list route means the per-sheet POST route is missing too (they ship together).
-    if (isRouteMissing(listResult.error)) {
-      return Ok('route-missing');
-    }
     return Err(listResult.error);
   }
   // Preserve the caller's snapshot pin, or pin the instance that resolved the target.
@@ -197,10 +192,6 @@ export async function applyPreparedSheet({
     expectedInstanceId ?? prepared.expectedInstanceId,
   );
   if (applyResult.isErr()) {
-    // A build with the list route but not the POST route (unlikely) still falls back cleanly.
-    if (isRouteMissing(applyResult.error)) {
-      return Ok('route-missing');
-    }
     return Err(applyResult.error);
   }
 

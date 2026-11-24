@@ -21,7 +21,7 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
           token: 'valid-token',
           pid: 999,
           instanceId: 'session-fatal-test',
-          apiVersion: '0.2.22',
+          apiVersion: '0.2.34',
         },
       ],
     });
@@ -74,7 +74,7 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
         error: {
           code: 'operation-failed',
           message: 'Internal Error',
-          'tableau-error-code': 'E71AE512',
+          tableauErrorCode: 'E71AE512',
         },
         result: { changed: false },
         warnings: [{ code: 'apply-warning', message: 'Desktop warning' }],
@@ -131,44 +131,48 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
     },
   );
 
-  it.each([
-    ['json', 'tableauErrorCode'],
-    ['xml', 'tableau-error-code'],
-  ])('preserves the Tableau code from a failed polled %s read', async (kind, errorKey) => {
-    const path = kind === 'json' ? '/v0/workbook' : '/v0/workbook/document';
-    server.setOverride(`GET ${path}`, {
-      status: 202,
-      contentType: 'application/json',
-      headers: { location: '/v0/operations/failed-read', 'retry-after': '0' },
-      body: JSON.stringify({ id: 'failed-read', kind: 'workbook.read', state: 'RUNNING' }),
-    });
-    server.setOperation('failed-read', {
-      retryAfterSeconds: 0,
-      poll: [
-        {
-          id: 'failed-read',
-          kind: 'workbook.read',
-          state: 'FAILED',
-          error: { code: 'operation-failed', message: 'Internal Error', [errorKey]: 'E71AE512' },
+  it.each(['json', 'xml'])(
+    'preserves the Tableau code from a failed polled %s read',
+    async (kind) => {
+      const path = kind === 'json' ? '/v0/workbook' : '/v0/workbook/document';
+      server.setOverride(`GET ${path}`, {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: '/v0/operations/failed-read', 'retry-after': '0' },
+        body: JSON.stringify({ id: 'failed-read', kind: 'workbook.read', state: 'RUNNING' }),
+      });
+      server.setOperation('failed-read', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'failed-read',
+            kind: 'workbook.read',
+            state: 'FAILED',
+            error: {
+              code: 'operation-failed',
+              message: 'Internal Error',
+              tableauErrorCode: 'E71AE512',
+            },
+          },
+        ],
+      });
+
+      const result =
+        kind === 'json'
+          ? await executor.getWorkbook(signal)
+          : await executor.getWorkbookDocument(signal);
+
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'command-failed',
+        error: {
+          recoverable: false,
+          'tableau-error-code': 'E71AE512',
+          message: expect.stringContaining('restart Tableau Desktop'),
         },
-      ],
-    });
-
-    const result =
-      kind === 'json'
-        ? await executor.getWorkbook(signal)
-        : await executor.getWorkbookDocument(signal);
-
-    expect(result.unwrapErr()).toMatchObject({
-      type: 'command-failed',
-      error: {
-        recoverable: false,
-        'tableau-error-code': 'E71AE512',
-        message: expect.stringContaining('restart Tableau Desktop'),
-      },
-    });
-    expect(server.requests.filter((request) => request.path === path)).toHaveLength(1);
-  });
+      });
+      expect(server.requests.filter((request) => request.path === path)).toHaveLength(1);
+    },
+  );
 
   it('delivers restart guidance through the MCP error funnel for workbook reads', async () => {
     server.setOverride('GET /v0/workbook/document', {

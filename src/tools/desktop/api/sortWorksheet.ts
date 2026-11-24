@@ -2,11 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from '../../../desktop/externalApi/toolUtils.js';
+import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { WorksheetSort } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
@@ -149,9 +145,6 @@ export const getSortWorksheetTool = (
               extra.signal,
             );
             if (result.isErr()) {
-              if (isRouteMissing(result.error)) {
-                return endpointNotInThisBuild('sort-worksheet').toErr();
-              }
               return new DesktopCommandExecutionError(result.error).toErr();
             }
 

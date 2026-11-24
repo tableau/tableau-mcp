@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 
-import { WORKSPACE_EXTENSIONS_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { WorkspaceExtensionList } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -19,7 +18,6 @@ export const getWorkspaceExtensionsTool = (
   const tool = new DesktopTool({
     server,
     name: 'get-workspace-extensions',
-    minApiVersion: WORKSPACE_EXTENSIONS_MIN_API_VERSION,
     title,
     description:
       'Lists the workspace extensions installed in Tableau Desktop, including disabled ones. ' +
@@ -43,7 +41,6 @@ export const getWorkspaceExtensionsTool = (
               await call(
                 'GET /v0/app/extensions',
                 async (executor, signal) => await executor.listWorkspaceExtensions(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

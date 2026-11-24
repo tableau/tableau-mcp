@@ -360,7 +360,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-refresh-auto-updates-storyboard',
-    apiVersion: '0.2.20',
+    apiVersion: '0.2.34',
   };
 }
 

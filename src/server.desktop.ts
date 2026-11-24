@@ -27,7 +27,7 @@ import {
   listExpertiseResources,
   readExpertiseResource,
 } from './desktop/expertise/index.js';
-import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
+import { apiVersionAtLeast, MIN_SUPPORTED_API_VERSION } from './desktop/externalApi/apiVersion.js';
 import { discoverInstances } from './desktop/externalApi/discovery.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
@@ -241,8 +241,7 @@ export function resolveConnectedApiVersion(
 
 /**
  * Drop tools whose {@link DesktopTool.minApiVersion} floor exceeds the connected Desktop's
- * API version. Fails open: an unknown connected version keeps every tool, leaving the
- * per-call `endpointNotInThisBuild` guard as the backstop.
+ * API version. Fails open: an unknown connected version keeps every tool.
  */
 export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
   tools: T[],
@@ -256,6 +255,20 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
       tool.minApiVersion === undefined ||
       apiVersionAtLeast(connectedApiVersion, tool.minApiVersion),
   );
+}
+
+export function warnIfUnsupportedApiVersion(connectedApiVersion: string | undefined): void {
+  if (
+    connectedApiVersion === undefined ||
+    apiVersionAtLeast(connectedApiVersion, MIN_SUPPORTED_API_VERSION)
+  ) {
+    return;
+  }
+  log({
+    message: `The connected Desktop serves External Client API v${connectedApiVersion}, which is older than v${MIN_SUPPORTED_API_VERSION}, the oldest version this server supports. Update Tableau Desktop.`,
+    level: 'warning',
+    logger: 'DesktopMcpServer',
+  });
 }
 
 export { DATA_ROOT, RESOURCES_ROOT };
@@ -399,6 +412,7 @@ export class DesktopMcpServer extends Server {
 
     const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
     const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
+    warnIfUnsupportedApiVersion(connectedApiVersion);
     const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
 
     if (gatedTools.length < profileTools.length) {

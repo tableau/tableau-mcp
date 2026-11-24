@@ -27,7 +27,6 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
   const saveWorkbookTool = new DesktopTool({
     server,
     name: 'save-workbook',
-    minApiVersion: '0.2.6',
     title,
     description:
       'Save the open workbook in place, or pass an absolute .twb/.twbx path to Save As: the workbook is ' +

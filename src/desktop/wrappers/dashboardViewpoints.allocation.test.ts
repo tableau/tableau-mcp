@@ -39,7 +39,6 @@ async function verifyAppliedAllocation(
   let live = expected;
   const instanceId = 'allocation-instance';
   const executor = makeExecutorMock({
-    desktopApiVersion: '0.2.24',
     listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
     getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml })),
     getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live, instanceId })),

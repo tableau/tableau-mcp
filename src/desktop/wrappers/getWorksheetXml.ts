@@ -5,7 +5,6 @@ import {
   WorkbookReadGateway,
 } from './workbookReadGateway.js';
 
-export { isRouteMissing } from '../externalApi/toolUtils.js';
 export type { GetWorksheetXmlError };
 
 export async function getWorksheetXml(

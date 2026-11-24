@@ -91,7 +91,7 @@ List of field names to restrict the returned columns (for example `"Region"`). W
 
 #### Field-name qualification
 
-Bare field names are qualified with the worksheet's datasource internal name (its caption on builds before API 0.2.25) before the data is read, as `[datasource].[field]` (for example `[federated.0abc123].[Region]`). A value already in `[datasource].[field]` form is passed through unchanged. Qualifying the names is done in-process (not an API call) after the worksheet document is read. If the worksheet declares no datasource, the call is refused. If the worksheet uses more than one datasource, a bare name is ambiguous and the call is refused — pass the field as `[datasource].[field]`.
+Bare field names are qualified with the worksheet's datasource internal name before the data is read, as `[datasource].[field]` (for example `[federated.0abc123].[Region]`). A value already in `[datasource].[field]` form is passed through unchanged. Qualifying the names is done in-process (not an API call) after the worksheet document is read. If the worksheet declares no datasource, the call is refused. If the worksheet uses more than one datasource, a bare name is ambiguous and the call is refused — pass the field as `[datasource].[field]`.
 
 :::note
 When a name cannot be qualified, the tool refuses before reading the data. The message starts with "Cannot restrict columns:" and then the reason. One reason is that the worksheet declares no datasource to qualify the field name against. The other is that the worksheet uses multiple datasources, so the field name is ambiguous, and the message lists the datasource-qualified names to pass.

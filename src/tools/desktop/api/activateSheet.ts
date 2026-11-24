@@ -3,11 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from '../../../desktop/externalApi/toolUtils.js';
+import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
@@ -135,9 +131,6 @@ export const getActivateSheetTool = (
           const executor = await extra.getExecutor(sessionResult.value);
           const result = await executor.goToSheet(resolved.value.id, extra.signal);
           if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('activate-sheet').toErr();
-            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

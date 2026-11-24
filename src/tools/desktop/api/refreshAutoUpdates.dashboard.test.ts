@@ -4,7 +4,6 @@ import { Ok } from 'ts-results-es';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
-  MockOverride,
   RecordedRequest,
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
@@ -348,24 +347,6 @@ describe('refresh-auto-updates on a dashboard', () => {
       await harness.close();
     }
   });
-
-  it('classifies a stable missing-route response without confusing dashboard-not-found', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride(
-        `POST ${ROUTE}`,
-        problemResponse(404, 'not-found', 'No route matches the dashboard refresh request.'),
-      );
-    });
-    try {
-      const result = await harness.callTool({ sheetId: DASHBOARD_ID, kind: 'dashboard' });
-
-      expect(result.isError).toBe(true);
-      expect(text(result)).toContain('Desktop build does not serve');
-      expect(text(result)).toContain('Do not retry');
-    } finally {
-      await harness.close();
-    }
-  });
 });
 
 type ToolArgs = {
@@ -408,7 +389,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-dashboard-refresh',
-    apiVersion: '0.2.19',
+    apiVersion: '0.2.34',
   };
 }
 
@@ -423,19 +404,4 @@ function text(result: CallToolResult): string {
 
 function parseText(result: CallToolResult): Record<string, unknown> {
   return JSON.parse(text(result)) as Record<string, unknown>;
-}
-
-function problemResponse(status: number, code: string, detail: string): MockOverride {
-  return {
-    status,
-    contentType: 'application/problem+json',
-    body: JSON.stringify({
-      type: 'problem',
-      title: detail,
-      status,
-      instance: '/v0/mock',
-      detail,
-      code,
-    }),
-  };
 }

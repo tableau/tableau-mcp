@@ -4,11 +4,6 @@ import { DesktopCommandExecutionError } from '../../errors/mcpToolError.desktop.
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { ExecuteCommandError } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-  RouteMissingOptions,
-} from '../externalApi/toolUtils.js';
 import { resolveSession } from '../session/sessionResolution.js';
 
 // Structural subset of TableauDesktopRequestHandlerExtra (src/tools/desktop/toolContext.ts).
@@ -24,10 +19,7 @@ export type ExternalApiCall = <T>(
     executor: ExternalApiToolExecutor,
     signal: AbortSignal,
   ) => Promise<Result<T, ExecuteCommandError>>,
-  options?: RouteMissingOptions & {
-    routeMissingError?: () => McpToolError;
-    errorContext?: string;
-  },
+  options?: { errorContext?: string },
 ) => Promise<Result<T, McpToolError>>;
 
 /** @deprecated Use {@link ExternalApiCall}; retained for source compatibility. */
@@ -60,9 +52,6 @@ export async function runExternalApiTool<T>({
   const call: ExternalApiCall = async (endpoint, invokeEndpoint, options) => {
     const result = await invokeEndpoint(executor, extra.signal);
     if (result.isErr()) {
-      if (isRouteMissing(result.error, options)) {
-        return (options?.routeMissingError?.() ?? endpointNotInThisBuild(endpoint)).toErr();
-      }
       return new DesktopCommandExecutionError(result.error, options?.errorContext).toErr();
     }
     return result;

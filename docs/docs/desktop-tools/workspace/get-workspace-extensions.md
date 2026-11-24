@@ -31,10 +31,6 @@ Identifier of the target %product_name% session. Type: string. Optional when a s
 With no session to resolve — none pinned, and either no running instance or more than one — the tool refuses instead of choosing. The multiple-instance refusal lists the session ids and points at [`list-instances`](../session/list-instances.md). A `session` that is not among the running instances is refused as well.
 :::
 
-## Notes and caveats
-
-- This tool is left out when the connected %ecapi_name% version is known to be older than 0.2.34. The compared version is the pinned session's version, or, when no session is pinned, the highest version among running instances. An unknown version leaves the tool available.
-- When the list call is not found, the tool returns `This Tableau Desktop build does not serve the GET /v0/app/extensions endpoint yet. Tell the user their Desktop build is too old for this read and that a Desktop update enables it. Do not retry.`
 
 ## Example results
 

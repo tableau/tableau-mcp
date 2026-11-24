@@ -41,7 +41,6 @@ export async function readDataMembers({
     worksheet: worksheetName,
     maxRows: DATA_MAX_ROWS,
     materializeEmpty: true,
-    ignoreAliases: true,
   });
   if (summary.isErr()) return undefined;
 

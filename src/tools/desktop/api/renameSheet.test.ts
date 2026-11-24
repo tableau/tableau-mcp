@@ -120,6 +120,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-rename-sheet',
-    apiVersion: '0.2.4',
+    apiVersion: '0.2.34',
   };
 }

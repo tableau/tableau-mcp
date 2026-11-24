@@ -19,7 +19,6 @@ import {
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
 import { runAlwaysBlockingValidation } from '../validation/registry.js';
-import { apiVersionAtLeast } from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
@@ -85,7 +84,6 @@ import {
   OperationList,
   operationListSchema,
   operationRoute,
-  OperationWarning,
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
@@ -160,7 +158,7 @@ const SUMMARY_DATA_PENDING_DEFAULT_DELAY_MS = 1_000;
 const SUMMARY_DATA_PENDING_MIN_DELAY_MS = 100;
 const SUMMARY_DATA_PENDING_MAX_WAIT_MS = 5_000;
 
-export type ExternalApiToolExecutorDeps = {
+type ExternalApiToolExecutorDeps = {
   /** Returns candidate live instances, newest-first. Re-invoked on rescan. */
   discover: () => Array<ExternalApiInstance> | Promise<Array<ExternalApiInstance>>;
   /** Preferred instance pid (e.g. the MCP session id). Falls back to newest. */
@@ -186,20 +184,6 @@ export type DesktopRpcTelemetryEvent = {
 type NoInstance = { type: 'no-instance'; pinnedPid?: number };
 type InstanceMismatch = { type: 'instance-mismatch'; expected: string; actual: string };
 type ExecutorOperationError = ExternalApiError | InstanceMismatch;
-
-/** Normalized shape of an operation envelope returned by a document apply. */
-type RawOutcome = {
-  result: Record<string, unknown> | undefined;
-  state: string | undefined;
-  envelopeError: OperationError | undefined;
-  warnings: OperationWarning[] | undefined;
-  diagnostics: WorkbookDiagnostics | undefined;
-  diagnosticsInvalid: boolean;
-  createdAt: string | undefined;
-  completedAt: string | undefined;
-  operationId: string | undefined;
-  apiVersion: string | undefined;
-};
 
 /**
  * The one executor for Tableau Desktop: every tool call reaches Desktop through the
@@ -1134,9 +1118,9 @@ export class ExternalApiToolExecutor {
 
   /**
    * Shared document-apply pipeline for the whole-workbook and per-sheet POST routes: run the
-   * HTTP call through withRescan, normalize the operation envelope, then fold it into a
-   * command-status result (envelope FAILED / Tableau error → command-failed). `command` labels
-   * the operation for logs and the synthetic command id.
+   * HTTP call through withRescan, then fold the operation envelope into a command-status result
+   * (envelope FAILED / Tableau error → command-failed). `command` labels the operation in logs
+   * and failure messages.
    */
   private async applyDocument(
     call: (http: ExternalApiHttp) => Promise<Result<OperationEnvelope, ExternalApiError>>,
@@ -1159,7 +1143,7 @@ export class ExternalApiToolExecutor {
       if (result.isErr()) {
         return Err(result.error);
       }
-      return Ok(normalizeEnvelope(result.value, http.apiVersion));
+      return Ok(result.value);
     });
 
     if (outcomeResult.isErr()) {
@@ -1292,46 +1276,30 @@ async function runOp<T>(
   }
 }
 
-function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
-  const hasDiagnostics = Object.hasOwn(envelope, 'diagnostics');
-  const parsedDiagnostics = hasDiagnostics
-    ? workbookDiagnosticsSchema.safeParse(envelope['diagnostics'])
-    : undefined;
-  const diagnosticsInvalid = parsedDiagnostics !== undefined && !parsedDiagnostics.success;
-  return {
-    result: isRecord(envelope.result) ? envelope.result : undefined,
-    state: envelope.state,
-    envelopeError: envelope.error,
-    warnings: envelope.warnings,
-    diagnostics: parsedDiagnostics?.success ? parsedDiagnostics.data : undefined,
-    diagnosticsInvalid,
-    createdAt: envelope.createdAt,
-    completedAt: envelope.completedAt,
-    operationId: envelope.id,
-    apiVersion,
-  };
-}
-
 function buildCommandStatus(
-  outcome: RawOutcome,
+  envelope: OperationEnvelope,
   command: string,
 ): Result<GetCommandStatusResponse, ExecuteCommandError> {
-  const state = outcome.state?.toUpperCase();
-  const failed = state === 'FAILED' || state === 'CANCELLED' || outcome.envelopeError !== undefined;
+  const parsedDiagnostics = Object.hasOwn(envelope, 'diagnostics')
+    ? workbookDiagnosticsSchema.safeParse(envelope.diagnostics)
+    : undefined;
+  const diagnostics = parsedDiagnostics?.success ? parsedDiagnostics.data : undefined;
+  const state = envelope.state.toUpperCase();
+  const failed = state === 'FAILED' || state === 'CANCELLED' || envelope.error !== undefined;
 
   if (failed) {
-    const tableauErrorCode = getTableauErrorCode(outcome.envelopeError);
+    const tableauErrorCode = getTableauErrorCode(envelope.error);
     return Err({
       type: 'command-failed',
       error: classifySessionFatalError({
-        code: outcome.envelopeError?.code ?? 'operation-failed',
-        message: outcome.envelopeError?.message ?? `Command external-api:${command} failed`,
+        code: envelope.error?.code ?? 'operation-failed',
+        message: envelope.error?.message ?? `Command external-api:${command} failed`,
         recoverable: false,
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
       }),
-      ...(outcome.result !== undefined ? { result: outcome.result } : {}),
-      ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
-      ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
+      ...(envelope.result !== undefined ? { result: envelope.result } : {}),
+      ...(envelope.warnings ? { warnings: envelope.warnings } : {}),
+      ...(diagnostics ? { diagnostics } : {}),
     });
   }
 
@@ -1339,37 +1307,28 @@ function buildCommandStatus(
   // as still running, never as completed (the guard against the old false-success-on-202 bug).
   if (state !== 'SUCCEEDED') {
     return Ok({
-      command_id: outcome.operationId ?? `ext_external-api:${command}_${Date.now()}`,
+      command_id: envelope.id,
       status: state === 'QUEUED' ? 'queued' : 'running',
-      submitted_at: outcome.createdAt ?? new Date().toISOString(),
+      submitted_at: envelope.createdAt ?? new Date().toISOString(),
     });
   }
 
   const now = new Date().toISOString();
-  const resultPayload =
-    outcome.result !== undefined || supportsOperationResult(outcome.apiVersion)
-      ? { result: outcome.result }
-      : {};
   return Ok({
-    command_id: outcome.operationId ?? `ext_external-api:${command}_${Date.now()}`,
+    command_id: envelope.id,
     status: 'completed',
-    submitted_at: outcome.createdAt ?? now,
-    started_at: outcome.createdAt ?? now,
-    completed_at: outcome.completedAt ?? now,
-    ...resultPayload,
-    ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
-    ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
-    ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
+    submitted_at: envelope.createdAt ?? now,
+    started_at: envelope.createdAt ?? now,
+    completed_at: envelope.completedAt ?? now,
+    result: envelope.result,
+    ...(envelope.warnings ? { warnings: envelope.warnings } : {}),
+    ...(diagnostics ? { diagnostics } : {}),
+    ...(parsedDiagnostics?.success === false ? { diagnosticsInvalid: true } : {}),
   });
 }
 
 function getTableauErrorCode(error: OperationError | undefined): string | undefined {
-  const value = error?.tableauErrorCode ?? error?.['tableau-error-code'];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function supportsOperationResult(apiVersion: string | undefined): boolean {
-  return apiVersionAtLeast(apiVersion, '0.1.1');
+  return error?.tableauErrorCode || undefined;
 }
 
 function summaryDataRetryDelayMs(retryAfterSeconds: number | undefined): number | undefined {
@@ -1632,8 +1591,4 @@ function mapNetworkFailure(
         ? unreachableInstanceMessage(pinnedPid, detail)
         : unknownInstanceUnreachableMessage(detail),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

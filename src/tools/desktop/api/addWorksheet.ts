@@ -23,7 +23,6 @@ export const getAddWorksheetTool = (server: DesktopMcpServer): DesktopTool<typeo
   const addWorksheetTool = new DesktopTool({
     server,
     name: 'add-worksheet',
-    minApiVersion: '0.2.6',
     title,
     description:
       'Add a blank worksheet to the open workbook. It becomes the active sheet; get its id from get-sheets.',
