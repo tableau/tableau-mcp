@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { Config } from '../../../config.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getDirname } from '../../../utils/getDirname.js';
+import { flowCalculationDiagnosticSchema } from './flowCalculationDiagnostics.js';
+import { MAX_PREP_CALCULATION_DIAGNOSTICS } from './prepCalculationLanguage.js';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const engineSummarySchema = z.object({
@@ -51,6 +53,10 @@ const resultSchema = z.object({
   attachmentCount: z.number().int().min(0).optional(),
   errorCount: z.number().int().min(0).optional(),
   errors: z.array(z.string().max(256)).max(20).optional(),
+  calculationDiagnostics: z
+    .array(flowCalculationDiagnosticSchema)
+    .max(MAX_PREP_CALCULATION_DIAGNOSTICS)
+    .optional(),
   canvasPalette: z
     .array(z.string().regex(/^#[0-9A-F]{6}$/))
     .length(20)

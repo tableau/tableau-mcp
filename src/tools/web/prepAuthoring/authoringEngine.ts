@@ -12,6 +12,7 @@ import { canvasColorErrors, nativeCanvasColors } from './canvasColors.js';
 import { CompactYaml, jsonBytes, object, parseJson } from './compactYaml.js';
 import { scopeCheck } from './credentialPolicy.js';
 import type { EngineResult } from './engineClient.js';
+import { changedCalculationDiagnostics } from './flowCalculationDiagnostics.js';
 import { knownEntries, summary } from './metadata.js';
 import { readNativeArchive } from './nativeArchive.js';
 import { AuthoringError, digest, identity, MAX_FILE, MAX_YAML, ProjectIo } from './projectIo.js';
@@ -114,12 +115,28 @@ export function runAuthoringEngine(request: Record<string, unknown>): EngineResu
     const compiled = compileFlowYaml(io, project, request.yaml, format);
     scopeCheck(compiled.document);
     const errors = [...compiled.errors, ...canvasColorErrors(compiled.document)];
-    if (errors.length)
+    const calculations = changedCalculationDiagnostics(
+      compiled.document,
+      () =>
+        compileFlowYaml(
+          io,
+          base,
+          io.read(join(base, 'project.yml'), MAX_YAML).toString('utf8'),
+          'tflx',
+        ).document,
+    );
+    if (errors.length || calculations.count)
       return {
         ok: true,
         valid: false,
-        errorCount: errors.length,
-        errors: errors.slice(0, 20).map((e) => e.slice(0, 256)),
+        errorCount: errors.length + calculations.count,
+        errors: [
+          ...errors,
+          ...calculations.diagnostics.map(({ code, message }) => `${code}: ${message}`),
+        ]
+          .slice(0, 20)
+          .map((error) => error.slice(0, 256)),
+        ...(calculations.count ? { calculationDiagnostics: calculations.diagnostics } : {}),
         canvasPalette: [...nativeCanvasColors],
         nativeExecutionVerified: false,
       };

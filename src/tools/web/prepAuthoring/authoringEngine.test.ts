@@ -166,6 +166,34 @@ describe('Node compact Prep authoring parity', () => {
     calculation.expression = 123;
     expect(metadataErrors(original).length).toBeGreaterThan(0);
   });
+  it('preserves unmodified imported formulas and validates changed formulas at the same location', () => {
+    const original = document();
+    const node = Object.values(object(object(original.flow).nodes))
+      .map(object)
+      .find((candidate) => candidate.nodeType === '.v1.AddColumn')!;
+    node.expression = 'LEGACY_FUNCTION([Sales])';
+    const source = writeNativeArchive(
+      new Map(Object.entries(original).map(([key, value]) => [key, jsonBytes(value)])),
+    );
+    const base = { workspace, jobId: randomUUID(), format: 'tflx' };
+    const prepared = run({
+      ...base,
+      operation: 'prepare',
+      source: { type: 'download', base64: source.toString('base64') },
+    });
+    const request = { ...base, projectSha256: prepared.projectSha256 };
+    const originalYaml = prepared.yaml!;
+    expect(preview(request, originalYaml).valid).toBe(true);
+    const invalid = preview(
+      request,
+      originalYaml.replace('LEGACY_FUNCTION([Sales])', 'ROUND([Sales],, 2)'),
+    );
+    expect(invalid.valid).toBe(false);
+    expect(invalid.calculationDiagnostics).toMatchObject([{ code: 'PREP_CALC_SYNTAX' }]);
+    expect(
+      preview(request, originalYaml.replace('LEGACY_FUNCTION([Sales])', 'ROUND([Sales], 2)')).valid,
+    ).toBe(true);
+  });
   it('stops release when edited canvas colors are outside the native palette', () => {
     const { request, prepared } = prepare(),
       codec = new CompactYaml(),

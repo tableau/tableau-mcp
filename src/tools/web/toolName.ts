@@ -1,6 +1,7 @@
 export const webToolNames = [
   'prepare-prep-flow-edit',
   'generate-prep-flow',
+  'validate-prep-calculation',
   'list-datasources',
   'list-extract-refresh-tasks',
   'update-cloud-extract-refresh-task',
@@ -83,7 +84,7 @@ export const webToolGroupNames = [
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
-  'prep-authoring': ['prepare-prep-flow-edit', 'generate-prep-flow'],
+  'prep-authoring': ['prepare-prep-flow-edit', 'generate-prep-flow', 'validate-prep-calculation'],
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook', 'download-workbook', 'move-workbook'],
   authoring: [

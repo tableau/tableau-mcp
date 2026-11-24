@@ -1,9 +1,12 @@
 # Native Prep authoring with compact YAML
 
-Two optional tools prepare compact YAML and generate new native Prep files:
+The optional Prep authoring tools prepare compact YAML, check calculations, and generate new native
+Prep files:
 
 - `prepare-prep-flow-edit` starts a new YAML project, exports a local TFL/TFLX, or downloads an
   authorized published flow.
+- `validate-prep-calculation` checks one calculated field expression or lists the available function
+  signatures for Tableau Prep 2026.3.
 - `generate-prep-flow` validates a preview, then releases its exact reviewed bytes as a new
   TFL/TFLX.
 
@@ -55,9 +58,8 @@ error paths and `compatibility`. To generate, send the same YAML/format with `mo
 the successful `expectedPreviewSha256`.
 
 The native artifact is returned as a workspace-relative path plus byte count/SHA256. It is a new
-local file; no source is overwritten and nothing is published or run. Previews also create private
-local candidate files, so both tools are annotated as non-destructive local writes rather than
-read-only calls.
+local file; no source is overwritten and nothing is published or run. Prepare and preview create
+private local files and are annotated as non-destructive writes. Calculation checks are read-only.
 
 A TFL still depends on its external files at the saved paths. Retain the matching project resources
 when moving outputs or cleaning caches; copying only the TFL does not carry those files. TFLX embeds
@@ -92,6 +94,33 @@ The compiler checks the authoring schema, value types, graph references, and loc
 YAML rules preserve arbitrary integers, integral floats, and strings such as `08`. It serializes
 and rereads the archive to check metadata and ZIP CRC. Source, resource, and candidate fingerprints
 ensure the generated file matches the reviewed preview.
+
+### Calculated fields
+
+Call `validate-prep-calculation` while editing a formula. For example:
+
+```json
+{"expression":"ROUND([Sales], 2)"}
+```
+
+Omit `expression` to list functions. An optional case-insensitive prefix narrows the LSP
+completion items. Each item includes the signature and argument limits.
+
+```json
+{"prefix":"datep"}
+```
+
+The catalog follows the [Tableau Prep Functions Reference](https://help.tableau.com/current/prep/en-us/prep_function_reference.htm).
+It uses `DATEPART`, as shown in the reference example and confirmed in Tableau Prep Builder 2026.3.1.
+The validator checks syntax, function names, arity, supported literal types, and `ORDERBY` around
+analytic calls. It accepts the documented `IF`, `CASE`, `FIXED`, `PARTITION`, and `ORDERBY` forms.
+
+Preview checks new or edited expressions in `AddColumn` and `MultiRowCalc` nodes, including nested
+nodes. An invalid formula returns `calculationDiagnostics` without a successful preview fingerprint.
+Each diagnostic includes the JSON Pointer to the expression and a zero-based UTF-16 LSP range
+inside that expression. An imported expression preserved at the same location can round-trip
+unchanged. Field types, connector behavior, and results that depend on data are evaluated by
+Tableau Prep at runtime.
 
 After successful static validation, the response returns official target-specific notices:
 

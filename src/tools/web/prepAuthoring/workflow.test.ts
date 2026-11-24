@@ -13,6 +13,7 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGeneratePrepFlowTool } from './generatePrepFlow.js';
 import { getPreparePrepFlowEditTool } from './preparePrepFlowEdit.js';
+import { getValidatePrepCalculationTool } from './validatePrepCalculation.js';
 
 const mocks = vi.hoisted(() => ({
   engine: vi.fn(),
@@ -275,9 +276,69 @@ describe('source-bound compact YAML workflow', () => {
     );
     expect(await getSupportedMcpScopes()).toContain('tableau:mcp:prep:author');
     const prepareTool = getPreparePrepFlowEditTool(new WebMcpServer());
+    const calculationTool = getValidatePrepCalculationTool(new WebMcpServer());
     expect(await Provider.from(prepareTool.disabled)).toBe(false);
+    expect(await Provider.from(calculationTool.disabled)).toBe(false);
+    expect(getRequiredScopesForTool('validate-prep-calculation')).toEqual([
+      'tableau:mcp:prep:author',
+    ]);
+    expect([...getRequiredApiScopesForTool('validate-prep-calculation')]).toEqual([]);
     mocks.config.transport = 'http';
     expect(await Provider.from(prepareTool.disabled)).toBe(true);
+    expect(await Provider.from(calculationTool.disabled)).toBe(true);
     expect(await getSupportedMcpScopes()).not.toContain('tableau:mcp:prep:author');
+  });
+  it('returns structured LSP results for calculations and completion without making Tableau requests', async () => {
+    const tool = getValidatePrepCalculationTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const diagnostic = await callback(
+      { expression: "DATEPARTT('year', [Day])", prefix: undefined },
+      extra(),
+    );
+    expect(diagnostic.structuredContent).toMatchObject({
+      valid: false,
+      diagnostics: [{ code: 'PREP_CALC_FUNCTION' }],
+    });
+    const completion = await callback({ expression: undefined, prefix: 'datep' }, extra());
+    expect(completion.structuredContent).toMatchObject({
+      completion: {
+        items: [
+          { label: 'DATEPARSE', kind: 3 },
+          { label: 'DATEPART', kind: 3, data: { minArgs: 2, maxArgs: 3 } },
+        ],
+      },
+    });
+    expect(mocks.useRest).not.toHaveBeenCalled();
+    expect(mocks.engine).not.toHaveBeenCalled();
+  });
+  it('rejects Passthrough authentication in the standalone calculation callback', async () => {
+    const tool = getValidatePrepCalculationTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const result = await callback(
+      { expression: '1 + 1', prefix: undefined },
+      getMockRequestHandlerExtra({
+        tableauAuthInfo: {
+          type: 'Passthrough',
+          username: 'test-user',
+          userId: 'test-user-id',
+          server: 'https://example.test',
+          siteId: 'test-site-id',
+          siteName: 'test-site',
+          raw: 'mock-token',
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: expect.stringContaining('Passthrough authentication') }],
+    });
+  });
+  it('redacts calculation text from invocation arguments', async () => {
+    const tool = getValidatePrepCalculationTool(new WebMcpServer());
+    const spy = vi.spyOn(tool, 'logAndExecute').mockResolvedValue({ content: [] });
+    await (
+      await Provider.from(tool.callback)
+    )({ expression: 'PRIVATE_EXPRESSION', prefix: undefined }, extra());
+    expect(spy.mock.calls[0][0].args.expression).toBe('[omitted from invocation logs]');
   });
 });

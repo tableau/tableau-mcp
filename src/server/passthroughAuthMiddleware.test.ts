@@ -25,6 +25,8 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName
   // Consent lifecycle tool: no Tableau REST API call. The tool callback explicitly returns an error
   // for non-Bearer auth types, so passthrough callers are rejected.
   'reset-consent',
+  // The local Prep validator requires stdio and rejects Passthrough authentication in its callback.
+  'validate-prep-calculation',
   // MCP app event telemetry: no Tableau REST API call. App-only tool that records telemetry
   // regardless of auth type. Safe with passthrough auth as it only sends telemetry events.
   'record-event',

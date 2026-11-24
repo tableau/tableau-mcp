@@ -240,6 +240,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:prep:author'],
     api: new Set(RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES),
   },
+  'validate-prep-calculation': {
+    mcp: ['tableau:mcp:prep:author'],
+    api: new Set(),
+  },
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -578,6 +582,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!prepAuthoringEnabled(config)) {
     enabledTools.delete('prepare-prep-flow-edit');
     enabledTools.delete('generate-prep-flow');
+    enabledTools.delete('validate-prep-calculation');
   }
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');

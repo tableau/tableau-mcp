@@ -31,6 +31,42 @@ describe('real bundled Node worker authoring integration', () => {
   });
   afterAll(() => cleanup(root));
   const signal = (): AbortSignal => new AbortController().signal;
+  it('returns LSP diagnostics across the worker boundary and blocks invalid calculation previews', async () => {
+    const config = { enabled: true, workspace },
+      jobId = randomUUID();
+    const base = { jobId, format: 'tflx' };
+    const prepared = await runPrepEngine(
+      config,
+      { ...base, operation: 'prepare', source: { type: 'new' } },
+      signal(),
+      worker,
+    );
+    const invalid = await runPrepEngine(
+      config,
+      {
+        ...base,
+        operation: 'preview',
+        projectSha256: prepared.projectSha256,
+        previewId: randomUUID(),
+        yaml: prepared.yaml!.replace('[Sales] * 1.1', 'ROUNDD([Sales])'),
+      },
+      signal(),
+      worker,
+    );
+    expect(invalid).toMatchObject({
+      valid: false,
+      errorCount: 1,
+      calculationDiagnostics: [
+        {
+          path: expect.stringMatching(/^\/flow\/nodes\/[a-f0-9-]+\/expression$/),
+          code: 'PREP_CALC_FUNCTION',
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 6 } },
+        },
+      ],
+    });
+    expect(invalid.previewId).toBeUndefined();
+    expect(invalid.previewSha256).toBeUndefined();
+  });
   it.each(['new', 'local', 'download'] as const)(
     'runs complete %s/edit/preview/release without Python',
     async (origin) => {

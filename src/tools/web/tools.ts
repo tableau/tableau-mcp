@@ -25,6 +25,7 @@ import { getManageKnowledgeContextTool } from './knowledge/manageKnowledgeContex
 import { getQueryKnowledgeContextTool } from './knowledge/queryKnowledgeContext.js';
 import { getGeneratePrepFlowTool } from './prepAuthoring/generatePrepFlow.js';
 import { getPreparePrepFlowEditTool } from './prepAuthoring/preparePrepFlowEdit.js';
+import { getValidatePrepCalculationTool } from './prepAuthoring/validatePrepCalculation.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -59,6 +60,7 @@ import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.
 export const webToolFactories = [
   getPreparePrepFlowEditTool,
   getGeneratePrepFlowTool,
+  getValidatePrepCalculationTool,
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,

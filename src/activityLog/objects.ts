@@ -46,6 +46,7 @@ function typedIdIn(typeArg: string, idArg: string): ObjectSource {
 export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> = {
   'prepare-prep-flow-edit': null,
   'generate-prep-flow': null,
+  'validate-prep-calculation': null,
   'list-datasources': null,
   'list-extract-refresh-tasks': null,
   'update-cloud-extract-refresh-task': idIn('extract-refresh-task', 'taskId'),

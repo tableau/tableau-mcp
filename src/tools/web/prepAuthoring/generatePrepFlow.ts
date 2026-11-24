@@ -16,7 +16,7 @@ export const getGeneratePrepFlowTool = (server: WebMcpServer): WebTool<typeof ge
     name: 'generate-prep-flow',
     minRequiredRole: SiteRole.EXPLORER,
     description:
-      'Preview edited compact Prep YAML, then generate a new local TFL/TFLX. Use only declarative !id/!include/!path project references. Preview checks schema/types, graph/resources and the 20 native canvas colors with matching RGBA. Missing or unsupported colors block release; use the returned canvasPalette to correct them. Generate requires the successful preview SHA256, identical YAML/format and unchanged source/resources, and writes exactly the reviewed bytes without overwriting originals. Read target-specific compatibility notices after validation. Static validity does not establish native execution or publish readiness. Opt-in stdio only; no publishing or flow, script, expression or database execution.',
+      'Preview edited compact Prep YAML, then generate a new local TFL/TFLX. Use only declarative !id/!include/!path project references. Preview checks schema/types, graph/resources, edited calculated fields and the native canvas palette. For formula errors, use calculationDiagnostics or check the expression with validate-prep-calculation. For color errors, use canvasPalette. Generate requires the successful preview SHA256, identical YAML/format and unchanged source/resources, and writes exactly the reviewed bytes. Read target-specific compatibility notices. Opt-in stdio for static validation, preview, and local generation.',
     paramsSchema: generateParams,
     annotations: {
       title: 'Generate Prep Flow',
