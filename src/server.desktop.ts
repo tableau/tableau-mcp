@@ -214,30 +214,14 @@ export function withoutUnservedExpertiseTools<T extends { name: DesktopToolName 
   return expertiseAvailable ? tools : tools.filter((tool) => !EXPERTISE_TOOL_NAMES.has(tool.name));
 }
 
-/**
- * The External Client API version the registration gate compares tool floors against: the
- * pinned instance's version when pinned, otherwise the highest version among live instances
- * (undefined when none is known, which fails the gate open).
- *
- * Unpinned resolves the highest — not the newest-started — so a tool is hidden only when no
- * running Desktop can serve it; whether the instance a call actually reaches serves it is a
- * per-call concern, not the gate's.
- */
-export function resolveConnectedApiVersion(
+export function pinnedApiVersion(
   instances: Array<ExternalApiInstance>,
   pinnedSessionId: string | undefined,
 ): string | undefined {
-  if (pinnedSessionId !== undefined) {
-    return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
+  if (pinnedSessionId === undefined) {
+    return undefined;
   }
-  return instances.reduce<string | undefined>(
-    (highest, instance) =>
-      instance.apiVersion !== undefined &&
-      (highest === undefined || apiVersionAtLeast(instance.apiVersion, highest))
-        ? instance.apiVersion
-        : highest,
-    undefined,
-  );
+  return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
 }
 
 /**
@@ -258,11 +242,6 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
   );
 }
 
-/**
- * Rejects a call whose target Desktop is older than the tool's floor. Registration can only
- * hide a tool when no running Desktop serves it; this covers the instance the call reaches.
- * An unknown version passes, so the call reports its own error.
- */
 export function assertServesApiVersion(
   tool: string,
   minApiVersion: string | undefined,
@@ -441,8 +420,10 @@ export class DesktopMcpServer extends Server {
       getExpertiseCorpusEntryCount() > 0,
     );
 
-    const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
-    const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
+    const connectedApiVersion = pinnedApiVersion(
+      discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }),
+      config.desktopSessionId,
+    );
     warnIfUnsupportedApiVersion(connectedApiVersion);
     const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
 

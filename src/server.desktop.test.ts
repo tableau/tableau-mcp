@@ -25,7 +25,7 @@ import {
   filterToolsByApiVersion,
   getDesktopToolListEntry,
   getModelFacingToolEntry,
-  resolveConnectedApiVersion,
+  pinnedApiVersion,
   selectToolsForProfile,
   stripEmptySchemaNoise,
   warnIfUnsupportedApiVersion,
@@ -725,50 +725,21 @@ describe('API-version tool gate', () => {
     apiVersion,
   });
 
-  describe('resolveConnectedApiVersion', () => {
-    it('unpinned → the highest version across live instances, not the newest-started', () => {
-      // Discovery is newest-first, so instances[0] here is the LOWER-version build; the gate
-      // must still resolve 0.2.6 so a tool the other running Desktop serves is not hidden.
-      expect(
-        resolveConnectedApiVersion([instance(1, '0.2.5'), instance(2, '0.2.6')], undefined),
-      ).toBe('0.2.6');
+  describe('pinnedApiVersion', () => {
+    it('returns the pinned instance version, not the highest', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe('0.2.5');
     });
 
-    it('unpinned → ignores instances with an unknown version when others report one', () => {
-      expect(resolveConnectedApiVersion([instance(1), instance(2, '0.2.6')], undefined)).toBe(
-        '0.2.6',
-      );
+    it('returns undefined when the session is not pinned', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6')], undefined)).toBeUndefined();
     });
 
-    it('unpinned → undefined when no instance reports a version', () => {
-      expect(resolveConnectedApiVersion([instance(1), instance(2)], undefined)).toBeUndefined();
+    it('returns undefined when no instance matches the pinned session', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
     });
 
-    it('pinned → the matching instance version, not the highest', () => {
-      expect(resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe(
-        '0.2.5',
-      );
-    });
-
-    it('pinned but no match → undefined so the gate fails open', () => {
-      expect(resolveConnectedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
-    });
-
-    it('no instances → undefined', () => {
-      expect(resolveConnectedApiVersion([], undefined)).toBeUndefined();
-      expect(resolveConnectedApiVersion([], '1')).toBeUndefined();
-    });
-
-    it('unpinned mixed-version fleet → a tool only the newer instance serves stays visible', () => {
-      const version = resolveConnectedApiVersion(
-        [instance(1, '0.2.6'), instance(2, '0.2.7')],
-        undefined,
-      );
-      const tools = [{ name: 'story', minApiVersion: '0.2.7' }, { name: 'plain' }];
-      expect(filterToolsByApiVersion(tools, version).map((t) => t.name)).toEqual([
-        'story',
-        'plain',
-      ]);
+    it('returns undefined when no Desktop is running', () => {
+      expect(pinnedApiVersion([], '1')).toBeUndefined();
     });
   });
 
