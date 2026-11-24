@@ -884,6 +884,15 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:content:read');
       expect(scopes).toContain('tableau:mcp_site_settings:read');
     });
+
+    it('should always advertise tableau:entitlements:read for premium Pulse availability checks', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:entitlements:read');
+    });
   });
 
   it('should separate Knowledge inspection and management API scopes', () => {
