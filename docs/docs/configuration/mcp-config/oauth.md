@@ -303,6 +303,9 @@ Disable scope enforcement and scope challenges.
 
 - Default: `false`
 - Useful for Tableau Server deployments that do not want to enforce scopes yet.
+- When `false`, connections accept tokens with a subset of supported scopes. Tools outside the grant
+  are omitted from the tool list and named in the initialize instructions. Calling a tool without
+  its required scopes returns `403` `insufficient_scope`.
 - When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
   enforce scopes on incoming access tokens.
 - With [your own identity provider](#use-your-own-identity-provider-self-hosted-only), `true` is
@@ -498,28 +501,11 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
 - When `true`, `scopes_supported` includes MCP + API scopes and scope challenges may include API
   scopes for step-up.
 - The check for AI-powered Pulse insight tools needs `tableau:entitlements:read`, so it is part of
-  the advertised set. With the default subset scope matching, tools are left out when a token lacks
-  their scopes. If [`DISABLE_STRICT_SCOPE_MATCH`](#disable_strict_scope_match) is `false`, strict
-  matching requires tokens issued before upgrading to be re-consented to include the scope.
-
-<hr />
-
-### `DISABLE_STRICT_SCOPE_MATCH`
-
-Do not require every access token to carry all supported scopes before it can connect. Allows for access tokens that are subsets of the full supported scopes lists to be used in a connection.
-
-- Default: `true`. Set explicitly to `false` to enable strict scope matching.
-- Has no effect when [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `true`.
-- When `false`, a token missing any supported `tableau:mcp:*` scope is rejected with a `403`
-  `insufficient_scope` error. When [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`, the
-  token must also carry the supported Tableau API scopes, except optional ones.
-- When `true`, a token with only some of the supported scopes can connect. Tools the token lacks
-  scopes for are left out of the tool list, and the server's initialize instructions name them.
-- When `true`, `ADVERTISE_API_SCOPES` is `true`, and
+  the advertised set. Tools are left out when a token lacks their scopes.
+- When `true`, [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `false`, and
   [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
-  every token must carry `tableau:mcp_site_settings:read` so the server can read the site's
-  settings. A token without it is rejected with a `403`, and the embedded authorization server
-  refuses to issue one (`400` `invalid_scope`).
+  every token must carry `tableau:mcp_site_settings:read`. A token without it is rejected with
+  `403`, and the embedded authorization server refuses to issue one (`400` `invalid_scope`).
 
 <hr />
 

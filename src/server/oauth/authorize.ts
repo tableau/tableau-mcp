@@ -5,7 +5,6 @@ import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getConfig } from '../../config.js';
-import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
@@ -28,6 +27,7 @@ import {
   parseScopes,
   validateScopes,
 } from './scopes.js';
+import { isSiteSettingsScopeRequired } from './siteSettingsScope.js';
 import { ClientRegistration, PendingAuthorization } from './types.js';
 
 /**
@@ -148,7 +148,7 @@ export function authorize(
     // verbatim, so this is the only place to stop an auth-code grant missing the scope the
     // connection gate (authMiddleware) would reject.
     if (
-      (await isSiteSettingsScopeRequired(config)) &&
+      isSiteSettingsScopeRequired(config) &&
       !scopesToGrant.includes(MCP_SITE_SETTINGS_READ_SCOPE)
     ) {
       res.status(400).json({

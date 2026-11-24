@@ -2,10 +2,6 @@ import { isInitializeRequest } from '@modelcontextprotocol/server';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
-import {
-  isSiteSettingsScopeRequired,
-  isStrictScopeMatchEnabled,
-} from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import {
   OAUTH_AUTH_CHALLENGE_GUIDANCE,
@@ -21,6 +17,7 @@ import {
   getSupportedMcpScopes,
   MCP_SITE_SETTINGS_READ_SCOPE,
 } from './scopes.js';
+import { isSiteSettingsScopeRequired } from './siteSettingsScope.js';
 import { AuthenticatedRequest } from './types.js';
 
 const protectedResourceMetadataPath = '/.well-known/oauth-protected-resource';
@@ -113,18 +110,13 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     const config = getConfig();
     const { enforceScopes, advertiseApiScopes } = config.oauth;
     if (enforceScopes) {
-      const strict = await isStrictScopeMatchEnabled(config);
-      const requiredMcpScopes = await getRequiredMcpScopesForRequest(
-        req.body,
-        strict,
-        authInfo.clientId,
-      );
-      const requiredApiScopes = await getRequiredApiScopesForRequest(
-        req.body,
-        advertiseApiScopes,
-        strict,
-        authInfo.clientId,
-      );
+      // Connections may hold a subset of scopes; enforce the scopes needed by each tool call.
+      const toolName = isInitializeRequest(req.body)
+        ? undefined
+        : getToolNameFromRequestBody(req.body);
+      const requiredMcpScopes = toolName === undefined ? [] : getRequiredMcpScopesForTool(toolName);
+      const requiredApiScopes =
+        advertiseApiScopes && toolName !== undefined ? getRequiredApiScopesForTool(toolName) : [];
       const missingMcpScopes = requiredMcpScopes.filter(
         (scope) => !authInfo.scopes.includes(scope),
       );
@@ -135,7 +127,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       // Checked on every request, including initialize: registration reads the site's settings for
       // every session, and a token without the scope would read them as empty.
       const missingMandatory =
-        (await isSiteSettingsScopeRequired(config)) &&
+        isSiteSettingsScopeRequired(config) &&
         !authInfo.scopes.includes(MCP_SITE_SETTINGS_READ_SCOPE)
           ? [MCP_SITE_SETTINGS_READ_SCOPE]
           : [];
@@ -147,10 +139,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       if (missingScopes.length > 0) {
         // A tools/call that is under-scoped is an error (the client asked to run a specific tool it
         // cannot); a startup request (initialize / tools/list) that comes in under-scoped is routine
-        // under subset mode, so log it at info to avoid alarming operators on every connect.
-        const toolName = isInitializeRequest(req.body)
-          ? undefined
-          : getToolNameFromRequestBody(req.body);
+        // with a limited grant, so log it at info to avoid alarming operators on every connect.
         const isToolCall = toolName !== undefined;
         log({
           message: isToolCall
@@ -221,11 +210,17 @@ export async function getOAuthChallenge(
   const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
   const baseUrl = new URL(resourceUri).origin;
   const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
-  // This challenge advertises what a fresh client may request. The server still supports the full
-  // scope set under subset mode (subset only governs what is accepted, not what is offered), so
-  // advertise the full set here — pass strict=true unconditionally.
-  const requiredMcpScopes = await getRequiredMcpScopesForRequest(body, true);
-  const requiredApiScopes = await getRequiredApiScopesForRequest(body, advertiseApiScopes, true);
+  // A fresh client can request the full supported set even though connections accept subsets.
+  const toolName = isInitializeRequest(body) ? undefined : getToolNameFromRequestBody(body);
+  const requiredMcpScopes =
+    toolName === undefined ? await getSupportedMcpScopes() : getRequiredMcpScopesForTool(toolName);
+  const requiredApiScopes = !advertiseApiScopes
+    ? []
+    : isInitializeRequest(body)
+      ? await getSupportedApiScopes(undefined, { includeOptionalScopes: false })
+      : toolName === undefined
+        ? []
+        : getRequiredApiScopesForTool(toolName);
   const scopeParam =
     enforceScopes && requiredMcpScopes.length > 0
       ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
@@ -235,55 +230,4 @@ export async function getOAuthChallenge(
     ? ', error="invalid_token", error_description="The access token is invalid or expired"'
     : '';
   return `Bearer realm="MCP", resource_metadata="${resourceMetadataUrl}"${scopeParam}${errorParam}`;
-}
-
-async function getRequiredMcpScopesForRequest(
-  body: unknown,
-  strict: boolean,
-  clientId?: string,
-): Promise<string[]> {
-  // A non-tool request (initialize, or any non-CallTool/batch body) demands the full supported MCP
-  // set only under strict matching. Under subset mode it requires no MCP scopes here — the caller
-  // may hold a subset, and the mandatory site-settings scope is enforced separately.
-  const toolName = isInitializeRequest(body) ? undefined : getToolNameFromRequestBody(body);
-  if (toolName === undefined) {
-    return strict ? getSupportedMcpScopes(clientId) : [];
-  }
-
-  const scopes = new Set<string>();
-  for (const scope of getRequiredMcpScopesForTool(toolName)) {
-    scopes.add(scope);
-  }
-
-  return Array.from(scopes);
-}
-
-async function getRequiredApiScopesForRequest(
-  body: unknown,
-  includeApiScopes: boolean,
-  strict: boolean,
-  clientId?: string,
-): Promise<string[]> {
-  if (!includeApiScopes) {
-    return [];
-  }
-
-  if (isInitializeRequest(body)) {
-    // Under subset mode the initialize request demands no full API set (per-tool checks still apply
-    // to tool requests); under strict it keeps requiring the non-optional supported API scopes.
-    // Optional post-publish reads must not prevent clients from initializing or publishing.
-    return strict ? getSupportedApiScopes(clientId, { includeOptionalScopes: false }) : [];
-  }
-
-  const toolName = getToolNameFromRequestBody(body);
-  if (toolName === undefined) {
-    return [];
-  }
-
-  const scopes = new Set<string>();
-  for (const scope of getRequiredApiScopesForTool(toolName)) {
-    scopes.add(scope);
-  }
-
-  return Array.from(scopes);
 }

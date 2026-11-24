@@ -152,7 +152,6 @@ describe('client credentials grant type', () => {
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
       // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
     });
 
     afterEach(() => {
@@ -174,7 +173,7 @@ describe('client credentials grant type', () => {
       expect(response.body.access_token).toEqual(expect.any(String));
     });
 
-    it('rejects a client_credentials grant that omits the mandatory scope when site settings are on and strict is off', async () => {
+    it('rejects a client_credentials grant that omits the mandatory scope when site settings are on', async () => {
       const { app } = await startServer();
 
       const response = await request(app).post('/oauth2/token').send({
@@ -189,16 +188,17 @@ describe('client credentials grant type', () => {
       expect(response.body.error_description).toContain(MANDATORY_SCOPE);
     });
 
-    it('mints the token when strict scope match is on, even for the same subset', async () => {
-      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
+    it('mints a subset token that includes the mandatory scope', async () => {
       const { app } = await startServer();
 
-      const response = await request(app).post('/oauth2/token').send({
-        grant_type: 'client_credentials',
-        client_id: 'test-client-id',
-        client_secret: 'test-client-secret',
-        scope: SUBSET_SCOPE,
-      });
+      const response = await request(app)
+        .post('/oauth2/token')
+        .send({
+          grant_type: 'client_credentials',
+          client_id: 'test-client-id',
+          client_secret: 'test-client-secret',
+          scope: `${SUBSET_SCOPE} ${MANDATORY_SCOPE}`,
+        });
 
       expect(response.status).toBe(200);
       expect(response.body.access_token).toEqual(expect.any(String));

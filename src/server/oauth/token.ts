@@ -4,7 +4,6 @@ import { CompactEncrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getConfig } from '../../config.js';
-import { isSiteSettingsScopeRequired } from '../../features/strictScopeMatch.js';
 import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
@@ -20,6 +19,7 @@ import {
   parseScopes,
   validateScopes,
 } from './scopes.js';
+import { isSiteSettingsScopeRequired } from './siteSettingsScope.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 export const AUDIENCE = 'tableau-mcp-server';
@@ -117,7 +117,7 @@ export function token(
 
           // Generate tokens. No mandatory-scope guard here: this branch replays authCode.scopes
           // verbatim, and authorize.ts already refused to freeze a grant missing the mandatory
-          // site-settings scope under subset mode, so the replay is safe by construction.
+          // site-settings scope with scope enforcement, so the replay is safe by construction.
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
           await refreshTokens.set(refreshTokenId, {
@@ -173,7 +173,7 @@ export function token(
           // This branch re-validates requested scopes, so refuse here a grant the connection gate
           // (authMiddleware) would reject. Mirrors the auth-code guard (authorize.ts).
           if (
-            (await isSiteSettingsScopeRequired(config)) &&
+            isSiteSettingsScopeRequired(config) &&
             !scopesToGrant.includes(MCP_SITE_SETTINGS_READ_SCOPE)
           ) {
             res.status(400).json({

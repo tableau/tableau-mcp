@@ -729,7 +729,6 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
-      disableStrictScopeMatch: true,
       external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -751,7 +750,6 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
-        disableStrictScopeMatch: true,
         external: null,
         ...defaultOAuthTimeoutMs,
       });
@@ -1137,26 +1135,6 @@ describe('Config', () => {
       });
     });
 
-    describe('DISABLE_STRICT_SCOPE_MATCH', () => {
-      it('defaults disableStrictScopeMatch to true', () => {
-        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', undefined);
-        const config = new Config();
-        expect(config.oauth.disableStrictScopeMatch).toBe(true);
-      });
-
-      it('sets disableStrictScopeMatch to true when DISABLE_STRICT_SCOPE_MATCH is "true"', () => {
-        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
-        const config = new Config();
-        expect(config.oauth.disableStrictScopeMatch).toBe(true);
-      });
-
-      it('sets disableStrictScopeMatch to false when DISABLE_STRICT_SCOPE_MATCH is "false"', () => {
-        vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
-        const config = new Config();
-        expect(config.oauth.disableStrictScopeMatch).toBe(false);
-      });
-    });
-
     // Scope defaults (enforced, not advertised, site settings on) must boot: requiring the
     // site-settings scope with API scopes unadvertised once made this config refuse to start.
     it('starts the embedded authz server with the default scope settings', () => {
@@ -1169,7 +1147,6 @@ describe('Config', () => {
         embeddedAuthzServer: true,
         enforceScopes: true,
         advertiseApiScopes: false,
-        disableStrictScopeMatch: true,
       });
       expect(config.enableMcpSiteSettings).toBe(true);
     });
