@@ -764,15 +764,36 @@ describe('API-version tool gate', () => {
   });
 
   describe('assertServesApiVersion', () => {
+    const story = { name: 'story', minApiVersion: '0.2.40' };
+    const tools: Array<{ name: string; minApiVersion?: string }> = [
+      story,
+      { name: 'newer', minApiVersion: '0.2.38' },
+      { name: 'served', minApiVersion: '0.2.34' },
+      { name: 'unfloored' },
+    ];
+
     it('throws when the Desktop is older than the floor', () => {
-      expect(() => assertServesApiVersion('story', '0.2.40', '0.2.34')).toThrow(
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
         DesktopApiVersionTooOldError,
       );
     });
 
     it('names the tool and both versions', () => {
-      expect(() => assertServesApiVersion('story', '0.2.40', '0.2.34')).toThrow(
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
         'story needs External Client API version 0.2.40 or later, but this Tableau Desktop serves 0.2.34.',
+      );
+    });
+
+    it('lists every registered tool this Desktop cannot run', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'Tools this Desktop cannot run: story, newer.',
+      );
+    });
+
+    it('steers the agent to other tools before suggesting an update', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'Do not call these tools again in this session. Continue with other tools if they can do what the user asked. ' +
+          'If none can, tell the user it needs a newer Tableau Desktop.',
       );
     });
 
@@ -782,7 +803,8 @@ describe('API-version tool gate', () => {
       ['unknown', '0.2.40', undefined],
       ['for a tool with no floor', undefined, '0.2.34'],
     ])('passes when the Desktop version is %s', (_case, minApiVersion, desktopApiVersion) => {
-      expect(() => assertServesApiVersion('story', minApiVersion, desktopApiVersion)).not.toThrow();
+      const tool = { name: 'story', minApiVersion };
+      expect(() => assertServesApiVersion(tool, [tool], desktopApiVersion)).not.toThrow();
     });
   });
 

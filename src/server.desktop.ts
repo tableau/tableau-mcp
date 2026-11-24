@@ -242,11 +242,12 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
   );
 }
 
-export function assertServesApiVersion(
-  tool: string,
-  minApiVersion: string | undefined,
+export function assertServesApiVersion<T extends { name: string; minApiVersion?: string }>(
+  tool: T,
+  registeredTools: T[],
   desktopApiVersion: string | undefined,
 ): void {
+  const { name, minApiVersion } = tool;
   if (
     minApiVersion === undefined ||
     desktopApiVersion === undefined ||
@@ -254,7 +255,15 @@ export function assertServesApiVersion(
   ) {
     return;
   }
-  throw new DesktopApiVersionTooOldError({ tool, minApiVersion, desktopApiVersion });
+  const served = new Set(filterToolsByApiVersion(registeredTools, desktopApiVersion));
+  throw new DesktopApiVersionTooOldError({
+    tool: name,
+    minApiVersion,
+    desktopApiVersion,
+    unservedTools: registeredTools
+      .filter((registered) => !served.has(registered))
+      .map((registered) => registered.name),
+  });
 }
 
 export function warnIfUnsupportedApiVersion(connectedApiVersion: string | undefined): void {
@@ -331,15 +340,8 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const {
-      name,
-      title,
-      description,
-      paramsSchema,
-      annotations,
-      callback,
-      minApiVersion,
-    } of tools) {
+    for (const tool of tools) {
+      const { name, title, description, paramsSchema, annotations, callback } = tool;
       const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
         const tableauToolCallback = await Provider.from(callback);
         // One clock per tool call, composed into extra.signal so the socket really aborts.
@@ -356,7 +358,7 @@ export class DesktopMcpServer extends Server {
             config,
             getExecutor: async (sessionId: string) => {
               const executor = await this.sessionManager.getExecutor(sessionId);
-              assertServesApiVersion(name, minApiVersion, executor.desktopApiVersion);
+              assertServesApiVersion(tool, tools, executor.desktopApiVersion);
               return executor;
             },
             server: this,
