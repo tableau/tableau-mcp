@@ -126,7 +126,7 @@ Deprecated alias of `dashboardName`, with the same conflict rule: pass one or th
 - **Pass at most one splice selector.** Supplying both a worksheet name and a dashboard name is rejected — the tool names both offending selectors and writes nothing, so the target element is never ambiguous. A `*Name` argument and its deprecated alias count as one selector when they agree.
 - **A missing element writes nothing.** When no `<worksheet>` or `<dashboard>` element with that name is found, nothing is written. The selector is the plain worksheet or dashboard name (A & B), not the XML-escaped form from the raw file (A &amp; B); use `get-sheets` to get exact names.
 - **Every rejection happens before the file is touched.** A path outside the cache directory, malformed XML, a splice target that is missing or does not match the selector, and an unresolvable session are all caught up front, so a failed call never leaves a partially-written or corrupted file.
-- **The result reports the character count written.** A full write reports the characters written to the file; a splice reports the character count of the resulting spliced file, which includes the untouched siblings, not just the replaced fragment.
+- **The result reports the UTF-8 byte count written.** A full write reports the bytes written to the file; a splice reports the byte size of the resulting spliced file, which includes the untouched siblings, not just the replaced fragment.
 
 ## Example results
 

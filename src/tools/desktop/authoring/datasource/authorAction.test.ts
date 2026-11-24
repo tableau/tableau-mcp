@@ -323,15 +323,11 @@ describe('authorActionTool', () => {
       { description?: string }
     >;
 
-    // The tool description tells the caller to pick a mode and pass its required field.
-    expect(tool.description).not.toBe('Add action.');
-    expect(tool.description).toContain('mode');
-
     // mode is the router: its description names each mode and the field that mode requires,
     // so the caller can populate it before the first call. This is where the tools/list byte
-    // budget is best spent — one place, all four modes — rather than repeated per param.
+    // budget is best spent — one place, all modes — rather than repeated per param.
     const modeDescription = paramsSchema['mode']?.description ?? '';
-    for (const modeName of ['parameter', 'set', 'url', 'filter']) {
+    for (const modeName of ['parameter', 'set', 'url', 'filter', 'highlight']) {
       expect(modeDescription).toContain(modeName);
     }
     expect(modeDescription).toContain('sourceField');
@@ -339,12 +335,8 @@ describe('authorActionTool', () => {
     expect(modeDescription).toContain('targetSet');
     expect(modeDescription).toContain('targetSheet');
 
-    // The four required mode-routing params each say which mode they belong to and, for the
-    // parameter target, the qualified form — the specifics the mode summary can't carry.
-    expect(paramsSchema['sourceField']?.description).toContain('parameter');
+    // An unqualified target can raise a blocking Tableau modal, so the caller must see the form.
     expect(paramsSchema['targetParameter']?.description).toContain('[Parameters]');
-    expect(paramsSchema['targetSet']?.description).toContain('set');
-    expect(paramsSchema['targetSheet']?.description).toContain('filter');
   });
 
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {

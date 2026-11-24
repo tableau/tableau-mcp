@@ -198,7 +198,7 @@ export const getWriteCachedXmlTool = (
           }
           return new Ok({
             filePath,
-            bytes: contentToWrite.length,
+            bytes: Buffer.byteLength(contentToWrite, 'utf8'),
             spliced: selectorTag !== undefined,
           });
         },

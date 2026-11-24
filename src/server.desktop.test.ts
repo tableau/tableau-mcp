@@ -1,8 +1,10 @@
 import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
+import { Ok } from 'ts-results-es';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
 import { apiVersionAtLeast, MIN_SUPPORTED_API_VERSION } from './desktop/externalApi/apiVersion.js';
+import { makeExecutorMock } from './desktop/externalApi/executor.mock.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
@@ -10,9 +12,12 @@ import {
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './desktop/instructions.js';
+import { SessionManager } from './desktop/session/sessionManager.js';
+import { DesktopApiVersionTooOldError } from './errors/mcpToolError.js';
 import * as loggerModule from './logging/logger.js';
 import {
   ALWAYS_LOAD_TOOL_NAMES,
+  assertServesApiVersion,
   DEMO_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
@@ -20,7 +25,7 @@ import {
   filterToolsByApiVersion,
   getDesktopToolListEntry,
   getModelFacingToolEntry,
-  resolveConnectedApiVersion,
+  pinnedApiVersion,
   selectToolsForProfile,
   stripEmptySchemaNoise,
   warnIfUnsupportedApiVersion,
@@ -372,7 +377,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
-    ['author-action', 2546], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
+    ['author-action', 2674], // raised 2026-11-23: caption, sourceField and targetSet get full-sentence describes (#1285); ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -720,50 +725,21 @@ describe('API-version tool gate', () => {
     apiVersion,
   });
 
-  describe('resolveConnectedApiVersion', () => {
-    it('unpinned → the highest version across live instances, not the newest-started', () => {
-      // Discovery is newest-first, so instances[0] here is the LOWER-version build; the gate
-      // must still resolve 0.2.6 so a tool the other running Desktop serves is not hidden.
-      expect(
-        resolveConnectedApiVersion([instance(1, '0.2.5'), instance(2, '0.2.6')], undefined),
-      ).toBe('0.2.6');
+  describe('pinnedApiVersion', () => {
+    it('returns the pinned instance version, not the highest', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe('0.2.5');
     });
 
-    it('unpinned → ignores instances with an unknown version when others report one', () => {
-      expect(resolveConnectedApiVersion([instance(1), instance(2, '0.2.6')], undefined)).toBe(
-        '0.2.6',
-      );
+    it('returns undefined when the session is not pinned', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6')], undefined)).toBeUndefined();
     });
 
-    it('unpinned → undefined when no instance reports a version', () => {
-      expect(resolveConnectedApiVersion([instance(1), instance(2)], undefined)).toBeUndefined();
+    it('returns undefined when no instance matches the pinned session', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
     });
 
-    it('pinned → the matching instance version, not the highest', () => {
-      expect(resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe(
-        '0.2.5',
-      );
-    });
-
-    it('pinned but no match → undefined so the gate fails open', () => {
-      expect(resolveConnectedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
-    });
-
-    it('no instances → undefined', () => {
-      expect(resolveConnectedApiVersion([], undefined)).toBeUndefined();
-      expect(resolveConnectedApiVersion([], '1')).toBeUndefined();
-    });
-
-    it('unpinned mixed-version fleet → a tool only the newer instance serves stays visible', () => {
-      const version = resolveConnectedApiVersion(
-        [instance(1, '0.2.6'), instance(2, '0.2.7')],
-        undefined,
-      );
-      const tools = [{ name: 'story', minApiVersion: '0.2.7' }, { name: 'plain' }];
-      expect(filterToolsByApiVersion(tools, version).map((t) => t.name)).toEqual([
-        'story',
-        'plain',
-      ]);
+    it('returns undefined when no Desktop is running', () => {
+      expect(pinnedApiVersion([], '1')).toBeUndefined();
     });
   });
 
@@ -784,6 +760,129 @@ describe('API-version tool gate', () => {
 
     it('fails open when the connected version is unknown — keeps everything unchanged', () => {
       expect(filterToolsByApiVersion(tools, undefined)).toBe(tools);
+    });
+  });
+
+  describe('assertServesApiVersion', () => {
+    const story = { name: 'story', minApiVersion: '0.2.40' };
+    const tools: Array<{ name: string; minApiVersion?: string }> = [
+      story,
+      { name: 'newer', minApiVersion: '0.2.38' },
+      { name: 'served', minApiVersion: '0.2.34' },
+      { name: 'unfloored' },
+    ];
+
+    it('throws when the Desktop is older than the floor', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        DesktopApiVersionTooOldError,
+      );
+    });
+
+    it('names the tool and both versions', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'story needs External Client API version 0.2.40 or later, but this Tableau Desktop serves 0.2.34.',
+      );
+    });
+
+    it('lists every registered tool this Desktop cannot run', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'Tools this Desktop cannot run: story, newer.',
+      );
+    });
+
+    it('steers the agent to other tools before suggesting an update', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'Do not call these tools again in this session. Continue with other tools if they can do what the user asked. ' +
+          'If none can, tell the user it needs a newer Tableau Desktop.',
+      );
+    });
+
+    it.each([
+      ['equal to the floor', '0.2.40', '0.2.40'],
+      ['newer than the floor', '0.2.40', '0.3.0'],
+      ['unknown', '0.2.40', undefined],
+      ['for a tool with no floor', undefined, '0.2.34'],
+    ])('passes when the Desktop version is %s', (_case, minApiVersion, desktopApiVersion) => {
+      const tool = { name: 'story', minApiVersion };
+      expect(() => assertServesApiVersion(tool, [tool], desktopApiVersion)).not.toThrow();
+    });
+  });
+
+  describe('per-call API version gate', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function callGatedTool(desktopApiVersion: string | undefined): Promise<{
+      result: CallToolResult;
+      toolBody: ReturnType<typeof vi.fn>;
+    }> {
+      const server = getServer();
+      const toolBody = vi.fn();
+      const tool: DesktopTool<Record<string, never>> = new DesktopTool({
+        server,
+        name: 'get-sheets',
+        title: 'Gated',
+        description: 'Gated test tool',
+        paramsSchema: {},
+        annotations: {
+          title: 'Gated',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        minApiVersion: '0.2.40',
+        callback: new Provider(
+          async () =>
+            async (_args, extra): Promise<CallToolResult> =>
+              tool.logAndExecute({
+                extra,
+                args: {},
+                callback: async () => {
+                  await extra.getExecutor('4242');
+                  toolBody();
+                  return new Ok({});
+                },
+              }),
+        ),
+      });
+      vi.spyOn(
+        server as unknown as { _getToolsToRegister: () => unknown },
+        '_getToolsToRegister',
+      ).mockResolvedValue([tool]);
+      vi.spyOn(SessionManager.prototype, 'getExecutor').mockResolvedValue(
+        makeExecutorMock({ desktopApiVersion }),
+      );
+      await server.registerTools();
+      const [, , registered] = vi.mocked(server.mcpServer.registerTool).mock
+        .calls[0] as unknown as [
+        string,
+        unknown,
+        (args: unknown, ctx: unknown) => Promise<CallToolResult>,
+      ];
+      const result = await registered(
+        {},
+        { mcpReq: { signal: new AbortController().signal, id: 1, notify: vi.fn() } },
+      );
+      return { result, toolBody };
+    }
+
+    it('rejects a call to a Desktop older than the tool floor before the tool runs', async () => {
+      const { result, toolBody } = await callGatedTool('0.2.34');
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        'get-sheets needs External Client API version 0.2.40 or later',
+      );
+      expect(toolBody).not.toHaveBeenCalled();
+    });
+
+    it.each(['0.2.40', undefined])('lets a call through to a Desktop on %s', async (version) => {
+      const { result, toolBody } = await callGatedTool(version);
+
+      expect(result.isError).toBe(false);
+      expect(toolBody).toHaveBeenCalledOnce();
     });
   });
 

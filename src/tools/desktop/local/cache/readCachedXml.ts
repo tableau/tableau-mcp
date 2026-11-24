@@ -126,6 +126,7 @@ export const getReadCachedXmlTool = (
 
           // Optional slice selectors keep large cached files out of context.
           let slice = fileContent;
+          let bytes: number | undefined;
           let sliceLabel = '';
           if (worksheetSelector !== undefined) {
             const match = findElement(fileContent, 'worksheet', worksheetSelector);
@@ -148,11 +149,16 @@ export const getReadCachedXmlTool = (
             slice = match.text;
             sliceLabel = ` (dashboard "${dashboardSelector}")`;
           } else if (startByte !== undefined || endByte !== undefined) {
-            slice = sliceBytes(fileContent, startByte, endByte);
+            ({ text: slice, bytes } = sliceBytes(fileContent, startByte, endByte));
             sliceLabel = ` (bytes ${startByte ?? 0}-${endByte ?? 'end'})`;
           }
 
-          return new Ok({ filePath, bytes: slice.length, xml: slice, sliceLabel });
+          return new Ok({
+            filePath,
+            bytes: bytes ?? Buffer.byteLength(slice, 'utf8'),
+            xml: slice,
+            sliceLabel,
+          });
         },
         getSuccessResult: ({ filePath, bytes, xml, sliceLabel }) => ({
           content: [
