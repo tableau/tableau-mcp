@@ -86,6 +86,8 @@ async function runCase(
 ): Promise<RunRecord> {
   const model = getModel();
   const agent = await getAgent({ mcpServer, model, systemPrompt: agentSystemPrompt });
+  // Parallel metadata calls trip VDS rate limits on shared eval sites.
+  agent.modelSettings = { ...agent.modelSettings, parallelToolCalls: false };
   const conversation = await runConversation(agent, abCase, {
     optIn: OPT_IN_ARMS.includes(arm),
     timeoutMs: turnTimeoutMs,
