@@ -1114,6 +1114,10 @@ describe('scopes', () => {
   });
 
   describe('getSupportedScopes', () => {
+    beforeEach(() => {
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+    });
+
     it('should return only MCP scopes when includeApiScopes is false', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
@@ -1138,7 +1142,6 @@ describe('scopes', () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
         async (featureName: string) => featureName === 'mcp-wildcard-scope',
       );
-      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
 
       const scopes = await getSupportedScopes({ includeApiScopes: false });
       expect(scopes).toContain(MCP_WILDCARD_SCOPE);
@@ -1146,8 +1149,6 @@ describe('scopes', () => {
     });
 
     it('should not accept the MCP wildcard when the mcp-wildcard-scope flag is off', async () => {
-      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
-
       const scopes = await getSupportedScopes({ includeApiScopes: true });
       expect(scopes).not.toContain(MCP_WILDCARD_SCOPE);
       expect(scopes).toEqual([
@@ -1193,6 +1194,10 @@ describe('scopes', () => {
   });
 
   describe('getAdvertisedScopes', () => {
+    beforeEach(() => {
+      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+    });
+
     describe('with the mcp-wildcard-scope flag on', () => {
       beforeEach(() => {
         mocks.mockIsFeatureEnabled.mockImplementation(
@@ -1201,16 +1206,12 @@ describe('scopes', () => {
       });
 
       it('advertises the MCP wildcard in place of the explicit MCP scopes', async () => {
-        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
-
         await expect(getAdvertisedScopes({ includeApiScopes: false })).resolves.toEqual([
           MCP_WILDCARD_SCOPE,
         ]);
       });
 
       it('advertises the MCP wildcard and the supported API scopes when includeApiScopes is true', async () => {
-        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
-
         const scopes = await getAdvertisedScopes({ includeApiScopes: true });
         expect(scopes).toEqual([MCP_WILDCARD_SCOPE, ...(await getSupportedApiScopes())]);
         expect(scopes).toContain('tableau:content:read');
@@ -1220,8 +1221,6 @@ describe('scopes', () => {
     it.each([false, true])(
       'advertises the explicit supported scopes when the flag is off (includeApiScopes=%s)',
       async (includeApiScopes) => {
-        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
-
         await expect(getAdvertisedScopes({ includeApiScopes })).resolves.toEqual(
           await getSupportedScopes({ includeApiScopes }),
         );
@@ -1256,31 +1255,31 @@ describe('scopes', () => {
 
   describe('collapseMcpScopes', () => {
     const supported = ['tableau:mcp:datasource:read', 'tableau:mcp:workbook:read'];
+    // Not an MCP scope, so it is never collapsed into the wildcard.
+    const apiScope = 'tableau:content:read';
 
     it('lists the wildcard in place of the MCP scopes when every supported one is listed', () => {
-      expect(collapseMcpScopes([...supported, 'tableau:content:read'], supported)).toEqual([
+      expect(collapseMcpScopes([...supported, apiScope], supported)).toEqual([
         MCP_WILDCARD_SCOPE,
-        'tableau:content:read',
+        apiScope,
       ]);
     });
 
     it('drops explicit MCP scopes that the wildcard already covers', () => {
       expect(
-        collapseMcpScopes(
-          ['tableau:mcp:datasource:read', MCP_WILDCARD_SCOPE, 'tableau:content:read'],
-          supported,
-        ),
-      ).toEqual([MCP_WILDCARD_SCOPE, 'tableau:content:read']);
+        collapseMcpScopes(['tableau:mcp:datasource:read', MCP_WILDCARD_SCOPE, apiScope], supported),
+      ).toEqual([MCP_WILDCARD_SCOPE, apiScope]);
     });
 
     it('keeps the scopes as listed when some supported MCP scope is not covered', () => {
-      expect(
-        collapseMcpScopes(['tableau:mcp:datasource:read', 'tableau:content:read'], supported),
-      ).toEqual(['tableau:mcp:datasource:read', 'tableau:content:read']);
+      expect(collapseMcpScopes(['tableau:mcp:datasource:read', apiScope], supported)).toEqual([
+        'tableau:mcp:datasource:read',
+        apiScope,
+      ]);
     });
 
     it('adds no wildcard when the server supports no MCP scopes', () => {
-      expect(collapseMcpScopes(['tableau:content:read'], [])).toEqual(['tableau:content:read']);
+      expect(collapseMcpScopes([apiScope], [])).toEqual([apiScope]);
     });
   });
 
@@ -1437,7 +1436,7 @@ describe('scopes', () => {
       );
     });
 
-    it('lists no optional API scopes when no enabled tool has one', async () => {
+    it('lists no optional API scopes for a client without publish-workbook (Slack)', async () => {
       const { optionalApiScopes } = await getScopeInfo(slackClientId);
 
       expect(optionalApiScopes).toEqual([]);

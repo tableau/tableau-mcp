@@ -51,6 +51,7 @@ describe('client credentials grant type', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _server = undefined;
+    mocks.mcpWildcardScopeFlag.value = false;
   });
 
   afterEach(async () => {
@@ -179,7 +180,6 @@ describe('client credentials grant type', () => {
 
     afterEach(() => {
       vi.unstubAllEnvs();
-      mocks.mcpWildcardScopeFlag.value = false;
     });
 
     it('grants the explicit MCP scopes and rejects a request for the wildcard when the flag is off', async () => {
