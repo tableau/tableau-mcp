@@ -38,6 +38,14 @@ function pulseDefinitionsPage(definitionCount = 0): Ok<unknown> {
   });
 }
 
+/** A `queryFlowsForSite` result; `totalAvailable` defaults to the number of flows returned. */
+function flowsPage(
+  flows: Array<Record<string, unknown>>,
+  totalAvailable = flows.length,
+): { pagination: Record<string, number>; flows: Array<Record<string, unknown>> } {
+  return { pagination: { pageNumber: 1, pageSize: 1, totalAvailable }, flows };
+}
+
 /** An entitlements response built from `{ entitlementType: enabled }` pairs. */
 function entitlements(enabledByType: Record<string, boolean>): Ok<unknown> {
   return new Ok(
@@ -163,7 +171,7 @@ describe('checkRegistrationConditions', () => {
     const getCurrentServerSession = vi.fn();
 
     beforeEach(() => {
-      queryFlowsForSite.mockReset().mockResolvedValue({ flows: [] });
+      queryFlowsForSite.mockReset().mockResolvedValue(flowsPage([]));
       getCurrentServerSession
         .mockReset()
         .mockResolvedValue(new Ok({ user: { siteRole: SiteRole.CREATOR } }));
@@ -177,7 +185,9 @@ describe('checkRegistrationConditions', () => {
     });
 
     it.each([true, false])('caches visibility=$0 across Flow tools', async (hasVisibleFlows) => {
-      queryFlowsForSite.mockResolvedValue({ flows: hasVisibleFlows ? [{ id: 'flow-id' }] : [] });
+      queryFlowsForSite.mockResolvedValue(
+        hasVisibleFlows ? flowsPage([{ id: 'flow-id', name: 'Sales Cleanup' }]) : flowsPage([]),
+      );
       const context: RegistrationContext = {};
       const expected = hasVisibleFlows
         ? { registrationConditionsMet: true }
@@ -203,9 +213,9 @@ describe('checkRegistrationConditions', () => {
     it.each([SiteRole.VIEWER, SiteRole.EXPLORER, SiteRole.EXPLORER_CAN_PUBLISH])(
       'allows a %s with a shared flow without a user ID or ownership lookup',
       async (siteRole) => {
-        queryFlowsForSite.mockResolvedValue({
-          flows: [{ id: 'shared-flow-id', owner: { id: 'another-user-id' } }],
-        });
+        queryFlowsForSite.mockResolvedValue(
+          flowsPage([{ id: 'shared-flow-id', name: 'Shared', owner: { id: 'another-user-id' } }]),
+        );
         await expect(
           checkRegistrationConditions(['UserCanViewFlows'], { siteRole }, restApiArgs),
         ).resolves.toEqual({ registrationConditionsMet: true });
@@ -216,6 +226,92 @@ describe('checkRegistrationConditions', () => {
         expect(getCurrentServerSession).not.toHaveBeenCalled();
       },
     );
+
+    describe('seeded sample flow', () => {
+      const seed = {
+        id: 'seed-id',
+        name: 'Superstore Flow',
+        fileType: 'tflx',
+        createdAt: '2026-11-24T16:04:53Z',
+        updatedAt: '2026-11-24T16:04:53Z',
+      };
+
+      it('treats a site whose only flow is the seed as having no flow', async () => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([seed]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'UserCanViewFlows',
+        });
+      });
+
+      it.each([
+        ['0 seconds', '2026-11-24T16:04:53Z'],
+        ['1 second, the update crossed a second boundary', '2026-11-24T16:04:54Z'],
+      ])('treats a seed updated %s after creation as the seed', async (_label, updatedAt) => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([{ ...seed, updatedAt }]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'UserCanViewFlows',
+        });
+      });
+
+      it.each(ADMIN_SITE_ROLES)(
+        'still allows %s when the seed is the only flow',
+        async (siteRole) => {
+          queryFlowsForSite.mockResolvedValue(flowsPage([seed]));
+          getCurrentServerSession.mockResolvedValue(new Ok({ user: { siteRole } }));
+          await expect(
+            checkRegistrationConditions(['UserCanViewFlows'], {}, restApiArgs),
+          ).resolves.toEqual({ registrationConditionsMet: true });
+        },
+      );
+
+      it('counts the seed plus a customer flow', async () => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([seed], 2));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({ registrationConditionsMet: true });
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['a different name', { name: 'Superstore' }],
+        ['a different case', { name: 'superstore flow' }],
+        ['a different file type', { fileType: 'tfl' }],
+        ['an edited flow', { updatedAt: '2026-11-25T09:00:00Z' }],
+        ['an update 2 seconds after creation', { updatedAt: '2026-11-24T16:04:55Z' }],
+        ['an update before creation', { updatedAt: '2026-11-24T16:04:52Z' }],
+        ['an unparseable updated time', { updatedAt: 'not-a-date' }],
+        ['no file type', { fileType: undefined }],
+        ['no created time', { createdAt: undefined }],
+        ['no updated time', { updatedAt: undefined }],
+      ])('counts a single flow with %s', async (_label, override) => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([{ ...seed, ...override }]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({ registrationConditionsMet: true });
+      });
+    });
 
     it.each(ADMIN_SITE_ROLES)('allows %s without a visible flow', async (siteRole) => {
       getCurrentServerSession.mockResolvedValue(new Ok({ user: { siteRole } }));
