@@ -2,6 +2,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/server';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
+import { isMcpWildcardScopeEnabled } from '../../features/mcpWildcardScope.js';
 import { log } from '../../logging/logger.js';
 import {
   OAUTH_AUTH_CHALLENGE_GUIDANCE,
@@ -10,11 +11,13 @@ import {
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
+  collapseMcpScopes,
   formatScopes,
   getRequiredApiScopesForTool,
   getRequiredMcpScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
+  isScopeGranted,
   MCP_SITE_SETTINGS_READ_SCOPE,
 } from './scopes.js';
 import { isSiteSettingsScopeRequired } from './siteSettingsScope.js';
@@ -115,18 +118,18 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const requiredMcpScopes = toolName === undefined ? [] : getRequiredMcpScopesForTool(toolName);
       const requiredApiScopes =
         advertiseApiScopes && toolName !== undefined ? getRequiredApiScopesForTool(toolName) : [];
-      const missingMcpScopes = requiredMcpScopes.filter(
-        (scope) => !authInfo.scopes.includes(scope),
-      );
+      const wildcardEnabled = await isMcpWildcardScopeEnabled();
+      const isGranted = (scope: string): boolean =>
+        wildcardEnabled ? isScopeGranted(scope, authInfo.scopes) : authInfo.scopes.includes(scope);
+      const missingMcpScopes = requiredMcpScopes.filter((scope) => !isGranted(scope));
       const shouldCheckApiScopes = advertiseApiScopes;
       const missingApiScopes = shouldCheckApiScopes
-        ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
+        ? requiredApiScopes.filter((scope) => !isGranted(scope))
         : [];
       // Checked on every request, including initialize: registration reads the site's settings for
       // every session, and a token without the scope would read them as empty.
       const missingMandatory =
-        isSiteSettingsScopeRequired(config) &&
-        !authInfo.scopes.includes(MCP_SITE_SETTINGS_READ_SCOPE)
+        isSiteSettingsScopeRequired(config) && !isGranted(MCP_SITE_SETTINGS_READ_SCOPE)
           ? [MCP_SITE_SETTINGS_READ_SCOPE]
           : [];
       // Dedupe: many tools also list the mandatory scope among their own API scopes.
@@ -160,7 +163,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
             ...authInfo.scopes,
           ]),
         ];
-        const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
+        const scopeParam = `scope="${await formatChallengeScopes(requiredScopesForChallenge, authInfo.clientId)}"`;
         // Name the specific missing scopes and append the shared 403 guidance so the failure is not
         // misread as a missing feature. The challenge header keeps a static error_description (it is a
         // header value); the richer text goes in the response body.
@@ -213,13 +216,21 @@ export async function getOAuthChallenge(
   const requiredApiScopes = await getRequiredApiScopesForRequest(body, advertiseApiScopes);
   const scopeParam =
     enforceScopes && requiredMcpScopes.length > 0
-      ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
+      ? `, scope="${await formatChallengeScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
       : '';
   // A fixed description: header values can't safely carry the validator's free-form error text.
   const errorParam = invalidToken
     ? ', error="invalid_token", error_description="The access token is invalid or expired"'
     : '';
   return `Bearer realm="MCP", resource_metadata="${resourceMetadataUrl}"${scopeParam}${errorParam}`;
+}
+
+async function formatChallengeScopes(scopes: string[], clientId?: string): Promise<string> {
+  if (await isMcpWildcardScopeEnabled()) {
+    return formatScopes(collapseMcpScopes(scopes, await getSupportedMcpScopes(clientId)));
+  }
+
+  return formatScopes(scopes);
 }
 
 async function getRequiredMcpScopesForRequest(body: unknown): Promise<ReadonlyArray<string>> {

@@ -64,11 +64,23 @@ To set it up:
   any token with a matching `aud`, so use a value unique to this server. A client ID is fine only if
   it is this MCP server's own client ID and no other app receives tokens for it. Never use a client
   ID shared with another app, or a shared default audience such as Okta's `api://default`.
-- Grant the `tableau:mcp:*` scopes your tools need in the `scope` or `scp` claim. The scopes also
-  keep out tokens without `tableau:mcp:*` scopes, including ID tokens and tokens meant for other
-  apps. Accepting ID tokens requires [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) set to `true`.
+- Grant MCP scopes in the `scope` or `scp` claim: either `tableau:mcp:*`, which grants every MCP
+  scope, or the `tableau:mcp:…` scopes your tools need. The server advertises `tableau:mcp:*`, so
+  clients request it; make sure your IdP accepts and issues that exact scope. The scopes also keep
+  out tokens without MCP scopes, including ID tokens and tokens meant for other apps. Accepting ID
+  tokens requires [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) set to `true`.
   The audience is then the only check that ties a token to this server, so do this only when every
   accepted audience is unique to this server.
+
+:::info[Upgrading]
+
+The server now advertises `tableau:mcp:*` in place of the individual `tableau:mcp:…` scopes, so
+clients that read `scopes_supported` request `tableau:mcp:*`. Before you upgrade, set up your IdP
+to accept that scope and put it in the token. If your IdP rejects the scope, sign-in fails. If it
+drops the scope, the token does not grant access to MCP tools. Tokens that list the individual
+scopes keep working.
+
+:::
 
 :::warning
 
@@ -497,8 +509,9 @@ SESSION_STORE_PROVIDER_CONFIG='{"module":"./providers/redis-session-store.js"}'
 Include Tableau API scopes in OAuth metadata and scope challenges.
 
 - Default: `false`
-- When `true`, `scopes_supported` includes MCP + API scopes and scope challenges may include API
-  scopes for step-up.
+- When `false`, `scopes_supported` lists MCP scopes only. When `true`, it also lists Tableau API
+  scopes, and scope challenges may include API scopes for step-up. `tableau:mcp:*` never grants API
+  scopes.
 - When `true`, the advertised set also includes `tableau:entitlements:read` if AI-powered Pulse
   insight tools are enabled and the `enforce-registration-conditions` feature flag is on.
 
