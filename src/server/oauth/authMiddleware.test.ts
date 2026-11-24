@@ -152,44 +152,59 @@ describe('authMiddleware WWW-Authenticate challenge (RFC 6750 §3)', () => {
     expect(res.body.error_description).toContain('token "expired"');
   });
 
-  it('advertises the supported scopes at initialize while keeping permission disclosure optional', async () => {
-    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-    const header = await getOAuthChallenge({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'initialize',
-      params: {
-        protocolVersion: '2025-03-26',
-        capabilities: {},
-        clientInfo: { name: 'test-client', version: '1.0.0' },
-      },
-    });
-    const scopes = /scope="([^"]*)"/.exec(header)![1].split(' ');
-    const supported = await getSupportedScopes({ includeApiScopes: true });
+  it.each([true, false])(
+    'advertises supported scopes at initialize while keeping permission disclosure optional (API scopes=%s)',
+    async (includeApiScopes) => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', String(includeApiScopes));
+      const header = await getOAuthChallenge({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+        },
+      });
+      const scopes = /scope="([^"]*)"/.exec(header)![1].split(' ');
+      const supported = await getSupportedScopes({ includeApiScopes });
 
-    expect(scopes).toEqual(
-      expect.arrayContaining(
+      expect(scopes).toEqual(
         supported.filter((scope) => scope !== PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE),
-      ),
-    );
-    expect(scopes).not.toContain(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
-  });
+      );
+    },
+  );
 
-  it('challenges a tool request with its required scopes rather than unrelated scopes', async () => {
-    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-    const header = await getOAuthChallenge({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: 'list-datasources', arguments: {} },
-    });
-    const scopes = /scope="([^"]*)"/.exec(header)![1].split(' ');
+  it.each([true, false])(
+    'challenges a tool request with its required scopes (API scopes=%s)',
+    async (includeApiScopes) => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', String(includeApiScopes));
+      const header = await getOAuthChallenge({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'list-datasources', arguments: {} },
+      });
+      const scopes = /scope="([^"]*)"/.exec(header)![1].split(' ');
+      const expectedScopes: string[] = [...getRequiredMcpScopesForTool('list-datasources')];
+      if (includeApiScopes) {
+        expectedScopes.push(...getRequiredApiScopesForTool('list-datasources'));
+      }
 
-    expect(scopes).toEqual([
-      ...getRequiredMcpScopesForTool('list-datasources'),
-      ...getRequiredApiScopesForTool('list-datasources'),
-    ]);
-  });
+      expect(scopes).toEqual(expectedScopes);
+    },
+  );
+
+  it.each([undefined, { jsonrpc: '2.0', id: 1, method: 'tools/list' }])(
+    'advertises only MCP scopes for a non-tool request: %j',
+    async (body) => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const header = await getOAuthChallenge(body);
+      const scopes = /scope="([^"]*)"/.exec(header)![1].split(' ');
+
+      expect(scopes).toEqual(await getSupportedMcpScopes());
+    },
+  );
 
   it('sends the same challenge on an SSE request with a rejected token', async () => {
     const middleware = authMiddleware(makeValidator(new Err('token expired')));

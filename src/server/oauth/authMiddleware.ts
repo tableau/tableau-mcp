@@ -111,9 +111,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     const { enforceScopes, advertiseApiScopes } = config.oauth;
     if (enforceScopes) {
       // Connections may hold a subset of scopes; enforce the scopes needed by each tool call.
-      const toolName = isInitializeRequest(req.body)
-        ? undefined
-        : getToolNameFromRequestBody(req.body);
+      const toolName = getToolNameFromRequestBody(req.body);
       const requiredMcpScopes = toolName === undefined ? [] : getRequiredMcpScopesForTool(toolName);
       const requiredApiScopes =
         advertiseApiScopes && toolName !== undefined ? getRequiredApiScopesForTool(toolName) : [];
@@ -211,16 +209,8 @@ export async function getOAuthChallenge(
   const baseUrl = new URL(resourceUri).origin;
   const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
   // A fresh client can request the full supported set even though connections accept subsets.
-  const toolName = isInitializeRequest(body) ? undefined : getToolNameFromRequestBody(body);
-  const requiredMcpScopes =
-    toolName === undefined ? await getSupportedMcpScopes() : getRequiredMcpScopesForTool(toolName);
-  const requiredApiScopes = !advertiseApiScopes
-    ? []
-    : isInitializeRequest(body)
-      ? await getSupportedApiScopes(undefined, { includeOptionalScopes: false })
-      : toolName === undefined
-        ? []
-        : getRequiredApiScopesForTool(toolName);
+  const requiredMcpScopes = await getRequiredMcpScopesForRequest(body);
+  const requiredApiScopes = await getRequiredApiScopesForRequest(body, advertiseApiScopes);
   const scopeParam =
     enforceScopes && requiredMcpScopes.length > 0
       ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
@@ -230,4 +220,33 @@ export async function getOAuthChallenge(
     ? ', error="invalid_token", error_description="The access token is invalid or expired"'
     : '';
   return `Bearer realm="MCP", resource_metadata="${resourceMetadataUrl}"${scopeParam}${errorParam}`;
+}
+
+async function getRequiredMcpScopesForRequest(body: unknown): Promise<ReadonlyArray<string>> {
+  const toolName = getToolNameFromRequestBody(body);
+  if (toolName === undefined) {
+    return getSupportedMcpScopes();
+  }
+
+  return getRequiredMcpScopesForTool(toolName);
+}
+
+async function getRequiredApiScopesForRequest(
+  body: unknown,
+  includeApiScopes: boolean,
+): Promise<ReadonlyArray<string>> {
+  if (!includeApiScopes) {
+    return [];
+  }
+
+  if (isInitializeRequest(body)) {
+    return getSupportedApiScopes(undefined, { includeOptionalScopes: false });
+  }
+
+  const toolName = getToolNameFromRequestBody(body);
+  if (toolName === undefined) {
+    return [];
+  }
+
+  return getRequiredApiScopesForTool(toolName);
 }
