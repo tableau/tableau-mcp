@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { WebMcpServer } from '../../../../server.web.js';
+import { resetTestKeyValueStore } from '../../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { WebTool } from '../../tool.js';
@@ -33,10 +34,13 @@ vi.mock('../../../../config.js', () => ({
     flowWriteToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    keyValueStore: { provider: 'memory' },
   })),
 }));
 
 const TASK_ID = '1bff10bb-57ae-43df-8774-a86d14aef432';
+
+beforeEach(resetTestKeyValueStore);
 
 describe('runFlowTaskTool', () => {
   beforeEach(() => {

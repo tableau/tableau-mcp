@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { resetTestKeyValueStore } from '../../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { WebTool } from '../../tool.js';
@@ -33,11 +34,14 @@ vi.mock('../../../../config.js', () => ({
     flowWriteToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    keyValueStore: { provider: 'memory' },
   })),
 }));
 
 const FLOW_RUN_ID = '1bff10bb-57ae-43df-8774-a86d14aef432';
 const ORIGINAL_REST_API_VERSION = RestApi.version;
+
+beforeEach(resetTestKeyValueStore);
 
 describe('cancelFlowRunTool', () => {
   beforeEach(() => {

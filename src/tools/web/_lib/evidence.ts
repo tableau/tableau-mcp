@@ -1,7 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 
+import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { ExpiringMap } from '../../../utils/expiringMap.js';
+import { getKeyValueStore } from '../../../storage/init.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
 import { WebToolName } from '../toolName.js';
@@ -42,6 +44,8 @@ export interface EvidenceContext {
  */
 export interface EvidenceStrategy<TTarget> {
   establish(ctx: EvidenceContext): Promise<void>;
+  // Best-effort removal of proof after a partially established preview fails.
+  revoke?(ctx: EvidenceContext): Promise<void>;
   verify(ctx: EvidenceContext): Promise<boolean>;
   describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string };
   explainRejection?(): string | undefined;
@@ -130,42 +134,9 @@ export class TagEvidence implements EvidenceStrategy<MutationTarget> {
   }
 }
 
-// Lazy-initialized registry of server-generated single-use confirmation nonces, keyed
-// `${siteId}:${userLuid}:${tool}:${targetId}`. Copied from adminGate.ts's getCache() pattern
-// (parseNumber + milliseconds.fromMinutes + ExpiringMap) to avoid a module-level parseNumber call.
-//
-// DURABILITY CAVEAT: this is in-memory, so it is NOT durable across a server restart and is NOT
-// shared across multiple instances. The consequence is asymmetric and safe: a lost/absent nonce can
-// only cause a confirm to be REJECTED (the caller must re-preview), never wrongly ALLOWED. It is
-// therefore strictly more friction and preserves the no-bypass guarantee. Contrast TagEvidence,
-// whose proof lives in durable Tableau server-side state.
-let nonceCache: ExpiringMap<string, string> | null = null;
-
-function getCache(): ExpiringMap<string, string> {
-  if (!nonceCache) {
-    const ttlMinutes = parseNumber(process.env.MUTATION_PREVIEW_TTL_MINUTES, {
-      defaultValue: 5,
-      minValue: 1,
-      maxValue: 60 * 24, // 24 hours
-    });
-    nonceCache = new ExpiringMap<string, string>({
-      defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
-    });
-  }
-  return nonceCache;
-}
-
-function nonceKey(ctx: EvidenceContext): string {
-  // Fold the optional parameter fingerprint into the key so a nonce is valid only for a confirm that
-  // carries the same caller-controlled parameters that were previewed. `binding` is a non-secret hash
-  // (see EvidenceContext.binding); an empty segment when absent keeps keys stable for taggable/no-arg
-  // targets like deletes.
-  return `${ctx.siteId}:${ctx.userLuid}:${ctx.tool}:${ctx.target.id}:${ctx.binding ?? ''}`;
-}
-
 /**
  * The preview→confirm approval window, in milliseconds, from MUTATION_PREVIEW_TTL_MINUTES (default
- * 5, min 1, max 24h) — the same bound RegistryEvidence's nonce cache uses. Exported so a preview
+ * 5, min 1, max 24h) — the same bound RegistryEvidence's nonce store uses. Exported so a preview
  * tool can compute and surface the absolute expiry (`expiresAtMs`) to its UI without duplicating
  * the parse/bounds logic.
  */
@@ -178,21 +149,140 @@ export function getMutationPreviewTtlMs(): number {
   return milliseconds.fromMinutes(ttlMinutes);
 }
 
-// Lazy-initialized registry of in-iframe human approvals, keyed identically to the nonce cache
-// (`${siteId}:${userLuid}:${tool}:${targetId}`) but storing only PRESENCE — there is no secret to
-// transport. Kept separate from `nonceCache` so the two strategies never collide on a key. Same
-// DURABILITY CAVEAT applies: in-memory, so a lost entry can only force a re-preview (reject), never
-// wrongly allow.
-let approvalCache: ExpiringMap<string, true> | null = null;
-
-function getApprovalCache(): ExpiringMap<string, true> {
-  if (!approvalCache) {
-    approvalCache = new ExpiringMap<string, true>({
-      defaultExpirationTimeMs: getMutationPreviewTtlMs(),
-    });
-  }
-  return approvalCache;
+// Preview proof lives in the independent key-value store, so with a shared custom provider a confirm
+// verifies on whichever replica it reaches. With the default memory provider it stays process-local:
+// a confirm reaching another process (or after a restart) is rejected and the caller re-previews.
+//
+// Each key holds one entry, so a new preview replaces the last one and only the latest token works.
+// The entry is a string carrying its own expiry, which survives any provider's serialization and
+// keeps a provider that ignores `ttlMs` from stretching the approval window. The write's `ttlMs` is
+// only a cleanup backstop; the embedded expiry is the authoritative check.
+function proofKey(namespace: string, key: string): string {
+  return `${namespace}:${key}`;
 }
+
+function sha256(fields: ReadonlyArray<string>): string {
+  // JSON keeps a delimiter inside one field from shifting into the next; hashing bounds key length
+  // and keeps raw ids and nonces out of a shared backend.
+  return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
+}
+
+// Provider exceptions may contain secrets in any field, including name and code. Log only known
+// literal labels. Property reads can still throw, so keep them inside the try below.
+const SAFE_ERROR_NAMES = new Set([
+  'Error',
+  'Http2Error',
+  'InternalServerError',
+  'ProvisionedThroughputExceededException',
+  'ResourceNotFoundException',
+  'S3ServiceException',
+  'Throttling',
+  'ThrottlingException',
+  'TimeoutError',
+]);
+const SAFE_ERROR_CODES = new Set<string | number>([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'ERR_HTTP2_STREAM_ERROR',
+  'ETIMEDOUT',
+  'NOSCRIPT',
+  '23505',
+  '503',
+  429,
+  500,
+  502,
+  503,
+  504,
+]);
+
+function safeErrorLabels(error: unknown): { errorName?: string; errorCode?: string | number } {
+  try {
+    const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
+    return {
+      errorName: typeof name === 'string' && SAFE_ERROR_NAMES.has(name) ? name : '<redacted>',
+      errorCode:
+        (typeof code === 'string' || typeof code === 'number') && SAFE_ERROR_CODES.has(code)
+          ? code
+          : '<redacted>',
+    };
+  } catch {
+    return {};
+  }
+}
+
+// Store failures surface as a fixed message so backend details (hosts, ports) never reach a client.
+async function withStore<T>(
+  namespace: string,
+  operation: 'set' | 'consume' | 'delete',
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    log({
+      message:
+        operation === 'delete'
+          ? 'Preview evidence rollback failed; proof may remain until expiry'
+          : 'Preview evidence store operation failed',
+      level: 'error',
+      logger: 'mutation-guard',
+      data: {
+        namespace,
+        operation,
+        ...safeErrorLabels(error),
+      },
+    });
+    throw new EvidenceStoreUnavailableError();
+  }
+}
+
+async function recordProof(namespace: string, key: string, secret = ''): Promise<void> {
+  const ttlMs = getMutationPreviewTtlMs();
+  const expiresAtMs = Date.now() + ttlMs;
+  await withStore(namespace, 'set', () =>
+    getKeyValueStore().set(proofKey(namespace, key), `${expiresAtMs}.${secret}`, {
+      ttlMs,
+    }),
+  );
+}
+
+async function revokeProof(namespace: string, key: string): Promise<void> {
+  await withStore(namespace, 'delete', () => getKeyValueStore().delete(proofKey(namespace, key)));
+}
+
+function matchesProof(stored: unknown, secret: string): stored is string {
+  if (typeof stored !== 'string') {
+    return false;
+  }
+  const dot = stored.indexOf('.');
+  const expiry = stored.slice(0, dot);
+  const expected = Buffer.from(stored.slice(dot + 1));
+  const actual = Buffer.from(secret);
+  return (
+    dot > 0 &&
+    /^\d+$/.test(expiry) &&
+    Number(expiry) > Date.now() &&
+    expected.length === actual.length &&
+    timingSafeEqual(expected, actual)
+  );
+}
+
+// Consume, then check: one atomic store call keeps a token single-use across replicas. A wrong token
+// burns the pending proof, but the key is scoped to the caller's own preview, so they re-preview.
+async function consumeProof(namespace: string, key: string, secret = ''): Promise<boolean> {
+  const stored = await withStore(namespace, 'consume', () =>
+    getKeyValueStore().consume(proofKey(namespace, key)),
+  );
+  return matchesProof(stored, secret);
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The KV is one flat keyspace shared with other features, so each proof kind gets a key prefix.
+const NONCE_NAMESPACE = 'mutation-confirmation-nonces-v1';
+const APPROVAL_NAMESPACE = 'mutation-app-approvals-v1';
 
 /**
  * AppApprovalEvidence — proof that a human approved the mutation by a gesture inside a rendered
@@ -215,40 +305,34 @@ function getApprovalCache(): ExpiringMap<string, true> {
  * DELETEs, which carry no payload beyond the target id) pass no `binding`, so their key is unchanged.
  */
 export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
-  // The preview-tool name that namespaces the approval key. The preview tool and its model-invisible
-  // confirm tool run as separate WebTool instances under DIFFERENT tool names, so the key must NOT be
-  // `ctx.tool` (that would never match across the pair). Instead both sides pass the SAME fixed
-  // namespace — the preview tool's name (e.g. 'delete-workbook', 'delete-datasource',
-  // 'delete-extract-refresh-task', 'update-cloud-extract-refresh-task') — so each tool's approval is
-  // isolated from every other tool's and the preview/confirm pair resolves the same entry.
-  private readonly namespace: string;
+  // The preview-tool name that scopes the approval key (not the KV key prefix). The preview tool and
+  // its model-invisible confirm tool run under DIFFERENT tool names, so the key must NOT be
+  // `ctx.tool` (that would never match across the pair). Both sides pass the SAME name (e.g.
+  // 'delete-content', 'update-cloud-extract-refresh-task') so the pair resolves one entry and each
+  // tool's approval stays isolated from every other tool's.
+  private readonly previewTool: string;
 
-  // Defaults to 'delete-workbook' to preserve the original (pre-generalization) behavior for the
-  // first tool to adopt this strategy. Every NEW tool MUST pass its own preview-tool name so the
-  // approvals don't collide on the 'delete-workbook' namespace.
-  constructor(namespace: string = 'delete-workbook') {
-    this.namespace = namespace;
+  constructor(previewTool: string) {
+    this.previewTool = previewTool;
   }
 
   private approvalKey(ctx: EvidenceContext): string {
-    // Fold the optional parameter fingerprint into the key (mirrors RegistryEvidence's nonceKey) so an
-    // approval minted for parameter set A cannot satisfy a confirm carrying parameter set B. An empty
-    // segment when `binding` is absent keeps keys stable for payload-free targets like the deletes.
-    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}:${ctx.binding ?? ''}`;
+    // The binding keeps an approval minted for parameter set A from satisfying a confirm carrying
+    // parameter set B. An empty binding keeps keys stable for payload-free targets like the deletes.
+    return sha256([ctx.siteId, ctx.userLuid, this.previewTool, ctx.target.id, ctx.binding ?? '']);
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
-    getApprovalCache().set(this.approvalKey(ctx), true);
+    await recordProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
+  }
+
+  async revoke(ctx: EvidenceContext): Promise<void> {
+    await revokeProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    const key = this.approvalKey(ctx);
-    if (!getApprovalCache().get(key)) {
-      return false;
-    }
-    // Single-use: consume the approval so it cannot be replayed.
-    getApprovalCache().delete(key);
-    return true;
+    // Single-use: consuming the approval means it cannot be replayed.
+    return consumeProof(APPROVAL_NAMESPACE, this.approvalKey(ctx));
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
@@ -261,34 +345,46 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
  * RegistryEvidence — server-generated single-use confirmation nonce, for mutations whose target has
  * no durable taggable state (e.g. extract refresh tasks).
  *
- * `establish` generates a fresh nonce via crypto.randomUUID() and stores it under a key scoped to
- * site + user + tool + target; the preview text echoes the nonce so the caller can supply it on
- * confirm. `verify` checks the supplied nonce matches the stored one AND deletes it (single-use), so
- * a nonce can never be replayed. The nonce is server-generated and unguessable, so — like the tag —
- * it cannot be fabricated by computing a value.
+ * `establish` generates a fresh nonce via crypto.randomUUID() and records its hash in the key-value
+ * store under a key scoped to site + user + tool + target + binding, replacing any earlier preview;
+ * the preview text echoes the nonce so the caller can supply it on confirm. `verify` atomically
+ * consumes that entry, then checks the nonce, so a token works once, only for the latest preview of
+ * exactly what was previewed. The nonce is server-generated and unguessable,
+ * so — like the tag — it cannot be fabricated by computing a value.
  *
- * See the DURABILITY CAVEAT on the registry cache above: this can only reject, never wrongly allow.
+ * See the store note above: this can only reject, never wrongly allow.
  */
 export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
   // The nonce minted by the most recent establish(), so the caller (preview branch) can surface it
   // in the response text. NEVER write this into the audit record.
   private lastNonce?: string;
 
+  private static key(ctx: EvidenceContext): string {
+    return sha256([ctx.siteId, ctx.userLuid, ctx.tool, ctx.target.id, ctx.binding ?? '']);
+  }
+
   async establish(ctx: EvidenceContext): Promise<void> {
     const nonce = randomUUID();
-    getCache().set(nonceKey(ctx), nonce);
+    this.lastNonce = undefined;
+    await recordProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx), sha256([nonce]));
     this.lastNonce = nonce;
   }
 
+  async revoke(ctx: EvidenceContext): Promise<void> {
+    this.lastNonce = undefined;
+    await revokeProof(NONCE_NAMESPACE, RegistryEvidence.key(ctx));
+  }
+
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    const key = nonceKey(ctx);
-    const stored = getCache().get(key);
-    if (!stored || !ctx.confirmationToken || stored !== ctx.confirmationToken) {
+    // Anything that isn't a nonce we could have minted is rejected without touching the store.
+    if (!ctx.confirmationToken || !UUID_PATTERN.test(ctx.confirmationToken)) {
       return false;
     }
-    // Single-use: consume the nonce so it cannot be replayed.
-    getCache().delete(key);
-    return true;
+    return consumeProof(
+      NONCE_NAMESPACE,
+      RegistryEvidence.key(ctx),
+      sha256([ctx.confirmationToken]),
+    );
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
@@ -305,7 +401,7 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
 /**
  * AllEvidence — AND-composition of several strategies. `verify` is true only when EVERY member
  * verifies; `establish` establishes every member; `explainRejection` delegates to the member that
- * failed. Used by confirm-delete-workbook to require BOTH a
+ * failed. Used by confirm-delete-content to require BOTH a
  * live batch `pending-deletion-YYYY-MM-DD` tag (durable, un-forgeable) AND a fresh in-iframe human approval
  * (AppApprovalEvidence) — layering the human-gesture proof ON TOP of the tag so the composite can
  * only ever NARROW access (reject), never wrongly allow.
@@ -324,8 +420,20 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
-    for (const strategy of this.strategies) {
-      await strategy.establish(ctx);
+    const attempted: Array<EvidenceStrategy<MutationTarget>> = [];
+    try {
+      for (const strategy of this.strategies) {
+        // A write may commit before reporting failure, so include the failing member in cleanup.
+        attempted.push(strategy);
+        await strategy.establish(ctx);
+      }
+    } catch (error) {
+      // Cleanup must try every attempted member and preserve the original failure. Existing Tableau
+      // tags are left intact; only strategies with revocable proof opt in. A concurrent newer preview
+      // may also be removed, which safely forces a re-preview. Backend outages can prevent cleanup;
+      // the embedded expiry still bounds any remaining proof's lifetime.
+      await Promise.allSettled(attempted.map(async (strategy) => strategy.revoke?.(ctx)));
+      throw error;
     }
   }
 
@@ -346,7 +454,13 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
 
   describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string } {
     const descriptors = this.strategies.map((s) => s.describeEvidence());
-    return descriptors.find((d) => d.kind === 'registry-nonce') ?? descriptors[0];
+    const primary = descriptors.find((d) => d.kind === 'registry-nonce') ?? descriptors[0];
+    // Join every member's detail so the audit still names the tag the preview wrote.
+    const detail = descriptors
+      .map((d) => d.detail)
+      .filter(Boolean)
+      .join('; ');
+    return { kind: primary.kind, ...(detail ? { detail } : {}) };
   }
 }
 

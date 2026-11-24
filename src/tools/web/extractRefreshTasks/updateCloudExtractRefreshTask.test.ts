@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
+import { EvidenceStoreUnavailableError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import {
   ExtractRefreshTask,
@@ -9,11 +10,14 @@ import {
   updateCloudExtractRefreshScheduleSchema,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getKeyValueStore } from '../../../storage/init.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
-import { AppApprovalEvidence } from '../_lib/evidence.js';
+import { AppApprovalEvidence, RegistryEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getConfirmUpdateCloudExtractRefreshTaskTool } from './confirmUpdateCloudExtractRefreshTask.js';
 import {
   getUpdateCloudExtractRefreshTaskTool,
   scheduleBinding,
@@ -94,6 +98,7 @@ vi.mock('../../../config.js', () => ({
     adminToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    keyValueStore: { provider: 'memory' },
   })),
 }));
 
@@ -120,6 +125,8 @@ const updatedTask: ExtractRefreshTask = {
     },
   },
 };
+
+beforeEach(resetTestKeyValueStore);
 
 describe('updateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {
@@ -755,6 +762,78 @@ describe('updateCloudExtractRefreshTaskTool', () => {
           binding: scheduleBinding(validSchedule),
         }),
       ).resolves.toBe(true);
+    });
+
+    it('denies the preview once when the evidence store is unavailable', async () => {
+      const establish = vi
+        .spyOn(AppApprovalEvidence.prototype, 'establish')
+        .mockRejectedValue(new EvidenceStoreUnavailableError());
+      try {
+        const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(result.isError).toBe(true);
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+      } finally {
+        establish.mockRestore();
+      }
+    });
+
+    it('denies app confirm after an approval write commits then reports failure', async () => {
+      const store = getKeyValueStore();
+      const originalSet = store.set.bind(store);
+      const set = vi.spyOn(store, 'set').mockImplementation(async (key, value, options) => {
+        await originalSet(key, value, options);
+        if (key.startsWith('mutation-app-approvals-v1:')) {
+          throw new Error('write committed before timeout');
+        }
+      });
+      try {
+        const preview = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(preview.isError).toBe(true);
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+        const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+        const callback = await Provider.from(tool.callback);
+        const confirm = await callback(
+          { taskId: validTaskId, schedule: validSchedule },
+          getMockRequestHandlerExtra(),
+        );
+        expect(confirm.isError).toBe(true);
+        invariant(confirm.content[0].type === 'text');
+        expect(confirm.content[0].text).toContain('could not verify');
+        expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+      } finally {
+        set.mockRestore();
+      }
+    });
+
+    it('records no approval when the nonce write fails (approval is written last)', async () => {
+      const nonce = vi
+        .spyOn(RegistryEvidence.prototype, 'establish')
+        .mockRejectedValue(new EvidenceStoreUnavailableError());
+      const approval = vi.spyOn(AppApprovalEvidence.prototype, 'establish');
+      try {
+        const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(result.isError).toBe(true);
+        expect(approval).not.toHaveBeenCalled();
+        const audits = getAuditRecords();
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          result: 'denied',
+          denyReason: 'evidence-store-unavailable',
+        });
+      } finally {
+        nonce.mockRestore();
+        approval.mockRestore();
+      }
     });
 
     it('routes confirm:true to the human-gesture panel instead of updating (no model self-confirm)', async () => {

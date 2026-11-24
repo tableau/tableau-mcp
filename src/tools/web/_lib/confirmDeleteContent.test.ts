@@ -5,6 +5,7 @@ import type { MockedFunction } from 'vitest';
 import { ContentNotStaleError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -101,6 +102,7 @@ vi.mock('../../../config.js', () => ({
     pendingDeletionMaxAgeDays: 30,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
+    keyValueStore: { provider: 'memory' },
   })),
 }));
 
@@ -161,6 +163,8 @@ async function establishExtractRefreshTaskApproval(taskId: string): Promise<void
     userLuid: getMockRequestHandlerExtra().getUserLuid(),
   });
 }
+
+beforeEach(resetTestKeyValueStore);
 
 describe('confirmDeleteContentTool', () => {
   afterEach(() => {

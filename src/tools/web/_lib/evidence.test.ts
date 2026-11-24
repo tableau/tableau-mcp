@@ -1,10 +1,13 @@
 import { afterEach, beforeEach } from 'vitest';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { getKeyValueStore } from '../../../storage/init.js';
+import { resetTestKeyValueStore } from '../../../storage/keyValueStoreFixtures.js';
 import {
   AllEvidence,
   AppApprovalEvidence,
   EvidenceContext,
+  getMutationPreviewTtlMs,
   NoEvidence,
   RegistryEvidence,
   TagEvidence,
@@ -46,6 +49,8 @@ function makeCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
     ...overrides,
   };
 }
+
+beforeEach(resetTestKeyValueStore);
 
 describe('TagEvidence', () => {
   beforeEach(() => {
@@ -156,9 +161,21 @@ describe('TagEvidence', () => {
 describe('RegistryEvidence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // The TTL is read once when the cache is lazily created (module-level singleton). Keep the
-    // default; the single-use + miss behaviors below don't depend on the exact TTL value.
+    // Each write reads the TTL. Keep the default unless a test explicitly changes the preview window.
     vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
+  });
+
+  it('writes the nonce with the preview TTL so the provider can expire it', async () => {
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '3');
+    const set = vi.spyOn(getKeyValueStore(), 'set');
+
+    await new RegistryEvidence().establish(makeCtx());
+
+    expect(set).toHaveBeenCalledOnce();
+    expect(set).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      ttlMs: 3 * 60 * 1000,
+    });
+    expect(getMutationPreviewTtlMs()).toBe(3 * 60 * 1000);
   });
 
   it('describes itself as a registry-nonce and NEVER leaks the raw nonce in the descriptor', async () => {
@@ -260,8 +277,7 @@ describe('RegistryEvidence', () => {
       await evidence.establish(ctx);
       const nonce = evidence.getEstablishedNonce()!;
 
-      // The cache TTL defaults to 5 minutes. Advance fake time well past it; ExpiringMap clears the
-      // entry via setTimeout, so the confirm can no longer find the nonce.
+      // The preview window defaults to 5 minutes. Once it expires, confirmation must be rejected.
       await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
 
       await expect(
@@ -344,19 +360,31 @@ describe('AppApprovalEvidence', () => {
     });
   }
 
+  it('writes the approval with the preview TTL so the provider can expire it', async () => {
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '7');
+    const set = vi.spyOn(getKeyValueStore(), 'set');
+
+    await new AppApprovalEvidence('delete-content').establish(appCtx());
+
+    expect(set).toHaveBeenCalledOnce();
+    expect(set).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      ttlMs: 7 * 60 * 1000,
+    });
+  });
+
   it('describes itself as a registry-nonce with a human-gesture detail and leaks no secret', () => {
-    const descriptor = new AppApprovalEvidence().describeEvidence();
+    const descriptor = new AppApprovalEvidence('delete-content').describeEvidence();
     expect(descriptor.kind).toBe('registry-nonce');
     expect(descriptor.detail).toContain('app-approval');
   });
 
   it('establish records presence so a later verify (single-use) succeeds exactly once', async () => {
-    const evidence = new AppApprovalEvidence();
+    const evidence = new AppApprovalEvidence('delete-content');
     const ctx = appCtx({ target: { id: 'wb-once', kind: 'workbook' } });
     await evidence.establish(ctx);
 
     // A separate instance (mirrors confirm tool ≠ preview tool) sharing the module registry.
-    const confirm = new AppApprovalEvidence();
+    const confirm = new AppApprovalEvidence('delete-content');
     const confirmCtx = appCtx({ target: { id: 'wb-once', kind: 'workbook' } });
     await expect(confirm.verify(confirmCtx)).resolves.toBe(true);
     // Single-use: the approval is consumed on first verify, so a replay is rejected.
@@ -364,14 +392,14 @@ describe('AppApprovalEvidence', () => {
   });
 
   it('verify fails when no approval was ever established (no human gesture)', async () => {
-    const evidence = new AppApprovalEvidence();
+    const evidence = new AppApprovalEvidence('delete-content');
     await expect(
       evidence.verify(appCtx({ target: { id: 'wb-never', kind: 'workbook' } })),
     ).resolves.toBe(false);
   });
 
   it('ignores any caller-supplied confirmationToken — approval is presence-based, not transported', async () => {
-    const evidence = new AppApprovalEvidence();
+    const evidence = new AppApprovalEvidence('delete-content');
     // A caller that forges a token but never previewed in the iframe must still be rejected.
     await expect(
       evidence.verify(
@@ -381,7 +409,7 @@ describe('AppApprovalEvidence', () => {
   });
 
   it('scopes approval by site+user+tool+target so a different target is not satisfied', async () => {
-    const evidence = new AppApprovalEvidence();
+    const evidence = new AppApprovalEvidence('delete-content');
     await evidence.establish(appCtx({ target: { id: 'wb-A', kind: 'workbook' } }));
     await expect(
       evidence.verify(appCtx({ target: { id: 'wb-B', kind: 'workbook' } })),
@@ -389,7 +417,7 @@ describe('AppApprovalEvidence', () => {
   });
 
   it('scopes approval by user so another user cannot consume it', async () => {
-    const evidence = new AppApprovalEvidence();
+    const evidence = new AppApprovalEvidence('delete-content');
     await evidence.establish(
       appCtx({ target: { id: 'wb-user', kind: 'workbook' }, userLuid: 'user-1' }),
     );
@@ -407,7 +435,7 @@ describe('AppApprovalEvidence', () => {
     });
 
     it('rejects a confirm once the approval window (TTL) has elapsed — must re-preview', async () => {
-      const evidence = new AppApprovalEvidence();
+      const evidence = new AppApprovalEvidence('delete-content');
       await evidence.establish(appCtx({ target: { id: 'wb-ttl', kind: 'workbook' } }));
       // TTL defaults to 5 minutes; advance past it so the approval auto-expires.
       await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
@@ -417,7 +445,7 @@ describe('AppApprovalEvidence', () => {
     });
 
     it('still verifies an approval that has not yet expired', async () => {
-      const evidence = new AppApprovalEvidence();
+      const evidence = new AppApprovalEvidence('delete-content');
       await evidence.establish(appCtx({ target: { id: 'wb-fresh', kind: 'workbook' } }));
       await vi.advanceTimersByTimeAsync(1000 * 60 * 2);
       await expect(
@@ -436,58 +464,41 @@ describe('AppApprovalEvidence', () => {
   // behavior and, critically, the cross-namespace ISOLATION the refactor exists to provide.
   describe('generalized namespace', () => {
     it('establish(ns) then verify(ns) for the SAME site/user/target succeeds (explicit namespace)', async () => {
-      const establish = new AppApprovalEvidence('delete-datasource');
-      const verify = new AppApprovalEvidence('delete-datasource');
+      const establish = new AppApprovalEvidence('delete-content');
+      const verify = new AppApprovalEvidence('delete-content');
       const ctx = appCtx({ target: { id: 'ns-A-target', kind: 'datasource' } });
       await establish.establish(ctx);
       await expect(verify.verify(ctx)).resolves.toBe(true);
     });
 
-    it('WRONG-NAMESPACE ISOLATION: an approval for delete-datasource does NOT satisfy delete-workbook for the SAME site/user/target', async () => {
+    it('isolates approvals between preview tools for the same site, user, and target', async () => {
       // This is the whole point of the refactor: one tool's human approval must never unlock
       // another tool's confirm, even when site + user + target id are identical. Establish under the
-      // 'delete-datasource' namespace, then attempt to verify under 'delete-workbook' with the same
-      // EvidenceContext → MUST be rejected.
+      // 'delete-content' scope, then verify under 'update-cloud-extract-refresh-task' with the same
+      // EvidenceContext. The other tool must be rejected.
       const sameTargetCtx = appCtx({ target: { id: 'shared-target-id', kind: 'datasource' } });
-      await new AppApprovalEvidence('delete-datasource').establish(sameTargetCtx);
-      await expect(new AppApprovalEvidence('delete-workbook').verify(sameTargetCtx)).resolves.toBe(
-        false,
-      );
-      // And the genuine namespace still verifies (the approval was recorded, just isolated).
+      await new AppApprovalEvidence('delete-content').establish(sameTargetCtx);
       await expect(
-        new AppApprovalEvidence('delete-datasource').verify(sameTargetCtx),
-      ).resolves.toBe(true);
+        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(sameTargetCtx),
+      ).resolves.toBe(false);
+      // And the genuine namespace still verifies (the approval was recorded, just isolated).
+      await expect(new AppApprovalEvidence('delete-content').verify(sameTargetCtx)).resolves.toBe(
+        true,
+      );
     });
 
-    it('isolates every distinct namespace from every other (extract-refresh-task vs update-cloud)', async () => {
+    it('isolates delete-content from schedule updates for the same task', async () => {
       const ctx = appCtx({ target: { id: 'task-shared', kind: 'extract-refresh-task' } });
-      await new AppApprovalEvidence('delete-extract-refresh-task').establish(ctx);
+      await new AppApprovalEvidence('delete-content').establish(ctx);
       // The update tool's confirm must not be satisfied by the delete tool's approval.
       await expect(
         new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(ctx),
       ).resolves.toBe(false);
     });
 
-    it('default constructor preserves the original behavior (namespace = delete-workbook)', async () => {
-      // new AppApprovalEvidence() must key identically to new AppApprovalEvidence('delete-workbook'),
-      // so the pre-generalization delete-workbook flow is unchanged. Establish with the default ctor,
-      // verify with the explicit 'delete-workbook' namespace → true.
-      const ctx = appCtx({ target: { id: 'default-ns-target', kind: 'workbook' } });
-      await new AppApprovalEvidence().establish(ctx);
-      await expect(new AppApprovalEvidence('delete-workbook').verify(ctx)).resolves.toBe(true);
-    });
-
-    it('default constructor is NOT satisfied by a non-delete-workbook namespace', async () => {
-      // The mirror of the above: establishing under an explicit non-default namespace must not
-      // satisfy the default ('delete-workbook') verify.
-      const ctx = appCtx({ target: { id: 'default-ns-iso', kind: 'workbook' } });
-      await new AppApprovalEvidence('delete-datasource').establish(ctx);
-      await expect(new AppApprovalEvidence().verify(ctx)).resolves.toBe(false);
-    });
-
     it('namespace key ignores ctx.tool entirely (preview/confirm tool names differ but namespace matches)', async () => {
       // Establish as the preview tool would (ctx.tool = 'delete-content') and verify as the
-      // confirm tool would (ctx.tool = 'delete-content'); the differing ctx.tool must NOT
+      // confirm tool would (ctx.tool = 'confirm-delete-content'); the differing ctx.tool must NOT
       // break the match because the fixed namespace is what keys the entry.
       const target = { id: 'tool-irrelevant', kind: 'datasource' as const };
       await new AppApprovalEvidence('delete-content').establish(
@@ -495,7 +506,7 @@ describe('AppApprovalEvidence', () => {
       );
       await expect(
         new AppApprovalEvidence('delete-content').verify(
-          appCtx({ target, tool: 'delete-content' }),
+          appCtx({ target, tool: 'confirm-delete-content' }),
         ),
       ).resolves.toBe(true);
     });
@@ -559,9 +570,9 @@ describe('AppApprovalEvidence', () => {
       // The DELETEs pass no binding; establish/verify with binding undefined must still match, so
       // folding binding into the key is a no-op for payload-free targets.
       const target = { id: 'ds-nobind', kind: 'datasource' as const };
-      await new AppApprovalEvidence('delete-datasource').establish(appCtx({ target }));
+      await new AppApprovalEvidence('delete-content').establish(appCtx({ target }));
       await expect(
-        new AppApprovalEvidence('delete-datasource').verify(appCtx({ target })),
+        new AppApprovalEvidence('delete-content').verify(appCtx({ target })),
       ).resolves.toBe(true);
     });
   });
@@ -581,7 +592,7 @@ describe('AllEvidence (AND-composition)', () => {
   }
 
   it('verify is true only when EVERY strategy verifies (tag present AND approval present)', async () => {
-    const approval = new AppApprovalEvidence();
+    const approval = new AppApprovalEvidence('delete-content');
     await approval.establish(appCtx('wb-and-ok'));
     const all = new AllEvidence([
       new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
@@ -592,7 +603,7 @@ describe('AllEvidence (AND-composition)', () => {
 
   it('verify is false when the tag is missing even if the approval is present', async () => {
     mocks.mockGetWorkbook.mockResolvedValue({ tags: { tag: [{ label: 'other' }] } });
-    const approval = new AppApprovalEvidence();
+    const approval = new AppApprovalEvidence('delete-content');
     await approval.establish(appCtx('wb-and-notag'));
     const all = new AllEvidence([
       new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
@@ -604,7 +615,7 @@ describe('AllEvidence (AND-composition)', () => {
   it('verify is false when no human approval exists even if the tag is present', async () => {
     const all = new AllEvidence([
       new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
-      new AppApprovalEvidence(),
+      new AppApprovalEvidence('delete-content'),
     ]);
     await expect(all.verify(appCtx('wb-and-noapproval'))).resolves.toBe(false);
   });
@@ -613,7 +624,7 @@ describe('AllEvidence (AND-composition)', () => {
     mocks.mockGetWorkbook.mockResolvedValue({
       tags: { tag: [{ label: 'pending-deletion-2026-08-01' }] },
     });
-    const approval = new AppApprovalEvidence();
+    const approval = new AppApprovalEvidence('delete-content');
     await approval.establish(appCtx('wb-and-crossbatch'));
     const all = new AllEvidence([
       new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
@@ -623,9 +634,54 @@ describe('AllEvidence (AND-composition)', () => {
     expect(all.explainRejection()).toContain('different cleanup batch');
   });
 
+  it('audits every member detail, including the pending-deletion tag', () => {
+    const descriptor = new AllEvidence([
+      new AppApprovalEvidence('delete-content'),
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+    ]).describeEvidence();
+    expect(descriptor.kind).toBe('registry-nonce');
+    expect(descriptor.detail).toContain('app-approval');
+    expect(descriptor.detail).toContain("pending-deletion tag 'pending-deletion-2026-09-25'");
+  });
+
+  it('revokes approval when a later tag write fails', async () => {
+    const error = new Error('tag write failed');
+    mocks.mockAddTagsToWorkbook.mockRejectedValueOnce(error);
+    const ctx = appCtx('failed-tag');
+    const approval = new AppApprovalEvidence('delete-content');
+    const all = new AllEvidence([
+      approval,
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+    ]);
+    await expect(all.establish(ctx)).rejects.toBe(error);
+    await expect(approval.verify(ctx)).resolves.toBe(false);
+  });
+
+  it('attempts all cleanup even if one revoke fails and preserves the original error', async () => {
+    const error = new Error('write failed');
+    const first = {
+      establish: vi.fn().mockResolvedValue(undefined),
+      revoke: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+      verify: vi.fn(),
+      describeEvidence: () => ({ kind: 'registry-nonce' as const }),
+    };
+    const failing = {
+      ...first,
+      establish: vi.fn().mockRejectedValue(error),
+      revoke: vi.fn().mockResolvedValue(undefined),
+    };
+    const unattempted = { ...first, revoke: vi.fn() };
+    await expect(new AllEvidence([first, failing, unattempted]).establish(makeCtx())).rejects.toBe(
+      error,
+    );
+    expect(first.revoke).toHaveBeenCalledOnce();
+    expect(failing.revoke).toHaveBeenCalledOnce();
+    expect(unattempted.revoke).not.toHaveBeenCalled();
+  });
+
   it('describes itself with the kind of its primary (first) strategy for the audit record', () => {
     const all = new AllEvidence([
-      new AppApprovalEvidence(),
+      new AppApprovalEvidence('delete-content'),
       new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
     ]);
     expect(all.describeEvidence().kind).toBe('registry-nonce');
