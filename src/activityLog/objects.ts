@@ -97,6 +97,7 @@ export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> 
         ? { type: 'datasource', luid: datasource.luid }
         : undefined,
   },
+  'list-my-favorites': null,
   'search-content': null,
   'revoke-access-token': null,
   'reset-consent': null,

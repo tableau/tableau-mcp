@@ -475,6 +475,24 @@ describe('server', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'list-datasources,query-datasource');
     });
 
+    it('registers current-user favorites only with content read access', async () => {
+      vi.stubEnv('INCLUDE_TOOLS', 'list-my-favorites');
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      const allowed = getServer();
+      await allowed.registerTools(bearerAuth, [
+        'tableau:mcp:content:read',
+        'tableau:content:read',
+        'tableau:mcp_site_settings:read',
+      ]);
+      expect(registeredNames(allowed)).toEqual(['list-my-favorites']);
+      const denied = getServer();
+      await denied.registerTools(bearerAuth, [
+        'tableau:mcp:content:read',
+        'tableau:mcp_site_settings:read',
+      ]);
+      expect(registeredNames(denied)).toEqual([]);
+    });
+
     it('omits a tool whose required API scope is not granted', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       const server = getServer();
