@@ -363,7 +363,7 @@ export class DesktopApiVersionTooOldError extends McpToolError {
         `${tool} needs External Client API version ${minApiVersion} or later, but this Tableau Desktop serves ${desktopApiVersion}. ` +
         `Tools this Desktop cannot run: ${unservedTools.join(', ')}. ` +
         'Do not call these tools again in this session. Continue with other tools if they can do what the user asked. ' +
-        'If none can, tell the user to update to the most recent public Tableau Desktop release.',
+        'If none can, tell the user it needs a newer Tableau Desktop.',
       statusCode: 501,
     });
   }

@@ -793,7 +793,7 @@ describe('API-version tool gate', () => {
     it('steers the agent to other tools before suggesting an update', () => {
       expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
         'Do not call these tools again in this session. Continue with other tools if they can do what the user asked. ' +
-          'If none can, tell the user to update to the most recent public Tableau Desktop release.',
+          'If none can, tell the user it needs a newer Tableau Desktop.',
       );
     });
 

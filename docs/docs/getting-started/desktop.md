@@ -44,8 +44,8 @@ The package reads its settings from the environment only. It does not read a `.e
 
 The server can start before %product_name% does. Each tool checks the External Client API version
 of the instance it calls. If that instance is too old, the tool says which tools it cannot run, and
-your AI tool carries on with the others. Update to the most recent public %product_name% release
-if none of them can do the job.
+your AI tool carries on with the others. It suggests updating %product_name% only if none of them
+can do the job.
 
 ## Build and run from source
 
