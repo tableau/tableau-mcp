@@ -254,17 +254,22 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 export const MAX_API_RETRY_ATTEMPTS = 2;
 
 /**
+ * Publishing writes the seed again ~50 ms after creating it, and the REST API rounds to whole
+ * seconds, so an untouched seed is 0 or 1 second apart (99.7% of Cloud seeds; the rest were edited).
+ */
+const SEED_MAX_UPDATE_LAG_MS = 1_000;
+
+/**
  * Whether `flow` looks like the sample flow seeded when a site is provisioned. The name is not
  * localized, but customers can publish the same sample themselves, so also require an untouched
- * `.tflx` (created == updated). Missing fields mean "not the seed": it errs toward counting a flow.
+ * `.tflx`. Missing or unparseable fields mean "not the seed": it errs toward counting a flow.
  */
 function isSeededSampleFlow(flow: Flow): boolean {
-  return (
-    flow.name === 'Superstore Flow' &&
-    flow.fileType === 'tflx' &&
-    flow.createdAt !== undefined &&
-    flow.createdAt === flow.updatedAt
-  );
+  if (flow.name !== 'Superstore Flow' || flow.fileType !== 'tflx') return false;
+  if (flow.createdAt === undefined || flow.updatedAt === undefined) return false;
+
+  const lagMs = Date.parse(flow.updatedAt) - Date.parse(flow.createdAt);
+  return lagMs >= 0 && lagMs <= SEED_MAX_UPDATE_LAG_MS;
 }
 
 /**

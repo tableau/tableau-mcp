@@ -250,6 +250,23 @@ describe('checkRegistrationConditions', () => {
         });
       });
 
+      it.each([
+        ['0 seconds', '2026-11-24T16:04:53Z'],
+        ['1 second, the update crossed a second boundary', '2026-11-24T16:04:54Z'],
+      ])('treats a seed updated %s after creation as the seed', async (_label, updatedAt) => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([{ ...seed, updatedAt }]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'UserCanViewFlows',
+        });
+      });
+
       it.each(ADMIN_SITE_ROLES)(
         'still allows %s when the seed is the only flow',
         async (siteRole) => {
@@ -278,8 +295,12 @@ describe('checkRegistrationConditions', () => {
         ['a different case', { name: 'superstore flow' }],
         ['a different file type', { fileType: 'tfl' }],
         ['an edited flow', { updatedAt: '2026-11-25T09:00:00Z' }],
+        ['an update 2 seconds after creation', { updatedAt: '2026-11-24T16:04:55Z' }],
+        ['an update before creation', { updatedAt: '2026-11-24T16:04:52Z' }],
+        ['an unparseable updated time', { updatedAt: 'not-a-date' }],
         ['no file type', { fileType: undefined }],
-        ['no created time', { createdAt: undefined, updatedAt: undefined }],
+        ['no created time', { createdAt: undefined }],
+        ['no updated time', { updatedAt: undefined }],
       ])('counts a single flow with %s', async (_label, override) => {
         queryFlowsForSite.mockResolvedValue(flowsPage([{ ...seed, ...override }]));
         await expect(
