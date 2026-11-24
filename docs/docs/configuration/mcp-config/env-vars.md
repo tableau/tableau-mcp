@@ -1099,8 +1099,10 @@ under the OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if uns
 
 ## `TABLEAU_EXPERTISE_DIR`
 
-These are the authoring expertise roots served as `expertise://` resources. When unset, the
-expertise corpus is empty. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows);
+These are the authoring expertise roots served as `expertise://` resources. When unset, or when
+the roots hold no modules, the corpus is empty and the server does not register
+`search-expertise`, `read-expertise-resource`, or the `expertise://` resources, and its
+instructions do not mention them. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows);
 earlier roots win on a name collision.
 
 <hr />

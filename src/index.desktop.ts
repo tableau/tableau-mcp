@@ -18,7 +18,7 @@ const serverVersion = pkg.version;
 const DESKTOP_LOG_RETENTION_DAYS = 14;
 
 // The shipped tableau-mcp-desktop binary now serves BOTH profiles from one artifact,
-// selected purely by TRANSPORT — so tab-agent-south can spawn the web/insights profile
+// selected purely by TRANSPORT — so Tableau Agent can spawn the web/insights profile
 // from the very same installed binary it launches for desktop authoring, without a
 // second bundled artifact (Chiron insights "B1"):
 //

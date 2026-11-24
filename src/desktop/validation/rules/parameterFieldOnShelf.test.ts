@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { getExpertiseCorpusEntryCount } from '../../expertise/index.js';
 import { parameterFieldOnShelfRule as rule } from './parameterFieldOnShelf.js';
+
+vi.mock('../../expertise/index.js', () => ({ getExpertiseCorpusEntryCount: vi.fn(() => 1) }));
 
 describe('parameter-field-on-shelf rule', () => {
   it('errors on a Parameters field on rows', () => {
@@ -12,6 +15,13 @@ describe('parameter-field-on-shelf rule', () => {
     expect(issues[0].severity).toBe('error');
     expect(issues[0].message).toMatch(/\[Parameters\]\.\[none:Parameter 4:nk\]/);
     expect(issues[0].suggestion).toMatch(/parameter-actions/);
+  });
+
+  it('omits the expertise reference when the corpus is empty', () => {
+    vi.mocked(getExpertiseCorpusEntryCount).mockReturnValueOnce(0);
+    const xml = '<worksheet><table><rows>[Parameters].[Parameter 1]</rows></table></worksheet>';
+    const [issue] = rule.validate(xml);
+    expect(issue.suggestion).toMatch(/TARGET, never the source mark's field\.$/);
   });
 
   it('errors on a Parameters field on cols too', () => {

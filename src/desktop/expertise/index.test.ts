@@ -7,6 +7,7 @@ import { Dirent, readdirSync, readFileSync } from 'fs';
 import {
   _resetExpertiseSearchCache,
   clearExpertiseCache,
+  getExpertiseCorpusEntryCount,
   listExpertiseResources,
   readExpertiseResource,
   readExpertiseSections,
@@ -58,6 +59,22 @@ describe('expertise/index', () => {
     clearExpertiseCache();
     _resetExpertiseSearchCache();
     vi.stubEnv('TABLEAU_EXPERTISE_DIR', EXPERTISE_ROOT);
+  });
+
+  describe('getExpertiseCorpusEntryCount', () => {
+    it('walks the corpus once and reuses the count until the cache is cleared', () => {
+      setupFsMock({ [join(EXPERTISE_ROOT, 'test.md')]: '# Test\nContent.' });
+
+      expect(getExpertiseCorpusEntryCount()).toBe(1);
+      const walks = vi.mocked(readdirSync).mock.calls.length;
+      expect(getExpertiseCorpusEntryCount()).toBe(1);
+      expect(getExpertiseCorpusEntryCount()).toBe(1);
+      expect(vi.mocked(readdirSync).mock.calls).toHaveLength(walks);
+
+      clearExpertiseCache();
+      setupFsMock({});
+      expect(getExpertiseCorpusEntryCount()).toBe(0);
+    });
   });
 
   describe('listExpertiseResources', () => {
