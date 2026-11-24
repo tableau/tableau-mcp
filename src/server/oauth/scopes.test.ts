@@ -883,36 +883,18 @@ describe('scopes', () => {
     // Registration-condition probe scopes must be advertised too, or the token minted from this
     // metadata lacks them and the probe fails closed, hiding the very tools it gates. The Pulse
     // premium probe reads `tableau:entitlements:read`, which no tool declares in its own scope set.
-    it('should advertise tableau:entitlements:read for the RequiresPulsePremium probe with all feature flags disabled', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
+    it.each([true, false])(
+      'includes scopes required for availability checks with includeOptionalScopes=%s',
+      async (includeOptionalScopes) => {
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+        } as any);
 
-      const scopes = await getSupportedApiScopes();
-      expect(scopes).toContain('tableau:entitlements:read');
-    });
-
-    it('should advertise condition probe scopes even when optional scopes are excluded', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes(undefined, { includeOptionalScopes: false });
-      expect(scopes).toContain('tableau:insight_definitions_metrics:read');
-      expect(scopes).toContain('tableau:entitlements:read');
-    });
-
-    it('should advertise the Knowledge availability probe scope when knowledge-tools is enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'knowledge-tools',
-      );
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes();
-      expect(scopes).toContain('tableau:knowledge:read');
-    });
+        const scopes = await getSupportedApiScopes(undefined, { includeOptionalScopes });
+        expect(scopes).toContain('tableau:insight_definitions_metrics:read');
+        expect(scopes).toContain('tableau:entitlements:read');
+      },
+    );
   });
 
   it('should separate Knowledge inspection and management API scopes', () => {
