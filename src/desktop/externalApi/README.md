@@ -10,7 +10,7 @@ Client API ("Athena V0"), a loopback HTTP host discovered via per-instance `<pid
 | `externalApiToolExecutor.ts` | The one tool executor: instance discovery/pinning, 401 rescan, and **every tool endpoint method** |
 | `executorTypes.ts`           | Shared executor types (`ExecuteCommand*`, `WorkbookDocument`, …)                                  |
 | `discovery.ts`               | Discovery-file scanning (`TABLEAU_EXTERNAL_API_DISCOVERY_DIR` override)                           |
-| `toolUtils.ts`               | Error helpers shared with the tool layer (`isRouteMissing`, …)                                    |
+| `toolUtils.ts`               | Helpers shared with the tool layer (`resolveItemByNameOrId`, …)                                   |
 | `mockExternalApiServer.ts`   | Real-HTTP mock of the /v0 surface for tests                                                       |
 
 ## Adding awareness of a new API method
@@ -27,12 +27,25 @@ To expose it as an MCP tool, add a tool file under `src/tools/desktop/` and regi
 `toolName.ts` + `tools.ts` (and the default profile allowlist in `server.desktop.ts` if it should
 ship in the default surface).
 
+## Newer API versions
+
+`MIN_SUPPORTED_API_VERSION` in `apiVersion.ts` is the oldest External Client API version this server
+supports. Code does not check for anything older. When a feature needs a newer version:
+
+- For a new tool, set `minApiVersion` on it. Registration hides the tool when the connected Desktop
+  reports an older version.
+- For changed behavior in an existing tool, compare `executor.desktopApiVersion` with
+  `apiVersionAtLeast` and keep the older path until the minimum supported version catches up.
+
+When the minimum supported version is raised, remove the floors and branches it now covers. A test
+fails if a tool sets a floor that is not newer than the minimum.
+
 ## Native dialog actions
 
-`get-active-dialogs` and `invoke-dialog-action` share the session-safe dialog contract introduced in
-API 0.2.26. Later builds add file, color, and print providers. Use the capabilities returned for the
-current dialog rather than assuming provider support from the platform or API version. Preparing,
-suspended, and closing panels are blockers; they do not authorize an action.
+`get-active-dialogs` and `invoke-dialog-action` share a session-safe dialog contract. Later builds
+may add providers. Use the capabilities returned for the current dialog rather than assuming
+provider support from the platform or API version. Preparing, suspended, and closing panels are
+blockers; they do not authorize an action.
 
 Copy `objectName`, `title`, `className`, `sessionId`, and `revision` exactly. Generate one
 `requestId` for a logical action. If its outcome is uncertain, poll `recentActions` in the same

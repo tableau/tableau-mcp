@@ -1,7 +1,6 @@
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
-import { ExecuteCommandError } from '../externalApi/executorTypes.js';
 import { getWorksheetXml } from './getWorksheetXml.js';
 
 describe('getWorksheetXml', () => {
@@ -78,36 +77,5 @@ describe('getWorksheetXml', () => {
       },
     });
     expect(executor.getWorksheetDocument).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the External API whole-document read when the first-class route is missing', async () => {
-    const signal = new AbortController().signal;
-    const routeMissing = {
-      type: 'command-failed',
-      error: { code: 'not-found', message: 'No route matches /v0/workbook/worksheets' },
-    } as ExecuteCommandError;
-    const executor = makeExecutorMock({
-      listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
-      getWorkbookDocument: vi.fn().mockResolvedValue(
-        Ok({
-          xml: `<workbook><worksheets>
-            <worksheet name="Profit"><table><view /></table></worksheet>
-          </worksheets></workbook>`,
-          applicationVersion: undefined,
-          xsdPayloadVersion: undefined,
-        }),
-      ),
-    });
-
-    const result = await getWorksheetXml({
-      executor,
-      signal,
-      worksheetName: 'Profit',
-    });
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().xml).toContain('<worksheet name="Profit">');
-    expect(result.unwrap().name).toBe('Profit');
-    expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

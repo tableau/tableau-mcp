@@ -33,7 +33,6 @@ export const getOperationsTool = (server: DesktopMcpServer): DesktopTool<typeof 
   const tool = new DesktopTool({
     server,
     name: 'get-operations',
-    minApiVersion: '0.2.0',
     title,
     description:
       'Without operationId, list in-flight and recent Tableau Desktop operations (id, kind, state, timestamps, and the error with its code and tableauErrorCode when failed), plus any blocking or progress windows. ' +

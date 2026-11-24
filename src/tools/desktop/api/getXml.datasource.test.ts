@@ -19,15 +19,6 @@ import { getXmlTool } from './getXml.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
-const routeMissing: ExecuteCommandError = {
-  type: 'command-failed',
-  error: {
-    code: 'not-found',
-    message: 'No route matches GET /v0/workbook/datasources/target/document',
-    recoverable: false,
-  },
-};
-
 describe('getXmlTool kind=datasource', () => {
   const writtenFiles: string[] = [];
 
@@ -98,18 +89,6 @@ describe('getXmlTool kind=datasource', () => {
       expect(resultBody(result).datasourceXml).toContain(`<datasource name="${expectedName}"`);
     },
   );
-
-  it('rejects a Desktop below 0.2.10 without a request', async () => {
-    const { result, order } = await invoke({
-      datasourceId: 'Sales%20Extract',
-      mode: 'inline',
-      apiVersion: '0.2.9',
-    });
-
-    expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain('datasource document endpoint');
-    expect(order).toEqual([]);
-  });
 
   it.each([
     { args: { kind: 'datasource' }, message: 'datasourceId is required with kind datasource.' },
@@ -259,18 +238,6 @@ describe('getXmlTool kind=datasource', () => {
     expect(body.instructions).toContain('datasourceFile');
   });
 
-  it('maps a missing document route through the standard read harness', async () => {
-    const { result } = await invoke({
-      datasourceId: 'Sales%20Extract',
-      mode: 'inline',
-      documentError: routeMissing,
-    });
-
-    expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain('endpoint yet');
-    expect(resultText(result)).toContain('Do not retry');
-  });
-
   it('returns the document error after resolving the datasource', async () => {
     const { result, order } = await invoke({
       datasourceId: 'Sales%20Extract',
@@ -305,7 +272,6 @@ describe('getXmlTool kind=datasource', () => {
     xml,
     capBytes,
     documentError,
-    apiVersion,
     signal,
   }: {
     datasourceId: string;
@@ -314,7 +280,6 @@ describe('getXmlTool kind=datasource', () => {
     xml?: string;
     capBytes?: number;
     documentError?: ExecuteCommandError;
-    apiVersion?: string;
     signal?: AbortSignal;
   }): Promise<{
     result: CallToolResult;
@@ -337,9 +302,6 @@ describe('getXmlTool kind=datasource', () => {
           });
     });
     const executor = makeExecutorMock({ listWorkbookDatasources, getDatasourceDocument });
-    if (apiVersion !== undefined) {
-      Object.assign(executor, { desktopApiVersion: apiVersion });
-    }
     const tool = getXmlTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const base = getMockRequestHandlerExtra();

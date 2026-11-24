@@ -1,14 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
-import {
-  ExecuteCommandError,
-  ExecuteCommandWarning,
-} from '../../../desktop/externalApi/executorTypes.js';
+import { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
 import { DashboardRefreshOutcome, SheetKind } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
@@ -47,12 +42,6 @@ type RefreshToolResult = {
   warnings?: ExecuteCommandWarning[];
 };
 
-const MIN_API_VERSION: Record<SheetKind, ApiVersionFloor> = {
-  worksheet: '0.2.13',
-  dashboard: '0.2.19',
-  storyboard: '0.2.20',
-};
-
 const MULTI_TARGET = {
   dashboard: {
     review: 'Review failed dashboard refresh targets',
@@ -76,7 +65,6 @@ export const getRefreshAutoUpdatesTool = (
   const refreshAutoUpdatesTool = new DesktopTool({
     server,
     name: 'refresh-auto-updates',
-    minApiVersion: MIN_API_VERSION.worksheet,
     title,
     description:
       "Run pending automatic updates now, without changing the active sheet: for one worksheet, every worksheet in a dashboard's current device layout, or the current point of a storyboard. " +
@@ -100,11 +88,6 @@ export const getRefreshAutoUpdatesTool = (
           }
 
           const executor = await extra.getExecutor(sessionResult.value);
-          const apiVersion = executor.desktopApiVersion;
-          if (apiVersion !== undefined && !apiVersionAtLeast(apiVersion, MIN_API_VERSION[kind])) {
-            return endpointNotInThisBuild(`${kind} refresh`).toErr();
-          }
-
           const dispatched = await refreshByIdThenName({
             executor,
             session,
@@ -121,7 +104,7 @@ export const getRefreshAutoUpdatesTool = (
           if (dispatched.value.kind === 'worksheet') {
             const { result } = dispatched.value;
             if (result.isErr()) {
-              return refreshError(result.error, 'worksheet');
+              return new DesktopCommandExecutionError(result.error).toErr();
             }
             const completed = result.value.status === 'completed';
             const subject = completed
@@ -147,13 +130,12 @@ export const getRefreshAutoUpdatesTool = (
                 ),
               ).toErr();
             }
-            return refreshError(
+            return new DesktopCommandExecutionError(
               result.error,
-              kind,
               result.error.type === 'command-failed' && result.error.error?.code === spec.failedCode
                 ? spec.failedMessage
                 : undefined,
-            );
+            ).toErr();
           }
 
           if (result.value.status !== 'completed') {
@@ -181,17 +163,6 @@ export const getRefreshAutoUpdatesTool = (
 
   return refreshAutoUpdatesTool;
 };
-
-function refreshError(
-  error: ExecuteCommandError,
-  kind: SheetKind,
-  message?: string,
-): Err<McpToolError> {
-  if (error.type === 'command-failed' && error.error?.code === 'not-found') {
-    return endpointNotInThisBuild(`${kind} refresh`).toErr();
-  }
-  return new DesktopCommandExecutionError(error, message).toErr();
-}
 
 type Dispatched =
   | {

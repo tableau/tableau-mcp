@@ -3,10 +3,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import type { ExecuteCommandWarning } from '../../../../desktop/externalApi/executorTypes.js';
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-} from '../../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
   extractColorMaps,
@@ -74,7 +70,6 @@ export const getSetMemberColorsTool = (
     title,
     description: "Set colors for members of the discrete field on a worksheet's Color.",
     paramsSchema,
-    minApiVersion: '0.2.10',
     annotations: {
       readOnlyHint: false,
       openWorldHint: false,
@@ -99,9 +94,7 @@ export const getSetMemberColorsTool = (
               return new GetWorksheetXmlFailedError(error).toErr();
             }
             if (type === 'execute-command-error') {
-              return isRouteMissing(error)
-                ? endpointNotInThisBuild('worksheet document').toErr()
-                : new DesktopCommandExecutionError(error).toErr();
+              return new DesktopCommandExecutionError(error).toErr();
             }
             return new UnknownError(error).toErr();
           }
@@ -135,9 +128,7 @@ export const getSetMemberColorsTool = (
               : undefined;
           const document = await executor.getDatasourceDocument(datasourceId, extra.signal);
           if (document.isErr()) {
-            return isRouteMissing(document.error)
-              ? endpointNotInThisBuild('datasource document').toErr()
-              : new DesktopCommandExecutionError(document.error).toErr();
+            return new DesktopCommandExecutionError(document.error).toErr();
           }
 
           const built = buildBuckets(colors, target.datatype, {
@@ -183,9 +174,7 @@ export const getSetMemberColorsTool = (
             ).toErr();
           }
           if (applied.kind === 'error') {
-            return isRouteMissing(applied.error)
-              ? endpointNotInThisBuild('datasource document').toErr()
-              : new DesktopCommandExecutionError(applied.error).toErr();
+            return new DesktopCommandExecutionError(applied.error).toErr();
           }
 
           const { verification } = applied;

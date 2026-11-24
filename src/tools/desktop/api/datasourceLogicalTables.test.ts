@@ -33,7 +33,6 @@ describe('datasource logical table tools', () => {
     const tool = factory(new DesktopMcpServer());
 
     expect(tool.name).toBe(name);
-    expect(tool.minApiVersion).toBe('0.2.31');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,
@@ -184,7 +183,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-datasource-logical-tables',
-    apiVersion: '0.2.31',
+    apiVersion: '0.2.34',
   };
 }
 

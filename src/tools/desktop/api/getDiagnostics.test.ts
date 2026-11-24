@@ -32,7 +32,6 @@ describe('get-diagnostics tool', () => {
     const description = await Provider.from(tool.description);
 
     expect(tool.name).toBe('get-diagnostics');
-    expect(tool.minApiVersion).toBe('0.2.16');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),

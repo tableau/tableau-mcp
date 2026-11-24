@@ -3,10 +3,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { checkCacheFileArg, readCacheFileArg } from '../../../../desktop/cachePath.js';
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-} from '../../../../desktop/externalApi/toolUtils.js';
 import { listAvailableFields } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -244,9 +240,6 @@ export const getListAvailableFieldsTool = (
 
             const workbookDatasourceResult = await executor.listWorkbookDatasources(extra.signal);
             if (workbookDatasourceResult.isErr()) {
-              if (isRouteMissing(workbookDatasourceResult.error)) {
-                return endpointNotInThisBuild('workbook datasources').toErr();
-              }
               return new DesktopCommandExecutionError(workbookDatasourceResult.error).toErr();
             }
 

@@ -63,7 +63,7 @@ function containsCredentialParameter(value: string): boolean {
  * Replaces credential attribute values on <connection> and <named-connection> tags with
  * REDACTED_CREDENTIAL_SENTINEL, without parsing and reserializing the document. Formulas, captions,
  * names and SQL are never touched. Tableau Desktop normally omits these values, but the MCP boundary
- * must fail safe if an older or regressed host includes one. A redacted copy must never be applied
+ * must fail safe if a regressed host includes one. A redacted copy must never be applied
  * back: runApplyPreamble refuses XML that carries the sentinel.
  */
 export function redactDatasourceCredentials(xml: string): string {
