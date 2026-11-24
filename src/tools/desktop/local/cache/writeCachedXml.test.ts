@@ -81,6 +81,16 @@ describe('writeCachedXmlTool', () => {
     expect(result.content[0].text).toContain(`${VALID_XML.length} bytes`);
   });
 
+  it('should report UTF-8 bytes, not characters, for multi-byte content', async () => {
+    const xml = '<worksheet name="Café"><table/></worksheet>';
+
+    const result = await getResult(CACHED_FILE, xml);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(`Wrote ${Buffer.byteLength(xml, 'utf8')} bytes`);
+  });
+
   it('should call the contained writer with the resolved path and content', async () => {
     await getResult(CACHED_FILE, VALID_XML);
 

@@ -60,7 +60,35 @@ describe('readCachedXmlTool', () => {
     const result = await getResult(CACHED_FILE);
 
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(`${SAMPLE_XML.length} bytes`);
+    expect(result.content[0].text).toContain(`Read ${SAMPLE_XML.length} bytes`);
+  });
+
+  it('should report UTF-8 bytes, not characters, for multi-byte content', async () => {
+    const xml = '<worksheet name="Café"/>';
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+      ok: true,
+      path: CACHED_FILE,
+      text: xml,
+    });
+
+    const result = await getResult(CACHED_FILE);
+
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(`Read ${Buffer.byteLength(xml, 'utf8')} bytes`);
+  });
+
+  it('should report the byte span of a range slice over multi-byte content', async () => {
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+      ok: true,
+      path: CACHED_FILE,
+      text: '<a>日本</a>',
+    });
+
+    const result = await getResult(CACHED_FILE, { startByte: 3, endByte: 9 });
+
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Read 6 bytes');
+    expect(result.content[0].text).toContain('日本');
   });
 
   it('should return error when file does not exist', async () => {
