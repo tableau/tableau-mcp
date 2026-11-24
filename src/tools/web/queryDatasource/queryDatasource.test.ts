@@ -2,6 +2,7 @@ import { CallToolResult, Client, InMemoryTransport } from '@modelcontextprotocol
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
+import * as activityLogModule from '../../../activityLog/init.js';
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { Query, queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
@@ -21,6 +22,7 @@ import {
   getVizqlDataServiceDisabledError,
 } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { WebTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
@@ -1063,6 +1065,539 @@ describe('queryDatasourceTool', () => {
     expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
   });
 
+  describe('VDS QueryRequest envelope', () => {
+    const datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9';
+    const productVersion2026_2 = { value: '2026.2.0', build: '20262.26.0512.0900' };
+    const query: Query = {
+      fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Profit', function: 'SUM' }],
+    };
+    const rows = (n: number): { data: Array<Record<string, unknown>> } => ({
+      data: Array.from({ length: n }, (_, i) => ({ Category: `C${i}`, 'SUM(Profit)': i })),
+    });
+
+    async function getParsed(args: Parameters<typeof getToolResult>[0]): Promise<any> {
+      const result = await getToolResult(args);
+      invariant(result.content[0].type === 'text');
+      expect(result.isError, result.content[0].text).toBe(false);
+      return JSON.parse(result.content[0].text);
+    }
+
+    beforeEach(() => {
+      mocks.mockReadMetadata.mockResolvedValue(
+        Ok({
+          data: [
+            { fieldCaption: 'Category', fieldName: 'Category', dataType: 'STRING' },
+            { fieldCaption: 'Profit', fieldName: 'Profit', dataType: 'REAL' },
+          ],
+        }),
+      );
+      mocks.mockQueryDatasource.mockResolvedValue(Ok(rows(3)));
+    });
+
+    it('runs a pasted QueryRequest with only the envelope LUID', async () => {
+      await getParsed({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { datasourceLuid } },
+      });
+
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+        expect.objectContaining({ datasource: { datasourceLuid }, query }),
+      );
+    });
+
+    it('forwards the caller options it supports and keeps its own returnFormat and debug', async () => {
+      const parsed = await getParsed({
+        query,
+        productVersion: productVersion2026_2,
+        extraArgs: {
+          options: {
+            disaggregate: true,
+            bypassMetadataCache: true,
+            withNewSession: true,
+            returnFormat: 'ARRAYS',
+            debug: false,
+          },
+        },
+      });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).toEqual({
+        returnFormat: 'OBJECTS',
+        debug: true,
+        disaggregate: true,
+        bypassMetadataCache: true,
+        withNewSession: true,
+      });
+      expect(parsed.mcp.warnings).toEqual([
+        expect.objectContaining({
+          type: 'IGNORED_REQUEST_PROPERTY',
+          affectedProperties: ['options.returnFormat', 'options.debug'],
+        }),
+      ]);
+    });
+
+    it('defaults disaggregate to false', async () => {
+      await getParsed({ query, extraArgs: { options: {} } });
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.disaggregate).toBe(false);
+    });
+
+    it('sends bypassMetadataCache and withNewSession to the metadata read', async () => {
+      await getParsed({
+        query,
+        productVersion: productVersion2026_2,
+        extraArgs: { options: { bypassMetadataCache: true, withNewSession: true } },
+      });
+
+      expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
+        datasource: { datasourceLuid },
+        options: { bypassMetadataCache: true, withNewSession: true },
+      });
+    });
+
+    describe('withNewSession and the validation reads', () => {
+      const newFieldQuery: Query = {
+        fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'New Field' }],
+      };
+
+      beforeEach(() => {
+        // The old session doesn't have the field yet; a new session does.
+        mocks.mockReadMetadata.mockImplementation(async (request) =>
+          Ok({
+            data: [
+              { fieldCaption: 'Category', fieldName: 'Category', dataType: 'STRING' },
+              ...(request.options?.withNewSession
+                ? [{ fieldCaption: 'New Field', fieldName: 'New Field', dataType: 'STRING' }]
+                : []),
+            ],
+          }),
+        );
+      });
+
+      it('validates against the new session, so a field only it knows reaches the query', async () => {
+        await getParsed({
+          query: newFieldQuery,
+          productVersion: productVersion2026_2,
+          extraArgs: { options: { withNewSession: true } },
+        });
+
+        expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+          expect.objectContaining({ query: newFieldQuery }),
+        );
+      });
+
+      it('still rejects a field the old session lacks when no new session is asked for', async () => {
+        const result = await getToolResult({
+          query: newFieldQuery,
+          productVersion: productVersion2026_2,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+      });
+
+      it('opens the session before the filter-value queries and sends it again on the query', async () => {
+        await getParsed({
+          query: {
+            fields: [{ fieldCaption: 'Category' }],
+            filters: [{ field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['C0'] }],
+          },
+          productVersion: productVersion2026_2,
+          extraArgs: { options: { withNewSession: true } },
+        });
+
+        const queryCalls = mocks.mockQueryDatasource.mock.calls;
+        expect(queryCalls.length).toBeGreaterThan(1);
+        expect(mocks.mockReadMetadata.mock.invocationCallOrder[0]).toBeLessThan(
+          mocks.mockQueryDatasource.mock.invocationCallOrder[0],
+        );
+        // One extra session open at most: filter-value queries reuse the one read-metadata opened.
+        for (const [request] of queryCalls.slice(0, -1)) {
+          expect(request.options).not.toHaveProperty('withNewSession');
+        }
+        expect(queryCalls.at(-1)?.[0].options.withNewSession).toBe(true);
+      });
+    });
+
+    it('does not send options to the metadata read when bypassMetadataCache is absent', async () => {
+      await getParsed({ query });
+      expect(mocks.mockReadMetadata).toHaveBeenCalledWith({ datasource: { datasourceLuid } });
+    });
+
+    it('applies options.rowLimit like limit, including the truncation probe', async () => {
+      const parsed = await getParsed({ query, extraArgs: { options: { rowLimit: 2 } } });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(3);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'requested-limit' },
+      });
+    });
+
+    it('uses the smaller of limit and options.rowLimit', async () => {
+      await getParsed({ query, limit: 1, extraArgs: { options: { rowLimit: 2 } } });
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(2);
+    });
+
+    it('reports admin-cap when options.rowLimit exceeds the server cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      const parsed = await getParsed({ query, extraArgs: { options: { rowLimit: 5 } } });
+
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp.resultInfo).toEqual({
+        returnedCount: 2,
+        truncated: true,
+        truncationReason: 'admin-cap',
+      });
+    });
+
+    it('trims options.rowLimit client-side on versions that cannot send a rowLimit', async () => {
+      const parsed = await getParsed({
+        query,
+        productVersion: testProductVersion2025_3,
+        extraArgs: { options: { rowLimit: 2 } },
+      });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp.resultInfo).toEqual({
+        returnedCount: 2,
+        truncated: true,
+        truncationReason: 'requested-limit',
+      });
+    });
+
+    it('emits mcp.warnings without resultInfo when no row limit applies', async () => {
+      const parsed = await getParsed({
+        query,
+        extraArgs: { options: { returnFormat: 'ARRAYS' } },
+      });
+
+      expect(parsed.mcp).toEqual({
+        warnings: [expect.objectContaining({ affectedProperties: ['options.returnFormat'] })],
+      });
+    });
+
+    it('returns no warnings for a pasted request whose options match the tool', async () => {
+      const parsed = await getParsed({
+        datasourceLuid: null,
+        query,
+        extraArgs: {
+          datasource: { datasourceLuid },
+          options: { returnFormat: 'OBJECTS', debug: true, disaggregate: false },
+        },
+      });
+
+      expect(parsed).not.toHaveProperty('mcp');
+    });
+
+    it('applies options.interpretFieldCaptionsAsFieldNames like the top-level argument', async () => {
+      mocks.mockReadMetadata.mockResolvedValue(
+        Ok({ data: [{ fieldCaption: 'Margin', fieldName: 'Calculation_1003', dataType: 'REAL' }] }),
+      );
+      await getParsed({
+        query: { fields: [{ fieldCaption: 'Calculation_1003' }] },
+        extraArgs: { options: { interpretFieldCaptionsAsFieldNames: true } },
+      });
+
+      expect(
+        mocks.mockQueryDatasource.mock.calls[0][0].options.interpretFieldCaptionsAsFieldNames,
+      ).toBe(true);
+    });
+
+    it('rejects options.interpretFieldCaptionsAsFieldNames on Tableau 2025.2', async () => {
+      const result = await getToolResult({
+        query,
+        productVersion: { value: '2025.2.9', build: '20252.25.1001.1200' },
+        extraArgs: { options: { interpretFieldCaptionsAsFieldNames: true } },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('requires Tableau 2025.3 or later');
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        name: 'unknown keys',
+        extraArgs: { baz: 1, options: { foo: 1 } },
+        message: 'Unrecognized arguments: `baz`, `options.foo`',
+      },
+      {
+        name: 'conflicting LUIDs',
+        extraArgs: { datasource: { datasourceLuid: '2d7a3b9e-3f1c-4b8e-9a5d-6c1e2f3a4b5c' } },
+        message: 'differ',
+      },
+    ])('rejects $name before any network call', async ({ extraArgs, message }) => {
+      const result = await getToolResult({ query, extraArgs });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(message);
+      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it.each([testProductVersion, { value: '2025.2.9', build: '20252.25.1001.1200' }])(
+      'keeps unknown keys through schema parsing on $value',
+      async (productVersion) => {
+        const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
+        const schema = await Provider.from(tool.paramsSchema);
+
+        // The MCP SDK parses args with this schema before the callback runs.
+        expect(schema.parse({ datasourceLuid, query, options: { foo: 1 }, baz: 2 })).toMatchObject({
+          options: { foo: 1 },
+          baz: 2,
+        });
+      },
+    );
+
+    it('ignores workbookDatasourceId, never forwards it, and queries the LUID', async () => {
+      const parsed = await getParsed({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { datasourceLuid, workbookDatasourceId: 'Sample - Superstore' } },
+      });
+
+      expect(parsed.mcp.warnings).toEqual([
+        expect.objectContaining({
+          type: 'IGNORED_REQUEST_PROPERTY',
+          affectedProperties: ['datasource.workbookDatasourceId'],
+        }),
+      ]);
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].datasource).toEqual({ datasourceLuid });
+      expect(JSON.stringify(mocks.mockReadMetadata.mock.calls)).not.toContain(
+        'Sample - Superstore',
+      );
+    });
+
+    it('rejects workbookDatasourceId without a LUID before any network call', async () => {
+      const result = await getToolResult({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { workbookDatasourceId: 'Sample - Superstore' } },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        "datasource.workbookDatasourceId isn't used by this tool",
+      );
+      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it('checks the allow-list against the LUID even when workbookDatasourceId is given', async () => {
+      vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+      const result = await getToolResult({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { datasourceLuid, workbookDatasourceId: 'Sample - Superstore' } },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`LUID ${datasourceLuid} is not allowed`);
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it('rejects an envelope LUID outside the datasource allow-list', async () => {
+      vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+      const result = await getToolResult({
+        datasourceLuid: null,
+        query,
+        extraArgs: { datasource: { datasourceLuid } },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        `Querying the datasource with LUID ${datasourceLuid} is not allowed.`,
+      );
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    describe('option version matrix', () => {
+      // Each tier restates every flag, so check every tier for every gated option.
+      const tiers = [
+        { value: '2025.2.9', build: '20252.25.1001.1200' },
+        testProductVersion2025_3,
+        testProductVersion,
+        productVersion2026_2,
+      ];
+      const minVersions = { bypassMetadataCache: '2025.3', withNewSession: '2026.2' } as const;
+      const isSupported = (version: string, minVersion: string): boolean =>
+        version.localeCompare(minVersion, undefined, { numeric: true }) >= 0;
+
+      const cases = tiers.flatMap((productVersion) =>
+        Object.entries(minVersions).map(([key, minVersion]) => ({
+          key,
+          minVersion,
+          productVersion,
+          supported: isSupported(productVersion.value, minVersion),
+        })),
+      );
+
+      it.each(cases)(
+        '$key: false on $productVersion.value is forwarded only where supported',
+        async ({ key, productVersion, supported }) => {
+          await getParsed({ query, productVersion, extraArgs: { options: { [key]: false } } });
+
+          const sent = mocks.mockQueryDatasource.mock.calls[0][0].options;
+          const sentToMetadataRead = mocks.mockReadMetadata.mock.calls[0][0].options ?? {};
+          if (supported) {
+            expect(sent[key]).toBe(false);
+            expect(sentToMetadataRead[key]).toBe(false);
+          } else {
+            expect(sent).not.toHaveProperty(key);
+            expect(sentToMetadataRead).not.toHaveProperty(key);
+          }
+        },
+      );
+
+      it.each(cases)(
+        '$key: true on $productVersion.value is forwarded or names the minimum version',
+        async ({ key, minVersion, productVersion, supported }) => {
+          const result = await getToolResult({
+            query,
+            productVersion,
+            extraArgs: { options: { [key]: true } },
+          });
+          invariant(result.content[0].type === 'text');
+
+          if (supported) {
+            expect(result.isError, result.content[0].text).toBe(false);
+            expect(mocks.mockQueryDatasource.mock.calls[0][0].options[key]).toBe(true);
+            expect(mocks.mockReadMetadata.mock.calls[0][0].options[key]).toBe(true);
+          } else {
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain(
+              `options.${key} requires Tableau ${minVersion} or later`,
+            );
+            expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+          }
+        },
+      );
+
+      it.each(tiers)('forwards disaggregate: true on $value', async (productVersion) => {
+        await getParsed({ query, productVersion, extraArgs: { options: { disaggregate: true } } });
+        expect(mocks.mockQueryDatasource.mock.calls[0][0].options.disaggregate).toBe(true);
+      });
+
+      it.each(tiers)(
+        'warns on, and never forwards, the read-metadata options on $value',
+        async (productVersion) => {
+          const options = {
+            includeHiddenFields: true,
+            includeGroupFormulas: true,
+            includeRemoteDatabaseNames: true,
+          };
+          const parsed = await getParsed({ query, productVersion, extraArgs: { options } });
+
+          expect(parsed.mcp.warnings).toEqual([
+            expect.objectContaining({
+              type: 'IGNORED_REQUEST_PROPERTY',
+              affectedProperties: Object.keys(options).map((key) => `options.${key}`),
+            }),
+          ]);
+          const sent = mocks.mockQueryDatasource.mock.calls[0][0].options;
+          for (const key of Object.keys(options)) expect(sent).not.toHaveProperty(key);
+        },
+      );
+    });
+
+    describe('caller-supplied credentials', () => {
+      const password = 'caller-secret-password';
+      const connections = [{ connectionUsername: 'u', connectionPassword: password }];
+
+      function getLogSinks(): unknown[][] {
+        return [
+          vi.mocked(loggerModule.log).mock.calls,
+          vi.mocked(WebTool.prototype.notifyInvocation).mock.calls,
+          vi.mocked(activityLogModule.recordToolCall).mock.calls,
+        ];
+      }
+
+      beforeEach(() => {
+        vi.spyOn(activityLogModule, 'recordToolCall');
+        vi.spyOn(WebTool.prototype, 'notifyInvocation');
+      });
+
+      it('never logs or forwards datasource.connections', async () => {
+        const parsed = await getParsed({
+          datasourceLuid: null,
+          query: {
+            fields: [{ fieldCaption: 'Category' }],
+            filters: [{ field: { fieldCaption: 'Category' }, filterType: 'SET', values: ['C0'] }],
+          },
+          extraArgs: { datasource: { datasourceLuid, connections } },
+        });
+
+        expect(parsed.mcp.warnings).toContainEqual(
+          expect.objectContaining({ affectedProperties: ['datasource.connections'] }),
+        );
+        // The SET filter adds a distinct-values query, so both VDS request paths are covered.
+        expect(mocks.mockQueryDatasource.mock.calls.length).toBeGreaterThan(1);
+        const sinks = [
+          ...getLogSinks(),
+          mocks.mockReadMetadata.mock.calls,
+          mocks.mockQueryDatasource.mock.calls,
+        ];
+        for (const calls of sinks) {
+          expect(calls.length).toBeGreaterThan(0);
+          expect(JSON.stringify(calls)).not.toContain(password);
+        }
+        // An envelope-only LUID still identifies the datasource in the activity log.
+        expect(vi.mocked(activityLogModule.recordToolCall).mock.calls[0][0]).toMatchObject({
+          object: { type: 'datasource', luid: datasourceLuid },
+        });
+      });
+
+      // Logging runs before the unknown-key check, so these reach the logs before the error.
+      it.each([
+        {
+          name: 'a top-level connections',
+          extraArgs: { connections },
+          unknownKey: '`connections`',
+          loggedArgs: { connections: '[redacted]' },
+        },
+        {
+          name: 'an unknown options key',
+          extraArgs: { options: { disaggregate: true, connectionPassword: password } },
+          unknownKey: '`options.connectionPassword`',
+          loggedArgs: { options: { disaggregate: true, connectionPassword: '[redacted]' } },
+        },
+        {
+          name: 'an unknown datasource key',
+          extraArgs: { datasource: { datasourceLuid, connectionPassword: password } },
+          unknownKey: '`datasource.connectionPassword`',
+          loggedArgs: { datasource: { datasourceLuid, connectionPassword: '[redacted]' } },
+        },
+      ])(
+        'redacts $name in logs and still rejects it',
+        async ({ extraArgs, unknownKey, loggedArgs }) => {
+          const result = await getToolResult({ query, extraArgs });
+
+          expect(result.isError).toBe(true);
+          invariant(result.content[0].type === 'text');
+          expect(result.content[0].text).toContain(unknownKey);
+          for (const calls of getLogSinks()) {
+            expect(calls.length).toBeGreaterThan(0);
+            expect(JSON.stringify(calls)).not.toContain(password);
+          }
+          // The key name stays visible so the debug log shows what was rejected.
+          expect(vi.mocked(WebTool.prototype.notifyInvocation).mock.calls[0][0].args).toMatchObject(
+            loggedArgs,
+          );
+          expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+          expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+        },
+      );
+    });
+  });
+
   describe('embedded datasources under a project scope', () => {
     const datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9';
     const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
@@ -1118,12 +1653,17 @@ async function getToolResult({
   workbookLuid,
   query,
   interpretFieldCaptionsAsFieldNames,
+  datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9',
+  extraArgs,
 }: {
   query?: Query;
   interpretFieldCaptionsAsFieldNames?: boolean;
   limit?: number;
   productVersion?: ProductVersion;
   workbookLuid?: string;
+  datasourceLuid?: string | null;
+  // VDS envelope (datasource, options) and unknown keys, as a pasted QueryRequest would carry them.
+  extraArgs?: Record<string, unknown>;
 } = {}): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(
     new WebMcpServer(),
@@ -1132,7 +1672,7 @@ async function getToolResult({
   const callback = await Provider.from(queryDatasourceTool.callback);
   return await callback(
     {
-      datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      ...(datasourceLuid !== null && { datasourceLuid }),
       query: query ?? {
         fields: [
           { fieldCaption: 'Category' },
@@ -1142,6 +1682,7 @@ async function getToolResult({
       workbookLuid,
       limit,
       interpretFieldCaptionsAsFieldNames,
+      ...extraArgs,
     },
     getMockRequestHandlerExtra(),
   );
