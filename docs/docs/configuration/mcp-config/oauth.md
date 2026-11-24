@@ -501,15 +501,6 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
   scopes for step-up.
 - When `true`, the advertised set also includes `tableau:entitlements:read` if AI-powered Pulse
   insight tools are enabled and the `enforce-registration-conditions` feature flag is on.
-- When `true`, [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `false`, and
-  [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
-  every access token used for MCP requests must carry `tableau:mcp_site_settings:read`. A token
-  without it is rejected with `403` `insufficient_scope`. The embedded authorization server also
-  rejects `/oauth2/authorize` requests and `client_credentials` token requests whose grants omit
-  the scope (`400` `invalid_scope`).
-- The embedded authorization server preserves the original scopes when refreshing a token. If an
-  older grant lacks the site-settings scope and the requirement above applies, reauthorize to add
-  it; refreshing does not add the missing scope.
 
 <hr />
 
