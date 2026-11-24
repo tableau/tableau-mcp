@@ -38,7 +38,7 @@ describe('surgical dashboard apply instance identity', () => {
         pid: 999,
         instanceId,
         token,
-        apiVersion: '0.1.1',
+        apiVersion: '0.2.34',
       });
       // Reuse the PID, sheet ID, and document across restart so only the instance pin
       // can distinguish the replacement Desktop from the snapshot's original process.

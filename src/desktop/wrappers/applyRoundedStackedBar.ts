@@ -22,7 +22,7 @@ import { tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 import { pollReadback } from './pollReadback.js';
 import { qualifyDatasourceColumn } from './qualifyDatasourceColumn.js';
 
-export type ApplyRoundedStackedBarOutcome =
+type ApplyRoundedStackedBarOutcome =
   | {
       state: 'applied';
       mutation: 'sent';
@@ -87,7 +87,7 @@ export async function applyRoundedStackedBar({
 
     const summary = await executor.getWorksheetSummaryData(
       contract.worksheetId,
-      { maxRows: 1000, ignoreAliases: true, ignoreSelection: true },
+      { maxRows: 1000, ignoreSelection: true },
       signal,
     );
     if (summary.isErr()) {
@@ -128,7 +128,7 @@ export async function applyRoundedStackedBar({
     }
 
     const qualify = (column: string): string =>
-      qualifyDatasourceColumn(executor.desktopApiVersion, contract.datasource, column);
+      qualifyDatasourceColumn(contract.datasource.internalName, column);
     const requestedUnderlyingColumns = unique([
       qualify(contract.category.column),
       ...(contract.segment ? [qualify(contract.segment.column)] : []),
@@ -140,7 +140,6 @@ export async function applyRoundedStackedBar({
       logicalTableId,
       {
         maxRows: 10_000,
-        ignoreAliases: true,
         ignoreSelection: true,
         columnsToIncludeByFieldName: requestedUnderlyingColumns,
       },
@@ -252,7 +251,7 @@ export async function applyRoundedStackedBar({
             if (workbookDocument.isErr()) return Err(workbookDocument.error);
             const postSummary = await executor.getWorksheetSummaryData(
               applyOutcome.id,
-              { maxRows: 1000, ignoreAliases: true, ignoreSelection: true },
+              { maxRows: 1000, ignoreSelection: true },
               signal,
             );
             if (postSummary.isErr()) return Err(postSummary.error);

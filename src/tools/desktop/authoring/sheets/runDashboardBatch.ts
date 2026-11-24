@@ -12,7 +12,6 @@ import type {
   ExecuteCommandError,
   ExecuteCommandWarning,
 } from '../../../../desktop/externalApi/executorTypes.js';
-import { isRouteMissing } from '../../../../desktop/externalApi/toolUtils.js';
 import {
   deleteDashboard,
   listDashboardRefs,
@@ -697,9 +696,7 @@ export const getRunDashboardBatchTool = (
               if (removed.kind === 'failed') {
                 const fatal = getSessionFatalError(removed.error);
                 if (fatal) return fatal.toErr();
-                // The real applyDocument dispatches before the HTTP call, so a 404 arrives dispatched.
-                const routeMissing = isRouteMissing(removed.error);
-                if (removed.dispatched && !routeMissing) {
+                if (removed.dispatched) {
                   return failBatch('removeExisting', describeDesktopError(removed.error), {
                     applied: false,
                   });
@@ -708,10 +705,8 @@ export const getRunDashboardBatchTool = (
                   steps,
                   orderedArtifactIds,
                   dashboardName,
-                  routeMissing
-                    ? 'This Desktop build cannot delete a dashboard natively, so the dashboard cannot be replaced. Nothing was changed.'
-                    : describeDesktopError(removed.error),
-                  routeMissing ? 'deleteRouteMissing' : 'preDispatchRemoval',
+                  describeDesktopError(removed.error),
+                  'preDispatchRemoval',
                 );
               }
               if (removed.kind === 'unconfirmed') {

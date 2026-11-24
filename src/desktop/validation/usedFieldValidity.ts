@@ -1,8 +1,4 @@
 import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
-import {
-  apiVersionAtLeast,
-  WORKBOOK_DIAGNOSTICS_MIN_API_VERSION,
-} from '../externalApi/apiVersion.js';
 import type { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import type { WorkbookDiagnostics, WorksheetInvalidField } from '../externalApi/types.js';
 import type { ReadbackVerificationResult, VerificationFinding } from './readback-verify.js';
@@ -54,15 +50,6 @@ export async function checkUsedFieldValidity({
       message: `Field verification expected Desktop instance ${expectedInstanceId}, but found ${actualInstanceId}.`,
     };
   }
-  if (!apiVersionAtLeast(executor.desktopApiVersion, WORKBOOK_DIAGNOSTICS_MIN_API_VERSION)) {
-    return {
-      status: 'unknown',
-      worksheetId,
-      reason: 'unsupported-api',
-      message: `Field verification requires External Client API ${WORKBOOK_DIAGNOSTICS_MIN_API_VERSION} or newer.`,
-    };
-  }
-
   if (diagnosticsInvalid) {
     return {
       status: 'unknown',

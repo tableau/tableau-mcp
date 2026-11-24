@@ -331,7 +331,6 @@ describe.each(
       let live = expected;
       const instanceId = 'manual-allocation-instance';
       const executor = makeExecutorMock({
-        desktopApiVersion: '0.2.24',
         listDashboards: vi
           .fn()
           .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),

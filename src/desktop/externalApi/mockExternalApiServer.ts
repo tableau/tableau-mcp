@@ -3,6 +3,7 @@ import { AddressInfo } from 'net';
 
 import { listAvailableFields } from '../metadata/field-builder.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
+import { MIN_SUPPORTED_API_VERSION } from './apiVersion.js';
 import {
   type DatasourceItem,
   DialogList,
@@ -173,16 +174,6 @@ const DEFAULT_WORKBOOK_DATASOURCES = [
     // Unpublished: hasDownloadFilePermission is null (permission N/A), projected out like a null luid.
     hasDownloadFilePermission: null,
   },
-  {
-    // luid absent entirely (older API build that predates the field): exercises
-    // the `undefined` leg of `luid: z.string().nullish()` — the reason it's
-    // nullish() rather than nullable(). type/isExtract/hasDownloadFilePermission
-    // are likewise absent, exercising the fail-open `undefined` leg of each newer
-    // field. All projected out of the tool output.
-    id: 'wb-ds-legacy',
-    name: 'Legacy Extract',
-    caption: 'Legacy Extract',
-  },
 ];
 const DEFAULT_SUMMARY_DATA = {
   columns: [
@@ -245,13 +236,11 @@ const sendXml = (res: ServerResponse, status: number, xml: string): void => {
   res.end(xml);
 };
 
-// Models the live 0.1.0 Problem shape: `type: 'problem'` + required code/status/instance,
-// human text in `title`. `detail` is an RFC-9457 member additionalProperties admits.
+// Models the live Problem shape: required code/status/instance, human text in `title`.
+// `detail` is an RFC-9457 extension member that additionalProperties admits.
 const sendProblem = (res: ServerResponse, status: number, code: string, detail: string): void => {
   res.writeHead(status, { 'content-type': 'application/problem+json' });
-  res.end(
-    JSON.stringify({ type: 'problem', title: detail, status, instance: '/v0/mock', detail, code }),
-  );
+  res.end(JSON.stringify({ title: detail, status, instance: '/v0/mock', detail, code }));
 };
 
 const sendOperation = (res: ServerResponse, command: string): void => {
@@ -472,7 +461,7 @@ export async function startMockExternalApiServer(
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.root) {
       sendJson(res, 200, {
-        apiVersion: '0.1.0',
+        apiVersion: MIN_SUPPORTED_API_VERSION,
         applicationVersion: '2026.1',
         links: {
           health: '/v0/health',
@@ -1517,7 +1506,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.32' },
+        info: { title: 'Tableau External Client API', version: MIN_SUPPORTED_API_VERSION },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },

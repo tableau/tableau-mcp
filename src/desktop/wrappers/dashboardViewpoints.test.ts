@@ -22,7 +22,6 @@ describe('dashboard viewpoint registration', () => {
       source,
       'D',
       '<dashboard name="D"><zones><zone name="A"/><zone name="B"/></zones></dashboard>',
-      { useNativeViewpointDefaults: true },
     ).unwrap().xml;
     expect(expected).toContain('<viewpoint name="B"/>');
     const matches = createDashboardReadbackVerifier(expected, 'D');

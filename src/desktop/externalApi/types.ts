@@ -8,7 +8,7 @@ import { z } from 'zod';
  * the production registry/generator harness.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
- * write-thin, and an older Desktop build may omit a field a newer spec marks required.
+ * write-thin.
  */
 
 /** Route paths served by the running Desktop loopback host. */
@@ -97,7 +97,6 @@ export const HEADER_XSD_PAYLOAD_VERSION = 'x-tableau-xsd-payload-version';
 /** Query accepted by {@link worksheetSummaryDataRoute}. */
 export type WorksheetSummaryDataQuery = {
   maxRows?: number;
-  ignoreAliases?: boolean;
   ignoreSelection?: boolean;
   /**
    * Field names restricting the returned columns. Each becomes its own repeated
@@ -373,9 +372,6 @@ export function worksheetSummaryDataRoute(
   if (query.maxRows !== undefined) {
     search.set('maxRows', String(query.maxRows));
   }
-  if (query.ignoreAliases !== undefined) {
-    search.set('ignoreAliases', String(query.ignoreAliases));
-  }
   if (query.ignoreSelection !== undefined) {
     search.set('ignoreSelection', String(query.ignoreSelection));
   }
@@ -494,9 +490,6 @@ export function worksheetLogicalTableDataRoute(
   if (query.maxRows !== undefined) {
     search.set('maxRows', String(query.maxRows));
   }
-  if (query.ignoreAliases !== undefined) {
-    search.set('ignoreAliases', String(query.ignoreAliases));
-  }
   if (query.ignoreSelection !== undefined) {
     search.set('ignoreSelection', String(query.ignoreSelection));
   }
@@ -555,8 +548,8 @@ export function datasourceRefreshExtractRoute(datasourceId: string): string {
 
 /**
  * Discovery file written by Desktop to `<OS app-local-data>/ExternalApi/<pid>.json`.
- * Only `schemaVersion === 1` is understood. Version fields are optional so a slightly
- * newer/older build still parses; the essentials (pid/baseUrl/token) are required. The
+ * Only `schemaVersion === 1` is understood. Version fields are optional so a newer build
+ * still parses; the essentials (pid/baseUrl/token) are required. The
  * producer publishes an origin, not a general URL: plain HTTP on numeric IPv4 loopback with
  * an explicit valid port and no credentials, path, query, or fragment.
  */
@@ -1282,10 +1275,8 @@ export type WorkbookDiagnostics = z.infer<typeof workbookDiagnosticsSchema>;
  * server-side fallback), not the requested one — it is authoritative for the label
  * the tool emits on the inline image block. The render format is constrained to
  * `image/png` or `image/svg+xml`. The live server sends it on every rendered response.
- * It stays optional for parse-safety: (1) the field is being added to the
- * server async, so a build that predates it must still parse (a required field would
- * fail `safeParse` and error the whole export, not just mislabel); (2) the degenerate
- * "neither bytes nor path" envelope legitimately carries no rendered format. When absent,
+ * It stays optional because the degenerate "neither bytes nor path" envelope carries no
+ * rendered format. When absent,
  * blank, or not `image/svg+xml`, the block is labelled `image/png`.
  */
 export const imageResultSchema = z

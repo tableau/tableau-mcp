@@ -1,22 +1,17 @@
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
-import {
-  type ColumnFilterDatasource,
-  qualifyDatasourceColumn,
-} from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
+import { qualifyDatasourceColumn } from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
 
 /**
  * The underlying-data column filter (`columnsToIncludeByFieldName`) matches only a
  * datasource-qualified field name — `[<datasource>].[<field>]`, e.g. `[federated.0abc123].[Region]`.
  * A bare `Region` is silently ignored (all columns come back), so the tool qualifies it here from
- * the worksheet's datasource. Desktop API 0.2.25 and later match the datasource internal name;
- * earlier builds match its caption.
+ * the worksheet's datasource.
  *
  * A value already in `[ds].[field]` form is passed through verbatim (power-user escape hatch).
  */
 export function qualifyColumnFields(
   worksheetXml: string,
   columns: Array<string>,
-  apiVersion: string | undefined,
 ): { ok: true; columns: Array<string> } | { ok: false; reason: string } {
   const datasources = worksheetDatasources(worksheetXml);
 
@@ -35,19 +30,19 @@ export function qualifyColumnFields(
     }
     if (datasources.length > 1) {
       const options = datasources
-        .map((datasource) => qualifyDatasourceColumn(apiVersion, datasource, column))
+        .map((datasource) => qualifyDatasourceColumn(datasource, column))
         .join(', ');
       return {
         ok: false,
         reason: `the worksheet uses multiple datasources, so "${column}" is ambiguous — pass one of: ${options}`,
       };
     }
-    qualified.push(qualifyDatasourceColumn(apiVersion, datasources[0], column));
+    qualified.push(qualifyDatasourceColumn(datasources[0], column));
   }
   return { ok: true, columns: qualified };
 }
 
-function worksheetDatasources(worksheetXml: string): Array<ColumnFilterDatasource> {
+function worksheetDatasources(worksheetXml: string): Array<string> {
   let parsed: Record<string, unknown>;
   try {
     parsed = parseXML(worksheetXml) as unknown as Record<string, unknown>;
@@ -58,7 +53,7 @@ function worksheetDatasources(worksheetXml: string): Array<ColumnFilterDatasourc
   const view = ((worksheet?.['table'] as Record<string, unknown> | undefined)?.['view'] ??
     {}) as Record<string, unknown>;
   const container = (view['datasources'] ?? {}) as Record<string, unknown>;
-  const datasources = new Map<string, ColumnFilterDatasource>();
+  const datasources = new Set<string>();
   for (const ds of normalizeArray(
     container['datasource'] as Record<string, unknown> | Record<string, unknown>[] | undefined,
   )) {
@@ -66,11 +61,7 @@ function worksheetDatasources(worksheetXml: string): Array<ColumnFilterDatasourc
     if (typeof internalName !== 'string' || internalName.length === 0) {
       continue;
     }
-    const caption = ds['@_caption'];
-    datasources.set(internalName, {
-      caption: typeof caption === 'string' && caption.length > 0 ? caption : internalName,
-      internalName,
-    });
+    datasources.add(internalName);
   }
   return Array.from(datasources.values());
 }

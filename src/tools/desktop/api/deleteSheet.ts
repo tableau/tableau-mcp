@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
@@ -72,9 +71,6 @@ export const getDeleteSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
             const executor = await extra.getExecutor(sessionResult.value);
             const result = await executor.deleteSheet(ref, extra.signal);
             if (result.isErr()) {
-              if (isRouteMissing(result.error)) {
-                return endpointNotInThisBuild('delete-sheet').toErr();
-              }
               return new DesktopCommandExecutionError(result.error).toErr();
             }
 

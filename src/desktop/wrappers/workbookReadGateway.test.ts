@@ -1,7 +1,3 @@
-import { Err, Ok } from 'ts-results-es';
-
-import { makeExecutorMock } from '../externalApi/executor.mock.js';
-import { ExecuteCommandError } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -60,99 +56,7 @@ describe('WorkbookReadGateway', () => {
       await server.close();
     }
   });
-
-  it('falls back to the External API whole-document read when the worksheet list route is missing', async () => {
-    const getWorkbookDocument = vi.fn().mockResolvedValue(
-      Ok({
-        xml: '<workbook><worksheets><worksheet name="Sheet From XML"><table /><simple-id uuid="{GUID-XML}" /></worksheet></worksheets></workbook>',
-        applicationVersion: undefined,
-        xsdPayloadVersion: undefined,
-      }),
-    );
-    const routeMissing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No route matches GET /v0/workbook/worksheets',
-        recoverable: false,
-      },
-    };
-    const executor = makeExecutorMock({
-      ...makeExecutor(),
-      getWorkbookDocument,
-      listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
-    });
-
-    const gateway = new WorkbookReadGateway({
-      executor,
-      signal,
-    });
-    const result = await gateway.listWorksheets();
-
-    expect(gateway.mode).toBe('external-api');
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value.worksheets).toEqual([{ id: '{GUID-XML}', name: 'Sheet From XML' }]);
-    }
-    expect(getWorkbookDocument).toHaveBeenCalledWith(signal);
-  });
-
-  it('surfaces the worksheet simple-id from the whole-document fallback so a caller can capture it', async () => {
-    const gateway = gatewayForWorkbookFallback(
-      '<workbook><worksheets><worksheet name="Sheet A"><table /><simple-id uuid="{GUID-A}" /></worksheet></worksheets></workbook>',
-    );
-    const result = await gateway.listWorksheets();
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value.worksheets).toEqual([{ id: '{GUID-A}', name: 'Sheet A' }]);
-    }
-  });
-
-  it('resolves a whole-document get-worksheet-xml by the simple-id, not just the name', async () => {
-    const gateway = gatewayForWorkbookFallback(
-      '<workbook><worksheets><worksheet name="Sheet A"><table /><simple-id uuid="{GUID-A}" /></worksheet></worksheets></workbook>',
-    );
-    const result = await gateway.getWorksheetXml('{GUID-A}');
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value.xml).toContain('name="Sheet A"');
-      expect(result.value.name).toBe('Sheet A');
-    }
-  });
 });
-
-function gatewayForWorkbookFallback(workbookXml: string): WorkbookReadGateway {
-  const routeMissing: ExecuteCommandError = {
-    type: 'command-failed',
-    error: {
-      code: 'not-found',
-      message: 'No route matches GET /v0/workbook/worksheets',
-      recoverable: false,
-    },
-  };
-  const executor = makeExecutorMock({
-    ...makeExecutor(),
-    getWorkbookDocument: vi
-      .fn()
-      .mockResolvedValue(
-        Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
-      ),
-    listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
-  });
-  return new WorkbookReadGateway({ executor, signal });
-}
-
-function makeExecutor(): ExternalApiToolExecutor {
-  return makeExecutorMock({
-    start: vi.fn(),
-    stop: vi.fn(),
-    isAvailable: vi.fn(() => true),
-    getWorkbookDocument: vi.fn(),
-    applyWorkbookDocument: vi.fn(),
-  });
-}
 
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
   return {

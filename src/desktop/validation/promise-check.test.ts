@@ -133,7 +133,7 @@ describe('promise check receipt (W-23447506)', () => {
     expect(text).not.toContain('promised sort NOT verified');
   });
 
-  it.each(['unsupported-api', 'validation-read-failed'])(
+  it.each(['diagnostics-unavailable', 'validation-read-failed'])(
     'keeps known promised sort loss failed when native validation is unavailable: %s',
     (reason) => {
       expect(

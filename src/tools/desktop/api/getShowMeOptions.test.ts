@@ -65,7 +65,6 @@ describe('getShowMeOptionsTool', () => {
 
     expect(tool.name).toBe('get-show-me-options');
     expect(tool.title).toBe('Get Show Me Options');
-    expect(tool.minApiVersion).toBe('0.2.18');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheet: expect.any(Object),
@@ -197,27 +196,6 @@ describe('getShowMeOptionsTool', () => {
       expect(executor.getWorksheetShowMeOptions).not.toHaveBeenCalled();
     },
   );
-
-  it('gives upgrade guidance and forbids retry when the discovery route is missing', async () => {
-    const routeMissing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No route matches GET /v0/workbook/worksheets/sheet-sales/showMe',
-        recoverable: false,
-      },
-    };
-
-    const { result } = await invoke({
-      args: { worksheet: 'Sales by Region' },
-      discoveryError: routeMissing,
-    });
-
-    expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain('Desktop build is too old');
-    expect(resultText(result)).toContain('Desktop update enables it');
-    expect(resultText(result)).toContain('Do not retry');
-  });
 
   it('passes the request abort signal to inventory and discovery', async () => {
     const signal = new AbortController().signal;

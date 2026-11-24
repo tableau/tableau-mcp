@@ -374,9 +374,7 @@ describe('export-image tools', () => {
   });
 
   it('defaults to a single image/png block when effectiveMimeType is absent (accepted no-fallback default)', async () => {
-    // Older Desktop builds that predate the effectiveMimeType field omit it. With no byte-sniff
-    // fallback, SVG-looking bytes and no declaration are labelled image/png — the documented
-    // degradation on such builds.
+    // With no byte-sniff fallback, SVG-looking bytes and no declaration are labelled image/png.
     const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
@@ -459,7 +457,7 @@ describe('export-image tools', () => {
     }
   });
 
-  it('surfaces a 409 viz-not-ready as a command error (not a too-new endpoint)', async () => {
+  it('surfaces a 409 viz-not-ready as a command error', async () => {
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 409,
@@ -479,8 +477,6 @@ describe('export-image tools', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('not ready to render');
-      // A 409 is a live-endpoint condition, NOT the too-new-endpoint signal.
-      expect(result.content[0].text).not.toContain('Do not retry');
     } finally {
       await harness.close();
     }
@@ -551,53 +547,6 @@ describe('export-image tools', () => {
       await harness.close();
     }
   });
-
-  it.each([
-    {
-      makeTool: exportWorksheetImageTool,
-      args: { worksheetName: 'sheet-sales' },
-      overrideKey: 'GET /v0/workbook/worksheets/sheet-sales/image',
-      expectedMessage: 'does not serve the worksheet image endpoint',
-    },
-    {
-      makeTool: exportDashboardImageTool,
-      args: { dashboardName: 'dash-exec' },
-      overrideKey: 'GET /v0/workbook/dashboards/dash-exec/image',
-      expectedMessage: 'does not serve the dashboard image endpoint',
-    },
-    {
-      makeTool: exportStoryboardImageTool,
-      args: { storyboardName: 'story-qbr' },
-      overrideKey: 'GET /v0/workbook/storyboards/story-qbr/image',
-      expectedMessage: 'does not serve the storyboard image endpoint',
-    },
-  ])(
-    'reports an honest too-new endpoint 404 for $expectedMessage',
-    async ({ makeTool, args, overrideKey, expectedMessage }) => {
-      const harness = await startHarness(makeTool, (server) => {
-        server.setOverride(overrideKey, {
-          status: 404,
-          body: JSON.stringify({
-            code: 'not-found',
-            status: 404,
-            instance: '/v0/mock',
-            title: `No route matches ${overrideKey}`,
-            detail: `No route matches ${overrideKey}`,
-          }),
-        });
-      });
-      try {
-        const result = await harness.callTool(args);
-
-        expect(result.isError).toBe(true);
-        invariant(result.content[0].type === 'text');
-        expect(result.content[0].text).toContain(expectedMessage);
-        expect(result.content[0].text).toContain('Do not retry');
-      } finally {
-        await harness.close();
-      }
-    },
-  );
 
   it.each([
     {

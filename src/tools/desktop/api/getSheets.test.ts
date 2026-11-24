@@ -72,21 +72,6 @@ describe('getSheetsTool', () => {
     }
   });
 
-  it('reports a too-new endpoint error when the inventory route is missing', async () => {
-    const harness = await startHarness(getSheetsTool, (server) =>
-      setRouteMissing(server, 'GET /v0/workbook'),
-    );
-    try {
-      const result = await harness.callTool({});
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('does not serve the workbook inventory endpoint');
-      expect(errorText(result)).toContain('Do not retry');
-    } finally {
-      await harness.close();
-    }
-  });
-
   it.each([
     {
       kind: 'worksheet',
@@ -114,20 +99,6 @@ describe('getSheetsTool', () => {
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject(expected);
       expect(requestPaths(harness.server)).toEqual([path]);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('reports a too-new endpoint error when the storyboard list route is missing', async () => {
-    const harness = await startHarness(getSheetsTool, (server) =>
-      setRouteMissing(server, 'GET /v0/workbook/storyboards'),
-    );
-    try {
-      const result = await harness.callTool({ kind: 'storyboard' });
-
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('does not serve the storyboard list endpoint');
     } finally {
       await harness.close();
     }
@@ -271,28 +242,13 @@ async function startHarness(
   };
 }
 
-function setRouteMissing(server: MockExternalApiServer, key: string): void {
-  server.setOverride(key, {
-    status: 404,
-    contentType: 'application/problem+json',
-    body: JSON.stringify({
-      type: 'problem',
-      title: `No route matches ${key}`,
-      status: 404,
-      instance: '/v0/mock',
-      detail: `No route matches ${key}`,
-      code: 'not-found',
-    }),
-  });
-}
-
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-get-sheets',
-    apiVersion: '0.2.25',
+    apiVersion: '0.2.34',
   };
 }
 
