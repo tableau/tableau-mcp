@@ -17,5 +17,6 @@
   "authoring-with-slack": false,
   "activity-log": false,
   "admin-tools": false,
+  "mcp-wildcard-scope": false,
   "mcp-protocol-2026": false
 }

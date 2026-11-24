@@ -23,6 +23,7 @@ import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js'
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import {
+  getAdvertisedScopes,
   getSupportedScopes,
   MCP_SITE_SETTINGS_READ_SCOPE,
   parseScopes,
@@ -141,7 +142,7 @@ export function authorize(
       validScopes.length > 0
         ? validScopes
         : enforceScopes
-          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id })
+          ? await getAdvertisedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id })
           : [];
 
     // The grant is frozen at the pending-auth .set below and the token.ts auth-code branch replays it

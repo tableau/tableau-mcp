@@ -8,11 +8,31 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
+  mcpWildcardScopeFlag: { value: false },
 }));
 
 vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
+
+// Override the wildcard flag per test, keeping admin tools enabled as in the shared setup.
+vi.mock('../../../src/features/init.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/features/init.js')>();
+  return {
+    ...original,
+    getFeatureGate: () => {
+      const featureGate = original.getFeatureGate();
+      return {
+        isFeatureEnabled: async (featureName: string) => {
+          if (featureName === 'mcp-wildcard-scope') {
+            return mocks.mcpWildcardScopeFlag.value;
+          }
+          return featureName === 'admin-tools' || featureGate.isFeatureEnabled(featureName);
+        },
+      };
+    },
+  };
+});
 
 describe('client credentials grant type', () => {
   let _server: http.Server | undefined;
@@ -23,6 +43,7 @@ describe('client credentials grant type', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _server = undefined;
+    mocks.mcpWildcardScopeFlag.value = false;
   });
 
   afterEach(async () => {
@@ -139,6 +160,68 @@ describe('client credentials grant type', () => {
     expect(response.body).toEqual({
       error: 'invalid_client',
       error_description: 'Invalid client credentials',
+    });
+  });
+
+  describe('MCP wildcard scope', () => {
+    beforeEach(() => {
+      // enforceScopes on; the suite default is OAUTH_DISABLE_SCOPES=true (enforcement off).
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+      mocks.mcpWildcardScopeFlag.value = true;
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('grants the explicit MCP scopes and rejects a request for the wildcard when the flag is off', async () => {
+      mocks.mcpWildcardScopeFlag.value = false;
+      const { app } = await startServer();
+
+      const granted = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+      });
+      expect(granted.status).toBe(200);
+      expect(granted.body.scope).toContain('tableau:mcp:datasource:read');
+      expect(granted.body.scope).not.toContain('tableau:mcp:*');
+
+      const rejected = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+        scope: 'tableau:mcp:*',
+      });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error).toBe('invalid_scope');
+    });
+
+    it('grants the wildcard when no scopes are requested', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.scope).toBe('tableau:mcp:*');
+    });
+
+    it('accepts a request for the wildcard', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth2/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+        scope: 'tableau:mcp:*',
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.scope).toBe('tableau:mcp:*');
     });
   });
 
