@@ -143,7 +143,6 @@ describe('workspace extension tools', () => {
       expect(result.isError).toBe(true);
       const text = JSON.stringify(result);
       expect(text).toContain('No workspace extension has id missing.');
-      expect(text).not.toContain('too old');
       expect(text).not.toContain('Reloaded');
     } finally {
       await harness.close();
@@ -182,7 +181,6 @@ describe('workspace extension tools', () => {
       expect(result.isError).toBe(true);
       const text = JSON.stringify(result);
       expect(text).toContain(message);
-      expect(text).not.toContain('too old');
       expect(text).not.toContain('Reloaded');
       expect(harness.server.requests.some((r) => r.path === `/v0/operations/${operationId}`)).toBe(
         true,
