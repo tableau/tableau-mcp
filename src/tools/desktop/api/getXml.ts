@@ -2,12 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { apiVersionAtLeast, ApiVersionFloor } from '../../../desktop/externalApi/apiVersion.js';
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from '../../../desktop/externalApi/toolUtils.js';
+import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { SheetKind } from '../../../desktop/externalApi/types.js';
 import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { parseXML } from '../../../desktop/metadata/parser.js';
@@ -56,8 +51,6 @@ type GetXmlToolResult =
       datasourceXml?: string;
     }
   | XmlReadFileResult;
-
-const DATASOURCE_DOCUMENT_MIN_API_VERSION: ApiVersionFloor = '0.2.10';
 
 const XML_READ_ANNOTATIONS = {
   readOnlyHint: false, // Writes to a cache file
@@ -196,9 +189,6 @@ async function readWorksheetXml({
       case 'get-worksheet-xml-error':
         return new GetWorksheetXmlFailedError(error).toErr();
       case 'execute-command-error':
-        if (isRouteMissing(error)) {
-          return endpointNotInThisBuild('worksheet document').toErr();
-        }
         return new DesktopCommandExecutionError(error).toErr();
       default: {
         const _: never = type;
@@ -260,9 +250,6 @@ async function readDashboardXml({
       case 'get-dashboard-xml-error':
         return new GetDashboardXmlFailedError(error).toErr();
       case 'execute-command-error':
-        if (isRouteMissing(error)) {
-          return endpointNotInThisBuild('dashboard document').toErr();
-        }
         return new DesktopCommandExecutionError(error).toErr();
       default: {
         const _: never = type;
@@ -356,14 +343,6 @@ async function readDatasourceXml({
     session,
     extra,
     callback: async (executor, _signal, read, resolvedSession) => {
-      const apiVersion = executor.desktopApiVersion;
-      if (
-        apiVersion !== undefined &&
-        !apiVersionAtLeast(apiVersion, DATASOURCE_DOCUMENT_MIN_API_VERSION)
-      ) {
-        return endpointNotInThisBuild('datasource document').toErr();
-      }
-
       const list = await read(
         'workbook datasources',
         async (executor, signal) => await executor.listWorkbookDatasources(signal),

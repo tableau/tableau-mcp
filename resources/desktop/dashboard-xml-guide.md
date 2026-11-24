@@ -35,10 +35,11 @@ A Tableau dashboard consists of zones that contain worksheets, text, images, or 
 ```
 
 NOTE: Worksheet view registration belongs to the dashboard window, not the dashboard fragment.
-Desktop API 0.2.22 and newer repairs registration for submitted worksheet zones during dashboard
-apply. See "Critical: Viewpoints" below for older-build safeguards.
+Dashboard apply repairs registration for submitted worksheet zones. See "Critical: Viewpoints"
+below.
 
-NOTE: A `<datasources>` entry in the dashboard must copy the workbook's own entry (same `name` and `caption`), or leave the block out and Tableau adds it; any other entry is refused.
+NOTE: A `<datasources>` entry in the dashboard must copy the workbook's own entry (same `name` and
+`caption`), or leave the block out and Tableau adds it; any other entry is refused.
 
 ## Key Concepts
 
@@ -206,7 +207,8 @@ it. A missing visual document indicates dashboard-window registration, not works
 3. **Positions must add up**: x + w should not exceed parent width, y + h should not exceed parent
    height
 4. **Keep UUIDs**: Don't change existing `<simple-id uuid="..."/>` unless creating new dashboards
-5. **Zone IDs**: Every zone needs a unique `id`; on an existing dashboard keep each zone's id with its worksheet or content, and give a new zone an id no other zone uses
+5. **Zone IDs**: Every zone needs a unique `id`; on an existing dashboard keep each zone's id with
+   its worksheet or content, and give a new zone an id no other zone uses
 6. **Worksheet zones**: To reference a worksheet, use the `name` attribute directly on the zone
    element (NOT a child `<zone-pane>` element)
 7. **Zone styling**: Worksheet zones should include `<zone-style>` with border and margin formatting
@@ -222,8 +224,7 @@ it. A missing visual document indicates dashboard-window registration, not works
   formats
 - **Worksheet content may be blank**: Placement does not require marks or fields.
 - **View registration is separate**: Every referenced worksheet needs a corresponding dashboard
-  window view. Desktop API 0.2.22 and newer repairs missing registrations for submitted zones. On
-  older or unknown versions, register the worksheets in Desktop before applying the layout.
+  window view. Dashboard apply repairs missing registrations for submitted zones.
 
 ## Critical: Viewpoints
 
@@ -260,23 +261,19 @@ Example: If your dashboard has zones with `name="Sheet 1"` and `name="Sheet 2"`,
 </window>
 ```
 
-The dashboard-only endpoint repairs missing view registrations for submitted worksheet zones on
-Desktop API 0.2.22 and newer, including blank worksheets. MCP verifies repaired registration in
-readback before reporting success. Existing viewpoint settings are preserved. Extra requested
-worksheet names outside the submitted zones must already be registered, even on supported builds.
-
-On older or unknown API versions, missing registration is blocked before dispatch. Add the
-worksheets to the dashboard in Desktop, then re-read the dashboard before retrying. Do not populate
-a blank worksheet, change its zone type, or replace the whole workbook as a workaround.
+The dashboard-only endpoint repairs missing view registrations for submitted worksheet zones,
+including blank worksheets. MCP verifies repaired registration in readback before reporting success.
+Existing viewpoint settings are preserved. Extra requested worksheet names outside the submitted
+zones must already be registered; add them to the dashboard in Desktop, then re-read the dashboard
+before retrying. Do not populate a blank worksheet, change its zone type, or replace the whole
+workbook as a workaround.
 
 ## Workflow
 
 1. Confirm the dashboard and referenced worksheets exist in the open workbook.
-2. Check the discovered Desktop API version. On older or unknown versions, add any unregistered
-   worksheets to the dashboard in Desktop first, without changing their content.
-3. Use `get-xml` with `kind=dashboard` to read the current dashboard fragment.
-4. Edit the fragment's zones, retaining the dashboard identity and valid worksheet zone types.
-5. Use `apply-dashboard` for the surgical dashboard-only write, then inspect readback.
+2. Use `get-xml` with `kind=dashboard` to read the current dashboard fragment.
+3. Edit the fragment's zones, retaining the dashboard identity and valid worksheet zone types.
+4. Use `apply-dashboard` for the surgical dashboard-only write, then inspect readback.
 
 The apply path reads a locked live snapshot for registration checks, pins the Desktop instance, and
 checks cached source drift. It never falls back to a worksheet or whole-workbook write.

@@ -84,7 +84,7 @@ describe('removeFieldTool', () => {
     // The edit buffer keys on the sheet's simple-id — the resolver lists the sheet to map
     // "Sheet 1" to that id, so the sticky-buffer tests exercise the id path, not the fallback.
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'sheet-1-uuid', name: 'Sheet 1' }] }),
+      Ok({ count: 1, worksheets: [{ id: 'sheet-1-uuid', name: 'Sheet 1', hidden: false }] }),
     );
   });
 
@@ -620,35 +620,6 @@ describe('removeFieldTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Could not resolve a stable id');
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
-    expect(writeFileSync).not.toHaveBeenCalled();
-  });
-
-  it('uses in-profile recovery guidance when the worksheet endpoint is absent', async () => {
-    const routeMissingErr = {
-      type: 'execute-command-error' as const,
-      error: {
-        type: 'command-failed' as const,
-        error: {
-          code: 'not-found',
-          message: 'No route matches GET /api/v1/worksheets/sheet-1/document',
-          recoverable: false,
-        },
-      },
-    };
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(routeMissingErr));
-    vi.mocked(getWorksheetXmlModule.isRouteMissing).mockReturnValue(true);
-
-    const result = await getResult({
-      worksheetName: 'Sheet 1',
-      target: 'rows',
-      columnRef: COLUMN_REF,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('get-sheets');
-    expect(result.content[0].text).toContain('retry');
-    expect(result.content[0].text).not.toContain('get-app-info');
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 

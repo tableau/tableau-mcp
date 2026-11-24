@@ -627,34 +627,6 @@ describe('listAvailableFieldsTool', () => {
       );
     },
   );
-
-  it('identifies a Desktop build without workbook datasource metadata', async () => {
-    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
-    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
-    const listWorkbookDatasources = vi.fn().mockResolvedValue(
-      new Err({
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'No route matches GET /v0/workbook/datasources' },
-      }),
-    );
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue({ listWorkbookDatasources } as any),
-    };
-
-    const result = await getResult({
-      session: SESSION,
-      verbosity: 'slim',
-      hasLuid: true,
-      extra,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      'does not serve the workbook datasources endpoint yet',
-    );
-  });
 });
 
 function mockLiveWorkbookDatasourceMetadata(

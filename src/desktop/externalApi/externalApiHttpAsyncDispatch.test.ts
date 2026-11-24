@@ -19,7 +19,7 @@ const makeInstance = (baseUrl: string, token = 'valid-token'): ExternalApiInstan
   token,
   pid: 4321,
   instanceId: 'inst-async',
-  apiVersion: '0.2.0',
+  apiVersion: '0.2.34',
 });
 
 const accepted202 = (operationId: string): MockOverride => ({

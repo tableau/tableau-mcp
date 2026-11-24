@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { Config } from '../../../../config.desktop.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -75,7 +75,6 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     });
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument,
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
@@ -92,12 +91,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
       getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
         Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
       ),
-      // Older Desktop without the per-sheet route: readback falls back to the workbook document.
-      getWorksheetDocument: vi.fn(async () =>
-        Err({
-          type: 'command-failed' as const,
-          error: { code: 'not-found', message: 'No route matches /worksheets' },
-        }),
+      getWorksheetDocument: vi.fn(async (id: string) =>
+        Ok({ xml: extractSheetXml(liveXml, id.replace(/^id-/, '')) ?? '' }),
       ),
       getWorksheetSummaryData: vi.fn(async (_id: string, options: { maxRows: number }) =>
         Ok({
@@ -179,7 +174,6 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
     let liveXml = workbook;
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument: vi.fn(async (xml: string) => {
         liveXml = xml;
         return Ok({ command_id: 'apply', status: 'completed', submitted_at: '', result: {} });
@@ -199,11 +193,8 @@ describe('bind-template offered sorted-bar replacement (real binder + injector)'
       getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
         Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
       ),
-      getWorksheetDocument: vi.fn(async () =>
-        Err({
-          type: 'command-failed' as const,
-          error: { code: 'not-found', message: 'No route matches /worksheets' },
-        }),
+      getWorksheetDocument: vi.fn(async (id: string) =>
+        Ok({ xml: extractSheetXml(liveXml, id.replace(/^id-/, '')) ?? '' }),
       ),
       getWorksheetSummaryData: vi.fn(async (_id: string, options: { maxRows: number }) =>
         Ok({

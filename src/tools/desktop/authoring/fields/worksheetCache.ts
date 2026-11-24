@@ -5,7 +5,7 @@ import { DesktopCache } from '../../../../desktop/cache.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { writeRedactedXmlCacheFile } from '../../../../desktop/limits/redactedXmlCache.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
-import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
+import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   DesktopCommandExecutionError,
@@ -120,17 +120,6 @@ export async function fetchAndCacheWorksheet({
       case 'get-worksheet-xml-error':
         return Err(new GetWorksheetXmlFailedError(error));
       case 'execute-command-error':
-        if (isRouteMissing(error)) {
-          return Err(
-            new McpToolError({
-              type: 'endpoint-not-in-this-build',
-              message:
-                'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
-                'Use get-sheets to confirm the target sheet is visible, then retry on a Desktop build that serves worksheet documents.',
-              statusCode: 404,
-            }),
-          );
-        }
         return Err(new DesktopCommandExecutionError(error));
       default: {
         const _: never = type;

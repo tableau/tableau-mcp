@@ -14,7 +14,6 @@ describe('used-field validity verification', () => {
   it('propagates a session-fatal diagnostics read rather than reporting validation unknown', async () => {
     const executor = makeExecutorMock({
       desktopInstanceId: 'instance',
-      desktopApiVersion: '0.2.16',
       getWorksheetDiagnostics: vi.fn().mockResolvedValue(
         Err({
           type: 'command-failed',
@@ -85,15 +84,13 @@ describe('used-field validity verification', () => {
     const report = mergeUsedFieldValidityVerification(structuralWarning, {
       status: 'unknown',
       worksheetId: 'sheet-1',
-      reason: 'unsupported-api',
-      message: 'Field verification requires External Client API 0.2.16 or newer.',
+      reason: 'diagnostics-unavailable',
+      message: 'Field verification was unavailable.',
     });
 
     expect(report.status).toBe('skipped');
     expect(report.message).toContain(structuralWarning.message);
-    expect(report.message).toContain(
-      'Field verification requires External Client API 0.2.16 or newer.',
-    );
+    expect(report.message).toContain('Field verification was unavailable.');
     expect(report.message).toContain(scopeNote);
     expect(report.message).not.toContain('found no invalid used fields');
     expect(report.findings).toEqual([
@@ -101,7 +98,7 @@ describe('used-field validity verification', () => {
       expect.objectContaining({
         severity: 'warning',
         source: 'used-field-validity',
-        reason: 'unsupported-api',
+        reason: 'diagnostics-unavailable',
       }),
     ]);
     expect(
@@ -187,7 +184,6 @@ describe('used-field validity verification', () => {
   it('returns unknown instead of throwing when the best-effort post-check throws', async () => {
     const executor = {
       desktopInstanceId: 'instance-1',
-      desktopApiVersion: '0.2.16',
       getWorksheetDiagnostics: vi.fn().mockRejectedValue(new Error('discovery failed')),
     } as unknown as ExternalApiToolExecutor;
 
@@ -208,7 +204,6 @@ describe('used-field validity verification', () => {
   it('returns unknown when Desktop responds for a different worksheet id', async () => {
     const executor = {
       desktopInstanceId: 'instance-1',
-      desktopApiVersion: '0.2.16',
       getWorksheetDiagnostics: vi.fn().mockResolvedValue(
         Ok({
           worksheets: [{ worksheetId: 'wrong-sheet', status: 'complete', invalidFields: [] }],
@@ -234,7 +229,6 @@ describe('used-field validity verification', () => {
     const getWorksheetDiagnostics = vi.fn();
     const executor = {
       desktopInstanceId: 'instance-1',
-      desktopApiVersion: '0.2.16',
       getWorksheetDiagnostics,
     } as unknown as ExternalApiToolExecutor;
 
@@ -274,7 +268,6 @@ describe('used-field validity verification', () => {
   it('preserves definite invalid fields from an incomplete diagnostics record', async () => {
     const executor = {
       desktopInstanceId: 'instance-1',
-      desktopApiVersion: '0.2.16',
       getWorksheetDiagnostics: vi.fn(),
     } as unknown as ExternalApiToolExecutor;
 
@@ -311,11 +304,10 @@ describe('used-field validity verification', () => {
     });
   });
 
-  it('reports a replaced Desktop instance before an older API version', async () => {
+  it('reports a replaced Desktop instance', async () => {
     const getWorksheetDiagnostics = vi.fn();
     const executor = {
       desktopInstanceId: 'instance-replacement',
-      desktopApiVersion: '0.2.15',
       getWorksheetDiagnostics,
     } as unknown as ExternalApiToolExecutor;
 
@@ -337,7 +329,6 @@ describe('used-field validity verification', () => {
   it('distinguishes missing Desktop identity from a compatible instance', async () => {
     const getWorksheetDiagnostics = vi.fn();
     const executor = {
-      desktopApiVersion: '0.2.16',
       getWorksheetDiagnostics,
     } as unknown as ExternalApiToolExecutor;
 

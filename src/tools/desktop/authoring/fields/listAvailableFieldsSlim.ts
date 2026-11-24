@@ -107,8 +107,8 @@ export function filterListAvailableFieldsSlimByLuid({
   const datasources: DatasourceFieldCandidateGroup[] = [];
   let matchedWorkbookIdentity = false;
   // Workbook datasources whose identity matched a field group but that carried no LUID.
-  // Kept distinct from a total identity miss so installer troubleshooting can tell a
-  // Desktop/MCP contract-version lag (matched, but no LUID field) from an empty workbook.
+  // Kept distinct from a total identity miss so the error can tell unpublished datasources
+  // (matched, but no LUID) from an empty workbook.
   const matchedWithoutLuid = new Set<string>();
 
   for (const group of result.datasources) {
@@ -174,8 +174,8 @@ export function filterListAvailableFieldsSlimByLuid({
     return new ArgsValidationError(
       [
         `Matched workbook datasource(s) [${[...matchedWithoutLuid].join(', ')}] but none carried a LUID.`,
-        'This usually means the Desktop/MCP build predates the workbook-datasource LUID contract,',
-        'not that the workbook has no eligible fields. Update Tableau Desktop / the MCP server.',
+        'Only published datasources carry a LUID: embedded, federated and Parameters datasources do not,',
+        'nor do datasources whose hosting site Tableau Desktop is not signed in to.',
       ].join(' '),
     ).toErr();
   }

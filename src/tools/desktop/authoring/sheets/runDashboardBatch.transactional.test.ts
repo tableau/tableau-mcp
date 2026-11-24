@@ -152,7 +152,7 @@ describe('run-dashboard-batch transactional apply', () => {
   });
 
   it('hides the Start Page before activating the built dashboard', async () => {
-    const harness = statefulExecutor({ desktopApiVersion: '0.2.11' });
+    const harness = statefulExecutor();
 
     const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
 
@@ -453,16 +453,6 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(harness.deletes).toHaveLength(0);
       expect(harness.posts).toHaveLength(0);
       expect(harness.current()).toBe(BASELINE);
-    });
-
-    it('refuses retry-safe, with no apply, when the delete route is missing', async () => {
-      const harness = statefulExecutor({ deleteRouteMissing: true });
-
-      const result = await callBatch(artifactStore([]), harness.executor, [], true);
-
-      expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
-      expect(bodyOf(result).steps.at(-1).stage).toBe('deleteRouteMissing');
-      expect(harness.posts).toHaveLength(0);
     });
 
     it('refuses retry-safe before any dispatch when the dashboard has no id', async () => {
@@ -1247,20 +1237,6 @@ describe('run-dashboard-batch transactional apply', () => {
         expect(outcome).toBe('refused');
       });
 
-      it('deleteRouteMissing: retry-safe refusal text; the fake dispatched, so the outcome is failed', async () => {
-        const harness = statefulExecutor({ deleteRouteMissing: true });
-
-        const { body, outcome } = await outcomeOf(harness);
-
-        expect(body).toEqual(
-          refusedAt(
-            'deleteRouteMissing',
-            'This Desktop build cannot delete a dashboard natively, so the dashboard cannot be replaced. Nothing was changed.',
-          ),
-        );
-        expect(outcome).toBe('failed');
-      });
-
       it('success warnings: delete warnings first, then the empty sheet, then lost actions', async () => {
         const harness = statefulExecutor({
           initialXml: WITH_ACTION,
@@ -1319,7 +1295,6 @@ function statefulExecutor({
   failAfterDispatchPost = 0,
   dropActionsOnRemoval = false,
   deleteMode = 'remove',
-  deleteRouteMissing = false,
   deleteFails = false,
   deleteThrows = false,
   readErrorAtCall,
@@ -1331,7 +1306,6 @@ function statefulExecutor({
   readbackTransform,
   staleReadbackCount = 0,
   afterApplyDispatch,
-  desktopApiVersion,
 }: {
   initialXml?: string;
   guardedReadXml?: string;
@@ -1339,7 +1313,6 @@ function statefulExecutor({
   failAfterDispatchPost?: number;
   dropActionsOnRemoval?: boolean;
   deleteMode?: 'remove' | 'hide' | 'window-only';
-  deleteRouteMissing?: boolean;
   deleteFails?: boolean;
   deleteThrows?: boolean;
   readErrorAtCall?: number;
@@ -1351,7 +1324,6 @@ function statefulExecutor({
   readbackTransform?: (xml: string) => string;
   staleReadbackCount?: number;
   afterApplyDispatch?: () => void;
-  desktopApiVersion?: string;
 } = {}): {
   executor: ExternalApiToolExecutor;
   posts: string[];
@@ -1404,14 +1376,6 @@ function statefulExecutor({
     ),
     deleteSheet: vi.fn(
       async (ref: unknown, _signal: AbortSignal, options?: ApplyWorkbookDocumentOptions) => {
-        if (deleteRouteMissing) {
-          // The real applyDocument dispatches before the HTTP call, so a 404 comes back dispatched.
-          options?.onDispatch?.();
-          return Err({
-            type: 'command-failed' as const,
-            error: { code: 'not-found', message: 'No route matches' },
-          });
-        }
         if (
           options?.expectedInstanceId !== undefined &&
           options.expectedInstanceId !== instanceAtDelete
@@ -1466,7 +1430,6 @@ function statefulExecutor({
     goToSheet: vi.fn(async () =>
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
     ),
-    desktopApiVersion,
     setStartPageVisibility: vi.fn(async (isStartPageVisible: boolean) =>
       Ok({ isStartPageVisible }),
     ),

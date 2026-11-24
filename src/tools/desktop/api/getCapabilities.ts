@@ -16,7 +16,6 @@ export const getCapabilitiesTool = (server: DesktopMcpServer): DesktopTool<typeo
   const tool = new DesktopTool({
     server,
     name: 'get-capabilities',
-    minApiVersion: '0.2.25',
     title,
     description:
       'Return the External Client API capability matrix: for each operation id, whether it requires a Tableau Server connection (requiresServer).',
@@ -39,7 +38,6 @@ export const getCapabilitiesTool = (server: DesktopMcpServer): DesktopTool<typeo
               await call(
                 'Capabilities',
                 async (executor, signal) => await executor.getCapabilities(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

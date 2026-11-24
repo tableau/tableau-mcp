@@ -304,7 +304,6 @@ function document(xml: string): WorkbookDocument {
 
 function successfulExecutor(
   options: {
-    apiVersion?: string;
     distinctSeeds?: boolean;
     sourceWorksheetXml?: string;
     unrelatedAction?: boolean;
@@ -337,7 +336,6 @@ function successfulExecutor(
     .mockResolvedValue(Ok(underlyingRows(options.distinctSeeds ?? true)));
   const workbookOptions = { unrelatedAction: options.unrelatedAction };
   const executor = makeExecutorMock({
-    desktopApiVersion: options.apiVersion,
     getWorksheetDocument,
     getWorkbookDocument: vi
       .fn()
@@ -491,7 +489,7 @@ describe('applyRoundedStackedBar', () => {
     expect(harness.getWorksheetSummaryData).toHaveBeenNthCalledWith(
       1,
       WORKSHEET_ID,
-      { maxRows: 1000, ignoreAliases: true, ignoreSelection: true },
+      { maxRows: 1000, ignoreSelection: true },
       SIGNAL,
     );
     expect(harness.getWorksheetUnderlyingData).toHaveBeenCalledWith(
@@ -499,74 +497,14 @@ describe('applyRoundedStackedBar', () => {
       'orders',
       {
         maxRows: 10_000,
-        ignoreAliases: true,
         ignoreSelection: true,
         columnsToIncludeByFieldName: [
-          '[Friendly Sales].[Category]',
-          '[Friendly Sales].[Segment]',
-          '[Friendly Sales].[Profit]',
-          '[Friendly Sales].[Region]',
+          '[Sales].[Category]',
+          '[Sales].[Segment]',
+          '[Sales].[Profit]',
+          '[Sales].[Region]',
         ],
       },
-      SIGNAL,
-    );
-  });
-
-  it.each(['0.2.25', '0.3.0'])(
-    'requests underlying columns by datasource internal name on API %s',
-    async (apiVersion) => {
-      const harness = successfulExecutor({ apiVersion });
-
-      const outcome = await applyRoundedStackedBar({
-        sourceWorksheetXml: sourceWorksheet(),
-        intendedWorksheetXml: harness.planned.xml,
-        contract: harness.planned.semanticContract,
-        focus: NO_FOCUS,
-        executor: harness.executor,
-        signal: SIGNAL,
-      });
-
-      expect(outcome, JSON.stringify(outcome)).toMatchObject({ state: 'applied' });
-      expect(harness.getWorksheetUnderlyingData).toHaveBeenCalledWith(
-        WORKSHEET_ID,
-        'orders',
-        expect.objectContaining({
-          columnsToIncludeByFieldName: [
-            '[Sales].[Category]',
-            '[Sales].[Segment]',
-            '[Sales].[Profit]',
-            '[Sales].[Region]',
-          ],
-        }),
-        SIGNAL,
-      );
-    },
-  );
-
-  it('requests underlying columns by datasource caption on API 0.2.24', async () => {
-    const harness = successfulExecutor({ apiVersion: '0.2.24' });
-
-    const outcome = await applyRoundedStackedBar({
-      sourceWorksheetXml: sourceWorksheet(),
-      intendedWorksheetXml: harness.planned.xml,
-      contract: harness.planned.semanticContract,
-      focus: NO_FOCUS,
-      executor: harness.executor,
-      signal: SIGNAL,
-    });
-
-    expect(outcome, JSON.stringify(outcome)).toMatchObject({ state: 'applied' });
-    expect(harness.getWorksheetUnderlyingData).toHaveBeenCalledWith(
-      WORKSHEET_ID,
-      'orders',
-      expect.objectContaining({
-        columnsToIncludeByFieldName: [
-          '[Friendly Sales].[Category]',
-          '[Friendly Sales].[Segment]',
-          '[Friendly Sales].[Profit]',
-          '[Friendly Sales].[Region]',
-        ],
-      }),
       SIGNAL,
     );
   });
@@ -592,11 +530,7 @@ describe('applyRoundedStackedBar', () => {
       WORKSHEET_ID,
       'orders',
       expect.objectContaining({
-        columnsToIncludeByFieldName: [
-          '[Friendly Sales].[Category]',
-          '[Friendly Sales].[Profit]',
-          '[Friendly Sales].[Region]',
-        ],
+        columnsToIncludeByFieldName: ['[Sales].[Category]', '[Sales].[Profit]', '[Sales].[Region]'],
       }),
       SIGNAL,
     );
@@ -640,10 +574,10 @@ describe('applyRoundedStackedBar', () => {
       'orders',
       expect.objectContaining({
         columnsToIncludeByFieldName: [
-          '[Friendly Sales].[Category]',
-          '[Friendly Sales].[Segment]',
-          '[Friendly Sales].[Profit]',
-          '[Friendly Sales].[Region]',
+          '[Sales].[Category]',
+          '[Sales].[Segment]',
+          '[Sales].[Profit]',
+          '[Sales].[Region]',
         ],
       }),
       SIGNAL,
@@ -1048,22 +982,9 @@ describe('applyRoundedStackedBar', () => {
     expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {
-      label: 'route-missing',
-      worksheets: Err({
-        type: 'command-failed' as const,
-        error: {
-          code: 'not-found',
-          message: 'No route matches /v0/workbook/worksheets',
-          recoverable: false,
-        },
-      }),
-    },
-    { label: 'sheet-absent', worksheets: Ok({ worksheets: [] }) },
-  ])('keeps $label before mutation', async ({ label, worksheets }) => {
+  it('keeps sheet-absent before mutation', async () => {
     const harness = successfulExecutor();
-    vi.mocked(harness.executor.listWorksheets).mockResolvedValue(worksheets);
+    vi.mocked(harness.executor.listWorksheets).mockResolvedValue(Ok({ worksheets: [] }));
 
     const outcome = await applyRoundedStackedBar({
       sourceWorksheetXml: sourceWorksheet(),
@@ -1080,7 +1001,7 @@ describe('applyRoundedStackedBar', () => {
       retrySafe: true,
       stage: 'apply-preflight',
     });
-    expect(outcome.state !== 'applied' && outcome.message).toContain(label);
+    expect(outcome.state !== 'applied' && outcome.message).toContain('sheet-absent');
     expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
   });
 

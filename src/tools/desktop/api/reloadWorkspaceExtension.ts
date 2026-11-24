@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { WORKSPACE_EXTENSIONS_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -24,7 +23,6 @@ export const getReloadWorkspaceExtensionTool = (
   const reloadWorkspaceExtensionTool = new DesktopTool({
     server,
     name: 'reload-workspace-extension',
-    minApiVersion: WORKSPACE_EXTENSIONS_MIN_API_VERSION,
     title,
     description:
       'Reload a workspace extension from the repository Packages folder so a new or changed ' +

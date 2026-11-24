@@ -32,9 +32,7 @@ export const dashboardWorksheetZoneTypeRule: ValidationRule = {
         'Remove type-v2="worksheet" and keep name="Worksheet Name" on the zone. ' +
         'If Tableau reports a missing visual representation, inspect worksheet view registration ' +
         'in the dashboard window, not marks or fields: blank worksheets are valid. ' +
-        'Desktop API 0.2.22 and newer registers submitted worksheet zones through dashboard apply; ' +
-        'on older or unknown versions, add the worksheets to the dashboard in Desktop and re-read ' +
-        'before retrying. Changing the zone type does not fix a missing visual doc.',
+        'Dashboard apply registers submitted worksheet zones. Changing the zone type does not fix a missing visual doc.',
     }));
   },
 };

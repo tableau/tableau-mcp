@@ -16,7 +16,6 @@ export const getDesktopStateTool = (server: DesktopMcpServer): DesktopTool<typeo
   const tool = new DesktopTool({
     server,
     name: 'get-desktop-state',
-    minApiVersion: '0.2.14',
     title,
     description:
       'Report whether Tableau Desktop is idle or blocked, the strongest observed blocking cause, all active native activities, UI snapshot completeness, and visible modal or progress window content. When a modal needs action, obtain fresh exact identity and actions from get-active-dialogs before considering invoke-dialog-action.',
@@ -39,7 +38,6 @@ export const getDesktopStateTool = (server: DesktopMcpServer): DesktopTool<typeo
               await call(
                 'Desktop state',
                 async (executor, signal) => await executor.getDesktopState(signal),
-                { stableNotFoundMeansRouteMissing: true },
               ),
           }),
       });

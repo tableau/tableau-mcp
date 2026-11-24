@@ -108,11 +108,9 @@ in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe
 registrations in both empty and populated dashboards, preserving concurrent Desktop edits, and
 repairing unsafe zone types already present in the live dashboard. Known crash hazards cannot be
 grandfathered from the live baseline. Existing-dashboard edits use the surgical dashboard endpoint.
-Desktop builds advertising External Client API 0.2.22 or later create missing worksheet views
-during surgical dashboard apply. The MCP planner permits automatic completion on those builds,
-after every worksheet has been populated, and apply verifies the registrations in live readback.
-Older or unknown API versions still require manual registration in Desktop. A whole-workbook
-replacement is never a fallback for missing registrations.
+Desktop creates missing worksheet views during surgical dashboard apply. The MCP planner permits
+automatic completion after every worksheet has been populated, and apply verifies the registrations
+in live readback. A whole-workbook replacement is never a fallback for missing registrations.
 
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
@@ -175,8 +173,8 @@ When `true`, enables evals that can invoke the content-mutating Tableau Prep flo
 are skipped by default because the eval harness executes real MCP tool calls against the configured
 Tableau site. Only enable them on a disposable site.
 
-This is a test-safety gate, separate from the product feature gates. Mutating flow evals also require
-`FLOW_WRITE_TOOLS_ENABLED=true`.
+This is a test-safety gate, separate from the product feature gates. Mutating flow evals also
+require `FLOW_WRITE_TOOLS_ENABLED=true`.
 
 <hr />
 
