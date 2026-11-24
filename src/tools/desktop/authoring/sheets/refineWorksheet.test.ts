@@ -679,7 +679,7 @@ describe('refineWorksheetTool — mark_type', () => {
           severity: 'warning',
           source: 'used-field-validity',
           message: 'Field verification was unavailable.',
-          reason: 'unsupported-api',
+          reason: 'diagnostics-unavailable',
         },
       ],
     };

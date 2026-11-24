@@ -106,11 +106,7 @@ export const getWorksheetUnderlyingDataTool = (
                 if (document.isErr()) {
                   return document;
                 }
-                const qualified = qualifyColumnFields(
-                  document.value.xml,
-                  columns,
-                  executor.desktopApiVersion,
-                );
+                const qualified = qualifyColumnFields(document.value.xml, columns);
                 if (!qualified.ok) {
                   return new ArgsValidationError(
                     `Cannot restrict columns: ${qualified.reason}.`,

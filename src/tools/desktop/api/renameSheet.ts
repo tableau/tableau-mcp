@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
@@ -53,9 +52,6 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
             const executor = await extra.getExecutor(sessionResult.value);
             const result = await executor.renameSheet(ref, name, extra.signal);
             if (result.isErr()) {
-              if (isRouteMissing(result.error)) {
-                return endpointNotInThisBuild('rename-sheet').toErr();
-              }
               return new DesktopCommandExecutionError(result.error).toErr();
             }
 

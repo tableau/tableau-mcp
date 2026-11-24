@@ -2,6 +2,7 @@ import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcont
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
+import { apiVersionAtLeast, MIN_SUPPORTED_API_VERSION } from './desktop/externalApi/apiVersion.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
@@ -22,13 +23,14 @@ import {
   resolveConnectedApiVersion,
   selectToolsForProfile,
   stripEmptySchemaNoise,
+  warnIfUnsupportedApiVersion,
   withoutUnservedExpertiseTools,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
-import { desktopToolFactories } from './tools/desktop/tools.js';
+import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
 import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
@@ -709,7 +711,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   );
 });
 
-describe('API-version tool gate (interim minApiVersion floor)', () => {
+describe('API-version tool gate', () => {
   const instance = (pid: number, apiVersion?: string): ExternalApiInstance => ({
     baseUrl: `http://127.0.0.1:${pid}`,
     token: 't',
@@ -785,72 +787,41 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     });
   });
 
-  it('the version-gated tools declare the expected floors', () => {
-    const floors = new Map(
-      desktopToolFactories
-        .map((factory) => factory(new DesktopMcpServer()))
-        .map((tool) => [tool.name, tool.minApiVersion]),
-    );
-    expect(floors.get('capture-window-screenshot')).toBe('0.2.28');
-    expect(floors.get('set-auto-updates-paused')).toBe('0.2.5');
-    expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
-    expect(floors.get('open-file')).toBe('0.2.6');
-    expect(floors.get('list-saved-datasources')).toBe('0.2.6');
-    expect(floors.get('save-workbook')).toBe('0.2.6');
-    expect(floors.get('add-worksheet')).toBe('0.2.6');
-    expect(floors.get('add-dashboard')).toBe('0.2.6');
-    expect(floors.get('add-storyboard')).toBe('0.2.6');
-    expect(floors.get('export-storyboard-image')).toBe('0.2.7');
-    expect(floors.get('workbook-export-as')).toBe('0.2.7');
-    expect(floors.get('close-workbook')).toBe('0.2.32');
-    expect(floors.get('get-workspace-extensions')).toBe('0.2.34');
-    expect(floors.get('reload-workspace-extension')).toBe('0.2.34');
-    expect(floors.get('refresh-datasource')).toBe('0.2.8');
-    expect(floors.get('show-me')).toBe('0.2.11');
-    expect(floors.get('get-active-dialogs')).toBe('0.2.26');
-    expect(floors.get('invoke-dialog-action')).toBe('0.2.26');
-    expect(floors.get('get-desktop-state')).toBe('0.2.14');
-    expect(floors.get('get-diagnostics')).toBe('0.2.16');
-    expect(floors.get('get-datasources')).toBeUndefined();
-    expect(floors.get('apply-datasource')).toBe('0.2.10');
-    expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
-    expect(floors.get('get-show-me-options')).toBe('0.2.18');
-    expect(floors.get('set-data-source-page-active')).toBe('0.2.25');
-    expect(floors.get('get-capabilities')).toBe('0.2.25');
-    expect(floors.get('reload-extensions')).toBe('0.2.25');
-    expect(floors.get('validate-calculated-field')).toBe('0.2.30');
-    expect(floors.get('author-calc')).toBe('0.2.30');
-    expect(floors.get('list-datasource-logical-tables')).toBe('0.2.31');
-    expect(floors.get('get-datasource-underlying-data')).toBe('0.2.31');
-  });
+  describe('warnIfUnsupportedApiVersion', () => {
+    it.each(['0.2.33', '0.1.0'])('warns for a Desktop that serves %s', (version) => {
+      const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+      warnIfUnsupportedApiVersion(version);
+      expect(logSpy).toHaveBeenCalledOnce();
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining(`v${MIN_SUPPORTED_API_VERSION}`),
+        }),
+      );
+    });
 
-  it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
-    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
-    const registered = tools.filter((tool) => tool.name === 'get-diagnostics');
-
-    expect(registered).toHaveLength(1);
-    expect(filterToolsByApiVersion(tools, '0.2.15').map((tool) => tool.name)).not.toContain(
-      'get-diagnostics',
-    );
-    expect(filterToolsByApiVersion(tools, '0.2.16').map((tool) => tool.name)).toContain(
-      'get-diagnostics',
+    it.each([MIN_SUPPORTED_API_VERSION, '0.2.35', '0.3.0', undefined])(
+      'stays quiet for %s',
+      (version) => {
+        const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+        warnIfUnsupportedApiVersion(version);
+        expect(logSpy).not.toHaveBeenCalled();
+      },
     );
   });
 
-  it('gates apply-datasource at 0.2.10, not get-datasources or get-xml, and fails open for an unknown version', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
+  it('only sets a tool floor that is newer than the oldest supported version', () => {
+    const tools = [...desktopToolFactories, ...episodeToolFactories].map((factory) =>
+      factory(new DesktopMcpServer()),
     );
-    const at209 = filterToolsByApiVersion(profileTools, '0.2.9').map((tool) => tool.name);
-    const at210 = filterToolsByApiVersion(profileTools, '0.2.10').map((tool) => tool.name);
-    const unknown = filterToolsByApiVersion(profileTools, undefined);
-
-    expect(at209).not.toContain('apply-datasource');
-    expect(at210).toContain('apply-datasource');
-    expect(at209).toContain('get-datasources');
-    expect(at209).toContain('get-xml');
-    expect(unknown).toBe(profileTools);
+    const redundant = tools
+      .filter(
+        (tool) =>
+          tool.minApiVersion !== undefined &&
+          apiVersionAtLeast(MIN_SUPPORTED_API_VERSION, tool.minApiVersion),
+      )
+      .map((tool) => tool.name);
+    expect(redundant).toEqual([]);
   });
 
   it('registers each individual datasource factory exactly once', () => {
@@ -861,131 +832,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
 
     expect(names).toHaveLength(2);
     expect(new Set(names)).toEqual(featureNames);
-  });
-
-  it('gates start-page visibility below External Client API 0.2.11', () => {
-    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
-    const at210 = filterToolsByApiVersion(tools, '0.2.10').map((tool) => tool.name);
-    const at211 = filterToolsByApiVersion(tools, '0.2.11').map((tool) => tool.name);
-
-    expect(at210).not.toContain('set-start-page-visibility');
-    expect(at211).toContain('set-start-page-visibility');
-  });
-
-  it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const gated = filterToolsByApiVersion(profileTools, '0.2.5').map((tool) => tool.name);
-
-    for (const dropped of [
-      'open-file',
-      'list-saved-datasources',
-      'save-workbook',
-      'add-worksheet',
-      'add-dashboard',
-      'add-storyboard',
-    ]) {
-      expect(gated).not.toContain(dropped);
-    }
-    for (const kept of ['set-auto-updates-paused', 'apply-worksheet']) {
-      expect(gated).toContain(kept);
-    }
-  });
-
-  it.each(['full', '', 'dynamic-authoring'])(
-    'keeps worksheet and dashboard image exports while gating the 0.2.7 export routes in TOOL_PROFILE=%j',
-    (profile) => {
-      const profileTools = selectToolsForProfile(
-        desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-        profile,
-      );
-      const at26 = filterToolsByApiVersion(profileTools, '0.2.6').map((tool) => tool.name);
-      const at27 = filterToolsByApiVersion(profileTools, '0.2.7').map((tool) => tool.name);
-
-      for (const route of ['export-storyboard-image', 'workbook-export-as']) {
-        expect(at26).not.toContain(route);
-        expect(at27).toContain(route);
-      }
-      for (const route of ['export-worksheet-image', 'export-dashboard-image']) {
-        expect(at26).toContain(route);
-        expect(at27).toContain(route);
-      }
-    },
-  );
-
-  it('hides Show Me before 0.2.11 and exposes it at its registration floor', () => {
-    const fullTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'full',
-    );
-    expect(filterToolsByApiVersion(fullTools, '0.2.10').map((tool) => tool.name)).not.toContain(
-      'show-me',
-    );
-    expect(filterToolsByApiVersion(fullTools, '0.2.11').map((tool) => tool.name)).toContain(
-      'show-me',
-    );
-  });
-
-  it('a connected 0.2.25 Desktop hides dialog tools and 0.2.26 exposes them', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const at225 = filterToolsByApiVersion(profileTools, '0.2.25').map((tool) => tool.name);
-    const at226 = filterToolsByApiVersion(profileTools, '0.2.26').map((tool) => tool.name);
-
-    for (const name of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
-      expect(at225).not.toContain(name);
-      expect(at226).toContain(name);
-    }
-  });
-
-  it('gates app state at 0.2.14 independently of the dialog protocol', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.13')).not.toContain('get-active-dialogs');
-    expect(namesAt('0.2.13')).not.toContain('invoke-dialog-action');
-    expect(namesAt('0.2.13')).not.toContain('get-desktop-state');
-    expect(namesAt('0.2.14')).toContain('get-desktop-state');
-    expect(namesAt('0.3.0')).toContain('get-desktop-state');
-    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
-    expect(namesAt(undefined)).toContain('get-desktop-state');
-  });
-
-  it('gates refresh-auto-updates at 0.2.13 and fails open for an unknown version', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.12')).not.toContain('refresh-auto-updates');
-    expect(namesAt('0.2.13')).toContain('refresh-auto-updates');
-    expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
-    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
-    expect(namesAt(undefined)).toContain('refresh-auto-updates');
-  });
-
-  it('gates Show Me option discovery at External Client API 0.2.18', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.17')).not.toContain('get-show-me-options');
-    expect(namesAt('0.2.18')).toContain('get-show-me-options');
-    expect(namesAt('0.3.0')).toContain('get-show-me-options');
-    expect(namesAt(undefined)).toContain('get-show-me-options');
   });
 });
 

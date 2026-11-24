@@ -108,7 +108,6 @@ function synchronizeViewpointsInDocument(
   doc: Document,
   dashboardName: string,
   worksheetNames: string[],
-  useNativeViewpointDefaults = false,
 ): boolean {
   const root = doc.documentElement;
   if (!root || root.tagName !== 'workbook') throw new Error('Expected a workbook document.');
@@ -153,11 +152,6 @@ function synchronizeViewpointsInDocument(
     } else {
       const viewpoint = doc.createElement('viewpoint');
       viewpoint.setAttribute('name', name);
-      if (!useNativeViewpointDefaults) {
-        const zoom = doc.createElement('zoom');
-        zoom.setAttribute('type', 'entire-view');
-        viewpoint.appendChild(zoom);
-      }
       viewpoints.appendChild(viewpoint);
     }
   }
@@ -171,7 +165,6 @@ export function composeDashboardWorkbook(
   workbookXml: string,
   dashboardName: string,
   dashboardXml: string,
-  options: { useNativeViewpointDefaults?: boolean } = {},
 ): Result<{ xml: string; worksheetNames: string[] }, ValidationIssue[]> {
   const doc = parse(workbookXml);
   const root = doc.documentElement;
@@ -243,12 +236,7 @@ export function composeDashboardWorkbook(
   }
   if (existing) dashboards.replaceChild(replacement, existing);
   else dashboards.appendChild(replacement);
-  synchronizeViewpointsInDocument(
-    doc,
-    dashboardName,
-    worksheetNames,
-    options.useNativeViewpointDefaults,
-  );
+  synchronizeViewpointsInDocument(doc, dashboardName, worksheetNames);
   return Ok({ xml: new XMLSerializer().serializeToString(doc), worksheetNames });
 }
 

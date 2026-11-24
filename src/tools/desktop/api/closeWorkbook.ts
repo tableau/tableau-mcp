@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
 
-import { WORKBOOK_CLOSE_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -20,7 +19,6 @@ export const getCloseWorkbookTool = (
   const closeWorkbookTool = new DesktopTool({
     server,
     name: 'close-workbook',
-    minApiVersion: WORKBOOK_CLOSE_MIN_API_VERSION,
     title,
     description:
       'Close the open workbook (File > Close). A workbook with no unsaved changes, or an empty ' +

@@ -21,7 +21,6 @@ export const getDiagnosticsTool = (server: DesktopMcpServer): DesktopTool<typeof
   const tool = new DesktopTool({
     server,
     name: 'get-diagnostics',
-    minApiVersion: '0.2.16',
     title: 'Get Workbook Diagnostics',
     description:
       'Inspect the existing workbook before editing. Use diagnostics returned by supported workbook and worksheet document edits instead of a second read for the same result. Static diagnostics do not verify query execution or rendering.',

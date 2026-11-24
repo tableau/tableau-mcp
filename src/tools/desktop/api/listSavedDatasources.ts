@@ -36,7 +36,6 @@ export const getListSavedDatasourcesTool = (
     server,
     name: 'list-saved-datasources',
     // Floor matches open-file, the only way to use this tool's output.
-    minApiVersion: '0.2.6',
     title,
     description:
       "Lists Tableau Desktop's Saved Data Sources (My Tableau Repository, including bundled " +

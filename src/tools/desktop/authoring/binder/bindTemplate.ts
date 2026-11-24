@@ -218,10 +218,7 @@ type AppliedDefault = Pick<
 >;
 
 type CompletionCaveat =
-  | 'unconverted_currency'
-  | 'field_validation_unverified'
-  | 'query_render_unverified'
-  | 'summary_preview_unavailable';
+  'unconverted_currency' | 'query_render_unverified' | 'summary_preview_unavailable';
 
 type CompletionEvidence = {
   version: 2;
@@ -3055,10 +3052,7 @@ async function performAutoApply({
     (finding) =>
       finding.source === 'used-field-validity' && receiptInput.readback?.status === 'skipped',
   );
-  const postApplyUncertain =
-    !readbackRan ||
-    (usedFieldValidityUnknown !== undefined &&
-      usedFieldValidityUnknown.reason !== 'unsupported-api');
+  const postApplyUncertain = !readbackRan || usedFieldValidityUnknown !== undefined;
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
   const pieSliceWarning =
@@ -3115,13 +3109,6 @@ async function performAutoApply({
             : `${receiptText} ${terminalGuidance}`
   }${documentWarnings.length > 0 ? ` ${DESKTOP_WARNINGS_GUIDANCE}${formatDesktopWarnings(documentWarnings)}` : ''}${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const nativeFindings = verificationReport.findings ?? [];
-  const nativeFieldUnverified =
-    verificationReport.ok === true &&
-    verificationReport.status === 'skipped' &&
-    nativeFindings.length === 1 &&
-    nativeFindings[0].severity === 'warning' &&
-    nativeFindings[0].source === 'used-field-validity' &&
-    nativeFindings[0].reason === 'unsupported-api';
   const nativeFieldVerified =
     verificationReport.ok === true &&
     verificationReport.status === 'passed' &&
@@ -3147,7 +3134,7 @@ async function performAutoApply({
     verification?.ok === true &&
     verification.status === 'passed' &&
     verification.findings.length === 0 &&
-    (nativeFieldVerified || nativeFieldUnverified) &&
+    nativeFieldVerified &&
     res.encodings !== undefined &&
     res.encodings.unfilled.length === 0 &&
     (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
@@ -3155,7 +3142,6 @@ async function performAutoApply({
   const completionEligible = completionEligibleBesidesPie && pieSliceWarning === undefined;
   const caveats: CompletionCaveat[] = [];
   if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
-  if (nativeFieldUnverified) caveats.push('field_validation_unverified');
   caveats.push('query_render_unverified');
   if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
   const operationEligibleBesidesPie =
@@ -3175,7 +3161,7 @@ async function performAutoApply({
     verification?.ok === true &&
     verification.status === 'passed' &&
     verification.findings.length === 0 &&
-    (nativeFieldVerified || nativeFieldUnverified);
+    nativeFieldVerified;
   const operationEligible = operationEligibleBesidesPie && pieSliceWarning === undefined;
   const evidenceEligible = completionEligible || operationEligible;
   const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;

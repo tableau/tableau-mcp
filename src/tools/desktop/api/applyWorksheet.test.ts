@@ -91,8 +91,8 @@ describe('applyWorksheetTool', () => {
       {
         severity: 'warning' as const,
         source: 'used-field-validity' as const,
-        message: 'Field verification requires External Client API 0.2.16 or newer.',
-        reason: 'unsupported-api',
+        message: 'Field verification was unavailable.',
+        reason: 'diagnostics-unavailable',
       },
     ],
   };
@@ -116,7 +116,10 @@ describe('applyWorksheetTool', () => {
     vi.mocked(readFileSync).mockReset();
     mockContainedCacheReadFromFs();
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet' }] }),
+      Ok({
+        count: 1,
+        worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet', hidden: false }],
+      }),
     );
   });
 
@@ -239,65 +242,7 @@ describe('applyWorksheetTool', () => {
     ).toBeUndefined();
   });
 
-  it.each<[string, VerificationFinding[]]>([
-    ['passed', []],
-    [
-      'warning',
-      [
-        {
-          severity: 'warning' as const,
-          source: 'readback' as const,
-          message: 'A non-critical formatting node changed.',
-        },
-      ],
-    ],
-  ])(
-    'keeps a structurally %s templatePlan terminal when only native validation is unsupported',
-    async (_structuralStatus, structuralFindings) => {
-      const artifact = templateArtifact('direct-plan');
-      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
-        args.artifactApply!.dispatchState.attempted = true;
-        return Ok({
-          readbackWarnings: [],
-          readbackVerification: {
-            ok: true,
-            status: 'skipped',
-            findings: [
-              ...structuralFindings,
-              {
-                severity: 'warning' as const,
-                source: 'used-field-validity' as const,
-                message: 'Field verification requires External Client API 0.2.16 or newer.',
-                reason: 'unsupported-api',
-              },
-            ],
-          },
-        });
-      });
-
-      const result = await getDirectTemplateToolResult({
-        buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
-        getExecutor: vi.fn().mockResolvedValue({
-          getWorkbookDocument: vi.fn().mockResolvedValue(
-            Ok({
-              xml: '<workbook><worksheets/><windows/></workbook>',
-              instanceId: 'inst-build',
-            }),
-          ),
-        }),
-      });
-
-      expect(result.isError).toBe(false);
-      expect(result.structuredContent).toMatchObject({
-        applied: true,
-        retrySafe: false,
-        verification: { status: 'skipped' },
-        nextAction: { kind: 'done' },
-      });
-    },
-  );
-
-  it('keeps a structurally failed templatePlan failed when native validation is unsupported', async () => {
+  it('keeps a structurally failed templatePlan failed when native validation is unavailable', async () => {
     const artifact = templateArtifact('direct-plan');
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;
@@ -311,8 +256,8 @@ describe('applyWorksheetTool', () => {
             {
               severity: 'warning',
               source: 'used-field-validity',
-              message: 'Field verification requires External Client API 0.2.16 or newer.',
-              reason: 'unsupported-api',
+              message: 'Field verification was unavailable.',
+              reason: 'diagnostics-unavailable',
             },
           ],
         },
@@ -518,7 +463,10 @@ describe('applyWorksheetTool', () => {
     const controller = new AbortController();
     vi.mocked(listWorksheetsModule.listWorksheets).mockImplementation(async ({ signal }) => {
       if (signal.aborted) throw new Error('aborted worksheet lookup');
-      return Ok({ count: 1, worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet' }] });
+      return Ok({
+        count: 1,
+        worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet', hidden: false }],
+      });
     });
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;
@@ -1026,7 +974,7 @@ describe('applyWorksheetTool', () => {
           }),
           expect.objectContaining({
             source: 'used-field-validity',
-            reason: 'unsupported-api',
+            reason: 'diagnostics-unavailable',
           }),
         ]),
       },
@@ -1183,7 +1131,7 @@ describe('applyWorksheetTool', () => {
           }),
           expect.objectContaining({
             source: 'used-field-validity',
-            reason: 'unsupported-api',
+            reason: 'diagnostics-unavailable',
           }),
         ]),
       },
@@ -1579,7 +1527,7 @@ describe('applyWorksheetTool', () => {
   it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1' }] }),
+      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1', hidden: false }] }),
     );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [] }),
@@ -1604,7 +1552,10 @@ describe('applyWorksheetTool', () => {
     // fragment's absent simple-id skipped it, so a later name-only edit resumed the stale buffer.
     const mockXml = '<worksheet name="Old Name"><table></table></worksheet>';
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
-      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live' }] }),
+      Ok({
+        count: 1,
+        worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live', hidden: false }],
+      }),
     );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }),
@@ -1834,7 +1785,10 @@ describe('applyWorksheetTool', () => {
     const controller = new AbortController();
     vi.mocked(listWorksheetsModule.listWorksheets).mockImplementation(async ({ signal }) => {
       if (signal.aborted) throw new Error('aborted worksheet lookup');
-      return Ok({ count: 1, worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet' }] });
+      return Ok({
+        count: 1,
+        worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet', hidden: false }],
+      });
     });
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;

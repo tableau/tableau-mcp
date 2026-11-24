@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -63,13 +62,11 @@ describe('workspace extension tools', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('gates both tools at External API 0.2.34', () => {
+  it('declares the annotations for both tools', () => {
     const server = new DesktopMcpServer();
     const list = getWorkspaceExtensionsTool(server);
     const reload = getReloadWorkspaceExtensionTool(server);
-    expect(list.minApiVersion).toBe('0.2.34');
     expect(list.annotations).toMatchObject({ readOnlyHint: true });
-    expect(reload.minApiVersion).toBe('0.2.34');
     expect(reload.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
   });
 
@@ -106,27 +103,6 @@ describe('workspace extension tools', () => {
     } finally {
       await harness.close();
     }
-  });
-
-  it('reports a missing list route as a Desktop update', async () => {
-    const tool = getWorkspaceExtensionsTool(new DesktopMcpServer());
-    const extra = getMockRequestHandlerExtra();
-    const missing: ExecuteCommandError = {
-      type: 'command-failed',
-      error: {
-        code: 'not-found',
-        message: 'No route matches GET /v0/app/extensions',
-        recoverable: false,
-      },
-    };
-    extra.getExecutor = vi.fn().mockResolvedValue({
-      listWorkspaceExtensions: vi.fn().mockResolvedValue(new Err(missing)),
-    });
-
-    const callback = await Provider.from(tool.callback);
-    const result = await callback({ session: '12345' }, extra);
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result)).toContain('too old');
   });
 
   it('POSTs the encoded :reload route with no body', async () => {
@@ -167,7 +143,6 @@ describe('workspace extension tools', () => {
       expect(result.isError).toBe(true);
       const text = JSON.stringify(result);
       expect(text).toContain('No workspace extension has id missing.');
-      expect(text).not.toContain('too old');
       expect(text).not.toContain('Reloaded');
     } finally {
       await harness.close();
@@ -206,7 +181,6 @@ describe('workspace extension tools', () => {
       expect(result.isError).toBe(true);
       const text = JSON.stringify(result);
       expect(text).toContain(message);
-      expect(text).not.toContain('too old');
       expect(text).not.toContain('Reloaded');
       expect(harness.server.requests.some((r) => r.path === `/v0/operations/${operationId}`)).toBe(
         true,

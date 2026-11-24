@@ -8,7 +8,7 @@ sidebar_position: 7
 <span className="toolAvailability">Available September 2026 and later.</span>
 {/* /availability */}
 
-Reports application information about the %product_name% instance that is currently running, including live UI state. Use it to identify the Desktop build when an endpoint returns 404 as too-new, and to read whether the Start Page is visible, the Data Source page is active, and presentation mode is on. It returns whichever of the following the instance provides: the application version, the build identifier, the edition, the host operating system, and those UI flags.
+Reports application information about the %product_name% instance that is currently running, including live UI state. Use it to identify the Desktop build and to read whether the Start Page is visible, the Data Source page is active, and presentation mode is on. It returns whichever of the following the instance provides: the application version, the build identifier, the edition, the host operating system, and those UI flags.
 
 ## APIs called
 

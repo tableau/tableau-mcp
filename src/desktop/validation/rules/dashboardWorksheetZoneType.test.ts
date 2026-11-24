@@ -22,7 +22,7 @@ describe('dashboard-worksheet-zone-type', () => {
     expect(issues[1].message).toContain('Pipeline by Region');
     expect(issues[0].suggestion).toContain('missing visual representation');
     expect(issues[0].suggestion).toContain('dashboard window');
-    expect(issues[0].suggestion).toContain('0.2.22');
+    expect(issues[0].suggestion).toContain('Dashboard apply registers');
     expect(issues[0].suggestion).toContain('blank');
     expect(issues[0].suggestion).not.toContain('populate');
   });
