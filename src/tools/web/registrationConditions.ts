@@ -6,6 +6,7 @@ import {
   PulseNotAvailableError,
 } from '../../errors/mcpToolError.js';
 import { RestApiArgs, useRestApi } from '../../restApiInstance.js';
+import type { Flow } from '../../sdks/tableau/types/flow.js';
 import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pulse.js';
 import { isAdminSiteRole } from '../../sdks/tableau/types/user.js';
 // Type-only: erased at compile time, so scopes.ts can import the value map below without a
@@ -252,7 +253,25 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 /** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
 export const MAX_API_RETRY_ATTEMPTS = 2;
 
-/** One single-item visible-flow query, with no retries or pagination. Admins need not have flows. */
+/**
+ * Whether `flow` looks like the sample flow seeded when a site is provisioned. The name is not
+ * localized, but customers can publish the same sample themselves, so also require an untouched
+ * `.tflx` (created == updated). Missing fields mean "not the seed": it errs toward counting a flow.
+ */
+function isSeededSampleFlow(flow: Flow): boolean {
+  return (
+    flow.name === 'Superstore Flow' &&
+    flow.fileType === 'tflx' &&
+    flow.createdAt !== undefined &&
+    flow.createdAt === flow.updatedAt
+  );
+}
+
+/**
+ * One single-item visible-flow query, with no retries or pagination. A site's only flow being the
+ * seeded sample counts as no flow, so it does not enable Flow tools for everyone. Admins need not
+ * have flows.
+ */
 async function checkFlowsAvailable(
   restApiArgs: RestApiArgs,
   context: RegistrationContext,
@@ -263,11 +282,13 @@ async function checkFlowsAvailable(
       signal: AbortSignal.any([restApiArgs.signal, AbortSignal.timeout(5_000)]),
       jwtScopes: REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows,
       callback: async (restApi) => {
-        const { flows } = await restApi.flowsMethods.queryFlowsForSite({
+        const { flows, pagination } = await restApi.flowsMethods.queryFlowsForSite({
           siteId: restApi.siteId,
           pageSize: 1,
         });
-        if (flows.length > 0) return true;
+        const onlyTheSeededSample =
+          flows.length === 1 && pagination.totalAvailable === 1 && isSeededSampleFlow(flows[0]);
+        if (flows.length > 0 && !onlyTheSeededSample) return true;
 
         if (!Object.hasOwn(context, 'siteRole')) {
           const session = await restApi.authenticatedServerMethods.getCurrentServerSession();
