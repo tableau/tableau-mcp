@@ -2,6 +2,7 @@ import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { usersApis } from '../apis/usersApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { Favorite } from '../types/favorite.js';
 import { Pagination } from '../types/pagination.js';
 import { User } from '../types/user.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -21,6 +22,24 @@ export interface ListUsersResult {
 export default class UsersMethods extends AuthenticatedMethods<typeof usersApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(createGuardedZodios(baseUrl, usersApis, { axiosConfig }), creds);
+  }
+
+  listFavoritesForUser({
+    siteId,
+    userId,
+    pageNumber,
+    pageSize,
+  }: {
+    siteId: string;
+    userId: string;
+    pageNumber: number;
+    pageSize: number;
+  }): Promise<{ favorites: { favorite?: Favorite[] }; pagination?: Pagination }> {
+    return this._apiClient.listFavoritesForUser({
+      params: { siteId, userId },
+      queries: { pageNumber, pageSize },
+      ...this.authHeader,
+    });
   }
 
   /**

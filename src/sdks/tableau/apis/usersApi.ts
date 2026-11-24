@@ -2,8 +2,10 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { pathParam } from '../../routeSafety/ids.js';
+import { favoriteSchema } from '../types/favorite.js';
 import { paginationSchema } from '../types/pagination.js';
 import { userSchema } from '../types/user.js';
+import { paginationParameters } from './paginationParameters.js';
 
 /**
  * Tableau API response schema with transform to normalize different response shapes:
@@ -114,5 +116,21 @@ const updateUserEndpoint = makeEndpoint({
   response: z.object({ user: userSchema.partial() }),
 });
 
-const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint, updateUserEndpoint]);
+const listFavoritesForUserEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/favorites/:userId',
+  alias: 'listFavoritesForUser',
+  parameters: [pathParam('siteId', 'segment'), pathParam('userId'), ...paginationParameters],
+  response: z.object({
+    favorites: z.object({ favorite: z.array(favoriteSchema).optional() }),
+    pagination: paginationSchema.optional(),
+  }),
+});
+
+const usersApi = makeApi([
+  listUsersEndpoint,
+  getUserOnSiteEndpoint,
+  updateUserEndpoint,
+  listFavoritesForUserEndpoint,
+]);
 export const usersApis = [...usersApi] as const satisfies ZodiosEndpointDefinitions;
