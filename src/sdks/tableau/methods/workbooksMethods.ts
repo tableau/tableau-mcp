@@ -9,6 +9,7 @@ import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
 import { GranteeCapability } from '../types/permissions.js';
 import { Workbook, WorkbookConnection, workbookSchema } from '../types/workbook.js';
+import { revisionNumberSchema, WorkbookRevision } from '../types/workbookRevision.js';
 import {
   WorkbookValidationResult,
   workbookValidationResultSchema,
@@ -169,6 +170,63 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     };
   };
 
+  /** Lists one page of workbook revisions without changing the current workbook.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_workbook_revisions
+   */
+  getWorkbookRevisions = async ({
+    siteId,
+    workbookId,
+    pageSize,
+    pageNumber,
+  }: {
+    siteId: string;
+    workbookId: string;
+    pageSize?: number;
+    pageNumber?: number;
+  }): Promise<{ pagination: Pagination; revisions: WorkbookRevision[] }> => {
+    return this._apiClient.getWorkbookRevisions({
+      params: { siteId, workbookId },
+      queries: { pageSize, pageNumber },
+      ...this.authHeader,
+    });
+  };
+
+  /** Downloads exactly the requested past revision; the server rejects current/deleted revisions.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook_revision
+   */
+  downloadWorkbookRevision = async ({
+    siteId,
+    workbookId,
+    revisionNumber,
+    includeExtract,
+  }: {
+    siteId: string;
+    workbookId: string;
+    revisionNumber: number;
+    includeExtract?: boolean;
+  }): Promise<DownloadWorkbookResult> => {
+    const revision = revisionNumberSchema.parse(revisionNumber);
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      buildRestPath(
+        'sites',
+        siteId,
+        'workbooks',
+        assertLuid('workbookId', workbookId),
+        'revisions',
+        String(revision),
+        'content',
+      ),
+      { params: { includeExtract }, ...this.authHeader, responseType: 'arraybuffer' },
+    );
+    return {
+      content: Buffer.from(response.data),
+      contentType: getHeader(response.headers, 'content-type'),
+      filename: getFilenameFromContentDisposition(
+        getHeader(response.headers, 'content-disposition'),
+      ),
+    };
+  };
+
   /**
    * Deletes the specified workbook from the site.
    *
@@ -293,6 +351,35 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     );
     return workbook;
+  };
+
+  /**
+   * Replaces the notes on a specific workbook revision (REST API 3.30 or later).
+   * Requires the `tableau:workbooks:update` scope. A successful response has no body.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_revisions.htm#update_workbook_revision_notes
+   */
+  updateWorkbookRevisionNotes = async ({
+    siteId,
+    workbookId,
+    revisionNumber,
+    notes,
+  }: {
+    siteId: string;
+    workbookId: string;
+    revisionNumber: number;
+    notes: string;
+  }): Promise<void> => {
+    if (!revisionNumberSchema.safeParse(revisionNumber).success) {
+      throw new Error('revisionNumber must be a positive integer.');
+    }
+
+    await this._apiClient.updateWorkbookRevisionNotes(
+      { notes },
+      {
+        params: { siteId, workbookId, revisionNumber: String(revisionNumber) },
+        ...this.authHeader,
+      },
+    );
   };
 
   /**

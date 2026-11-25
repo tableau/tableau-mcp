@@ -436,6 +436,14 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  'list-workbook-revisions': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES),
+  },
+  'download-workbook-revision': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'download-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -447,6 +455,10 @@ const toolScopeMap: Record<
       'tableau:projects:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
+  },
+  'update-workbook-revision-notes': {
+    mcp: ['tableau:mcp:workbook:write'],
+    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -683,6 +695,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+    enabledTools.delete('download-workbook-revision');
   }
 
   if (!datasourceAuthoringEnabled) {
@@ -693,6 +706,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
     enabledTools.delete('move-workbook');
+    enabledTools.delete('update-workbook-revision-notes');
   }
 
   if (!authoringAllowedForClient) {
