@@ -513,7 +513,7 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
   scopes, and scope challenges may include API scopes for step-up. `tableau:mcp:*` never grants API
   scopes.
 - When `true`, the advertised set also includes `tableau:entitlements:read` if AI-powered Pulse
-  insight tools are enabled and the `enforce-registration-conditions` feature flag is on.
+  insight tools are enabled.
 
 <hr />
 
