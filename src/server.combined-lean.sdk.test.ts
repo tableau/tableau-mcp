@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   siteRole: vi.fn(),
 }));
 
+vi.mock('./tools/web/registrationConditions.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./tools/web/registrationConditions.js')>()),
+  checkRegistrationConditions: vi.fn().mockResolvedValue({ registrationConditionsMet: true }),
+}));
+
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({
     isFeatureEnabled: vi.fn((name: string) => mocks.enabledFeatures.has(name)),
@@ -100,7 +105,6 @@ describe('combined-lean against the real MCP SDK server', () => {
 
   it('reports a partial load with a retry warning over the real SDK, then completes on retry', async () => {
     vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-    mocks.enabledFeatures.add('enforce-role-requirements');
     mocks.enabledFeatures.add('admin-tools');
     mocks.siteRole.mockResolvedValue(undefined);
     const mcpServer = new McpServer(
