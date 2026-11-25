@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({
-    isFeatureEnabled: vi.fn((name: string) => name === 'enforce-role-requirements'),
+    isFeatureEnabled: vi.fn(() => false),
   })),
 }));
 

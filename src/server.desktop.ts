@@ -33,6 +33,7 @@ import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
 import { buildDesktopInstructions, EXPERTISE_TOOL_NAMES } from './desktop/instructions.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
+import { DesktopApiVersionTooOldError } from './errors/mcpToolError.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { registerSkills } from './skills/index.js';
@@ -213,30 +214,14 @@ export function withoutUnservedExpertiseTools<T extends { name: DesktopToolName 
   return expertiseAvailable ? tools : tools.filter((tool) => !EXPERTISE_TOOL_NAMES.has(tool.name));
 }
 
-/**
- * The External Client API version the registration gate compares tool floors against: the
- * pinned instance's version when pinned, otherwise the highest version among live instances
- * (undefined when none is known, which fails the gate open).
- *
- * Unpinned resolves the highest — not the newest-started — so a tool is hidden only when no
- * running Desktop can serve it; whether the instance a call actually reaches serves it is a
- * per-call concern, not the gate's.
- */
-export function resolveConnectedApiVersion(
+export function pinnedApiVersion(
   instances: Array<ExternalApiInstance>,
   pinnedSessionId: string | undefined,
 ): string | undefined {
-  if (pinnedSessionId !== undefined) {
-    return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
+  if (pinnedSessionId === undefined) {
+    return undefined;
   }
-  return instances.reduce<string | undefined>(
-    (highest, instance) =>
-      instance.apiVersion !== undefined &&
-      (highest === undefined || apiVersionAtLeast(instance.apiVersion, highest))
-        ? instance.apiVersion
-        : highest,
-    undefined,
-  );
+  return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
 }
 
 /**
@@ -255,6 +240,30 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
       tool.minApiVersion === undefined ||
       apiVersionAtLeast(connectedApiVersion, tool.minApiVersion),
   );
+}
+
+export function assertServesApiVersion<T extends { name: string; minApiVersion?: string }>(
+  tool: T,
+  registeredTools: T[],
+  desktopApiVersion: string | undefined,
+): void {
+  const { name, minApiVersion } = tool;
+  if (
+    minApiVersion === undefined ||
+    desktopApiVersion === undefined ||
+    apiVersionAtLeast(desktopApiVersion, minApiVersion)
+  ) {
+    return;
+  }
+  const served = new Set(filterToolsByApiVersion(registeredTools, desktopApiVersion));
+  throw new DesktopApiVersionTooOldError({
+    tool: name,
+    minApiVersion,
+    desktopApiVersion,
+    unservedTools: registeredTools
+      .filter((registered) => !served.has(registered))
+      .map((registered) => registered.name),
+  });
 }
 
 export function warnIfUnsupportedApiVersion(connectedApiVersion: string | undefined): void {
@@ -331,7 +340,8 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
+    for (const tool of tools) {
+      const { name, title, description, paramsSchema, annotations, callback } = tool;
       const toolCallback = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
         const tableauToolCallback = await Provider.from(callback);
         // One clock per tool call, composed into extra.signal so the socket really aborts.
@@ -347,7 +357,9 @@ export class DesktopMcpServer extends Server {
             deadline,
             config,
             getExecutor: async (sessionId: string) => {
-              return await this.sessionManager.getExecutor(sessionId);
+              const executor = await this.sessionManager.getExecutor(sessionId);
+              assertServesApiVersion(tool, tools, executor.desktopApiVersion);
+              return executor;
             },
             server: this,
           };
@@ -410,8 +422,10 @@ export class DesktopMcpServer extends Server {
       getExpertiseCorpusEntryCount() > 0,
     );
 
-    const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
-    const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
+    const connectedApiVersion = pinnedApiVersion(
+      discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }),
+      config.desktopSessionId,
+    );
     warnIfUnsupportedApiVersion(connectedApiVersion);
     const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
 
