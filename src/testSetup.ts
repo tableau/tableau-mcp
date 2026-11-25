@@ -24,6 +24,7 @@ vi.mock('@modelcontextprotocol/server', async (importOriginal) => {
             name: 'test-client',
           }),
           getClientCapabilities: vi.fn().mockReturnValue(undefined),
+          getNegotiatedProtocolVersion: vi.fn().mockReturnValue(undefined),
         },
         registerTool: vi.fn(),
         registerResource: vi.fn(),
