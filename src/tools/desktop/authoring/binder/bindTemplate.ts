@@ -1567,6 +1567,13 @@ function renderBlockers(blockers: Blocker[]): string {
 }
 
 function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): string {
+  if (reason === 'no-datasource-fields') {
+    return (
+      'Escalated (no-datasource-fields). No worksheet was produced: the workbook has no connected data, ' +
+      'so no template can bind. Tell the user and ask them to connect a datasource, then retry the same ask. ' +
+      'Do not list fields or build worksheets until data is connected.'
+    );
+  }
   return (
     `Escalated (${reason}). No worksheet was produced. Blockers: ${renderBlockers(blockers)}. ` +
     'Next: use the guarded artifact path: list-templates, list-available-fields, ' +
@@ -4048,6 +4055,26 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   /* fail-open */
                 }
                 return new Ok(completeRequestDecline(ask));
+              }
+              if (res.status === 'escalate' && res.reason === 'no-datasource-fields') {
+                // Nothing was attempted, so leave no recovery state: once the user connects data,
+                // the same ask must bind normally instead of hitting the terminal fallback gate.
+                try {
+                  sessionRouteState.releaseBindRecoveryReservation(
+                    resolvedSession,
+                    askKey,
+                    admission.reservationId,
+                  );
+                  sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+                } catch {
+                  /* fail-open */
+                }
+                return new Ok(
+                  withNextAction(
+                    { ...res, guidance: renderEscalationGuidance(res.reason, res.blockers) },
+                    prefillNextAction('Ask the user to connect data'),
+                  ),
+                );
               }
 
               // ── One structured correction boundary ─────────────────────────

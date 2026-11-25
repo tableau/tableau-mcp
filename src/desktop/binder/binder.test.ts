@@ -1898,6 +1898,22 @@ describe('binder/schema width cap', () => {
     );
   });
 
+  it.each([
+    ['no datasources', '<workbook><datasources/></workbook>'],
+    [
+      'only Parameters',
+      "<workbook><datasources><datasource name='Parameters'/></datasources></workbook>",
+    ],
+  ])('escalates no-datasource-fields with %s', async (_label, workbookXml) => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region',
+      workbookXml,
+      manifests: descriptors,
+    });
+
+    expect(result).toMatchObject({ status: 'escalate', reason: 'no-datasource-fields' });
+  });
+
   it('fails closed in the classifier above the field cap', () => {
     expect(
       classifyNoLlm(
