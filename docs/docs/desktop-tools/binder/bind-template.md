@@ -14,7 +14,7 @@ Each call reports one outcome in its `status` field:
 
 - `bound` — the ask matched a template and every slot is filled; the response carries the bound arguments (and, when `auto_apply` succeeded, an applied receipt).
 - `propose` — no deterministic match; the response lists candidate templates and the fields to bind, for you to choose one and call again with a `proposal`.
-- `escalate` — no fast-path template fits the ask or the data. The response usually routes you to the template artifact path (`list-templates` → `list-available-fields` → `build-worksheets-from-templates` → `apply-worksheet`). When the workbook has no connected data, `reason` is `"no-datasource-fields"` and the response asks you to have the user connect a datasource instead. Once they do, retry the same ask.
+- `escalate` — no fast-path template fits; the response usually routes you to the template artifact path (`list-templates` → `list-available-fields` → `build-worksheets-from-templates` → `apply-worksheet`). If the workbook has no connected data, `reason` is `"no-datasource-fields"` instead: have the user connect a datasource, then retry the same ask.
 - `blocked` — this MCP server refused the call before writing a chart, for example a repeated or unchanged retry for the same ask, a proposal outside the returned `call_2_contract`, an unresolved filter, or a pie with more than 12 slices (see [Notes and caveats](#notes-and-caveats)).
 
 :::note[Mutates the workbook]
@@ -232,7 +232,7 @@ Each calculation is checked before the workbook is changed. A message for a calc
 
 ## Notes and caveats
 
-- **`propose` and `escalate` are normal outcomes, not errors.** They report that the tool needs a chosen proposal, that no fast-path template fits, or that the workbook has no connected data. The response's `guidance` names the next step. Only a genuine failure (for example a failed workbook read) is returned as an error.
+- **`propose` and `escalate` are normal outcomes, not errors.** They report that the tool needs a chosen proposal or that no fast-path template fits — the response's `guidance` names the next step. Only a genuine failure (for example a failed workbook read) is returned as an error.
 - **Repeated retries for the same ask are blocked by this MCP server.** To prevent blind retry thrash, this MCP server's in-process guard tracks bind attempts per ask and returns a `blocked` outcome for a repeated proposal-absent call, an unchanged proposal, an exhausted single-retry budget, or an ask already determined not recoverable in the fast path. This guard lives on the MCP server, not in %product_name%; to proceed, change the proposal meaningfully based on the reported blockers, or take the fallback authoring path the guidance names.
 - **A reused sheet that still needs calculations cannot be a dashboard member.** When `target_worksheet` is omitted and the ask matches a sheet already applied, a dashboard member that still has calculations waiting to be authored is refused: `deterministic worksheet "<title>" is a dashboard member sheet with pending calculations — missing calculations prevent safe reuse, and the dashboard member cannot be rebuilt in place`.
 - **Summary rows after apply.** The summary read is called with the applied sheet's title and without a column list. A failure from that read is returned on `summary_rows_error`. The helper's blank-worksheet message and its requested-column messages are not used on this call.
