@@ -315,8 +315,15 @@ Disable scope enforcement and scope challenges.
 
 - Default: `false`
 - Useful for Tableau Server deployments that do not want to enforce scopes yet.
-- When `false`, enforce each tool's required MCP scopes. Also enforce required Tableau API scopes
-  when [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`.
+- When `false`, a token with only some of the supported scopes can connect. Tools it lacks scopes
+  for are left out of the tool list, and the server's initialize instructions name them. Each tool
+  call still requires that tool's MCP scopes, plus its Tableau API scopes when
+  [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`.
+- When `false`, `ADVERTISE_API_SCOPES` is `true`, and
+  [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
+  every token must carry `tableau:mcp_site_settings:read` so the server can read the site's
+  settings. It is an API scope, so `tableau:mcp:*` doesn't grant it. A token without it is rejected
+  with a `403`, and the embedded authorization server refuses to issue one (`400` `invalid_scope`).
 - When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
   enforce scopes on incoming access tokens.
 - With [your own identity provider](#use-your-own-identity-provider-self-hosted-only), `true` is
