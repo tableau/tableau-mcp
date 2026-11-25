@@ -25,6 +25,7 @@ import {
 } from '../../telemetry/clientDisplayName.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getProtocolVersionForTelemetry } from '../../telemetry/protocolVersion.js';
 import {
   buildAuthenticationErrorMessage,
   buildPermissionErrorMessage,
@@ -307,6 +308,7 @@ export class WebTool<Args extends undefined | ToolParamsSchema = undefined> exte
       const sanitizedClientId = sanitizeClientIdForTelemetry(oauthClientId);
       const clientName = getClientDisplayName(oauthClientId);
       productTelemetryForwarder.send('tool_call', {
+        mcp_protocol_version: getProtocolVersionForTelemetry(extra),
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',

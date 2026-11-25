@@ -204,32 +204,6 @@ describe.each([false, true])(
       },
     );
 
-    it('logs the connecting client once on initialize', async () => {
-      mocks.registerTools.mockResolvedValue(undefined);
-      vi.mocked(log).mockClear();
-
-      // The mocked server never answers, so only wait for the log, not the response.
-      void postInitialize().catch(() => {});
-      await vi.waitFor(() =>
-        expect(
-          vi.mocked(log).mock.calls.filter(([e]) => e.message === 'MCP client initialized'),
-        ).toHaveLength(1),
-      );
-
-      expect(log).toHaveBeenCalledWith({
-        message: 'MCP client initialized',
-        level: 'info',
-        logger: 'http',
-        data: {
-          protocolVersion: '2025-06-18',
-          clientInfo: { name: 'test-client', version: '1.0.0' },
-          capabilities: [],
-          extensions: [],
-          elicitationSupported: false,
-        },
-      });
-    });
-
     const post2026ToolsList = async (
       clientName: string,
       clientCapabilities: unknown = {},
@@ -314,9 +288,6 @@ describe.each([false, true])(
       await response.text();
 
       expect(builtFromEnvelope('flag-off')).toBe(false);
-      expect(vi.mocked(log).mock.calls.some(([e]) => e.message === 'MCP client initialized')).toBe(
-        false,
-      );
     });
 
     it('keeps a 2026-07-28 request on the 2025 path when the gate lookup fails', async () => {
@@ -356,72 +327,6 @@ describe.each([false, true])(
       expect(await response.json()).toMatchObject({
         error: { code: -32000, message: 'Could not get the MCP settings.' },
       });
-    });
-
-    it('logs a 2026-07-28 client once across requests, and a different client separately', async () => {
-      mocks.enabledFeatures.add('mcp-protocol-2026');
-      mocks.registerTools.mockResolvedValue(undefined);
-      vi.mocked(log).mockClear();
-      const { server } = await startExpressServer({
-        basePath: 'tableau-mcp',
-        config: makeConfig({ disableSessionManagement: stateless }),
-        logLevel: 'debug',
-        host: '127.0.0.1',
-      });
-      servers.push(server);
-      const { port } = server.address() as AddressInfo;
-
-      // The dedup set is module-level, so each describe.each run needs its own client names.
-      const post = (client: string, capabilities: object = {}): Promise<unknown> =>
-        fetch(`http://127.0.0.1:${port}/tableau-mcp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json, text/event-stream',
-            'Mcp-Method': 'tools/list',
-            'MCP-Protocol-Version': '2026-07-28',
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'tools/list',
-            params: {
-              _meta: {
-                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-                'io.modelcontextprotocol/clientInfo': {
-                  name: `${client}-${stateless}`,
-                  version: '1.0.0',
-                },
-                'io.modelcontextprotocol/clientCapabilities': capabilities,
-              },
-            },
-          }),
-        }).catch(() => {});
-      const initLogs = (): Array<unknown> =>
-        vi.mocked(log).mock.calls.filter(([e]) => e.message === 'MCP client initialized');
-
-      await post('modern-a');
-      await post('modern-a');
-      expect(initLogs()).toHaveLength(1);
-      expect(log).toHaveBeenCalledWith({
-        message: 'MCP client initialized',
-        level: 'info',
-        logger: 'http',
-        data: {
-          protocolVersion: '2026-07-28',
-          clientInfo: { name: `modern-a-${stateless}`, version: '1.0.0' },
-          capabilities: [],
-          extensions: [],
-          elicitationSupported: false,
-        },
-      });
-
-      await post('modern-b');
-      expect(initLogs()).toHaveLength(2);
-
-      // A capability change on a known client is logged again.
-      await post('modern-a', { elicitation: {} });
-      expect(initLogs()).toHaveLength(3);
     });
 
     it('answers a site settings 401 with the OAuth challenge, so the client signs in again', async () => {

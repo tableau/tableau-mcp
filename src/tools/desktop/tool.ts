@@ -15,6 +15,7 @@ import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getProtocolVersionForTelemetry } from '../../telemetry/protocolVersion.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { ToolParamsSchema } from '../toolContext.js';
@@ -218,6 +219,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     } finally {
       productTelemetryForwarder.send('tool_call', {
+        mcp_protocol_version: getProtocolVersionForTelemetry(extra),
         tool_name: this.name,
         request_id: requestId.toString(),
         // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)

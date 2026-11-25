@@ -382,6 +382,22 @@ describe('DesktopTool worksheet orientation', () => {
 describe('DesktopTool product telemetry', () => {
   const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
+  it.each(['2025-11-25', '2026-07-28'])(
+    'includes the protocol version on successful tool calls (%s)',
+    async (protocolVersion) => {
+      await makeTool().logAndExecute({
+        extra: { ...getMockRequestHandlerExtra(), protocolVersion },
+        args: { session: 'S1' },
+        callback: async () => new Ok({ ok: true }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledExactlyOnceWith(
+        'tool_call',
+        expect.objectContaining({ mcp_protocol_version: protocolVersion, success: true }),
+      );
+    },
+  );
+
   function extraWithConfig(
     overrides: Partial<Config>,
   ): ReturnType<typeof getMockRequestHandlerExtra> {
@@ -413,6 +429,7 @@ describe('DesktopTool product telemetry', () => {
       oauth_client_id: '',
       oauth_client_display_name: '',
       auth_type: 'desktop',
+      mcp_protocol_version: 'unknown',
     });
   });
 

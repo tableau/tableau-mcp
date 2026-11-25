@@ -402,6 +402,28 @@ describe('Tool', () => {
       mockTelemetrySend.mockClear();
     });
 
+    it.each(['2025-11-25', '2026-07-28', undefined])(
+      'includes the protocol version on failed tool calls (%s)',
+      async (protocolVersion) => {
+        await new WebTool(mockParams).logAndExecute({
+          extra: getMockRequestHandlerExtra({ protocolVersion }),
+          args: { param1: 'test' },
+          callback: async () => {
+            throw new Error('Callback failed');
+          },
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+
+        expect(mockTelemetrySend).toHaveBeenCalledExactlyOnceWith(
+          'tool_call',
+          expect.objectContaining({
+            mcp_protocol_version: protocolVersion ?? 'unknown',
+            success: false,
+          }),
+        );
+      },
+    );
+
     it('should send telemetry with success=true and empty error_code on success', async () => {
       const tool = new WebTool(mockParams);
 

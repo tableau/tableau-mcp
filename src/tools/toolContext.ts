@@ -1,6 +1,7 @@
 import {
   AuthInfo,
   CallToolResult,
+  PROTOCOL_VERSION_META_KEY,
   RequestId,
   RequestMeta,
   ServerContext,
@@ -58,17 +59,24 @@ export type TableauRequestFields = {
   sessionId?: string;
   authInfo?: AuthInfo;
   requestInfo?: { headers: Headers };
+  protocolVersion?: string;
   _meta?: RequestMeta;
   sendNotification: ServerContext['mcpReq']['notify'];
 };
 
 export function getRequestFields(ctx: ServerContext): TableauRequestFields {
+  const envelope = ctx.mcpReq.envelope;
+  const protocolVersion =
+    envelope && PROTOCOL_VERSION_META_KEY in envelope
+      ? envelope[PROTOCOL_VERSION_META_KEY]
+      : undefined;
   return {
     signal: ctx.mcpReq.signal,
     requestId: ctx.mcpReq.id,
     sessionId: ctx.sessionId,
     authInfo: ctx.http?.authInfo,
     requestInfo: ctx.http?.req ? { headers: ctx.http.req.headers } : undefined,
+    protocolVersion: typeof protocolVersion === 'string' ? protocolVersion : undefined,
     _meta: ctx.mcpReq._meta,
     sendNotification: ctx.mcpReq.notify,
   };

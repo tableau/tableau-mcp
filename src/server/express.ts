@@ -22,7 +22,6 @@ import https from 'https';
 import { Config } from '../config.js';
 import { McpSiteSettingsUnavailableError } from '../errors/mcpToolError.js';
 import { getFeatureGate } from '../features/init.js';
-import { logClientInitialized, logModernClientOnce } from '../logging/clientInitialized.js';
 import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { ClientInfo, Server } from '../server.js';
@@ -113,8 +112,7 @@ export async function startExpressServer({
       const context = modernRequest.getStore();
       const meta = getRequestMeta(context?.req.body);
       // The SDK calls the factory only after validating the envelope against its 2026-07-28 schema
-      // (a malformed one gets a 400), so rejected requests aren't logged and the casts below only narrow.
-      logModernClientOnce(meta);
+      // (a malformed one gets a 400), so the casts below only narrow.
       const server = new WebMcpServer({
         clientInfo: meta?.[CLIENT_INFO_META_KEY] as ClientInfo | undefined,
         capabilities: meta?.[CLIENT_CAPABILITIES_META_KEY] as
@@ -222,18 +220,6 @@ export async function startExpressServer({
       );
   });
 
-  // The 2025 handshake has no server-side "initialized" hook in stateless mode (each request gets
-  // a fresh server), so log from the initialize request itself. 2026-07-28 clients send no
-  // initialize; routeMcpPost logs them on first sight via logModernClientOnce.
-  function logHttpClientInitialized(body: unknown): void {
-    if (!isInitializeRequest(body)) return;
-    logClientInitialized({
-      protocolVersion: body.params.protocolVersion,
-      clientInfo: body.params.clientInfo,
-      capabilities: body.params.capabilities,
-    });
-  }
-
   async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       let transport: NodeStreamableHTTPServerTransport;
@@ -254,7 +240,6 @@ export async function startExpressServer({
         });
 
         await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.auth?.scopes);
-        logHttpClientInitialized(req.body);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -285,7 +270,6 @@ export async function startExpressServer({
             getTableauAuthInfo(req.auth),
             req.auth?.scopes,
           );
-          logHttpClientInitialized(req.body);
         } else {
           log({
             message: 'Rejected request: no valid session ID and not an initialize request',
