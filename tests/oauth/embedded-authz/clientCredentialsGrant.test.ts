@@ -8,9 +8,6 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
-  // Lets a test turn the disable-strict-scope-match flag off (strict on); otherwise delegates to the
-  // real gate.
-  disableStrictFlag: { value: true },
   mcpWildcardScopeFlag: { value: false },
 }));
 
@@ -18,9 +15,7 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 
-// Override the feature gate for this file so the disable-strict-scope-match flag is controllable
-// per-test.
-// Composes with the shared testSetup mock (admin-tools forcing lives there); this file's mock wins.
+// Override the wildcard flag per test, keeping admin tools enabled as in the shared setup.
 vi.mock('../../../src/features/init.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../src/features/init.js')>();
   return {
@@ -29,9 +24,6 @@ vi.mock('../../../src/features/init.js', async (importOriginal) => {
       const featureGate = original.getFeatureGate();
       return {
         isFeatureEnabled: async (featureName: string) => {
-          if (featureName === 'disable-strict-scope-match') {
-            return mocks.disableStrictFlag.value;
-          }
           if (featureName === 'mcp-wildcard-scope') {
             return mocks.mcpWildcardScopeFlag.value;
           }
@@ -243,12 +235,11 @@ describe('client credentials grant type', () => {
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
       // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      mocks.disableStrictFlag.value = true;
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
     });
 
     afterEach(() => {
       vi.unstubAllEnvs();
-      mocks.disableStrictFlag.value = true;
     });
 
     it('mints the token when API scopes are not advertised, even for a subset omitting the mandatory scope', async () => {
@@ -282,7 +273,7 @@ describe('client credentials grant type', () => {
     });
 
     it('mints the token when strict scope match is on, even for the same subset', async () => {
-      mocks.disableStrictFlag.value = false;
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
       const { app } = await startServer();
 
       const response = await request(app).post('/oauth2/token').send({

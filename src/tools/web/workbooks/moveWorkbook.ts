@@ -7,12 +7,10 @@ import {
   McpToolError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
@@ -58,7 +56,6 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
       idempotentHint: true,
       openWorldHint: true,
     },
-    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('data-apps'))),
     callback: async ({ workbookId, projectId, personalSpace }, extra): Promise<CallToolResult> => {
       return await moveWorkbookTool.logAndExecute<MoveWorkbookResult>({
         extra,

@@ -512,10 +512,9 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
   Tableau API scopes, and scope challenges may include API scopes for step-up. `tableau:mcp:*` never
   grants API scopes.
 - The check for AI-powered Pulse insight tools needs `tableau:entitlements:read`, so it is part of
-  the advertised set. Under strict scope matching (the default), tokens issued before upgrading must
-  be re-consented to include it. With
-  [`DISABLE_STRICT_SCOPE_MATCH`](#disable_strict_scope_match) `true`, those tools are left out
-  instead.
+  the advertised set. With the default subset scope matching, tools are left out when a token lacks
+  their scopes. If [`DISABLE_STRICT_SCOPE_MATCH`](#disable_strict_scope_match) is `false`, strict
+  matching requires tokens issued before upgrading to be re-consented to include the scope.
 
 <hr />
 
@@ -523,7 +522,7 @@ Include Tableau API scopes in OAuth metadata and scope challenges.
 
 Do not require every access token to carry all supported scopes before it can connect. Allows for access tokens that are subsets of the full supported scopes lists to be used in a connection.
 
-- Default: `false`.
+- Default: `true`. Set explicitly to `false` to enable strict scope matching.
 - Has no effect when [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `true`.
 - When `false`, a token must carry `tableau:mcp:*` or every supported `tableau:mcp:…` scope.
   Otherwise it is rejected with a `403` `insufficient_scope` error. When
