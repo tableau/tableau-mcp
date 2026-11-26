@@ -2037,7 +2037,7 @@
   },
   {
     "title": "Update User",
-    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the user's site role changed after the preview.",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the user's site role changed after the preview. BREAKING: MUTATION_PREVIEW_TTL_MINUTES is now capped at 5 minutes (previously 1440); a larger value is clamped to 5 with a startup warning, so a confirmation sent more than 5 minutes after its preview is rejected and the preview must be run again.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
     "toolCategory": "Users",
@@ -2047,7 +2047,7 @@
   },
   {
     "title": "Update Cloud Extract Refresh Task",
-    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the task's schedule changed after the preview. BREAKING: now requests the tableau:tasks:update and tableau:tasks:read scopes (replacing tableau:tasks:write); OAuth clients must re-consent before this tool works.",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the task's schedule changed after the preview. BREAKING: now requests the tableau:tasks:update and tableau:tasks:read scopes (replacing tableau:tasks:write); OAuth clients must re-consent before this tool works. BREAKING: MUTATION_PREVIEW_TTL_MINUTES is now capped at 5 minutes (previously 1440); a larger value is clamped to 5 with a startup warning, so a confirmation sent more than 5 minutes after its preview is rejected (including from the MCP Apps confirm panel) and the preview must be run again.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
     "toolCategory": "Tasks",
@@ -2057,7 +2057,7 @@
   },
   {
     "title": "Delete Tableau Content",
-    "summary": "Extract refresh task deletes use a signed, short-lived confirmation token that verifies on any replica sharing MUTATION_TOKEN_SECRET. The MCP Apps confirm panel receives its own signed approval token outside the model-visible text.",
+    "summary": "Extract refresh task deletes use a signed, short-lived confirmation token that verifies on any replica sharing MUTATION_TOKEN_SECRET. The MCP Apps confirm panel receives its own signed approval token outside the model-visible text. BREAKING: MUTATION_PREVIEW_TTL_MINUTES is now capped at 5 minutes (previously 1440); a larger value is clamped to 5 with a startup warning. This bounds the extract refresh task confirm window and the expiry of the MCP Apps confirm panel; the tag-based workbook and datasource confirm is not affected.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
     "toolCategory": "Content Management",
@@ -2067,7 +2067,7 @@
   },
   {
     "title": "Run Flow",
-    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the flow's recent runs changed after the preview. BREAKING: now requests the tableau:flow_runs:read scope; OAuth clients must re-consent before this tool works.",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the flow's recent runs changed after the preview. BREAKING: now requests the tableau:flow_runs:read scope; OAuth clients must re-consent before this tool works. BREAKING: MUTATION_PREVIEW_TTL_MINUTES is now capped at 5 minutes (previously 1440); a larger value is clamped to 5 with a startup warning, so a confirmation sent more than 5 minutes after its preview is rejected and the preview must be run again.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
     "toolCategory": "Flows",
@@ -2077,7 +2077,7 @@
   },
   {
     "title": "Run Flow Task",
-    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the flow's recent runs changed after the preview. BREAKING: now requests the tableau:flow_tasks:read and tableau:flow_runs:read scopes; OAuth clients must re-consent before this tool works.",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the flow's recent runs changed after the preview. BREAKING: now requests the tableau:flow_tasks:read and tableau:flow_runs:read scopes; OAuth clients must re-consent before this tool works. BREAKING: MUTATION_PREVIEW_TTL_MINUTES is now capped at 5 minutes (previously 1440); a larger value is clamped to 5 with a startup warning, so a confirmation sent more than 5 minutes after its preview is rejected and the preview must be run again.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
     "toolCategory": "Flows",
@@ -2087,7 +2087,7 @@
   },
   {
     "title": "Cancel Flow Run",
-    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET.",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. BREAKING: MUTATION_PREVIEW_TTL_MINUTES is now capped at 5 minutes (previously 1440); a larger value is clamped to 5 with a startup warning, so a confirmation sent more than 5 minutes after its preview is rejected and the preview must be run again.",
     "date": "2026-11-01",
     "changeType": "UPDATE",
     "toolCategory": "Flows",

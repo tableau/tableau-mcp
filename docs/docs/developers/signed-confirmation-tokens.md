@@ -146,7 +146,7 @@ an id and does.
 | -------------------------------- | ----------------- | ------------------------------------------------------------------------------------- |
 | `MUTATION_TOKEN_SECRET`          | For multi-replica | Signs and verifies. At least 32 characters after trimming. Identical on every replica |
 | `MUTATION_TOKEN_SECRET_PREVIOUS` | No                | Verify-only key during rotation. Requires `MUTATION_TOKEN_SECRET`                     |
-| `MUTATION_PREVIEW_TTL_MINUTES`   | No (existing)     | Token lifetime. Default 5, range 1 to 30; above 30 is clamped to 30 with a warning    |
+| `MUTATION_PREVIEW_TTL_MINUTES`   | No (existing)     | Token lifetime. Default 5, range 1 to 5; above 5 is clamped to 5 with a warning       |
 
 - A secret shorter than 32 characters, or `_PREVIOUS` without a current secret, fails at startup.
 - Surrounding whitespace (such as the trailing newline of a mounted secret file) is trimmed once,
@@ -154,8 +154,19 @@ an id and does.
   `process.env`.
 - With `DISABLE_SESSION_MANAGEMENT=true` and no secret, the server logs one startup warning that
   confirms will fail across replicas.
-- **Rotation:** set the new value as `MUTATION_TOKEN_SECRET` and the old value as
-  `MUTATION_TOKEN_SECRET_PREVIOUS` on every replica, wait at least one TTL, then remove `_PREVIOUS`.
+- **Rotation** takes two rollouts, because every replica verifies with both keys but signs with
+  `MUTATION_TOKEN_SECRET` only:
+  1. On every replica, keep the old value as `MUTATION_TOKEN_SECRET` and add the new value as
+     `MUTATION_TOKEN_SECRET_PREVIOUS`. Tokens are still signed with the old key, and every replica
+     can now also verify the new key.
+  2. After step 1 is on every replica, set the new value as `MUTATION_TOKEN_SECRET` and the old
+     value as `MUTATION_TOKEN_SECRET_PREVIOUS`. Replicas that are still on step 1 verify tokens
+     signed by updated replicas, and the reverse.
+  3. Wait at least one TTL after step 2 is on every replica, then remove `_PREVIOUS`.
+
+  Swapping the keys in a single rollout makes confirms fail with `bad-mac` while the rollout is in
+  flight: an updated replica signs with the new key, which a replica that is not yet updated cannot
+  verify.
 
 See [Environment Variables](../configuration/mcp-config/env-vars.md#mutation_token_secret) for the
 user-facing reference.
@@ -248,24 +259,27 @@ is applied only by an app-only confirm tool (`confirm-delete-content`,
   and the MCP logging notification for every tool call. There is no suffix rule: pagination and
   progress tokens such as `pageToken`, `nextPageToken`, and `progressToken` are not secrets and are
   logged as-is. A new secret argument name must be added to the list.
-- Audit records are emitted by `guardMutation` as before. The evidence descriptor keeps
-  `kind: 'registry-nonce'` (no audit schema change) with a fixed `detail` string, never the token. A
-  rejected confirm records `denyReason: 'preview-not-run'` with the state-changed explanation when
-  that is the cause. The standalone flow tools have no admin gate and emit no audit record, as
-  before.
+- Audit records are emitted by `guardMutation` as before. The evidence descriptor is now
+  `kind: 'signed-token'` with a fixed `detail` string, never the token. This is an audit schema
+  change: `signed-token` is a new value of the `confirmationEvidence.kind` enum (`schemaVersion`
+  stays 2, and `registry-nonce` remains valid for older records). Audit consumers that validate
+  `kind` against a fixed list must accept `signed-token` before this release is deployed. A rejected
+  confirm records `denyReason: 'preview-not-run'` with the state-changed explanation when that is
+  the cause. The standalone flow tools have no admin gate and emit no audit record, as before.
 
 ## Known residual risks
 
 The token is unforgeable and bound to the previewed change, but it is **not strictly single-use
 across replicas**. The replay cache is per process.
 
-- **Cross-replica replay while the target is unchanged.** Within the TTL (so the TTL is capped at 30
-  minutes; a larger `MUTATION_PREVIEW_TTL_MINUTES` is clamped to 30 with a startup warning), a token that was already
-  accepted on replica A can be accepted again on replica B if the target's pre-state still matches.
-  This was observed live: a same-value `update-cloud-extract-refresh-task` (schedule set to its
-  current value) was replayed and accepted on a different replica. The replay re-applies the
-  identical change. A real change moves the pre-state, so its replay is rejected. Tools with no
-  pre-state rely on the target being gone or already in its end state (deleted task, cancelled run).
+- **Cross-replica replay while the target is unchanged.** Within the TTL (so the TTL is capped at 5
+  minutes; a larger `MUTATION_PREVIEW_TTL_MINUTES` is clamped to 5 with a startup warning), a token
+  that was already accepted on replica A can be accepted again on replica B if the target's
+  pre-state still matches. This was observed live: a same-value `update-cloud-extract-refresh-task`
+  (schedule set to its current value) was replayed and accepted on a different replica. The replay
+  re-applies the identical change. A real change moves the pre-state, so its replay is rejected.
+  Tools with no pre-state rely on the target being gone or already in its end state (deleted task,
+  cancelled run).
 - **Flow runs before the first run appears.** For `run-flow` and `run-flow-task` the first confirm's
   new run changes the fingerprint, so a replay is normally rejected (live-verified). A replay that
   lands on another replica before the new run is visible in Get Flow Runs can still start a second

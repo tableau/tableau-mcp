@@ -767,6 +767,18 @@ in which a preview token is valid. The maximum is deliberately short: the single
 confirmation token is per replica, so in a multi-replica deployment the TTL is also the window in
 which a token could be replayed on a different replica.
 
+A decimal value (for example `1.5`) is accepted and rounded to the nearest millisecond.
+
+:::warning Breaking change
+
+The maximum was previously `1440` (24 hours). A deployment that set a longer window for slow human
+review (for example `30` or `60`) now gets `5` minutes, with a single warning in the server log. A
+confirmation sent more than 5 minutes after its preview is rejected as "preview not run" and the
+preview must be run again. Review any existing `MUTATION_PREVIEW_TTL_MINUTES` setting before
+upgrading.
+
+:::
+
 <hr />
 
 ## `MUTATION_TOKEN_SECRET`
@@ -806,12 +818,13 @@ extract-refresh-task delete or a flow-run cancel, a replay reaches a target that
 deleted or cancelled.
 
 For `run-flow` and `run-flow-task`, the token is also bound to a fingerprint of the flow's 10 most
-recent runs (run ids and statuses). The first confirmation starts a new run, which changes that
-fingerprint, so a replay on another replica is normally rejected. A replay can still start a second
-run if it lands before the first run appears in the flow's run history. Detection is also weaker
-when more than 10 of the flow's runs have no completion time yet (for example, many queued runs):
-the new run may fall outside the window. Status changes of in-flight runs between preview and
-confirmation reject the confirmation; preview again to continue.
+recent runs by completion time (run ids only). The first confirmation starts a new run, which
+changes that fingerprint, so a replay on another replica is normally rejected. A replay can still
+start a second run if it lands before the first run appears in the flow's run history. Detection is
+also weaker when more than 10 of the flow's runs have no completion time yet (for example, many
+queued runs): the new run may fall outside the window. A status change of an existing run between
+preview and confirmation (for example, a queued run that starts or finishes) does not change the
+fingerprint and does not reject the confirmation.
 
 The approval token delivered to an MCP Apps confirm panel is never placed in model-visible text. It
 has the same residual window: a captured approval token could be replayed on a different replica
@@ -830,10 +843,19 @@ during a secret rotation. New tokens are always signed with the current secret.
 - Minimum length: 32 characters. A shorter value makes the server fail at startup.
 - Setting this without `MUTATION_TOKEN_SECRET` makes the server fail at startup.
 
-To rotate: set the new value in `MUTATION_TOKEN_SECRET` and the old value in
-`MUTATION_TOKEN_SECRET_PREVIOUS` on every replica. Then, after at least one
-[`MUTATION_PREVIEW_TTL_MINUTES`](#mutation_preview_ttl_minutes) has passed, remove
-`MUTATION_TOKEN_SECRET_PREVIOUS`.
+Every replica verifies with both secrets but signs with `MUTATION_TOKEN_SECRET` only. To rotate
+without rejecting confirmations during a rolling deploy, use two rollouts:
+
+1. On every replica, keep the old value in `MUTATION_TOKEN_SECRET` and set the new value in
+   `MUTATION_TOKEN_SECRET_PREVIOUS`.
+2. Once step 1 is on every replica, set the new value in `MUTATION_TOKEN_SECRET` and the old value
+   in `MUTATION_TOKEN_SECRET_PREVIOUS`.
+3. Once step 2 is on every replica and at least one
+   [`MUTATION_PREVIEW_TTL_MINUTES`](#mutation_preview_ttl_minutes) has passed, remove
+   `MUTATION_TOKEN_SECRET_PREVIOUS`.
+
+Swapping both values in a single rollout rejects confirmations while the rollout is in flight: a
+replica that is not yet updated cannot verify a token signed with the new secret.
 
 <hr />
 
