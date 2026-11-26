@@ -144,6 +144,72 @@ describe('SignedConfirmation', () => {
     expect(resolveState).toHaveBeenCalledOnce();
   });
 
+  describe('confirmAndRun', () => {
+    function httpError(status: number): Error {
+      return Object.assign(new Error(`Request failed with status code ${status}`), {
+        isAxiosError: true,
+        response: { status },
+      });
+    }
+
+    it('runs the mutation after a verified confirm and keeps the token consumed on success', async () => {
+      const options = replica();
+      const token = await preview(new SignedConfirmation(spec(), options));
+      const run = vi.fn(async () => 'job');
+      await expect(
+        new SignedConfirmation(spec(), options).confirmAndRun(caller, token, run),
+      ).resolves.toBe('job');
+      expect(run).toHaveBeenCalledOnce();
+      await expect(
+        new SignedConfirmation(spec(), options).confirmAndRun(caller, token, run),
+      ).rejects.toThrow(PreviewNotRunError);
+      expect(run).toHaveBeenCalledOnce();
+    });
+
+    it('does not run the mutation when confirm rejects', async () => {
+      const run = vi.fn(async () => 'job');
+      await expect(
+        new SignedConfirmation(spec(), replica()).confirmAndRun(caller, 'not-a-token', run),
+      ).rejects.toThrow(PreviewNotRunError);
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it.each([400, 403, 404, 409])(
+      'releases the token on a definite %i (nothing applied): a retry with the same token passes',
+      async (status) => {
+        const options = replica();
+        const token = await preview(new SignedConfirmation(spec(), options));
+        const error = httpError(status);
+        await expect(
+          new SignedConfirmation(spec(), options).confirmAndRun(caller, token, async () => {
+            throw error;
+          }),
+        ).rejects.toBe(error);
+        await expect(
+          new SignedConfirmation(spec(), options).confirmAndRun(caller, token, async () => 'job'),
+        ).resolves.toBe('job');
+      },
+    );
+
+    it.each([
+      ['a 500', httpError(500)],
+      ['a 503', httpError(503)],
+      ['a 408', httpError(408)],
+      ['a network error (no status)', new Error('ECONNRESET')],
+    ])('keeps the token consumed on %s (outcome unknown)', async (_label, error) => {
+      const options = replica();
+      const token = await preview(new SignedConfirmation(spec(), options));
+      await expect(
+        new SignedConfirmation(spec(), options).confirmAndRun(caller, token, async () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+      await expect(
+        new SignedConfirmation(spec(), options).confirmAndRun(caller, token, async () => 'job'),
+      ).rejects.toThrow(PreviewNotRunError);
+    });
+  });
+
   it('exposes an audit descriptor that never contains the token', async () => {
     const confirmation = new SignedConfirmation(spec(), replica());
     const token = await preview(confirmation);

@@ -170,15 +170,15 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   );
                 }
 
-                await confirmation.confirm(caller, confirmationToken);
-
-                return await restApi.flowsMethods.runFlowNow({
-                  siteId: restApi.siteId,
-                  flowId,
-                  runMode,
-                  outputStepIds,
-                  parameterSpecs: parameterOverrides,
-                });
+                return await confirmation.confirmAndRun(caller, confirmationToken, () =>
+                  restApi.flowsMethods.runFlowNow({
+                    siteId: restApi.siteId,
+                    flowId,
+                    runMode,
+                    outputStepIds,
+                    parameterSpecs: parameterOverrides,
+                  }),
+                );
               },
             });
 

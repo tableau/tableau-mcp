@@ -485,6 +485,32 @@ describe('runFlowTool', () => {
     });
   });
 
+  it('releases the token on a definite 4xx from Run Flow Now: a retry with the same token runs', async () => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+    mocks.mockRunFlowNow.mockRejectedValueOnce(makeAxiosError(409));
+    const first = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+    expect(first.isError).toBe(true);
+    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+    const retry = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(false);
+    expect(mocks.mockRunFlowNow).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['a 5xx', makeAxiosError(500)],
+    ['a network error', new Error('socket hang up')],
+  ])('keeps the token consumed on %s from Run Flow Now (outcome unknown)', async (_l, error) => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+    mocks.mockRunFlowNow.mockRejectedValueOnce(error);
+    expect(
+      (await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(true);
+    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+    const retry = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(true);
+    expect(mocks.mockRunFlowNow).toHaveBeenCalledOnce();
+  });
+
   it('maps a 403 into a clear licensing/permission error after confirmation', async () => {
     const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
     mocks.mockRunFlowNow.mockRejectedValue(makeAxiosError(403));

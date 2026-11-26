@@ -16,7 +16,9 @@
  * - Standalone (flow tools: run-flow, run-flow-task, cancel-flow-run, which have no admin gate and no
  *   audit record): call `preview()` / `confirm()`. `resolveState()` runs on BOTH phases; if it throws
  *   the error propagates (fail closed — no token is minted, nothing is mutated). On confirm a
- *   missing or malformed token is rejected first, without calling `resolveState()`.
+ *   missing or malformed token is rejected first, without calling `resolveState()`. Wrap the
+ *   mutating REST call in `confirmAndRun()` so a definite 4xx (nothing applied) releases the token,
+ *   the same rule guardMutation's recordOutcome applies.
  *
  * Keep the wording here, not at call sites, so every signed-token tool says the same thing:
  * "short-lived token bound to this change" (NOT "single-use" — see signedTokenEvidence.ts for the
@@ -24,10 +26,12 @@
  */
 import { PreviewNotRunError } from '../../../errors/mcpToolError.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { getHttpStatusCode } from '../../../utils/getHttpStatus.js';
 import { WebToolName } from '../toolName.js';
 import { isWellFormedConfirmationToken } from './confirmationTokenCodec.js';
 import { EvidenceContext } from './evidence.js';
 import { renderPreviewNotRunMessage, renderTokenConfirmNextStep } from './hitlText.js';
+import { isDefiniteNotAppliedStatus } from './mutationGuard.js';
 import { SignedTokenEvidence, SignedTokenEvidenceOptions } from './signedTokenEvidence.js';
 
 /** The preview "NEXT STEP" wording a tool supplies (see renderTokenConfirmNextStep). */
@@ -129,5 +133,29 @@ export class SignedConfirmation {
           : undefined,
       }),
     );
+  }
+
+  /**
+   * Standalone confirm + mutate: confirm() the token, then run the mutating REST call. When `run`
+   * fails with a DEFINITE client error (4xx other than 408 — the request was rejected, nothing was
+   * applied; see isDefiniteNotAppliedStatus) the token's replay-cache entry is released so the
+   * caller can retry with the same token, matching guardMutation's recordOutcome. A 5xx, 408,
+   * timeout, network error or status-less error keeps it consumed (the outcome is unknown). The
+   * error is always rethrown.
+   */
+  async confirmAndRun<T>(
+    caller: SignedConfirmationCaller,
+    confirmationToken: string | undefined,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    await this.confirm(caller, confirmationToken);
+    try {
+      return await run();
+    } catch (e) {
+      if (isDefiniteNotAppliedStatus(getHttpStatusCode(e))) {
+        this.evidence.release();
+      }
+      throw e;
+    }
   }
 }

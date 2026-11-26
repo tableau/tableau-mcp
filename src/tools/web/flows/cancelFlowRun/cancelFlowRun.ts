@@ -133,12 +133,12 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
                   );
                 }
 
-                await confirmation.confirm(caller, confirmationToken);
-
-                await restApi.flowsMethods.cancelFlowRun({
-                  siteId: restApi.siteId,
-                  flowRunId,
-                });
+                await confirmation.confirmAndRun(caller, confirmationToken, () =>
+                  restApi.flowsMethods.cancelFlowRun({
+                    siteId: restApi.siteId,
+                    flowRunId,
+                  }),
+                );
                 return {
                   mcp: {
                     cancelStatus:

@@ -261,6 +261,30 @@ describe('cancelFlowRunTool', () => {
     expect(result.content[0].text).toContain('initiated the run');
   });
 
+  it('releases the token on a definite 4xx from Cancel Flow Run: a retry with the same token cancels', async () => {
+    const confirmationToken = await previewCancelFlowRun();
+    mocks.mockCancelFlowRun.mockRejectedValueOnce(makeTableauError(403, '403136'));
+    expect(
+      (await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(true);
+    mocks.mockCancelFlowRun.mockResolvedValue(undefined);
+    const retry = await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(false);
+    expect(mocks.mockCancelFlowRun).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the token consumed on a 5xx from Cancel Flow Run (outcome unknown)', async () => {
+    const confirmationToken = await previewCancelFlowRun();
+    mocks.mockCancelFlowRun.mockRejectedValueOnce(makeTableauError(500, '500000'));
+    expect(
+      (await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(true);
+    mocks.mockCancelFlowRun.mockResolvedValue(undefined);
+    const retry = await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(true);
+    expect(mocks.mockCancelFlowRun).toHaveBeenCalledOnce();
+  });
+
   it('maps a 404 into a flow-run-not-found error', async () => {
     const confirmationToken = await previewCancelFlowRun();
     mocks.mockCancelFlowRun.mockRejectedValue(makeTableauError(404, '404036'));

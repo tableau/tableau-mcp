@@ -129,12 +129,12 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
                   );
                 }
 
-                await confirmation.confirm(caller, confirmationToken);
-
-                const job = await restApi.tasksMethods.runFlowTask({
-                  siteId: restApi.siteId,
-                  taskId,
-                });
+                const job = await confirmation.confirmAndRun(caller, confirmationToken, () =>
+                  restApi.tasksMethods.runFlowTask({
+                    siteId: restApi.siteId,
+                    taskId,
+                  }),
+                );
                 return {
                   job,
                   mcp: {
