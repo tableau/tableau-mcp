@@ -81,6 +81,20 @@ export class PreviewNotRunError extends McpToolError {
   }
 }
 
+// The session store holding preview proof failed. Fails closed with a fixed message so backend
+// details never reach the client.
+export class EvidenceStoreUnavailableError extends McpToolError {
+  constructor() {
+    super({
+      type: 'evidence-store-unavailable',
+      message:
+        'Could not check the preview for this change because the confirmation store is unavailable. ' +
+        'Nothing was changed. Try the preview again in a moment.',
+      statusCode: 503,
+    });
+  }
+}
+
 // Thrown by delete-content (preview AND confirm) when Admin Insights shows the workbook/datasource no
 // longer meets the stale-content criteria — it was used within the threshold, or accessed on/after
 // the cleanup batch's date (W-24311035). statusCode 409: the resource's state blocks the mutation.

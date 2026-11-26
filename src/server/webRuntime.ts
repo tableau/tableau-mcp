@@ -57,6 +57,19 @@ export async function initializeWebRuntime(
   await connectSessionStore();
   registerSessionStoreShutdown();
 
+  // Stateless HTTP is how a server is run behind a load balancer, where a process-local store
+  // makes flow confirms fail whenever they land on a different replica than their preview.
+  if (config.disableSessionManagement && config.sessionStore?.provider === 'memory') {
+    log({
+      message:
+        'DISABLE_SESSION_MANAGEMENT is true but SESSION_STORE_PROVIDER is memory. With more than ' +
+        'one replica, confirming a previewed mutation fails unless it reaches the same process. ' +
+        'Set SESSION_STORE_PROVIDER=custom with a shared store.',
+      level: 'warning',
+      logger: 'startup',
+    });
+  }
+
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
     log({
       message: 'Fatal error initializing server info',
