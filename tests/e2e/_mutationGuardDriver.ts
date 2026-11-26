@@ -300,13 +300,11 @@ async function main(): Promise<void> {
     hasPreviewNotRun,
     hasPreviewNotRun ? 'present' : 'ABSENT',
   );
-  // No raw nonce ever in audit detail.
-  const leak = auditLines.some((a) =>
-    /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-/.test(
-      JSON.stringify((a as any).data?.confirmationEvidence ?? {}),
-    ),
-  );
-  record('audit-no-nonce-leak', !leak, leak ? 'NONCE LEAKED IN AUDIT' : 'clean');
+  // No signed confirmation token anywhere in an audit record. Match the token shape
+  // (`v1.<expiresAtMs>.<tokenId:22 base64url>.`) against the whole serialized line, not only
+  // confirmationEvidence, so a token leaked into any field is caught.
+  const leak = auditLines.some((a) => /v1\.\d+\.[A-Za-z0-9_-]{22}\./.test(JSON.stringify(a)));
+  record('audit-no-token-leak', !leak, leak ? 'TOKEN LEAKED IN AUDIT' : 'clean');
 
   await client.close();
 
