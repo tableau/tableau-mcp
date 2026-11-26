@@ -64,6 +64,7 @@ export class Config extends BaseConfig {
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   disableSessionManagement: boolean;
+  requestStateSecret: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
@@ -145,6 +146,7 @@ export class Config extends BaseConfig {
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
+      REQUEST_STATE_SECRET: requestStateSecret,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
         passthroughAuthUserSessionCheckIntervalInMinutes,
@@ -211,6 +213,10 @@ export class Config extends BaseConfig {
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.disableSessionManagement = disableSessionManagement === 'true';
+    this.requestStateSecret = requestStateSecret?.trim() ?? '';
+    if (this.requestStateSecret && Buffer.byteLength(this.requestStateSecret) < 32) {
+      throw new Error('REQUEST_STATE_SECRET must be at least 32 bytes long.');
+    }
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,

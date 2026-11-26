@@ -4,6 +4,7 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import {
   AllEvidence,
   AppApprovalEvidence,
+  ElicitationApprovalEvidence,
   EvidenceContext,
   NoEvidence,
   RegistryEvidence,
@@ -629,6 +630,32 @@ describe('AllEvidence (AND-composition)', () => {
       new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
     ]);
     expect(all.describeEvidence().kind).toBe('registry-nonce');
+  });
+});
+
+describe('ElicitationApprovalEvidence', () => {
+  const ctx = makeCtx({ tool: 'update-user', binding: 'target-1:Viewer' });
+  const state = { tool: 'update-user' as const, targetId: 'target-1', binding: 'target-1:Viewer' };
+
+  it('verifies an accepted approval for this tool, target, and binding', async () => {
+    expect(await new ElicitationApprovalEvidence({ state, accepted: true }).verify(ctx)).toBe(true);
+  });
+
+  it.each([
+    ['not accepted', { state, accepted: false }],
+    ['no state', { accepted: true }],
+    ['another tool', { state: { ...state, tool: 'delete-content' as const }, accepted: true }],
+    ['another target', { state: { ...state, targetId: 'target-2' }, accepted: true }],
+    ['another binding', { state: { ...state, binding: 'target-1:Creator' }, accepted: true }],
+  ])('rejects when %s', async (_, options) => {
+    expect(await new ElicitationApprovalEvidence(options).verify(ctx)).toBe(false);
+  });
+
+  it('describes itself as a registry-nonce kind with an elicitation detail', () => {
+    expect(new ElicitationApprovalEvidence().describeEvidence()).toEqual({
+      kind: 'registry-nonce',
+      detail: expect.stringContaining('mcp-elicitation'),
+    });
   });
 });
 

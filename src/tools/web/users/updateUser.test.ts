@@ -4,6 +4,8 @@ import { Ok } from 'ts-results-es';
 import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { ElicitationApprovalEvidence } from '../_lib/evidence.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockUser } from './mockUser.js';
 import { getUpdateUserTool } from './updateUser.js';
@@ -76,14 +78,31 @@ function mockGuardSuccess(): void {
 describe('updateUserTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockReset().mockResolvedValue(false);
     mockGuardSuccess();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const updateUserTool = getUpdateUserTool(new WebMcpServer());
     expect(updateUserTool.name).toBe('update-user');
-    expect(updateUserTool.description).toContain('Updates the site role of a user');
+    expect(await Provider.from(updateUserTool.description)).toContain(
+      'Updates the site role of a user',
+    );
   });
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    'update-user-elicitation flag=%s → description mentions elicitation=%s',
+    async (flag, mentioned) => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'update-user-elicitation',
+      );
+      const description = await Provider.from(getUpdateUserTool(new WebMcpServer()).description);
+      expect(description.includes('form elicitation')).toBe(mentioned);
+    },
+  );
 
   it.each([
     [true, true, false],
@@ -305,6 +324,231 @@ describe('updateUserTool', () => {
     });
   });
 
+  describe('elicitation (multi round-trip)', () => {
+    const userId = 'a1b2c3d4-e5f6-4890-abcd-ef1234567890';
+    const elicitingServer = (): WebMcpServer =>
+      new WebMcpServer({ capabilities: { elicitation: { form: {} } } });
+    const approvalState = {
+      tool: 'update-user',
+      targetId: userId,
+      binding: `${userId}:Unlicensed`,
+    };
+
+    beforeEach(() => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'update-user-elicitation',
+      );
+    });
+
+    describe('with update-user-elicitation off', () => {
+      beforeEach(() => {
+        mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      });
+
+      it('keeps the token flow for a client that can elicit', async () => {
+        mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+        const requestInput = vi.fn();
+
+        const result = await getToolResult(
+          { userId, siteRole: 'Unlicensed' },
+          { server: elicitingServer(), requestInput },
+        );
+
+        expect(requestInput).not.toHaveBeenCalled();
+        expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: 'preview' }),
+        );
+        expect(mocks.mockGuardMutation).not.toHaveBeenCalledWith(
+          expect.objectContaining({ evidence: expect.any(ElicitationApprovalEvidence) }),
+        );
+        expect((result.content[0] as { text: string }).text).toContain('mock-nonce-123');
+      });
+
+      it('ignores an echoed approval and only previews', async () => {
+        mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+
+        const result = await getToolResult(
+          { userId, siteRole: 'Unlicensed' },
+          {
+            server: elicitingServer(),
+            requestState: (() => approvalState) as TableauWebRequestHandlerExtra['requestState'],
+            inputResponses: { confirm: { action: 'accept', content: { confirm: true } } },
+          },
+        );
+
+        expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: 'preview' }),
+        );
+        expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
+        expect((result.content[0] as { text: string }).text).toContain('mock-nonce-123');
+      });
+    });
+
+    it('asks the user to approve instead of returning a token', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue({
+        ...mockUser,
+        siteRole: 'Creator',
+        email: 'john.smith@example.com',
+      });
+      const requestInput = vi.fn().mockResolvedValue(undefined);
+
+      await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        { server: elicitingServer(), requestInput },
+      );
+
+      expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phase: 'preview',
+          evidence: expect.any(ElicitationApprovalEvidence),
+        }),
+      );
+      expect(requestInput).toHaveBeenCalledWith(
+        {
+          confirm: expect.objectContaining({
+            method: 'elicitation/create',
+            params: expect.objectContaining({
+              message: expect.stringContaining('from Creator to Unlicensed'),
+            }),
+          }),
+        },
+        approvalState,
+      );
+      expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
+    });
+
+    it('treats a bare elicitation capability as form support', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+      const requestInput = vi.fn().mockResolvedValue(undefined);
+
+      await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        { server: new WebMcpServer({ capabilities: { elicitation: {} } }), requestInput },
+      );
+
+      expect(requestInput).toHaveBeenCalled();
+    });
+
+    it('reads capabilities declared on the request itself (2026-07-28)', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+      const requestInput = vi.fn().mockResolvedValue(undefined);
+
+      await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        { clientCapabilities: { elicitation: { form: {} } }, requestInput },
+      );
+
+      expect(requestInput).toHaveBeenCalled();
+    });
+
+    it('keeps the token flow when the client cannot elicit forms', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+      const requestInput = vi.fn();
+
+      const result = await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        {
+          server: new WebMcpServer({ capabilities: { elicitation: { url: {} } } }),
+          requestInput,
+        },
+      );
+
+      expect(requestInput).not.toHaveBeenCalled();
+      expect((result.content[0] as { text: string }).text).toContain('mock-nonce-123');
+    });
+
+    it('only previews when a 2026-07-28 request declares no capabilities', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+      const requestInput = vi.fn();
+
+      const result = await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        { clientCapabilities: {}, requestInput },
+      );
+
+      expect(requestInput).not.toHaveBeenCalled();
+      expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: 'preview' }),
+      );
+      expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
+      expect((result.content[0] as { text: string }).text).toContain('mock-nonce-123');
+    });
+
+    it('applies the change once the user accepts', async () => {
+      mocks.mockUpdateUser.mockResolvedValue({ ...mockUser, siteRole: 'Unlicensed' });
+
+      const result = await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        {
+          server: elicitingServer(),
+          requestState: (() => approvalState) as TableauWebRequestHandlerExtra['requestState'],
+          inputResponses: { confirm: { action: 'accept', content: { confirm: true } } },
+        },
+      );
+
+      expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: 'confirm' }),
+      );
+      const { evidence } = mocks.mockGuardMutation.mock.calls[0][0];
+      expect(evidence).toBeInstanceOf(ElicitationApprovalEvidence);
+      const target = { id: userId, kind: 'user' as const };
+      await expect(
+        evidence.verify({ tool: 'update-user', target, binding: approvalState.binding }),
+      ).resolves.toBe(true);
+      await expect(
+        evidence.verify({ tool: 'update-user', target, binding: `${userId}:Viewer` }),
+      ).resolves.toBe(false);
+      expect(mocks.mockUpdateUser).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        userId,
+        siteRole: 'Unlicensed',
+      });
+      expect((result.content[0] as { text: string }).text).toContain('successfully updated');
+    });
+
+    it('treats a malformed echoed state as no approval', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+      const requestInput = vi.fn().mockResolvedValue(undefined);
+
+      await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        {
+          server: elicitingServer(),
+          requestInput,
+          requestState: (() => 'v1.unverified') as TableauWebRequestHandlerExtra['requestState'],
+          inputResponses: { confirm: { action: 'accept', content: { confirm: true } } },
+        },
+      );
+
+      expect(mocks.mockGuardMutation).toHaveBeenCalledWith(
+        expect.objectContaining({ phase: 'preview' }),
+      );
+      expect(requestInput).toHaveBeenCalled();
+      expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['declines', { action: 'decline' }],
+      ['cancels', { action: 'cancel' }],
+      ['answers no', { action: 'accept', content: { confirm: false } }],
+      ['sends no answer', undefined],
+    ])('makes no change when the user %s', async (_, answer) => {
+      const result = await getToolResult(
+        { userId, siteRole: 'Unlicensed' },
+        {
+          server: elicitingServer(),
+          requestState: (() => approvalState) as TableauWebRequestHandlerExtra['requestState'],
+          inputResponses: answer ? { confirm: answer } : undefined,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect((result.content[0] as { text: string }).text).toContain('No change made');
+      expect(mocks.mockGuardMutation).not.toHaveBeenCalled();
+      expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
+    });
+  });
+
   describe('guard rejection', () => {
     it('should return error when guard rejects (not admin)', async () => {
       const { AdminOnlyError } = await import('../../../errors/mcpToolError.js');
@@ -334,8 +578,11 @@ describe('updateUserTool', () => {
   });
 });
 
-async function getToolResult(args: any): Promise<CallToolResult> {
+async function getToolResult(
+  args: any,
+  overrides: Partial<TableauWebRequestHandlerExtra> = {},
+): Promise<CallToolResult> {
   const updateUserTool = getUpdateUserTool(new WebMcpServer());
   const callback = await Provider.from(updateUserTool.callback);
-  return await callback(args, getMockRequestHandlerExtra());
+  return await callback(args, getMockRequestHandlerExtra(overrides));
 }

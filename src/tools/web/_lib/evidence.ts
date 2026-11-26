@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
+import { z } from 'zod';
+
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
-import { WebToolName } from '../toolName.js';
+import { WebToolName, webToolNames } from '../toolName.js';
 import { MutationTarget } from './mutationGuard.js';
 import { formatPendingDeletionTag, getPendingDeletionMarkers } from './pendingDeletionTag.js';
 
@@ -299,6 +301,57 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
   /** The nonce minted by the last establish(), for the preview response text. Never audited. */
   getEstablishedNonce(): string | undefined {
     return this.lastNonce;
+  }
+}
+
+/** What a preview signs into the multi-round-trip `requestState` for ElicitationApprovalEvidence. */
+export const elicitationApprovalStateSchema = z.object({
+  tool: z.enum(webToolNames),
+  targetId: z.string(),
+  binding: z.string(),
+});
+export type ElicitationApprovalState = z.infer<typeof elicitationApprovalStateSchema>;
+
+/**
+ * ElicitationApprovalEvidence — proof that a human approved the mutation in a client-rendered
+ * elicitation form (2026-07-28 multi round-trip). The preview round returns `input_required` with
+ * the target and binding signed into `requestState`; the client asks the human and retries with
+ * their answer. The SDK's requestState hook has already verified the HMAC, TTL, and site/user
+ * binding before `verify` sees the payload, so `verify` only checks the payload names this exact
+ * tool, target, and binding and that the human accepted.
+ *
+ * Nothing is stored server-side, so this works across replicas that share REQUEST_STATE_SECRET. The
+ * signed state is not single-use: within its TTL, the same principal can replay the same approved
+ * change, which re-applies an identical update.
+ */
+export class ElicitationApprovalEvidence implements EvidenceStrategy<MutationTarget> {
+  private readonly state: ElicitationApprovalState | undefined;
+  private readonly accepted: boolean;
+
+  constructor({ state, accepted }: { state?: ElicitationApprovalState; accepted?: boolean } = {}) {
+    this.state = state;
+    this.accepted = accepted ?? false;
+  }
+
+  async establish(): Promise<void> {
+    // The proof is the signed requestState the tool returns with its input request.
+  }
+
+  async verify(ctx: EvidenceContext): Promise<boolean> {
+    return (
+      this.accepted &&
+      this.state?.tool === ctx.tool &&
+      this.state.targetId === ctx.target.id &&
+      this.state.binding === (ctx.binding ?? '')
+    );
+  }
+
+  describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
+    // Reuse the audited 'registry-nonce' kind (no schema change); the detail distinguishes it.
+    return {
+      kind: 'registry-nonce',
+      detail: 'mcp-elicitation (human approval, signed requestState)',
+    };
   }
 }
 

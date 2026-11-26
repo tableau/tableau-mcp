@@ -16,5 +16,6 @@
   "activity-log": false,
   "admin-tools": false,
   "mcp-wildcard-scope": false,
-  "mcp-protocol-2026": false
+  "mcp-protocol-2026": false,
+  "update-user-elicitation": false
 }
