@@ -5,11 +5,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
-import {
-  FlowNotAllowedError,
-  McpToolError,
-  PreviewNotRunError,
-} from '../../../../errors/mcpToolError.js';
+import { FlowNotAllowedError, McpToolError } from '../../../../errors/mcpToolError.js';
 import { isFlowWriteToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
@@ -18,10 +14,10 @@ import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
-import { EvidenceContext, RegistryEvidence } from '../../_lib/evidence.js';
-import { renderPreviewNotRunMessage, renderTokenConfirmNextStep } from '../../_lib/hitlText.js';
+import { SignedConfirmation } from '../../_lib/signedConfirmation.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
+import { resolveFlowRunPreState } from '../flowRunPreState.js';
 import { mapFlowWriteError } from '../flowWriteErrors.js';
 
 const MIN_RUN_FLOW_SPEC_REST_VERSION = '3.14';
@@ -69,8 +65,8 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   **This tool changes server state.** A confirmed run consumes warehouse + Tableau Prep Conductor capacity and overwrites the flow's outputs. Do not confirm until the user has explicitly approved the preview.
 
   **Two-phase confirmation:**
-  1. **Preview** (\`confirm\` omitted or false): checks the requested run and bounded-context eligibility, starts no run, and returns a single-use confirmation token.
-  2. **Run** (\`confirm: true\`): requires the token from the matching preview. The server verifies and consumes it before enqueuing the flow.
+  1. **Preview** (\`confirm\` omitted or false): checks the requested run and bounded-context eligibility, starts no run, and returns a short-lived confirmation token bound to this change.
+  2. **Run** (\`confirm: true\`): requires the token from the matching preview. The server verifies it before enqueuing the flow, and rejects it if the run options changed or a new run of this flow appeared since the preview.
 
   **Parameters:**
   - \`flowId\` (required) – The flow to run.
@@ -78,7 +74,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   - \`outputStepIds\` (optional) – Run only these output steps (ids from \`get-flow\`). If provided, it must contain at least one id; omit it to run every output step.
   - \`parameterOverrides\` (optional) – Array of \`{ parameterId, overrideValue }\` for flows that use parameters. Required parameters must be supplied. Use \`get-flow\` to discover parameter ids and whether they are required.
   - \`confirm\` (optional) – Set \`true\` only after the user approves the preview.
-  - \`confirmationToken\` (optional) – The single-use token returned by the matching preview. Required when \`confirm\` is true.
+  - \`confirmationToken\` (optional) – The token returned by the matching preview. Required when \`confirm\` is true.
 
   **Response:** Preview returns instructions and a confirmation token. A confirmed call returns \`{ job, mcp: { runStatus } }\`. \`job\` includes \`id\` (background job id) and \`runFlowJobType.flowRunId\` (the flow run id). The run is asynchronous: report it as *started/queued*, and to check the outcome poll with \`list-flow-runs\` (filter \`flowId:eq:<id>\`) or \`get-flow\` (\`flowRunLimit: 1\`).
 
@@ -87,7 +83,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   - Requires **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled.
   - **Caller-role:** in addition to admins/project leaders, the flow owner and users granted Run Flow / Execute permission can run a flow. Non-permitted callers get a clear permission error.
   - Not idempotent — each call enqueues another run. A run may be rejected if one is already queued or in progress for the flow.
-  - Requires Tableau REST API access scopes \`tableau:flows:run\`, \`tableau:flows:read\` (for bounded-context verification), and \`tableau:mcp_site_settings:read\`.`,
+  - Requires Tableau REST API access scopes \`tableau:flows:run\`, \`tableau:flows:read\` (for bounded-context verification), \`tableau:flow_runs:read\` (to bind the token to the flow's latest runs), and \`tableau:mcp_site_settings:read\`.`,
     paramsSchema,
     annotations: {
       title: 'Run Flow',
@@ -138,26 +134,29 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
               ...extra,
               jwtScopes: runFlowTool.requiredApiScopes,
               callback: async (restApi) => {
-                const evidence = new RegistryEvidence();
-                const target = { id: flowId };
-                const evidenceContext: EvidenceContext = {
-                  restApi,
-                  siteId: restApi.siteId,
-                  target,
+                // Server-signed, short-lived token bound to site, user, tool, flow, the run
+                // parameters (binding) AND the flow's newest runs (pre-state), so it verifies on any
+                // replica sharing MUTATION_TOKEN_SECRET and is rejected once another run appears.
+                const confirmation = new SignedConfirmation({
                   tool: 'run-flow',
-                  userLuid: extra.getUserLuid(),
-                  confirmationToken,
+                  targetId: flowId,
+                  targetKind: 'flow',
                   binding: createRunFlowBinding({
                     flowId,
                     runMode,
                     outputStepIds,
                     parameterOverrides,
                   }),
-                };
+                  resolveState: () => resolveFlowRunPreState(restApi, flowId),
+                  text: {
+                    subject: 'present this proposed flow run',
+                    approvalClause: 'confirm it. Do NOT run',
+                    tail: ' before starting the flow run).',
+                  },
+                });
+                const caller = { restApi, userLuid: extra.getUserLuid() };
 
                 if (!confirm) {
-                  await evidence.establish(evidenceContext);
-                  const nonce = evidence.getEstablishedNonce();
                   const outputDescription = outputStepIds?.length
                     ? `output steps ${outputStepIds.join(', ')}`
                     : 'all output steps';
@@ -167,24 +166,11 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   return (
                     `Preview — would enqueue a ${runMode ?? 'full'} run for flow '${flowId}' using ${outputDescription}${overrideDescription}. ` +
                     'No flow run has been started. ' +
-                    renderTokenConfirmNextStep({
-                      subject: 'present this proposed flow run',
-                      approvalClause: 'confirm it. Do NOT run',
-                      nonce,
-                      tail: ' before starting the flow run).',
-                    })
+                    (await confirmation.preview(caller))
                   );
                 }
 
-                if (!(await evidence.verify(evidenceContext))) {
-                  throw new PreviewNotRunError(
-                    renderPreviewNotRunMessage({
-                      tool: 'run-flow',
-                      targetKind: 'flow',
-                      targetId: flowId,
-                    }),
-                  );
-                }
+                await confirmation.confirm(caller, confirmationToken);
 
                 return await restApi.flowsMethods.runFlowNow({
                   siteId: restApi.siteId,
@@ -230,7 +216,7 @@ function redactParameterOverrides(
   }));
 }
 
-/** SHA-256 fingerprint binding the preview token to the request without caching raw parameter values. */
+/** SHA-256 fingerprint binding the preview token to the request without exposing raw parameter values. */
 function createRunFlowBinding({
   flowId,
   runMode,

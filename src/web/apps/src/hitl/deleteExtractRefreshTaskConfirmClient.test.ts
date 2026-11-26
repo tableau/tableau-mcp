@@ -4,6 +4,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APP_APPROVAL_META_KEY } from '../../../../utils/appApprovalMeta.js';
 import {
   isDeleteExtractRefreshTaskConfirmResult,
   parseDeleteExtractRefreshTaskConfirmResult,
@@ -109,6 +110,24 @@ describe('renderDeleteExtractRefreshTaskConfirm', () => {
     expect(app.callServerTool).toHaveBeenCalledWith({
       name: 'confirm-delete-content',
       arguments: { resourceType: 'extract-refresh-task', resourceId: taskId },
+    });
+  });
+
+  it('forwards the _meta approval token (never in text) to the confirm tool', async () => {
+    const result = {
+      ...(confirmResult() as Record<string, unknown>),
+      _meta: { [APP_APPROVAL_META_KEY]: 'v1.test-approval' },
+    };
+    renderDeleteExtractRefreshTaskConfirm(app as unknown as App, result as never);
+    (document.querySelector('.dww-confirm') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(app.callServerTool).toHaveBeenCalledWith({
+      name: 'confirm-delete-content',
+      arguments: {
+        resourceType: 'extract-refresh-task',
+        resourceId: taskId,
+        approvalToken: 'v1.test-approval',
+      },
     });
   });
 

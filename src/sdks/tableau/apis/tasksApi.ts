@@ -127,7 +127,7 @@ const deleteExtractRefreshTaskEndpoint = makeEndpoint({
  * Updates the schedule of an extract refresh task on Tableau Cloud (API 3.20+).
  * The endpoint shares the path with delete-extract-refresh-task and uses POST for the update verb.
  * Tableau Cloud only — not available on Tableau Server.
- * Tableau Cloud scope: tableau:tasks:write
+ * Tableau Cloud scope: tableau:tasks:update
  * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task
  */
 const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({

@@ -386,6 +386,63 @@ export class NoDesktopInstancesFoundError extends McpToolError {
   }
 }
 
+/**
+ * A signed confirmation / approval token cannot be issued because the request carries no
+ * authenticated site or user identity to bind it to (fail closed: an unbound token would not
+ * identify who it was issued to).
+ */
+export class ConfirmationIdentityMissingError extends McpToolError {
+  constructor() {
+    super({
+      type: 'confirmation-identity-missing',
+      message:
+        'Cannot issue a confirmation token without an authenticated site and user identity. ' +
+        'Reconnect with an authenticated Tableau user and run the preview again.',
+      statusCode: 401,
+    });
+  }
+}
+
+/**
+ * The pre-state read behind a signed confirmation / approval token (e.g. a flow's newest runs, an
+ * extract-refresh task's current schedule) was refused by Tableau with a 401/403. The usual cause is
+ * an OAuth token consented before the tool started requiring that read's scope, so the message
+ * names the scope(s) and tells the user to reconnect. Fail closed: no token is issued and nothing is
+ * mutated; there is deliberately no fallback to a token without pre-state. The HTTP status of the
+ * refused read is kept (401 or 403) so telemetry still classifies it as an auth failure.
+ */
+export class ConfirmationPreStateForbiddenError extends McpToolError {
+  readonly requiredScopes: ReadonlyArray<string>;
+
+  constructor({
+    description,
+    requiredScopes,
+    statusCode,
+    cause,
+  }: {
+    /** What could not be read, e.g. "this flow's recent runs". */
+    description: string;
+    requiredScopes: ReadonlyArray<string>;
+    statusCode: 401 | 403;
+    cause?: string;
+  }) {
+    const scopeList = requiredScopes.join(' and ');
+    super({
+      type: 'confirmation-pre-state-forbidden',
+      message:
+        `Could not read ${description} to prepare the confirmation (requires ${scopeList}). ` +
+        'Nothing was changed and no confirmation token was issued. Reconnect Tableau to grant ' +
+        `${requiredScopes.length > 1 ? 'these scopes' : 'this scope'}, then run the preview again. ` +
+        'If the scope is already granted, your Tableau permissions may not allow this read; if your ' +
+        'organization limits Tableau access, this tool may be intentionally unavailable.',
+      statusCode,
+      internalStatusCode: statusCode,
+      internalError: cause,
+    });
+    this.requiredScopes = requiredScopes;
+  }
+}
+
 export class AdminOnlyError extends McpToolError {
   constructor(message: string) {
     super({ type: 'admin-only', message, statusCode: 403 });

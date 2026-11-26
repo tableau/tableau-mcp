@@ -82,7 +82,7 @@ Only for action "remove-pending-tags": LUIDs of the workbooks or data sources to
 :::
 
 ### `confirm`
-When omitted or `false`, runs the non-destructive **preview**: it reports the target and records prior-preview evidence (tags a workbook or data source, or mints a single-use `confirmationToken` for an extract refresh task) without deleting anything. When `true`, permanently deletes — but only after the mutation guard verifies the prior-preview evidence (the pending-deletion tag for a workbook or data source, the `confirmationToken` for an extract refresh task).
+When omitted or `false`, runs the non-destructive **preview**: it reports the target and records prior-preview evidence (tags a workbook or data source, or mints a short-lived `confirmationToken` bound to this change for an extract refresh task) without deleting anything. When `true`, permanently deletes — but only after the mutation guard verifies the prior-preview evidence (the pending-deletion tag for a workbook or data source, the `confirmationToken` for an extract refresh task).
 
 #### Example
 
@@ -107,14 +107,14 @@ On a workbook or data source preview, a `cleanupDate` other than today's UTC dat
 Only for resourceType="workbook" or "datasource": minimum days since last access for the item to still count as stale. Defaults to the server stale-content threshold (90).
 
 ### `confirmationToken`
-**For `resourceType="extract-refresh-task"` only.** The single-use token returned by a prior preview call. **Required when `confirm` is `true`;** ignored otherwise. This MCP server's in-process mutation guard mints, holds, verifies, and consumes the token — and re-checks live Tableau state on confirm — so a forged or precomputed token, or a `confirm: true` call with no prior preview, is rejected. The token is not a Tableau REST API feature; it exists only in the MCP server's memory.
+**For `resourceType="extract-refresh-task"` only.** The short-lived token returned by a prior preview call. **Required when `confirm` is `true`;** ignored otherwise. This MCP server's mutation guard signs the token on preview, verifies its signature on confirm, and re-checks live Tableau state, so a forged or precomputed token, or a `confirm: true` call with no prior preview, is rejected. The token is not a Tableau REST API feature; it verifies on any replica that shares [`MUTATION_TOKEN_SECRET`](../../configuration/mcp-config/env-vars.md#mutation_token_secret).
 
 #### Example
 
 `"<token from preview>"`
 
 :::note[The confirmation token is ephemeral]
-Because the mutation guard's nonce store is in-memory to this MCP server, a `confirmationToken` does not outlive the preview session. If a confirm is rejected for a missing or expired token, re-run the preview to mint a fresh one.
+A `confirmationToken` is valid for [`MUTATION_PREVIEW_TTL_MINUTES`](../../configuration/mcp-config/env-vars.md#mutation_preview_ttl_minutes) (default 5). If a confirm is rejected for a missing or expired token, re-run the preview to mint a fresh one.
 :::
 
 ## Notes and caveats
@@ -196,7 +196,7 @@ The tool is **two-phase** to keep the destructive action safe:
    - For `extract-refresh-task`: first verifies the task exists on the site (there is no single-get
      endpoint, so the task list is checked for a matching id) — an unknown `taskId` returns a
      not-found error and **no** `confirmationToken` is minted. When the task exists, mints a
-     single-use `confirmationToken` and reports task metadata.
+     short-lived `confirmationToken` and reports task metadata.
    - Does **not** delete anything.
 
 2. **Confirm** (`confirm: true`):

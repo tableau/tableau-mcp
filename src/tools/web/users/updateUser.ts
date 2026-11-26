@@ -10,9 +10,10 @@ import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getHttpStatusCode } from '../../../utils/getHttpStatus.js';
 import { Provider } from '../../../utils/provider.js';
-import { RegistryEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
+import { SignedConfirmation } from '../_lib/signedConfirmation.js';
 import { WebTool } from '../tool.js';
 
 // ServerAdministrator is server-scoped (not assignable via PUT /sites/.../users/...).
@@ -41,7 +42,7 @@ const paramsSchema = {
     .optional()
     .describe(
       'When omitted or false, runs a non-destructive preview: looks up the user and reports ' +
-        'the proposed role change without applying it, returning a single-use confirmation token. ' +
+        'the proposed role change without applying it, returning a short-lived confirmation token bound to this change. ' +
         'When true, applies the role change — but only if the confirmationToken from a prior ' +
         'preview of this same userId and siteRole is supplied.',
     ),
@@ -49,7 +50,7 @@ const paramsSchema = {
     .string()
     .optional()
     .describe(
-      'The single-use confirmation token returned by a prior preview call for this userId and ' +
+      'The short-lived confirmation token returned by a prior preview call for this userId and ' +
         'siteRole. Required when confirm is true; ignored otherwise.',
     ),
 };
@@ -69,10 +70,10 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
 
   This tool is **two-phase** to protect against accidental role changes:
 
-  1. **Preview (default — \`confirm\` omitted or false):** looks up the user, reports the current and proposed site role, and returns a single-use confirmation token. Nothing is changed.
-  2. **Update (\`confirm: true\`):** applies the role change. Requires the \`confirmationToken\` from a prior preview of this same \`userId\` and \`siteRole\` (the server verifies and consumes it).
+  1. **Preview (default — \`confirm\` omitted or false):** looks up the user, reports the current and proposed site role, and returns a short-lived confirmation token bound to this change. Nothing is changed.
+  2. **Update (\`confirm: true\`):** applies the role change. Requires the \`confirmationToken\` from a prior preview of this same \`userId\` and \`siteRole\` (the server verifies it).
 
-  The token is server-generated and bound to the previewed \`userId\` and \`siteRole\`: a token minted while previewing role A cannot confirm an update to role B. Present the change to the user and get explicit approval before confirming.
+  The token is server-signed and bound to the previewed \`userId\`, \`siteRole\` and the user's current role: a token minted while previewing role A cannot confirm role B, and it is rejected if the user's role changed since the preview. Present the change to the user and get explicit approval before confirming.
 
   **Required human confirmation:** After preview, present the change to the user and get explicit approval before calling again with \`confirm: true\`. Do not auto-confirm.
 
@@ -80,7 +81,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
   - \`userId\` (required) – The LUID of the user to update. Obtain from \`list-users\`.
   - \`siteRole\` (required) – The new site role. Valid values: Creator, Explorer, ExplorerCanPublish, SiteAdministratorCreator, SiteAdministratorExplorer, Viewer, Unlicensed.
   - \`confirm\` (optional) – Set \`true\` to apply the change (requires confirmationToken).
-  - \`confirmationToken\` (optional) – The single-use token from the preview. Required when \`confirm\` is true.
+  - \`confirmationToken\` (optional) – The token from the preview. Required when \`confirm\` is true.
 
   **Response:** Confirmation message with the user's updated site role.
 
@@ -103,8 +104,19 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
             ...extra,
             jwtScopes: updateUserTool.requiredApiScopes,
             callback: async (restApi) => {
-              const evidence = new RegistryEvidence();
               const binding = `${args.userId}:${args.siteRole}`;
+              // Pre-state comes from resolveTarget().state (the role seen by the guard's lookup).
+              const confirmation = new SignedConfirmation({
+                tool: 'update-user',
+                targetId: args.userId,
+                targetKind: 'user',
+                binding,
+                text: {
+                  subject: 'present this change',
+                  approvalClause: 'confirm it. Do NOT apply',
+                  tail: ' before applying the update).',
+                },
+              });
 
               let cachedUser: Awaited<
                 ReturnType<typeof restApi.usersMethods.queryUserOnSite>
@@ -119,6 +131,9 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                   id: args.userId,
                   name: cachedUser.name,
                   kind: 'user',
+                  // Bind the token to the role seen at preview: a role change in between (by anyone)
+                  // invalidates the confirmation. Read from the same lookup, no extra REST call.
+                  state: cachedUser.siteRole ?? '',
                 };
               };
 
@@ -129,7 +144,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                 action: 'update',
                 mode: 'preview-confirm',
                 phase: args.confirm ? 'confirm' : 'preview',
-                evidence,
+                evidence: confirmation.evidence,
                 resolveTarget,
                 confirmationToken: args.confirmationToken,
                 binding,
@@ -150,15 +165,11 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                     userId: args.userId,
                   }));
                 const currentRole = user.siteRole ?? 'unknown';
-                const nonce = evidence.getEstablishedNonce()!;
                 return new Ok(
                   `Preview — user '${target.name ?? args.userId}' (${user.email ?? 'no email'}) ` +
                     `would be changed from ${currentRole} → ${args.siteRole}. ` +
                     'No change has been made. ' +
-                    'NEXT STEP — REQUIRED: present this change to the user and ask them to explicitly ' +
-                    "confirm it. Do NOT apply without the user's approval. " +
-                    `Once approved, call again with confirm: true and confirmationToken: "${nonce}" ` +
-                    '(the server will verify and consume this single-use token before applying the update).',
+                    confirmation.nextStep(),
                 );
               }
 
@@ -175,7 +186,11 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                 );
               } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
-                recordOutcome({ ok: false, failureDetail: message });
+                recordOutcome({
+                  ok: false,
+                  failureDetail: message,
+                  httpStatus: getHttpStatusCode(err),
+                });
                 // Let the shared tool error path map it to a 400 args-validation error.
                 if (err instanceof RouteSafetyError) throw err;
                 return new UnknownError(

@@ -619,8 +619,10 @@ Controls the read-only Tableau Prep flow tools. They are enabled by default.
   - [`describe-flow`](../../web-tools/flows/describe-flow.md)
   - [`get-flow-task`](../../web-tools/flows/get-flow-task.md)
 - When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is not
-  accepted. REST API scopes that an enabled tool still uses stay advertised. For example,
-  `run-flow` uses `tableau:flows:read`
+  accepted. REST API scopes that an enabled tool still uses stay advertised. With the mutating flow
+  tools enabled, `tableau:flows:read` (`run-flow`), `tableau:flow_runs:read` (`run-flow` and
+  `run-flow-task`, which read the recent runs bound into the confirmation token) and
+  `tableau:flow_tasks:read` (`run-flow-task`) stay advertised
 
 <hr />
 
@@ -628,7 +630,7 @@ Controls the read-only Tableau Prep flow tools. They are enabled by default.
 
 Controls the content-**mutating** Tableau Prep flow tools. They are enabled by default. A confirmed
 run consumes Tableau Prep Conductor capacity and can overwrite flow outputs. Each tool previews the
-change first and returns a single-use confirmation token. The tool makes the change only when it's
+change first and returns a short-lived token bound to this change. The tool makes the change only when it's
 called again with that token, after the user approves the preview.
 
 - Default: unset, which enables the mutating flow tools
@@ -751,17 +753,87 @@ memory pressure to reduce REST traffic.
 
 ## `MUTATION_PREVIEW_TTL_MINUTES`
 
-TTL (in minutes) for the single-use confirmation tokens minted by the preview phase of two-phase
-mutation tools (e.g. [`delete-content`](../../web-tools/content/delete-content.md)).
+TTL (in minutes) for the confirmation tokens minted by the preview phase of two-phase mutation
+tools (e.g. [`delete-content`](../../web-tools/content/delete-content.md)).
 A token must be supplied on the confirmed call before it expires, otherwise the caller must re-run
 the preview.
 
 - Default: `5`
 - Minimum: `1`
-- Maximum: `1440` (24 hours)
+- Maximum: `5`. A larger value is clamped to `5` and the server logs a warning at startup.
 
-Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
-time between preview and confirmation.
+The default is also the maximum, so the only useful change is to lower it, which shortens the window
+in which a preview token is valid. The maximum is deliberately short: the single-use check on a
+confirmation token is per replica, so in a multi-replica deployment the TTL is also the window in
+which a token could be replayed on a different replica.
+
+<hr />
+
+## `MUTATION_TOKEN_SECRET`
+
+Shared secret used to sign the short-lived HITL confirmation tokens issued by `update-user`,
+`update-cloud-extract-refresh-task`, the extract-refresh-task branch of `delete-content`,
+`run-flow`, `run-flow-task` and `cancel-flow-run`. It also signs the approval tokens that the MCP
+Apps confirm panels (`delete-content`, `update-cloud-extract-refresh-task` with the `mcp-apps` flag
+on) pass to their app-only confirm tools. Approval tokens use a separately derived key, so a
+confirmation token cannot be used as an approval token or the other way round. The signing key is derived from the secret with HKDF-SHA256; the secret itself is
+never logged.
+
+A signed token is bound to the site, the user, the tool, the target, the requested change and the
+target's state at preview time. Any replica configured with the same secret can verify it, so a
+preview and its confirmation do not need to land on the same server instance.
+
+- Default: empty. Each process then signs tokens with its own random key, and a token verifies only
+  on the process that issued it.
+- Minimum length: 32 characters. A shorter value makes the server fail at startup.
+- Leading and trailing whitespace (for example the newline at the end of a mounted secret file) is
+  trimmed before use. A whitespace-only value counts as unset.
+- Set the **same** value on every replica behind a load balancer. For example:
+  `MUTATION_TOKEN_SECRET="$(openssl rand -base64 48)"`.
+
+If [`DISABLE_SESSION_MANAGEMENT`](#disable_session_management) is `true` and no secret is set, the
+server logs a startup warning: in that setup a confirmation routed to a different replica is
+rejected.
+
+:::note
+
+Tokens are short-lived and bound to the change, not strictly single-use across replicas. Each
+replica rejects a replay of a token it has already accepted. A replay on a different replica within
+the TTL is accepted only while the target is still in its previewed state. For `update-user` and
+`update-cloud-extract-refresh-task`, the first confirmation moves the target out of that state, so
+a replay is rejected. Where the change was identical, the replay re-applies it. For an
+extract-refresh-task delete or a flow-run cancel, a replay reaches a target that has already been
+deleted or cancelled.
+
+For `run-flow` and `run-flow-task`, the token is also bound to a fingerprint of the flow's 10 most
+recent runs (run ids and statuses). The first confirmation starts a new run, which changes that
+fingerprint, so a replay on another replica is normally rejected. A replay can still start a second
+run if it lands before the first run appears in the flow's run history. Detection is also weaker
+when more than 10 of the flow's runs have no completion time yet (for example, many queued runs):
+the new run may fall outside the window. Status changes of in-flight runs between preview and
+confirmation reject the confirmation; preview again to continue.
+
+The approval token delivered to an MCP Apps confirm panel is never placed in model-visible text. It
+has the same residual window: a captured approval token could be replayed on a different replica
+within the TTL while the target is still in its previewed state.
+
+:::
+
+<hr />
+
+## `MUTATION_TOKEN_SECRET_PREVIOUS`
+
+Previous value of [`MUTATION_TOKEN_SECRET`](#mutation_token_secret), accepted for verification only
+during a secret rotation. New tokens are always signed with the current secret.
+
+- Default: empty
+- Minimum length: 32 characters. A shorter value makes the server fail at startup.
+- Setting this without `MUTATION_TOKEN_SECRET` makes the server fail at startup.
+
+To rotate: set the new value in `MUTATION_TOKEN_SECRET` and the old value in
+`MUTATION_TOKEN_SECRET_PREVIOUS` on every replica. Then, after at least one
+[`MUTATION_PREVIEW_TTL_MINUTES`](#mutation_preview_ttl_minutes) has passed, remove
+`MUTATION_TOKEN_SECRET_PREVIOUS`.
 
 <hr />
 

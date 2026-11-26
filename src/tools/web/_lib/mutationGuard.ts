@@ -29,13 +29,18 @@
  * elicitation handshake (or the app-only confirmation tool described in confirm.ts) is tracked as
  * follow-up.
  *
- * RegistryEvidence's nonce store is in-memory (see the DURABILITY CAVEAT in evidence.ts): it is not
- * durable across restart / multi-instance, but it can only ever reject (never wrongly allow), so the
- * no-bypass guarantee holds.
+ * Every token-gated mutation tool uses SignedTokenEvidence (via signedConfirmation.ts, or
+ * appApproval.ts for the MCP-Apps confirm panels): its HMAC-signed token verifies on any replica
+ * sharing MUTATION_TOKEN_SECRET.
  */
 import { Ok, Result } from 'ts-results-es';
 
-import { AdminOnlyError, McpToolError, PreviewNotRunError } from '../../../errors/mcpToolError.js';
+import {
+  AdminOnlyError,
+  ConfirmationPreStateForbiddenError,
+  McpToolError,
+  PreviewNotRunError,
+} from '../../../errors/mcpToolError.js';
 import { AUDIT_LOGGER, log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { assertAdmin } from '../adminGate.js';
@@ -60,6 +65,12 @@ export interface MutationTarget {
   project?: string;
   owner?: string;
   kind: 'datasource' | 'workbook' | 'extract-refresh-task' | 'user';
+  /**
+   * Optional server-derived snapshot of the target's mutable state (e.g. a user's current site role,
+   * a hash of a task's current schedule). Passed to the evidence strategy so a signed confirmation
+   * token is rejected if the target changed between preview and confirm. Not written to the audit.
+   */
+  state?: string;
 }
 
 /** What the guard hands back to the tool on success so it can build its tool-specific response. */
@@ -72,8 +83,32 @@ export interface GuardOutcome {
    * is the SOLE audit entry for the confirm, so the caller MUST invoke it once the REST result is
    * known or the attempt goes unaudited. No-op on the preview phase (nothing mutates, and the preview
    * already logged its single 'allowed' record), so callers can invoke it unconditionally.
+   *
+   * On a failed confirm, pass `httpStatus` when the REST call's status is known. A DEFINITE client
+   * error (4xx other than 408: the request was rejected, nothing was applied) releases the evidence
+   * verify consumed, so the caller can retry with the same token on the same replica. A 5xx, 408,
+   * timeout, network error or omitted status leaves the token consumed — the outcome is unknown (a
+   * run may have been enqueued), so a retry needs a new preview.
    */
-  recordOutcome: (outcome: { ok: true } | { ok: false; failureDetail?: string }) => void;
+  recordOutcome: (outcome: MutationOutcome) => void;
+}
+
+/** The terminal result of a confirmed mutation's REST call, reported via recordOutcome. */
+export type MutationOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      failureDetail?: string;
+      /** HTTP status of the failed REST call, when known (see recordOutcome). */
+      httpStatus?: number;
+    };
+
+/**
+ * True for a status that proves the request was rejected without being applied: any 4xx except
+ * 408 Request Timeout (where the server may have started processing).
+ */
+export function isDefiniteNotAppliedStatus(httpStatus: number | undefined): boolean {
+  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408;
 }
 
 /**
@@ -164,7 +199,29 @@ export async function guardMutation<TTarget>({
   }
 
   // (3) Resolve the target so both the evidence gate and the audit record name exactly what was acted on.
-  const target = await resolveTarget();
+  // A refused pre-state read (the token's pre-state is part of the target, e.g. a task's schedule
+  // hash) is a DENIED attempt: audit it and return the scope-naming error as a clean tool error. Fail
+  // closed: no evidence is established or verified and nothing is mutated. Any other throw
+  // propagates as before.
+  let target: MutationTarget;
+  try {
+    target = await resolveTarget();
+  } catch (e) {
+    if (!(e instanceof ConfirmationPreStateForbiddenError)) {
+      throw e;
+    }
+    emitAuditRecord({
+      actor,
+      tool,
+      action,
+      phase,
+      target: { id: 'unresolved', kind: fallbackTargetKind ?? targetKindHint(tool) },
+      confirmationEvidence: evidenceDescriptor,
+      result: 'denied',
+      denyReason: e.type,
+    });
+    return e.toErr();
+  }
   const evidenceCtx: EvidenceContext = {
     restApi,
     siteId: restApi.siteId,
@@ -209,9 +266,14 @@ export async function guardMutation<TTarget>({
 
   // (4b) Target-state precondition. On a preview it runs BEFORE establish so a rejected preview
   // leaves no evidence (no residue); on a confirm it runs after verify, right before the mutation.
+  // A confirm rejected here mutates nothing, so the guard releases what verify consumed (e.g. a
+  // signed token's replay-cache entry): the caller's token is not burned by a stale-reject.
   if (precondition) {
     const preconditionResult = await precondition(target);
     if (preconditionResult.isErr()) {
+      if (phase === 'confirm' && mode === 'preview-confirm') {
+        evidence.release?.();
+      }
       emitAuditRecord({
         actor,
         tool,
@@ -227,8 +289,28 @@ export async function guardMutation<TTarget>({
   }
 
   // (5) Preview phase: establish the server-side proof the confirm phase will verify.
+  // A typed refusal from establish (e.g. no authenticated identity to bind a signed token to) is a
+  // DENIED preview: audit it and return it as a clean tool error. Any other throw propagates as
+  // before (fail closed: no evidence, no 'allowed' record).
   if (phase === 'preview') {
-    await evidence.establish(evidenceCtx);
+    try {
+      await evidence.establish(evidenceCtx);
+    } catch (e) {
+      if (!(e instanceof McpToolError)) {
+        throw e;
+      }
+      emitAuditRecord({
+        actor,
+        tool,
+        action,
+        phase,
+        target,
+        confirmationEvidence: evidenceDescriptor,
+        result: 'denied',
+        denyReason: e.type,
+      });
+      return e.toErr();
+    }
   }
 
   // (6) Allowed: on a PREVIEW, emit the single terminal 'allowed' record — nothing mutates, so the
@@ -251,9 +333,18 @@ export async function guardMutation<TTarget>({
   // Terminal-outcome recorder handed to the caller. Only a confirm phase mutates, so the preview
   // phase is a deliberate no-op — callers can invoke it unconditionally after their REST call. On a
   // confirm this emits the SOLE audit record for the attempt ('completed' or 'failed').
-  const recordOutcome = (outcome: { ok: true } | { ok: false; failureDetail?: string }): void => {
+  const recordOutcome = (outcome: MutationOutcome): void => {
     if (phase !== 'confirm') {
       return;
+    }
+    // A definite client error means nothing was applied: reopen the token (same rationale as the
+    // precondition release above). Unknown outcomes (5xx, timeouts, no status) keep it consumed.
+    if (
+      mode === 'preview-confirm' &&
+      !outcome.ok &&
+      isDefiniteNotAppliedStatus(outcome.httpStatus)
+    ) {
+      evidence.release?.();
     }
     emitAuditRecord({
       actor,

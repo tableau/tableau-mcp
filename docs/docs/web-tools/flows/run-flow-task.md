@@ -15,13 +15,13 @@ sidebar_position: 9
   **This tool changes server state** (it runs the flow, consuming Prep Conductor capacity and overwriting outputs). Only call it when the user asks to run the task.
 
   **Two-phase confirmation:**
-  1. **Preview** (`confirm` omitted or false): describes the task run without enqueuing it and returns a single-use confirmation token.
+  1. **Preview** (`confirm` omitted or false): describes the task run without enqueuing it and returns a short-lived confirmation token bound to this change.
   2. **Run** (`confirm: true`): requires the token from the matching preview before enqueuing the task.
 
   **Parameters:**
   - `taskId` (required) – The flow run task id from `list-flow-tasks` (the task `id`, i.e. the flowRun id).
   - `confirm` (optional) – Set `true` only after the user approves the preview.
-  - `confirmationToken` (optional) – The single-use token returned by the matching preview. Required when `confirm` is true.
+  - `confirmationToken` (optional) – The token returned by the matching preview. Required when `confirm` is true.
 
   **Response:** Preview returns instructions and a confirmation token. A confirmed call returns `{ job, mcp: { runStatus } }` — `job.id` (background job id) and `job.runFlowJobType.flowRunId`. Asynchronous: report it as *started*, then poll `list-flow-runs` / `get-flow` for the outcome.
 
@@ -30,7 +30,7 @@ sidebar_position: 9
   - **Caller-role:** non-administrators can only run flow run tasks they own.
   - Not idempotent. If a run for the task is already queued/in progress the request may be rejected.
   - **Bounded-context note:** when this MCP server is restricted to specific projects/tags, this tool cannot verify that a task's flow is in the allowed set (a task carries no project/tag and is addressed only by task id), so it refuses. Use `run-flow` (by flow id) in that configuration.
-  - Requires Tableau REST API access scopes `tableau:flow_tasks:run` and `tableau:mcp_site_settings:read`.
+  - Requires Tableau REST API access scopes `tableau:flow_tasks:run`, `tableau:flow_tasks:read` and `tableau:flow_runs:read` (to bind the token to the task's flow and its latest runs), and `tableau:mcp_site_settings:read`.
 
 ## APIs called
 
@@ -59,9 +59,15 @@ The confirmationToken argument.
 ## Two-phase confirmation
 
 1. **Preview** (default, with `confirm` omitted or `false`): describes the task run without
-   enqueuing it and returns a single-use `confirmationToken`.
+   enqueuing it and returns a short-lived `confirmationToken` bound to this change.
 2. **Run** (`confirm: true`): requires the token from a matching preview. Present the proposed run to
    the user and get explicit approval before making the confirmed call.
+
+The token is bound to the task id and to a fingerprint of the task's flow's 10 most recent run ids.
+Each phase makes two extra REST calls: Get Flow Run Task (to resolve the task's flow) and Get Flow
+Runs. If a new run appears between preview and confirm, the confirmation is rejected and a new
+preview is needed; an existing run that only changes status does not reject it. If either lookup fails, or the task has no
+resolvable flow, no token is issued and nothing runs.
 
 ## Requirements
 

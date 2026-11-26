@@ -25,6 +25,8 @@ vi.mock('./config.js', () => ({
   getConfig: vi.fn(() => ({
     transport: startupState.transport,
     server: 'https://tableau.example.com',
+    mutationTokenSecret: '',
+    mutationTokenSecretPrevious: '',
     auth: startupState.auth,
     oauth: { enabled: startupState.oauthEnabled },
     httpHost: startupState.httpHost,

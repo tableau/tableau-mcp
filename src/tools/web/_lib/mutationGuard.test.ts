@@ -1,13 +1,20 @@
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
-import { ContentNotStaleError } from '../../../errors/mcpToolError.js';
+import {
+  ConfirmationIdentityMissingError,
+  ConfirmationPreStateForbiddenError,
+  ContentNotStaleError,
+} from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { getMockRequestHandlerExtra, MOCK_SITE_LUID } from '../toolContext.mock.js';
 import { auditRecordSchema } from './auditRecord.js';
-import { EvidenceStrategy, NoEvidence, RegistryEvidence } from './evidence.js';
+import { deriveConfirmationTokenKey } from './confirmationTokenCodec.js';
+import { AllEvidence, EvidenceStrategy, NoEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
+import { SignedTokenEvidence } from './signedTokenEvidence.js';
 
 const mocks = vi.hoisted(() => ({
   mockAssertAdmin: vi.fn(),
@@ -120,6 +127,52 @@ describe('guardMutation', () => {
     expect(record.target.kind).toBe('datasource');
   });
 
+  // W-25002517: the signed token's pre-state comes from resolveTarget (e.g. a task's schedule hash).
+  // A scope-refused pre-state read is a DENIED attempt returned as a clean typed error, with no
+  // evidence established or verified (fail closed).
+  it.each(['preview', 'confirm'] as const)(
+    'on %s, audits DENIED and returns a ConfirmationPreStateForbiddenError from resolveTarget without touching evidence',
+    async (phase) => {
+      const preStateError = new ConfirmationPreStateForbiddenError({
+        description: "this extract refresh task's current schedule",
+        requiredScopes: ['tableau:tasks:read'],
+        statusCode: 403,
+      });
+      const evidence = makeEvidence();
+      const result = await run({
+        tool: 'update-cloud-extract-refresh-task',
+        action: 'update',
+        phase,
+        evidence,
+        confirmationToken: phase === 'confirm' ? 'v1.some-token' : undefined,
+        resolveTarget: vi.fn().mockRejectedValue(preStateError),
+      });
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error).toBe(preStateError);
+        expect(result.error.message).toContain('requires tableau:tasks:read');
+      }
+      expect(evidence.establish).not.toHaveBeenCalled();
+      expect(evidence.verify).not.toHaveBeenCalled();
+      const audits = getAuditRecords();
+      expect(audits).toHaveLength(1);
+      const record = auditRecordSchema.parse(audits[0]);
+      expect(record.result).toBe('denied');
+      expect(record.denyReason).toBe('confirmation-pre-state-forbidden');
+      expect(record.target.id).toBe('unresolved');
+      expect(record.target.kind).toBe('extract-refresh-task');
+    },
+  );
+
+  it('still propagates an untyped resolveTarget failure (no audit, unchanged behavior)', async () => {
+    const evidence = makeEvidence();
+    await expect(
+      run({ resolveTarget: vi.fn().mockRejectedValue(new Error('network down')), evidence }),
+    ).rejects.toThrow('network down');
+    expect(evidence.establish).not.toHaveBeenCalled();
+    expect(getAuditRecords()).toHaveLength(0);
+  });
+
   // --- preview-confirm: verify gate ---
 
   it('on confirm, denies and emits a DENIED audit when evidence.verify is false (forged/precomputed)', async () => {
@@ -186,6 +239,34 @@ describe('guardMutation', () => {
     expect(record.denyReason).toBeUndefined();
   });
 
+  it('on preview, a typed establish refusal (missing identity) is a DENIED audit and a clean Err', async () => {
+    const evidence = new SignedTokenEvidence({
+      keys: { current: deriveConfirmationTokenKey('mutation-guard-identity-secret-0123456789') },
+      ttlMs: 60_000,
+    });
+    const extra = getMockRequestHandlerExtra();
+    vi.spyOn(extra, 'getUserLuid').mockReturnValue(undefined as unknown as string);
+    const result = await run({ phase: 'preview', evidence, extra });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toBeInstanceOf(ConfirmationIdentityMissingError);
+      expect(result.error.message).toContain('authenticated site and user identity');
+    }
+    expect(evidence.getEstablishedNonce()).toBeUndefined();
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    const record = auditRecordSchema.parse(audits[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('confirmation-identity-missing');
+    expect(record.phase).toBe('preview');
+  });
+
+  it('on preview, an untyped establish failure still propagates (no allowed record)', async () => {
+    const evidence = makeEvidence({ establish: vi.fn().mockRejectedValue(new Error('boom')) });
+    await expect(run({ phase: 'preview', evidence })).rejects.toThrow('boom');
+    expect(getAuditRecords()).toHaveLength(0);
+  });
+
   // --- preview-confirm: establish on preview ---
 
   it('on preview, calls evidence.establish and emits an ALLOWED audit (does NOT verify)', async () => {
@@ -248,6 +329,168 @@ describe('guardMutation', () => {
       expect(record.result).toBe('denied');
       expect(record.denyReason).toBe('content-not-stale');
       expect(record.phase).toBe('confirm');
+    });
+
+    it('on confirm, a failing precondition releases what verify consumed; a clean one does not', async () => {
+      const release = vi.fn();
+      const evidence = makeEvidence({ release });
+      await run({ phase: 'confirm', evidence, precondition: vi.fn(notStale) });
+      expect(release).toHaveBeenCalledOnce();
+
+      release.mockClear();
+      const ok = await run({
+        phase: 'confirm',
+        evidence,
+        precondition: vi.fn().mockResolvedValue(Ok.EMPTY),
+      });
+      expect(ok.isOk()).toBe(true);
+      expect(release).not.toHaveBeenCalled();
+    });
+
+    describe('recordOutcome release on a definite non-applied failure', () => {
+      it.each([400, 403, 404, 409])(
+        'releases the evidence on a %i (the request was rejected, nothing applied)',
+        async (httpStatus) => {
+          const release = vi.fn();
+          const result = await run({ phase: 'confirm', evidence: makeEvidence({ release }) });
+          result.unwrap().recordOutcome({ ok: false, failureDetail: 'rejected', httpStatus });
+          expect(release).toHaveBeenCalledOnce();
+          const record = auditRecordSchema.parse(getAuditRecords()[0]);
+          expect(record.result).toBe('failed');
+        },
+      );
+
+      it.each([
+        ['a 500', 500],
+        ['a 503', 503],
+        ['a 408 timeout', 408],
+        ['an unknown status (network error / timeout)', undefined],
+      ])('keeps the evidence consumed on %s (outcome unknown)', async (_label, httpStatus) => {
+        const release = vi.fn();
+        const result = await run({ phase: 'confirm', evidence: makeEvidence({ release }) });
+        result.unwrap().recordOutcome({ ok: false, failureDetail: 'failed', httpStatus });
+        expect(release).not.toHaveBeenCalled();
+      });
+
+      it('never releases on success, on a preview, or in confirm-only mode', async () => {
+        const release = vi.fn();
+        (await run({ phase: 'confirm', evidence: makeEvidence({ release }) }))
+          .unwrap()
+          .recordOutcome({ ok: true });
+        (await run({ phase: 'preview', evidence: makeEvidence({ release }) }))
+          .unwrap()
+          .recordOutcome({ ok: false, httpStatus: 404 });
+        (await run({ phase: 'confirm', mode: 'confirm-only', evidence: makeEvidence({ release }) }))
+          .unwrap()
+          .recordOutcome({ ok: false, httpStatus: 404 });
+        expect(release).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('with a real signed token', () => {
+      const SECRET = 'mutation-guard-release-secret-0123456789';
+      const options = (): ConstructorParameters<typeof SignedTokenEvidence>[0] => ({
+        keys: { current: deriveConfirmationTokenKey(SECRET) },
+        replayCache,
+        ttlMs: 60_000,
+      });
+      let replayCache: ExpiringMap<string, true>;
+
+      beforeEach(() => {
+        replayCache = new ExpiringMap<string, true>({ defaultExpirationTimeMs: 60_000 });
+      });
+
+      async function mintToken(): Promise<string> {
+        const evidence = new SignedTokenEvidence(options());
+        await run({ phase: 'preview', evidence });
+        return evidence.getEstablishedNonce()!;
+      }
+
+      it('a stale-reject does not burn the token: the same token confirms once the precondition holds', async () => {
+        const token = await mintToken();
+        const rejected = await run({
+          phase: 'confirm',
+          evidence: new SignedTokenEvidence(options()),
+          confirmationToken: token,
+          precondition: vi.fn(notStale),
+        });
+        expect(rejected.isErr()).toBe(true);
+        if (rejected.isErr()) {
+          expect(rejected.error.type).toBe('content-not-stale');
+        }
+
+        const accepted = await run({
+          phase: 'confirm',
+          evidence: new SignedTokenEvidence(options()),
+          confirmationToken: token,
+          precondition: vi.fn().mockResolvedValue(Ok.EMPTY),
+        });
+        expect(accepted.isOk()).toBe(true);
+
+        // Once a confirm proceeded, the token is consumed: a replay on this replica is rejected.
+        const replay = await run({
+          phase: 'confirm',
+          evidence: new SignedTokenEvidence(options()),
+          confirmationToken: token,
+        });
+        expect(replay.isErr()).toBe(true);
+        if (replay.isErr()) {
+          expect(replay.error.type).toBe('preview-not-run');
+        }
+      });
+
+      it('a 4xx failure does not burn the token (retry works); a 5xx does', async () => {
+        const token = await mintToken();
+        const first = await run({
+          phase: 'confirm',
+          evidence: new SignedTokenEvidence(options()),
+          confirmationToken: token,
+        });
+        first.unwrap().recordOutcome({ ok: false, httpStatus: 409 });
+
+        const retry = await run({
+          phase: 'confirm',
+          evidence: new SignedTokenEvidence(options()),
+          confirmationToken: token,
+        });
+        expect(retry.isOk()).toBe(true);
+        retry.unwrap().recordOutcome({ ok: false, httpStatus: 502 });
+
+        const afterUnknown = await run({
+          phase: 'confirm',
+          evidence: new SignedTokenEvidence(options()),
+          confirmationToken: token,
+        });
+        expect(afterUnknown.isErr()).toBe(true);
+        if (afterUnknown.isErr()) {
+          expect(afterUnknown.error.type).toBe('preview-not-run');
+        }
+      });
+
+      it('AllEvidence forwards release to the signed member that verified', async () => {
+        const tag = new TagEvidence({ cleanupDate: '2026-11-22', kind: 'workbook' });
+        vi.spyOn(tag, 'verify').mockResolvedValue(true);
+        vi.spyOn(tag, 'establish').mockResolvedValue(undefined);
+        const signed = new SignedTokenEvidence(options());
+        await run({ phase: 'preview', evidence: new AllEvidence([tag, signed]) });
+        const token = signed.getEstablishedNonce()!;
+
+        const confirmEvidence = (): AllEvidence =>
+          new AllEvidence([tag, new SignedTokenEvidence(options())]);
+        const rejected = await run({
+          phase: 'confirm',
+          evidence: confirmEvidence(),
+          confirmationToken: token,
+          precondition: vi.fn(notStale),
+        });
+        expect(rejected.isErr()).toBe(true);
+        const accepted = await run({
+          phase: 'confirm',
+          evidence: confirmEvidence(),
+          confirmationToken: token,
+        });
+        expect(accepted.isOk()).toBe(true);
+      });
     });
 
     it('a passing precondition lets the mutation proceed', async () => {
@@ -317,8 +560,8 @@ describe('guardMutation', () => {
     expect(record.actor.siteName).toBe('tc25');
   });
 
-  it('SECURITY: the raw RegistryEvidence nonce never appears in the emitted audit record', async () => {
-    const evidence = new RegistryEvidence();
+  it('SECURITY: the raw signed token never appears in the emitted audit record', async () => {
+    const evidence = new SignedTokenEvidence();
     // Preview phase establishes a nonce; the audit must describe — never embed — it.
     await guardMutation({
       restApi: makeRestApi(),
@@ -334,6 +577,44 @@ describe('guardMutation', () => {
     const serialized = JSON.stringify(getAuditRecords()[0]);
     expect(serialized).not.toContain(nonce);
     const record = auditRecordSchema.parse(getAuditRecords()[0]);
-    expect(record.confirmationEvidence.kind).toBe('registry-nonce');
+    expect(record.confirmationEvidence.kind).toBe('signed-token');
+  });
+
+  // --- Target state pass-through (SignedTokenEvidence) ---
+
+  it('passes target.state to establish on preview', async () => {
+    const evidence = makeEvidence();
+    await run({
+      phase: 'preview',
+      evidence,
+      resolveTarget: async () => ({ ...target, state: 'Creator' }),
+    });
+    expect(evidence.establish).toHaveBeenCalledWith(
+      expect.objectContaining({ target: expect.objectContaining({ state: 'Creator' }) }),
+    );
+  });
+
+  it('passes target.state to verify on confirm', async () => {
+    const evidence = makeEvidence();
+    await run({
+      phase: 'confirm',
+      evidence,
+      confirmationToken: 'tok',
+      resolveTarget: async () => ({ ...target, state: 'schedule-hash' }),
+    });
+    expect(evidence.verify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        confirmationToken: 'tok',
+        target: expect.objectContaining({ state: 'schedule-hash' }),
+      }),
+    );
+  });
+
+  it('never writes target.state into the audit record', async () => {
+    await run({
+      phase: 'preview',
+      resolveTarget: async () => ({ ...target, state: 'secret-ish-state-value' }),
+    });
+    expect(JSON.stringify(getAuditRecords())).not.toContain('secret-ish-state-value');
   });
 });

@@ -9,10 +9,13 @@ import {
   updateCloudExtractRefreshScheduleSchema,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { readAppApprovalToken } from '../../../utils/appApprovalMeta.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { createAppApprovalEvidence } from '../_lib/appApproval.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
-import { AppApprovalEvidence } from '../_lib/evidence.js';
+import { exportedForTesting as signedTokenTesting } from '../_lib/signedTokenEvidence.js';
+import { mutationTokenConfigFromEnv } from '../_lib/signedTokenEvidence.mock.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
   getUpdateCloudExtractRefreshTaskTool,
@@ -40,14 +43,12 @@ function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
   return records[0];
 }
 
-// Extract the single-use confirmation token the preview response echoes back.
+// Extract the signed confirmation token the preview response echoes back.
 function extractConfirmationToken(text: string): string {
-  // Match the UUID nonce directly rather than the surrounding quote char — the preview text may use
-  // a typographic quote, which a literal ASCII-quote pattern would miss.
-  // Match the UUID nonce directly, skipping whatever quoting sits between the label and the value
+  // Match the v1 token directly, skipping whatever quoting sits between the label and the value
   // (the preview text arrives JSON-escaped, so the quotes are `\"` not `"`).
   const match = text.match(
-    /confirmationToken:[^0-9a-fA-F]*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+    /confirmationToken:[^v]*(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
   );
   invariant(match, `expected a confirmationToken in preview text, got: ${text}`);
   return match[1];
@@ -91,6 +92,7 @@ vi.mock('../adminGate.js', () => ({
 
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
+    ...mutationTokenConfigFromEnv(),
     adminToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -124,6 +126,7 @@ const updatedTask: ExtractRefreshTask = {
 describe('updateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    signedTokenTesting.reset();
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({
       id: 'owner-1',
@@ -230,7 +233,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     expect(record.denyReason).toBe('not-admin');
     expect(record.tool).toBe('update-cloud-extract-refresh-task');
     expect(record.action).toBe('update');
-    expect(record.confirmationEvidence.kind).toBe('registry-nonce');
+    expect(record.confirmationEvidence.kind).toBe('signed-token');
   });
 
   it('should surface Tableau-structured error code/summary/detail when present', async () => {
@@ -509,7 +512,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     });
   });
 
-  // --- AC-6: preview→confirm registry-nonce gate + audit records outcome, not just intent ---
+  // --- AC-6: preview→confirm signed-token gate + audit records outcome, not just intent ---
 
   describe('AC-6 confirm gate and audit', () => {
     it('AC-6(a): preview (confirm omitted) does NOT apply the update and audits an allowed preview', async () => {
@@ -524,8 +527,8 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(record.result).toBe('allowed');
       expect(record.phase).toBe('preview');
       expect(record.action).toBe('update');
-      // Now a registry-nonce gate (bound to the previewed schedule), not the old confirm-only 'none'.
-      expect(record.confirmationEvidence.kind).toBe('registry-nonce');
+      // Now a signed-token gate (bound to the previewed schedule), not the old confirm-only 'none'.
+      expect(record.confirmationEvidence.kind).toBe('signed-token');
     });
 
     it('AC-6(b): confirm with a valid preview token applies the update and audits a single completed', async () => {
@@ -589,7 +592,8 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
     });
 
-    // Fix #1: the nonce is single-use — a token that already confirmed once cannot be replayed.
+    // Fix #1: a token that already confirmed once cannot be replayed on the same replica (per-process
+    // replay cache in SignedTokenEvidence).
     it('AC-6(e): a confirmation token cannot be replayed after it succeeds once', async () => {
       const previewResult = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
       invariant(previewResult.content[0].type === 'text');
@@ -714,6 +718,182 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     });
   });
 
+  describe('signed confirmation token (SignedTokenEvidence)', () => {
+    const currentDaily = {
+      frequency: 'Daily',
+      nextRunAt: '2026-11-22T06:00:00Z',
+      frequencyDetails: {
+        start: '02:00:00',
+        intervals: { interval: { weekDay: 'Monday' } },
+      },
+    };
+
+    async function previewToken(): Promise<string> {
+      const previewResult = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      invariant(previewResult.content[0].type === 'text');
+      expect(previewResult.content[0].text).toContain('short-lived token bound to this change');
+      expect(previewResult.content[0].text).not.toContain('single-use');
+      return extractConfirmationToken(previewResult.content[0].text);
+    }
+
+    async function confirmWith(token: string): Promise<CallToolResult> {
+      return await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+        confirmationToken: token,
+      });
+    }
+
+    beforeEach(() => {
+      mocks.mockListExtractRefreshTasks.mockResolvedValue([
+        { id: validTaskId, datasource: { id: 'ds-1' }, schedule: currentDaily },
+      ]);
+    });
+
+    it('preview returns a v1 token', async () => {
+      expect(await previewToken()).toMatch(/^v1\./);
+    });
+
+    it('rejects the confirm when the task schedule changed after the preview', async () => {
+      const token = await previewToken();
+      mocks.mockListExtractRefreshTasks.mockResolvedValue([
+        {
+          id: validTaskId,
+          datasource: { id: 'ds-1' },
+          schedule: {
+            ...currentDaily,
+            frequencyDetails: { ...currentDaily.frequencyDetails, start: '03:00:00' },
+          },
+        },
+      ]);
+      const result = await confirmWith(token);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('could not verify that a preview ran');
+      expect(result.content[0].text).toContain('The target changed after the preview');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('still accepts the confirm when only nextRunAt moved (not part of the state)', async () => {
+      const token = await previewToken();
+      mocks.mockListExtractRefreshTasks.mockResolvedValue([
+        {
+          id: validTaskId,
+          datasource: { id: 'ds-1' },
+          schedule: { ...currentDaily, nextRunAt: '2026-11-23T06:00:00Z' },
+        },
+      ]);
+      expect((await confirmWith(token)).isError).toBe(false);
+      expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalledOnce();
+    });
+
+    it('confirms on a fresh process with the same MUTATION_TOKEN_SECRET (cross-replica)', async () => {
+      vi.stubEnv('MUTATION_TOKEN_SECRET', 'extract-task-replica-secret-0123456789ab');
+      signedTokenTesting.reset();
+      const token = await previewToken();
+      signedTokenTesting.reset(); // a different replica: fresh keys + replay cache, same secret
+      expect((await confirmWith(token)).isError).toBe(false);
+      expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalledOnce();
+    });
+
+    it('rejects a token from a fresh process with no shared secret (per-process key)', async () => {
+      const token = await previewToken();
+      signedTokenTesting.reset(); // a different replica with its own random key
+      expect((await confirmWith(token)).isError).toBe(true);
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    // MAJOR-1: the pre-state read (Get Extract Refresh Tasks, tableau:tasks:read) must not silently
+    // fall back to '' on one phase while the other resolved the real schedule.
+    it('rejects the confirm when the preview resolved the schedule but the confirm could not', async () => {
+      const token = await previewToken();
+      mocks.mockListExtractRefreshTasks.mockRejectedValue(
+        new Error('401 missing tableau:tasks:read'),
+      );
+      const result = await confirmWith(token);
+      expect(result.isError).toBe(true);
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('rejects the confirm when the preview could not resolve the schedule but the confirm could', async () => {
+      // A preview that cannot read the schedule fails closed and mints no token, so there is
+      // nothing for a later confirm to verify.
+      mocks.mockListExtractRefreshTasks.mockRejectedValueOnce(
+        new Error('401 missing tableau:tasks:read'),
+      );
+      const previewResult = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      expect(previewResult.isError).toBe(true);
+      invariant(previewResult.content[0].type === 'text');
+      expect(previewResult.content[0].text).not.toMatch(/v1\.[0-9]+\./);
+
+      // Even a token bound to the empty state ('' — what the old silent fallback produced) does
+      // not confirm once the confirm resolves the real schedule.
+      const emptyStateEvidence = new (
+        await import('../_lib/signedTokenEvidence.js')
+      ).SignedTokenEvidence();
+      await emptyStateEvidence.establish({
+        restApi: { siteId: 'test-site-id' } as never,
+        siteId: 'test-site-id',
+        target: { id: validTaskId, kind: 'extract-refresh-task', state: '' },
+        tool: 'update-cloud-extract-refresh-task',
+        userLuid: getMockRequestHandlerExtra().getUserLuid(),
+        binding: scheduleBinding(validSchedule),
+      });
+      const staleToken = emptyStateEvidence.getEstablishedNonce();
+      invariant(staleToken);
+      const result = await confirmWith(staleToken);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('The target changed after the preview');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    // W-25002517: a token consented before this tool required tableau:tasks:read is refused on the
+    // pre-state read. The error names the scope and says to reconnect (not the generic "Permission
+    // denied (403)" from tool.ts), audits DENIED, mints no token and applies nothing.
+    it.each([401, 403])(
+      'preview names tableau:tasks:read and says to reconnect when the schedule read is refused (%i)',
+      async (status) => {
+        mocks.mockListExtractRefreshTasks.mockRejectedValue(makeHttpError(status));
+        const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        const text = result.content[0].text;
+        expect(text).toContain(
+          "Could not read this extract refresh task's current schedule to prepare the confirmation (requires tableau:tasks:read)",
+        );
+        expect(text).toContain('Reconnect Tableau');
+        expect(text).not.toContain('Permission denied');
+        expect(text).not.toMatch(/v1\.[0-9]+\./);
+        expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+        const records = getAuditRecords();
+        expect(records).toHaveLength(1);
+        expect(records[0].result).toBe('denied');
+        expect(records[0].denyReason).toBe('confirmation-pre-state-forbidden');
+      },
+    );
+
+    it('confirm names tableau:tasks:read when the schedule re-read is refused, and applies nothing', async () => {
+      const token = await previewToken();
+      mocks.mockListExtractRefreshTasks.mockRejectedValue(makeHttpError(403));
+      const result = await confirmWith(token);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('requires tableau:tasks:read');
+      expect(result.content[0].text).toContain('Reconnect Tableau');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('never writes the token into the audit record', async () => {
+      const token = await previewToken();
+      await confirmWith(token);
+      const serialized = JSON.stringify(getAuditRecords());
+      expect(serialized).not.toContain(token);
+      expect(serialized).not.toContain(token.split('.')[2]);
+    });
+  });
+
   // --- MCP-Apps flag ON: preview carries the iframe app + records a human-approval window ---
 
   describe('with mcp-apps flag ON', () => {
@@ -727,7 +907,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(tool.app?.resourceUri).toContain('update-cloud-extract-refresh-task');
     });
 
-    it('preview returns an AppToolResult panel payload AND records a single-use human approval', async () => {
+    it('preview returns an AppToolResult panel AND a signed approval token in _meta only', async () => {
       const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
@@ -736,23 +916,75 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(payload.data.taskId).toBe(validTaskId);
       expect(payload.data.schedule.frequency).toBe('Weekly');
       expect(typeof payload.data.expiresAtMs).toBe('number');
-      // SECURITY: no secret/token is transported to the iframe — approval is presence-based.
-      expect(result.content[0].text).not.toMatch(/nonce|token|secret/i);
       // The destructive update never runs during preview.
       expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
 
-      // The approval was recorded under the 'update-cloud-extract-refresh-task' namespace, bound to
-      // the previewed schedule — so verify must pass the SAME schedule binding the preview folded
-      // into the approval key (an approval minted for schedule A does not satisfy a confirm for B).
+      // SECURITY: the approval token reaches the iframe in `_meta` only — never the model-visible text.
+      const approvalToken = readAppApprovalToken(result);
+      expect(approvalToken).toMatch(/^v1\./);
+      expect(result.content[0].text).not.toContain(approvalToken!);
+      expect(result.content[0].text).not.toMatch(/nonce|token|secret/i);
+
+      // The token verifies under the 'update-cloud-extract-refresh-task' namespace, bound to the
+      // previewed schedule (a token minted for schedule A does not satisfy a confirm for B).
       const extra = getMockRequestHandlerExtra();
+      const confirmCtx = {
+        restApi: { siteId: 'test-site-id' } as never,
+        siteId: 'test-site-id',
+        target: { id: validTaskId, kind: 'extract-refresh-task' as const },
+        tool: 'confirm-update-cloud-extract-refresh-task' as const,
+        userLuid: extra.getUserLuid(),
+        confirmationToken: approvalToken,
+      };
       await expect(
-        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify({
-          restApi: { siteId: 'test-site-id' } as never,
-          siteId: 'test-site-id',
-          target: { id: validTaskId, kind: 'extract-refresh-task' },
-          tool: 'confirm-update-cloud-extract-refresh-task',
-          userLuid: extra.getUserLuid(),
+        createAppApprovalEvidence('update-cloud-extract-refresh-task').verify({
+          ...confirmCtx,
+          binding: scheduleBinding({ ...validSchedule, frequency: 'Daily' } as never),
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        createAppApprovalEvidence('update-cloud-extract-refresh-task').verify({
+          ...confirmCtx,
           binding: scheduleBinding(validSchedule),
+        }),
+      ).resolves.toBe(true);
+    });
+
+    it('binds the approval token to the task schedule at preview time (state-bound)', async () => {
+      const currentSchedule = {
+        frequency: 'Daily',
+        frequencyDetails: { start: '02:00:00', intervals: { interval: { weekDay: 'Monday' } } },
+      };
+      mocks.mockListExtractRefreshTasks.mockResolvedValue([
+        { id: validTaskId, datasource: { id: 'ds-1' }, schedule: currentSchedule },
+      ]);
+      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      const approvalToken = readAppApprovalToken(result);
+      const { extractRefreshScheduleState } =
+        await import('../_lib/resolveExtractRefreshTaskTarget.js');
+      const confirmCtx = {
+        restApi: { siteId: 'test-site-id' } as never,
+        siteId: 'test-site-id',
+        tool: 'confirm-update-cloud-extract-refresh-task' as const,
+        userLuid: getMockRequestHandlerExtra().getUserLuid(),
+        confirmationToken: approvalToken,
+        binding: scheduleBinding(validSchedule),
+      };
+      // Wrong / missing state rejects; the preview-time state verifies.
+      await expect(
+        createAppApprovalEvidence('update-cloud-extract-refresh-task').verify({
+          ...confirmCtx,
+          target: { id: validTaskId, kind: 'extract-refresh-task', state: '' },
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        createAppApprovalEvidence('update-cloud-extract-refresh-task').verify({
+          ...confirmCtx,
+          target: {
+            id: validTaskId,
+            kind: 'extract-refresh-task',
+            state: extractRefreshScheduleState(currentSchedule),
+          },
         }),
       ).resolves.toBe(true);
     });
@@ -790,7 +1022,7 @@ async function getToolResult(args: {
   );
 }
 
-// Two-phase convenience: run the preview to mint the schedule-bound single-use token, then confirm
+// Two-phase convenience: run the preview to mint the schedule-bound signed token, then confirm
 // with it. Mirrors the real caller contract (a confirm now REQUIRES a token from a prior preview of
 // this same taskId + schedule). Returns the confirm-phase result. Use for the many tests that assert
 // the applied update or its error handling.
@@ -806,5 +1038,12 @@ async function previewThenConfirm(args: {
     schedule: args.schedule,
     confirm: true,
     confirmationToken,
+  });
+}
+
+function makeHttpError(status: number): Error {
+  return Object.assign(new Error(`Request failed with status code ${status}`), {
+    isAxiosError: true,
+    response: { status },
   });
 }

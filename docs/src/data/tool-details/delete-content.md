@@ -11,7 +11,7 @@ The tool is **two-phase** to keep the destructive action safe:
    - For `extract-refresh-task`: first verifies the task exists on the site (there is no single-get
      endpoint, so the task list is checked for a matching id) — an unknown `taskId` returns a
      not-found error and **no** `confirmationToken` is minted. When the task exists, mints a
-     single-use `confirmationToken` and reports task metadata.
+     short-lived `confirmationToken` and reports task metadata.
    - Does **not** delete anything.
 
 2. **Confirm** (`confirm: true`):

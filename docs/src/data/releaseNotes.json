@@ -2034,5 +2034,65 @@
     "toolName": "undo-redo-workbook",
     "docPath": "/docs/desktop-tools/workbook/undo-redo-workbook",
     "sourceCommit": "8c2bc45771b5"
+  },
+  {
+    "title": "Update User",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the user's site role changed after the preview.",
+    "date": "2026-11-01",
+    "changeType": "UPDATE",
+    "toolCategory": "Users",
+    "toolType": "Web Tools",
+    "toolName": "update-user",
+    "docPath": "/docs/web-tools/users/update-user"
+  },
+  {
+    "title": "Update Cloud Extract Refresh Task",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the task's schedule changed after the preview. BREAKING: now requests the tableau:tasks:update and tableau:tasks:read scopes (replacing tableau:tasks:write); OAuth clients must re-consent before this tool works.",
+    "date": "2026-11-01",
+    "changeType": "UPDATE",
+    "toolCategory": "Tasks",
+    "toolType": "Web Tools",
+    "toolName": "update-cloud-extract-refresh-task",
+    "docPath": "/docs/web-tools/tasks/update-cloud-extract-refresh-task"
+  },
+  {
+    "title": "Delete Tableau Content",
+    "summary": "Extract refresh task deletes use a signed, short-lived confirmation token that verifies on any replica sharing MUTATION_TOKEN_SECRET. The MCP Apps confirm panel receives its own signed approval token outside the model-visible text.",
+    "date": "2026-11-01",
+    "changeType": "UPDATE",
+    "toolCategory": "Content Management",
+    "toolType": "Web Tools",
+    "toolName": "delete-content",
+    "docPath": "/docs/web-tools/content/delete-content"
+  },
+  {
+    "title": "Run Flow",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the flow's recent runs changed after the preview. BREAKING: now requests the tableau:flow_runs:read scope; OAuth clients must re-consent before this tool works.",
+    "date": "2026-11-01",
+    "changeType": "UPDATE",
+    "toolCategory": "Flows",
+    "toolType": "Web Tools",
+    "toolName": "run-flow",
+    "docPath": "/docs/web-tools/flows/run-flow"
+  },
+  {
+    "title": "Run Flow Task",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET. A token is rejected if the flow's recent runs changed after the preview. BREAKING: now requests the tableau:flow_tasks:read and tableau:flow_runs:read scopes; OAuth clients must re-consent before this tool works.",
+    "date": "2026-11-01",
+    "changeType": "UPDATE",
+    "toolCategory": "Flows",
+    "toolType": "Web Tools",
+    "toolName": "run-flow-task",
+    "docPath": "/docs/web-tools/flows/run-flow-task"
+  },
+  {
+    "title": "Cancel Flow Run",
+    "summary": "Confirmation tokens are now signed and short-lived, so a preview and its confirmation can be served by different server replicas that share MUTATION_TOKEN_SECRET.",
+    "date": "2026-11-01",
+    "changeType": "UPDATE",
+    "toolCategory": "Flows",
+    "toolType": "Web Tools",
+    "toolName": "cancel-flow-run",
+    "docPath": "/docs/web-tools/flows/cancel-flow-run"
   }
 ]

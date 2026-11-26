@@ -8,7 +8,7 @@ sidebar_position: 3
 <span className="toolAvailability">Available June 2026 and later.</span>
 {/* /availability */}
 
-Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often a refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task. Because the update overwrites the task's schedule, it is **two-phase**: a preview call (`confirm` omitted or `false`) reports the schedule that would be applied and returns a single-use confirmation token, and a confirm call (`confirm: true` with that token) applies it.
+Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often a refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task. Because the update overwrites the task's schedule, it is **two-phase**: a preview call (`confirm` omitted or `false`) reports the schedule that would be applied and returns a short-lived confirmation token bound to this change, and a confirm call (`confirm: true` with that token) applies it.
 
 :::warning[Admin Only]
 Registered only when [`ADMIN_TOOLS_ENABLED`](../../configuration/mcp-config/env-vars.md#admin_tools_enabled)`=true`. The tool is restricted to Tableau site administrators, and the caller's site role (`SiteAdministratorCreator`, `SiteAdministratorExplorer`, or `ServerAdministrator`) is verified at request time.
@@ -20,13 +20,13 @@ This tool calls the **Cloud variant** of the update endpoint and is not appropri
 
 ## APIs called
 
-This tool talks to the **Tableau REST API** (Tableau Cloud). At the MCP layer it is gated on the `tableau:mcp:tasks:write` scope; the underlying REST calls require the `tableau:tasks:write` and `tableau:users:read` OAuth scopes. It follows a two-phase preview → confirm flow: the preview phase only reads (to authorize the caller and describe the change), and the write is issued only on the confirm phase.
+This tool talks to the **Tableau REST API** (Tableau Cloud). At the MCP layer it is gated on the `tableau:mcp:tasks:write` scope; the underlying REST calls require the `tableau:tasks:update`, `tableau:tasks:read` and `tableau:users:read` OAuth scopes. It follows a two-phase preview → confirm flow: the preview phase only reads (to authorize the caller and describe the change), and the write is issued only on the confirm phase.
 
 - Authorize the caller and describe the change (read-only; runs on every call and is the whole of a `confirm`-omitted preview). Verifies the caller holds a site-administrator role and, for the audit trail, resolves the task's underlying data source or workbook (and, best-effort, its owner) before reporting the schedule that would be applied. Nothing is changed on this phase.
   - `GET /api/{version}/sites/{siteId}/users/{userId}` — look up the caller's site role for the admin check (and, best-effort, the underlying content's owner for the audit record). Issued against the REST API; requires the `tableau:users:read` OAuth scope. [Query User On Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#query_user_on_site)
-  - `GET /api/{version}/sites/{siteId}/tasks/extractRefreshes` — list the site's extract refresh tasks to identify this task's underlying data source or workbook for the audit record. Issued against the REST API; covered by the `tableau:tasks:write` scope the tool holds. [Get Extract Refresh Tasks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#list_extract_refresh_tasks_in_site)
+  - `GET /api/{version}/sites/{siteId}/tasks/extractRefreshes` — list the site's extract refresh tasks to read this task's current schedule (bound into the confirmation token, and into the MCP-Apps approval token, as its pre-state) and to identify its underlying data source or workbook for the audit record. Runs on both the preview and the confirm. Issued against the REST API; requires the `tableau:tasks:read` OAuth scope. If the listing fails, the call fails closed: a preview mints no token and a confirm applies nothing. [Get Extract Refresh Tasks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#list_extract_refresh_tasks_in_site)
 - Apply the schedule change (confirm phase only — `confirm: true` with a valid confirmation token). Overwrites the task's schedule wholesale with the supplied one.
-  - `POST /api/{version}/sites/{siteId}/tasks/extractRefreshes/{taskId}` — update the task's schedule. Issued against the REST API (Tableau Cloud only); requires the `tableau:tasks:write` OAuth scope. [Update Cloud Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task)
+  - `POST /api/{version}/sites/{siteId}/tasks/extractRefreshes/{taskId}` — update the task's schedule. Issued against the REST API (Tableau Cloud only); requires the `tableau:tasks:update` OAuth scope. [Update Cloud Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task)
 
 ## Required arguments
 
@@ -110,7 +110,7 @@ Hourly between 08:00 and 18:00 every 2 hours, Mondays:
 ## Optional arguments
 
 ### `confirm`
-Boolean that selects the phase. When omitted or `false`, runs a non-destructive **preview**: reports the new schedule that would be applied and returns a single-use confirmation token, changing nothing. When `true`, **applies** the update — but only if the `confirmationToken` from a prior preview of this same `taskId` and `schedule` is also supplied. Present the previewed change to the user and get explicit approval before calling again with `confirm: true`.
+Boolean that selects the phase. When omitted or `false`, runs a non-destructive **preview**: reports the new schedule that would be applied and returns a short-lived confirmation token bound to this change, changing nothing. When `true`, **applies** the update — but only if the `confirmationToken` from a prior preview of this same `taskId` and `schedule` is also supplied. Present the previewed change to the user and get explicit approval before calling again with `confirm: true`.
 
 :::note[MCP-Apps confirm panel]
 When the [`mcp-apps`](../../developers/feature-flags.md) feature flag is enabled, the preview phase renders an in-app **confirm panel** describing the schedule change (new frequency and time window, plus a live countdown) instead of returning preview text the model could act on. The change is then applied only when a person clicks **Apply schedule change** in that panel, which invokes the model-invisible `confirm-update-cloud-extract-refresh-task` tool — the model-driven `confirm: true` path is **closed** while the flag is on, so the assistant cannot apply the change on the user's behalf. This is cooperative human-in-the-loop: it relies on the MCP client hiding the confirm tool from the model and rendering the panel, so a non-cooperating client could still drive preview → confirm without a human gesture. When the flag is off, the tool behaves exactly as the two-phase `confirm`/`confirmationToken` flow.
@@ -125,7 +125,7 @@ When the [`mcp-apps`](../../developers/feature-flags.md) feature flag is enabled
 <hr />
 
 ### `confirmationToken`
-The single-use token returned by a prior preview call for this same `taskId` and `schedule`. Required when `confirm` is `true`; ignored otherwise.
+The short-lived token returned by a prior preview call for this same `taskId` and `schedule`. It is rejected if the task's schedule changed after the preview. Required when `confirm` is `true`; ignored otherwise.
 
 This token is minted, held, verified, and consumed by **this MCP server's in-process mutation guard** — it is **not** a Tableau REST API feature, and the underlying REST calls have no knowledge of it. The guard binds the token to a fingerprint of the previewed `taskId` and `schedule`, so a token minted while previewing schedule A cannot confirm an update to schedule B, and a `confirm: true` with no prior preview (no valid token) is rejected. On confirm, the guard re-checks live Tableau state, so a forged or precomputed token — or a target that drifted since the preview — is rejected as well.
 
@@ -137,7 +137,7 @@ This token is minted, held, verified, and consumed by **this MCP server's in-pro
 
 ## Notes and caveats
 
-- The confirmation token is held only in memory by this MCP server, so it does not outlive the preview session; it is valid for [`MUTATION_PREVIEW_TTL_MINUTES`](../../configuration/mcp-config/env-vars.md#mutation_preview_ttl_minutes) (default 5). If a confirm is rejected for a missing or expired token, re-run the preview to mint a fresh one.
+- The confirmation token is signed by this MCP server and verifies on any replica that shares [`MUTATION_TOKEN_SECRET`](../../configuration/mcp-config/env-vars.md#mutation_token_secret); it is valid for [`MUTATION_PREVIEW_TTL_MINUTES`](../../configuration/mcp-config/env-vars.md#mutation_preview_ttl_minutes) (default 5). If a confirm is rejected for a missing or expired token, re-run the preview to mint a fresh one.
 - Calling against a Tableau Server site — or with a stale `taskId` — returns a 404, which the tool surfaces as a Tableau Cloud-only hint pointing at [`list-extract-refresh-tasks`](./list-extract-refresh-tasks.md) rather than a bare "Not Found".
 - Every attempt — the preview and the confirmed update, and both allowed and denied attempts (for example a non-admin caller) — emits a structured authoritative audit record to this MCP server's audit log sink (logger `audit`, level `notice`), not just to the tool-response text. Each record captures the actor identity, the tool, the action (`update`), the phase, the target id, the confirmation-evidence kind, and the result; a confirmed update additionally records a terminal `completed` or `failed` outcome reflecting the REST result.
 
@@ -149,7 +149,7 @@ On a confirmed update, a confirmation message describing the updated task and it
 Extract refresh task 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' has been successfully updated. New schedule: Weekly (start 06:00:00).
 ```
 
-On a preview (`confirm` omitted or `false`), a message describing the schedule that would be applied, plus the single-use confirmation token to supply on the confirmed call.
+On a preview (`confirm` omitted or `false`), a message describing the schedule that would be applied, plus the short-lived confirmation token to supply on the confirmed call.
 
 ## Related
 
@@ -159,10 +159,10 @@ On a preview (`confirm` omitted or `false`), a message describing the schedule t
 {/* tool-details */}
 ## Confirm and audit
 
-This mutation is **two-phase**, gated on a server-generated single-use confirmation token:
+This mutation is **two-phase**, gated on a server-signed, short-lived confirmation token bound to this change:
 
 1. **Preview** (default — `confirm` omitted or `false`): reports the new schedule that would be
-   applied without changing anything, and returns a single-use `confirmationToken`.
+   applied without changing anything, and returns a short-lived `confirmationToken`.
 2. **Update** (`confirm: true` + `confirmationToken`): applies the schedule update. The server
    verifies and consumes the token first.
 
@@ -178,9 +178,10 @@ preview phase renders an in-iframe **confirm panel** describing the schedule cha
 schedule change is then applied only when a person clicks **Apply schedule change** in that panel,
 (`visibility: ['app']`), passing the task id and the full structured schedule. With the flag on, the
 model-driven `confirm: true` path is **closed** — the assistant cannot apply the change on the user's
-behalf; the only route is the human gesture. The confirm tool verifies a fresh, single-use human
-approval recorded during the preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
-expired approval rejects the update. When the flag is off the tool behaves exactly as the two-phase
+behalf; the only route is the human gesture. The confirm tool verifies a short-lived, signed approval
+token that the preview hands to the panel (never to the model), bound to the previewed schedule and to
+the task's schedule at preview time (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
+expired approval, or a task whose schedule changed since the preview, rejects the update. When the flag is off the tool behaves exactly as the two-phase
 `confirm`/`confirmationToken` flow described above.
 
 :::warning[Cooperative, not server-enforced]
@@ -189,7 +190,7 @@ This is **cooperative** human-in-the-loop: it depends on the MCP client honoring
 recorded during the model-driven preview phase, so a **non-cooperating** client that ignores the
 visibility hint could still drive `preview → confirm-*` back-to-back with no human gesture. This task
 tool has **no tag layer** — the app approval is the only gate — so a non-cooperating client has nothing
-else to clear (the schedule-bound registry nonce still proves a preview *ran*, but not that a human
+else to clear (the schedule- and state-bound signed approval token still proves a preview *ran*, but not that a human
 approved). Server-enforced HITL (an approval primitive the model cannot forge or reach) is tracked as
 follow-up work (W-23125362).
 :::
@@ -198,7 +199,7 @@ follow-up work (W-23125362).
 Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for
 example a non-admin caller) — emits a structured authoritative audit record to the server's durable
 the actor identity, the tool, action (`update`), phase, the target id, the confirmation evidence kind
-(`registry-nonce` for this tool), and the result. A confirmed update emits an `allowed` record when
+(`signed-token` for this tool), and the result. A confirmed update emits an `allowed` record when
 authorized, then a terminal `completed` (or `failed`, with `failureDetail`) record reflecting the
 REST outcome — so the trail records what actually happened, not just intent. This routing is
 centralized in the shared mutation guard so every TMCP mutation tool audits identically.

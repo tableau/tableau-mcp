@@ -8,7 +8,7 @@ sidebar_position: 2
 <span className="toolAvailability">Available June 2026 and later.</span>
 {/* /availability */}
 
-Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to `Unlicensed` to reclaim licenses. This is a two-phase mutation — a preview call reports the proposed change and returns a single-use confirmation token, and a second call with that token applies it.
+Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to `Unlicensed` to reclaim licenses. This is a two-phase mutation — a preview call reports the proposed change and returns a short-lived confirmation token bound to this change, and a second call with that token applies it.
 
 :::warning[Admin Only]
 This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
@@ -46,7 +46,7 @@ The new site role. One of `Creator`, `Explorer`, `ExplorerCanPublish`, `SiteAdmi
 ## Optional arguments
 
 ### `confirm`
-Whether to apply the change. When omitted or `false` (the default), the tool runs in **preview** mode: it looks up the user, reports the current and proposed site role, and returns a single-use `confirmationToken` — no change is made. Set to `true` to apply the change; this requires a matching `confirmationToken`.
+Whether to apply the change. When omitted or `false` (the default), the tool runs in **preview** mode: it looks up the user, reports the current and proposed site role, and returns a short-lived `confirmationToken` bound to this change — no change is made. Set to `true` to apply the change; this requires a matching `confirmationToken`.
 
 #### Example
 
@@ -55,7 +55,7 @@ Whether to apply the change. When omitted or `false` (the default), the tool run
 <hr />
 
 ### `confirmationToken`
-The single-use token returned by a prior preview call, bound to the previewed `userId` and `siteRole`. **Required when `confirm` is `true`.** The MCP server's in-process mutation guard verifies and consumes the token — and re-checks the live user state — before applying the change, so a token minted for a different role, a forged or precomputed token, or a `confirm: true` call with no prior preview is rejected. The token is not a Tableau REST API feature; it is held only in the MCP server's memory for the preview session.
+The short-lived token returned by a prior preview call, bound to the previewed `userId` and `siteRole`. **Required when `confirm` is `true`.** The MCP server's mutation guard verifies the token's signature and re-checks the live user state before applying the change, so a token minted for a different role, a token issued before the user's role changed, a forged or precomputed token, or a `confirm: true` call with no prior preview is rejected. The token is not a Tableau REST API feature; it is signed by the MCP server and verifies on any replica that shares [`MUTATION_TOKEN_SECRET`](../../configuration/mcp-config/env-vars.md#mutation_token_secret).
 
 #### Example
 
@@ -64,7 +64,7 @@ The single-use token returned by a prior preview call, bound to the previewed `u
 ## Notes and caveats
 
 - **Requires explicit human approval.** After a preview, present the proposed role change to the user and get their explicit approval before calling again with `confirm: true`. Do not auto-confirm.
-- **The confirmation token is ephemeral.** It lives only in the MCP server's memory for the preview session; if a confirm is rejected for a missing or stale token, re-run the preview to mint a fresh one.
+- **The confirmation token is ephemeral.** It is valid for [`MUTATION_PREVIEW_TTL_MINUTES`](../../configuration/mcp-config/env-vars.md#mutation_preview_ttl_minutes) (default 5) and only while the user's site role is unchanged. It verifies on any replica that shares [`MUTATION_TOKEN_SECRET`](../../configuration/mcp-config/env-vars.md#mutation_token_secret). If a confirm is rejected for a missing, expired or stale token, re-run the preview to mint a fresh one.
 
 ## Example results
 
@@ -113,10 +113,10 @@ User 'jsmith' has been successfully updated. New site role: Unlicensed.
 {/* tool-details */}
 ## Confirm and audit
 
-This mutation is **two-phase**, gated on a server-generated single-use confirmation token:
+This mutation is **two-phase**, gated on a server-generated short-lived confirmation token bound to this change:
 
 1. **Preview** (default — `confirm` omitted or `false`): looks up the user, reports the current
-   and proposed site role, and returns a single-use `confirmationToken`.
+   and proposed site role, and returns a short-lived `confirmationToken` bound to this change.
 2. **Update** (`confirm: true` + `confirmationToken`): applies the role change. The server
    verifies and consumes the token first.
 

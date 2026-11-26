@@ -10,11 +10,13 @@ import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getHttpStatusCode } from '../../../utils/getHttpStatus.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
+import { createAppApprovalEvidence } from './appApproval.js';
 import { formatProjectPhrase } from './deleteContent.js';
-import { AllEvidence, AppApprovalEvidence, TagEvidence } from './evidence.js';
+import { AllEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
 import {
   checkCleanupBatchAge,
@@ -49,6 +51,11 @@ const paramsSchema = {
       'Only for resourceType="workbook" or "datasource": the staleness threshold the preview used. ' +
         'Defaults to the server stale-content threshold.',
     ),
+  approvalToken: z
+    .string()
+    .max(512)
+    .optional()
+    .describe('Supplied by the confirm panel only: the approval token from the preview result.'),
 };
 
 export const getConfirmDeleteContentTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -139,9 +146,10 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                     action: 'delete',
                     mode: 'preview-confirm',
                     phase: 'confirm',
+                    confirmationToken: args.approvalToken,
                     evidence: new AllEvidence([
                       new TagEvidence({ cleanupDate, kind: 'workbook' }),
-                      new AppApprovalEvidence('delete-content'),
+                      createAppApprovalEvidence('delete-content'),
                     ]),
                     resolveTarget,
                     fallbackTargetKind: 'workbook',
@@ -165,7 +173,11 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                       siteId,
                     });
                   } catch (e) {
-                    recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                    recordOutcome({
+                      ok: false,
+                      failureDetail: getExceptionMessage(e),
+                      httpStatus: getHttpStatusCode(e),
+                    });
                     throw e;
                   }
                   recordOutcome({ ok: true });
@@ -207,9 +219,10 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                     action: 'delete',
                     mode: 'preview-confirm',
                     phase: 'confirm',
+                    confirmationToken: args.approvalToken,
                     evidence: new AllEvidence([
                       new TagEvidence({ cleanupDate, kind: 'datasource' }),
-                      new AppApprovalEvidence('delete-content'),
+                      createAppApprovalEvidence('delete-content'),
                     ]),
                     resolveTarget,
                     fallbackTargetKind: 'datasource',
@@ -233,7 +246,11 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                       siteId,
                     });
                   } catch (e) {
-                    recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                    recordOutcome({
+                      ok: false,
+                      failureDetail: getExceptionMessage(e),
+                      httpStatus: getHttpStatusCode(e),
+                    });
                     throw e;
                   }
                   recordOutcome({ ok: true });
@@ -270,7 +287,8 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                     action: 'delete',
                     mode: 'preview-confirm',
                     phase: 'confirm',
-                    evidence: new AppApprovalEvidence('delete-content'),
+                    confirmationToken: args.approvalToken,
+                    evidence: createAppApprovalEvidence('delete-content'),
                     resolveTarget,
                     fallbackTargetKind: 'extract-refresh-task',
                   });
@@ -285,7 +303,11 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                       taskId: resourceId,
                     });
                   } catch (e) {
-                    recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                    recordOutcome({
+                      ok: false,
+                      failureDetail: getExceptionMessage(e),
+                      httpStatus: getHttpStatusCode(e),
+                    });
                     throw e;
                   }
                   recordOutcome({ ok: true });

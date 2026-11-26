@@ -16,3 +16,4 @@ In this section:
 - [E2E Tests](e2e-tests.md): End-to-end tests against a live Tableau site (CI or the mcp-test site).
 - [Eval Tests](eval-tests.md): LLM-scored evaluations of whether the model picks the right tools and answers well.
 - [Feature Flags](feature-flags.md): Control available features during development via `features.json` or a cloud provider.
+- [Signed Confirmation Tokens](signed-confirmation-tokens.md): How preview → confirm mutation tools are gated, and how to add a new one.

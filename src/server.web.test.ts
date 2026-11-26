@@ -670,6 +670,47 @@ describe('server', () => {
       expect(getInstructions(server)).toContain("doesn't include access to these tools");
     });
 
+    it('omits run-flow with the reconnect note for a main-era grant lacking tableau:flow_runs:read (W-25002517)', async () => {
+      // run-flow's signed confirmation token hashes the flow's newest runs into its pre-state, so the
+      // tool now requires tableau:flow_runs:read. A token consented before that change holds run-flow's
+      // old scope set; under subset mode the tool must be omitted (not registered and then 403 on
+      // every call) and the session told to reconnect.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'run-flow,cancel-flow-run');
+      expect(apiScopes('run-flow')).toContain('tableau:flow_runs:read');
+      const mainEraRunFlowGrant = allScopes('run-flow').filter(
+        (scope) => scope !== 'tableau:flow_runs:read',
+      );
+      const server = getServer();
+
+      await server.registerTools(bearerAuth, [
+        ...mainEraRunFlowGrant,
+        ...allScopes('cancel-flow-run'),
+      ]);
+
+      const registered = registeredNames(server);
+      expect(registered).not.toContain('run-flow');
+      expect(registered).toContain('cancel-flow-run');
+      const instructions = getInstructions(server);
+      expect(instructions).toContain("doesn't include access to these tools: run-flow.");
+      expect(instructions).toContain('reconnect Tableau');
+    });
+
+    it('registers run-flow once the grant includes tableau:flow_runs:read', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+      vi.stubEnv('INCLUDE_TOOLS', 'run-flow');
+      const server = getServer();
+
+      await server.registerTools(bearerAuth, allScopes('run-flow'));
+
+      expect(registeredNames(server)).toContain('run-flow');
+      expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
+    });
+
     // createMockConditionalTool declares RequiresPulse, whose probe scope is
     // tableau:insight_definitions_metrics:read (its requiredConditionApiScopes). Its MCP/API scopes
     // are empty, so only the condition-scope clause can omit it.

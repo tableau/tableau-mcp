@@ -72,6 +72,15 @@ vi.mock('../sessionStore/init.js', () => ({
   }),
 }));
 
+vi.mock('../tools/web/_lib/signedTokenEvidence.js', () => ({
+  initializeConfirmationTokenKeys: vi.fn((cfg: { mutationTokenSecret?: string }) => {
+    if (cfg.mutationTokenSecret === 'too-short') {
+      throw new Error('MUTATION_TOKEN_SECRET must be at least 32 characters long');
+    }
+  }),
+}));
+
+import { initializeConfirmationTokenKeys } from '../tools/web/_lib/signedTokenEvidence.js';
 import { initializeWebRuntime } from './webRuntime.js';
 
 function deferred<T>(): {
@@ -115,6 +124,15 @@ describe('initializeWebRuntime', () => {
   afterEach(() => {
     processOnceSpy.mockRestore();
     processExitSpy.mockRestore();
+  });
+
+  it('validates the confirmation-token secret first and fails fast on a bad one', async () => {
+    await expect(
+      initializeWebRuntime({ ...config, mutationTokenSecret: 'too-short' } as Config),
+    ).rejects.toThrow(/at least 32 characters/);
+    expect(initializeConfirmationTokenKeys).toHaveBeenCalledOnce();
+    // Nothing else was initialized after the failed validation.
+    expect(runtimeState.events).toEqual([]);
   });
 
   it('connects providers before starting server info and returns its pending readiness', async () => {

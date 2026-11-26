@@ -105,7 +105,7 @@ be turned on explicitly.
 - [`ADMIN_GATE_CACHE_TTL_MINUTES`](env-vars.md#admin_gate_cache_ttl_minutes) — how long admin role
   lookups and related metadata are cached. Lower it if role changes need to propagate faster.
 - [`MUTATION_PREVIEW_TTL_MINUTES`](env-vars.md#mutation_preview_ttl_minutes) — lifetime of the
-  single-use confirmation tokens used by two-phase mutation tools (e.g.
+  short-lived confirmation tokens used by two-phase mutation tools (e.g.
   [`delete-content`](../../web-tools/content/delete-content.md)).
 
 :::warning

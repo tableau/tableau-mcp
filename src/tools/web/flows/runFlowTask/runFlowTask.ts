@@ -3,17 +3,19 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
-import { McpToolError, PreviewNotRunError } from '../../../../errors/mcpToolError.js';
+import { McpToolError } from '../../../../errors/mcpToolError.js';
 import { isFlowWriteToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
+import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
-import { EvidenceContext, RegistryEvidence } from '../../_lib/evidence.js';
-import { renderPreviewNotRunMessage, renderTokenConfirmNextStep } from '../../_lib/hitlText.js';
+import { readPreState } from '../../_lib/preStateRead.js';
+import { SignedConfirmation } from '../../_lib/signedConfirmation.js';
 import { WebTool } from '../../tool.js';
+import { FLOW_RUNS_READ_SCOPE, resolveFlowRunPreState } from '../flowRunPreState.js';
 import { mapFlowWriteError } from '../flowWriteErrors.js';
 
 const paramsSchema = {
@@ -46,13 +48,13 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
   **This tool changes server state** (it runs the flow, consuming Prep Conductor capacity and overwriting outputs). Only call it when the user asks to run the task.
 
   **Two-phase confirmation:**
-  1. **Preview** (\`confirm\` omitted or false): describes the task run without enqueuing it and returns a single-use confirmation token.
-  2. **Run** (\`confirm: true\`): requires the token from the matching preview before enqueuing the task.
+  1. **Preview** (\`confirm\` omitted or false): describes the task run without enqueuing it and returns a short-lived confirmation token bound to this change.
+  2. **Run** (\`confirm: true\`): requires the token from the matching preview before enqueuing the task, and rejects it if a new run of the task's flow appeared since the preview.
 
   **Parameters:**
   - \`taskId\` (required) – The flow run task id from \`list-flow-tasks\` (the task \`id\`, i.e. the flowRun id).
   - \`confirm\` (optional) – Set \`true\` only after the user approves the preview.
-  - \`confirmationToken\` (optional) – The single-use token returned by the matching preview. Required when \`confirm\` is true.
+  - \`confirmationToken\` (optional) – The token returned by the matching preview. Required when \`confirm\` is true.
 
   **Response:** Preview returns instructions and a confirmation token. A confirmed call returns \`{ job, mcp: { runStatus } }\` — \`job.id\` (background job id) and \`job.runFlowJobType.flowRunId\`. Asynchronous: report it as *started*, then poll \`list-flow-runs\` / \`get-flow\` for the outcome.
 
@@ -61,7 +63,7 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
   - **Caller-role:** non-administrators can only run flow run tasks they own.
   - Not idempotent. If a run for the task is already queued/in progress the request may be rejected.
   - **Bounded-context note:** when this MCP server is restricted to specific projects/tags, this tool cannot verify that a task's flow is in the allowed set (a task carries no project/tag and is addressed only by task id), so it refuses. Use \`run-flow\` (by flow id) in that configuration.
-  - Requires Tableau REST API access scopes \`tableau:flow_tasks:run\` and \`tableau:mcp_site_settings:read\`.`,
+  - Requires Tableau REST API access scopes \`tableau:flow_tasks:run\`, \`tableau:flow_tasks:read\` and \`tableau:flow_runs:read\` (to bind the token to the task's flow and its latest runs), and \`tableau:mcp_site_settings:read\`.`,
     paramsSchema,
     annotations: {
       title: 'Run Flow Task',
@@ -100,40 +102,34 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
               ...extra,
               jwtScopes: runFlowTaskTool.requiredApiScopes,
               callback: async (restApi) => {
-                const evidence = new RegistryEvidence();
-                const evidenceContext: EvidenceContext = {
-                  restApi,
-                  siteId: restApi.siteId,
-                  target: { id: taskId },
+                // Server-signed, short-lived token bound to site, user, tool and task (binding =
+                // taskId), plus the pre-state of the task's flow: its newest runs. The flow id is
+                // resolved from the task (one extra Get Flow Run Task call) on preview AND confirm, so
+                // a task re-pointed at another flow, or a new run of the flow, rejects the confirm.
+                // Any lookup failure fails closed.
+                const confirmation = new SignedConfirmation({
                   tool: 'run-flow-task',
-                  userLuid: extra.getUserLuid(),
-                  confirmationToken,
+                  targetId: taskId,
+                  targetKind: 'flow run task',
                   binding: taskId,
-                };
+                  resolveState: () => resolveFlowRunTaskPreState(restApi, taskId),
+                  text: {
+                    subject: 'present this proposed task run',
+                    approvalClause: 'confirm it. Do NOT run',
+                    tail: ' before starting the task run).',
+                  },
+                });
+                const caller = { restApi, userLuid: extra.getUserLuid() };
 
                 if (!confirm) {
-                  await evidence.establish(evidenceContext);
                   return (
                     `Preview — would enqueue the existing flow run task '${taskId}'. ` +
                     'No flow run has been started. ' +
-                    renderTokenConfirmNextStep({
-                      subject: 'present this proposed task run',
-                      approvalClause: 'confirm it. Do NOT run',
-                      nonce: evidence.getEstablishedNonce(),
-                      tail: ' before starting the task run).',
-                    })
+                    (await confirmation.preview(caller))
                   );
                 }
 
-                if (!(await evidence.verify(evidenceContext))) {
-                  throw new PreviewNotRunError(
-                    renderPreviewNotRunMessage({
-                      tool: 'run-flow-task',
-                      targetKind: 'flow run task',
-                      targetId: taskId,
-                    }),
-                  );
-                }
+                await confirmation.confirm(caller, confirmationToken);
 
                 const job = await restApi.tasksMethods.runFlowTask({
                   siteId: restApi.siteId,
@@ -164,6 +160,31 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
 
   return runFlowTaskTool;
 };
+
+/**
+ * Pre-state for a task run: the task's flow id plus that flow's newest runs (resolveFlowRunPreState).
+ * Throws (fail closed) when the task or its flow cannot be resolved. A 401/403 on the task read names
+ * tableau:flow_tasks:read (both pre-state scopes, since the runs read follows), and on the runs read
+ * names tableau:flow_runs:read (see preStateRead.ts).
+ */
+async function resolveFlowRunTaskPreState(restApi: RestApi, taskId: string): Promise<string> {
+  const task = await readPreState(
+    () => restApi.tasksMethods.getFlowRunTask({ siteId: restApi.siteId, taskId }),
+    {
+      description: "this flow task and its flow's recent runs",
+      requiredScopes: ['tableau:flow_tasks:read', FLOW_RUNS_READ_SCOPE],
+    },
+  );
+  const flowId = task.flow?.id;
+  if (!flowId) {
+    throw new McpToolError({
+      type: 'flow-task-flow-unresolved',
+      statusCode: 409,
+      message: `Could not resolve the flow for flow run task '${taskId}', so the run cannot be confirmed safely. Verify the task id with list-flow-tasks and preview again.`,
+    });
+  }
+  return await resolveFlowRunPreState(restApi, flowId);
+}
 
 export const exportedForTesting = {
   runFlowTaskParamsSchema: paramsSchema,

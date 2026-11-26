@@ -1103,3 +1103,202 @@ describe('MCP wildcard scope', () => {
     });
   });
 });
+
+// W-25002517: the signed confirmation tokens hash a pre-state read into the token, so run-flow,
+// run-flow-task and the extract-refresh-task update tools gained API scopes for that read
+// (flow_runs:read, flow_tasks:read, tasks:read), and tableau:tasks:write (not a Tableau scope) was
+// corrected to tableau:tasks:update. A token consented before this release holds the tool's OLD
+// scope set; these tests pin that such a token is challenged (403 insufficient_scope naming the new
+// scopes) rather than reaching the tool. The arrays below are the scope sets on main before the
+// change, written out literally so a future edit to toolScopeMap cannot silently move them.
+describe('pre-change (main-era) tokens after the signed-token scope additions (W-25002517)', () => {
+  const MANDATORY_SCOPE = 'tableau:mcp_site_settings:read';
+  const clientId = 'test-client';
+
+  const MAIN_ERA_GRANTS: Record<string, string[]> = {
+    'run-flow': [
+      'tableau:mcp:flow:run',
+      'tableau:flows:run',
+      'tableau:flows:read',
+      'tableau:mcp_site_settings:read',
+    ],
+    'run-flow-task': [
+      'tableau:mcp:flow:run',
+      'tableau:flow_tasks:run',
+      'tableau:mcp_site_settings:read',
+    ],
+    'update-cloud-extract-refresh-task': [
+      'tableau:mcp:tasks:write',
+      'tableau:tasks:write',
+      'tableau:users:read',
+      'tableau:mcp_site_settings:read',
+    ],
+    'confirm-update-cloud-extract-refresh-task': [
+      'tableau:mcp:tasks:write',
+      'tableau:tasks:write',
+      'tableau:users:read',
+      'tableau:mcp_site_settings:read',
+    ],
+  };
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false'); // enforceScopes on
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    // Flow read tools on too, so flow_runs:read / flow_tasks:read were already in main's advertised
+    // set (list-flow-runs / list-flow-tasks) and the strict-mode test isolates the tasks:update rename.
+    vi.stubEnv('FLOW_READ_TOOLS_ENABLED', 'true');
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+  });
+
+  async function drive(
+    scopes: string[],
+    body: unknown,
+  ): Promise<{ req: AuthenticatedRequest; res: any; next: ReturnType<typeof vi.fn> }> {
+    const middleware = authMiddleware(makeValidator(new Ok({ scopes, clientId })));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body,
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+    await middleware(req, res, next);
+    return { req, res, next };
+  }
+
+  const callBody = (name: string): Record<string, unknown> => ({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name, arguments: {} },
+  });
+
+  const initializeBody = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test-client', version: '1.0.0' },
+    },
+  };
+
+  function challengeScopes(res: any): string[] {
+    const header = res.headers['WWW-Authenticate'] as string;
+    return /scope="([^"]*)"/.exec(header)![1].split(' ');
+  }
+
+  describe('subset mode: tools/call with the main-era grant', () => {
+    beforeEach(() => {
+      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
+    });
+
+    it.each([
+      ['run-flow', ['tableau:flow_runs:read'], []],
+      ['run-flow-task', ['tableau:flow_tasks:read', 'tableau:flow_runs:read'], []],
+      [
+        'update-cloud-extract-refresh-task',
+        ['tableau:tasks:update', 'tableau:tasks:read'],
+        ['tableau:tasks:write'],
+      ],
+      [
+        'confirm-update-cloud-extract-refresh-task',
+        ['tableau:tasks:update', 'tableau:tasks:read'],
+        ['tableau:tasks:write'],
+      ],
+    ])(
+      '%s: 403 insufficient_scope naming %j',
+      async (toolName, expectedMissing, heldButObsolete) => {
+        const grant = MAIN_ERA_GRANTS[toolName];
+        for (const scope of expectedMissing) {
+          // Guards the premise: the new scope really is required now and absent from the old grant.
+          expect(getRequiredApiScopesForTool(toolName as any)).toContain(scope);
+          expect(grant).not.toContain(scope);
+        }
+
+        const { res, next } = await drive(grant, callBody(toolName));
+
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('insufficient_scope');
+        const scopeList = challengeScopes(res);
+        for (const scope of expectedMissing) {
+          expect(scopeList).toContain(scope);
+          expect(res.body.error_description).toContain(scope);
+        }
+        // Held scopes are preserved in the step-up challenge so re-consent does not narrow the grant.
+        expect(scopeList).toContain(MANDATORY_SCOPE);
+        for (const scope of heldButObsolete) {
+          expect(scopeList).toContain(scope);
+          // ...but the obsolete scope is not named as missing.
+          expect(res.body.error_description).not.toContain(scope);
+        }
+      },
+    );
+
+    it('the main-era grant still initializes under subset mode (the gap surfaces per tool)', async () => {
+      const { next, res } = await drive(MAIN_ERA_GRANTS['run-flow'], initializeBody);
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBeUndefined();
+    });
+  });
+
+  describe('strict mode (default): initialize with the main-era full advertised set', () => {
+    it('403s at initialize naming tableau:tasks:update for a grant with tasks:write instead', async () => {
+      // Strict is the default (no DISABLE_STRICT_SCOPE_MATCH, flag off).
+      mocks.isFeatureEnabled.mockResolvedValue(false);
+      const current = await getSupportedScopes({ includeApiScopes: true, clientId });
+      expect(current).toContain('tableau:tasks:update');
+      // Main's full advertised set: identical except tasks:write where this release has tasks:update.
+      // (With admin + flow read tools on, tasks:read / flow_runs:read / flow_tasks:read were already
+      // advertised on main via list-extract-refresh-tasks / list-flow-runs / list-flow-tasks.)
+      expect(current).toEqual(
+        expect.arrayContaining([
+          'tableau:tasks:read',
+          'tableau:flow_runs:read',
+          'tableau:flow_tasks:read',
+        ]),
+      );
+      const mainEraFullSet = [
+        ...current.filter((scope) => scope !== 'tableau:tasks:update'),
+        'tableau:tasks:write',
+      ];
+
+      const { res, next } = await drive(mainEraFullSet, initializeBody);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('insufficient_scope');
+      expect(res.body.error_description).toContain('tableau:tasks:update');
+      // Only the corrected scope is missing — the rest of the main-era set is still accepted.
+      expect(res.body.error_description).toMatch(/Missing required scopes: tableau:tasks:update\./);
+      const scopeList = challengeScopes(res);
+      expect(scopeList).toContain('tableau:tasks:update');
+      // The challenge carries the full current list so the client re-consents once.
+      for (const scope of current) {
+        expect(scopeList).toContain(scope);
+      }
+    });
+
+    it('accepts the current full advertised set at initialize', async () => {
+      mocks.isFeatureEnabled.mockResolvedValue(false);
+      const current = await getSupportedScopes({ includeApiScopes: true, clientId });
+
+      const { res, next } = await drive(current, initializeBody);
+
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBeUndefined();
+    });
+  });
+});

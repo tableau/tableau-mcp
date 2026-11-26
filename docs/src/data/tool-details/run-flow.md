@@ -13,13 +13,16 @@
 The tool is two-phase:
 
 1. **Preview** — omit `confirm` or set it to `false`. The tool checks the requested run and
-   bounded-context eligibility, starts no run, and returns a single-use `confirmationToken`.
+   bounded-context eligibility, starts no run, and returns a short-lived `confirmationToken` bound to this change.
 2. **Run** — set `confirm: true` and pass the token from the matching preview. The server verifies
-   and consumes the token before enqueuing the run.
+   the token before enqueuing the run.
 
 Present the preview to the user and get explicit approval before calling the tool with `confirm: true`.
 The token is bound to the flow id, run mode, output steps, and parameter overrides, so changing any
-of those values requires a new preview.
+of those values requires a new preview. The token is also bound to a fingerprint of the flow's 10
+most recent run ids, read with one extra Get Flow Runs call on preview and on confirm: if a new run
+appears in between, the confirmation is rejected and a new preview is needed. An existing run that
+only progresses (for example Pending to Success) does not reject the confirmation. If that lookup fails, no token is issued and nothing runs.
 
 ## Bounded context (fail-closed)
 
@@ -29,7 +32,7 @@ the run, and refuses otherwise.
 
 ## Response
 
-A preview returns instructions and a single-use confirmation token. A confirmed call returns an object
+A preview returns instructions and a short-lived confirmation token. A confirmed call returns an object
 `{ job, mcp: { runStatus } }`:
 
 - `job.id` — the background job id.

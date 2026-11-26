@@ -32,6 +32,7 @@ import {
 import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
+import { redactSecretArgs } from '../../utils/redactSecretArgs.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { ToolParamsSchema } from '../toolContext.js';
 import { RegistrationCondition } from './registrationConditions.js';
@@ -192,7 +193,7 @@ export class WebTool<Args extends undefined | ToolParamsSchema = undefined> exte
     this.notifyInvocation({ requestId, args, username });
     log(
       {
-        message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+        message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(redactSecretArgs(args))}`,
         level: 'debug',
         logger: 'tool',
         tool_name: this.name,

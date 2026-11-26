@@ -1,9 +1,15 @@
 ## Two-phase confirmation
 
 1. **Preview** (default, with `confirm` omitted or `false`): describes the task run without
-   enqueuing it and returns a single-use `confirmationToken`.
+   enqueuing it and returns a short-lived `confirmationToken` bound to this change.
 2. **Run** (`confirm: true`): requires the token from a matching preview. Present the proposed run to
    the user and get explicit approval before making the confirmed call.
+
+The token is bound to the task id and to a fingerprint of the task's flow's 10 most recent run ids.
+Each phase makes two extra REST calls: Get Flow Run Task (to resolve the task's flow) and Get Flow
+Runs. If a new run appears between preview and confirm, the confirmation is rejected and a new
+preview is needed; an existing run that only changes status does not reject it. If either lookup fails, or the task has no
+resolvable flow, no token is issued and nothing runs.
 
 ## Requirements
 

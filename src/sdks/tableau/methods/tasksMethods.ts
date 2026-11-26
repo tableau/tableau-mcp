@@ -95,7 +95,7 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
    * also returns the two as siblings; this method merges them so callers receive a single
    * `ExtractRefreshTask` record with `schedule` populated, matching list-extract-refresh-tasks.
    *
-   * Required scopes (Tableau Cloud): `tableau:tasks:write`
+   * Required scopes (Tableau Cloud): `tableau:tasks:update`
    *
    * @param siteId - The Tableau site ID
    * @param taskId - The extract refresh task ID to update
