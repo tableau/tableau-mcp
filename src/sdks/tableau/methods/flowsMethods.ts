@@ -20,6 +20,25 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
     super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }
 
+  /** Changes only a flow's project.
+   * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#update_flow
+   */
+  updateFlow = async ({
+    siteId,
+    flowId,
+    projectId,
+  }: {
+    siteId: string;
+    flowId: string;
+    projectId: string;
+  }): Promise<Flow> => {
+    const response = await this._apiClient.updateFlow(
+      { flow: { project: { id: projectId } } },
+      { params: { siteId, flowId }, ...this.authHeader },
+    );
+    return response.flow;
+  };
+
   /**
    * Returns the flows on a site.
    *
