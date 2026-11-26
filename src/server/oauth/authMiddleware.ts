@@ -212,8 +212,8 @@ export async function getOAuthChallenge(
   const baseUrl = new URL(resourceUri).origin;
   const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
   // A fresh client can request the full supported set even though connections accept subsets.
-  const requiredMcpScopes = await getRequiredMcpScopesForRequest(body);
-  const requiredApiScopes = await getRequiredApiScopesForRequest(body, advertiseApiScopes);
+  const requiredMcpScopes = await getChallengeMcpScopes(body);
+  const requiredApiScopes = await getChallengeApiScopes(body, advertiseApiScopes);
   const scopeParam =
     enforceScopes && requiredMcpScopes.length > 0
       ? `, scope="${await formatChallengeScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
@@ -233,7 +233,7 @@ async function formatChallengeScopes(scopes: string[], clientId?: string): Promi
   return formatScopes(scopes);
 }
 
-async function getRequiredMcpScopesForRequest(body: unknown): Promise<ReadonlyArray<string>> {
+async function getChallengeMcpScopes(body: unknown): Promise<ReadonlyArray<string>> {
   const toolName = getToolNameFromRequestBody(body);
   if (toolName === undefined) {
     return getSupportedMcpScopes();
@@ -242,7 +242,7 @@ async function getRequiredMcpScopesForRequest(body: unknown): Promise<ReadonlyAr
   return getRequiredMcpScopesForTool(toolName);
 }
 
-async function getRequiredApiScopesForRequest(
+async function getChallengeApiScopes(
   body: unknown,
   includeApiScopes: boolean,
 ): Promise<ReadonlyArray<string>> {
