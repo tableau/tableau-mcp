@@ -16,12 +16,17 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { APP_APPROVAL_META_KEY } from '../../../utils/appApprovalMeta.js';
+import { defaultSuccessResult } from '../tool.js';
 import { EvidenceContext } from './evidence.js';
 import { SignedTokenEvidence } from './signedTokenEvidence.js';
 
 const APP_APPROVAL_TOKEN = Symbol('appApprovalToken');
 
-/** The evidence both the preview (establish) and the app-only confirm (verify) must construct. */
+/**
+ * The evidence both the preview (establish) and the app-only confirm (verify) must construct.
+ * Returns a NEW instance on every call: SignedTokenEvidence holds per-call mutable state, so call
+ * this per request (never cache the result at module scope).
+ */
 export function createAppApprovalEvidence(previewTool: string): SignedTokenEvidence {
   return new SignedTokenEvidence({ purpose: 'app-approval', namespace: previewTool });
 }
@@ -45,17 +50,16 @@ export async function attachAppApproval<const T extends object>(
 }
 
 /**
- * logAndExecute `getSuccessResult`: the default text serialization, plus `_meta` carrying the
- * approval token when the result has one. The token is never written to `content`.
+ * logAndExecute `getSuccessResult`: the default serialization (defaultSuccessResult, delegated to
+ * so the two never diverge), plus `_meta` carrying the approval token when the result has one. A
+ * result without a token (flag OFF, string preview) gets exactly the default. The token is never
+ * written to `content`.
  */
 export function appApprovalSuccessResult(result: unknown): CallToolResult {
+  const base = defaultSuccessResult(result);
   const token =
     result && typeof result === 'object'
       ? (result as { [APP_APPROVAL_TOKEN]?: string })[APP_APPROVAL_TOKEN]
       : undefined;
-  return {
-    isError: false,
-    content: [{ type: 'text', text: JSON.stringify(result) }],
-    ...(token ? { _meta: { [APP_APPROVAL_META_KEY]: token } } : {}),
-  };
+  return token ? { ...base, _meta: { ...base._meta, [APP_APPROVAL_META_KEY]: token } } : base;
 }

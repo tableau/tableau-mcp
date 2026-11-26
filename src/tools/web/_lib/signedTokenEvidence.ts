@@ -204,6 +204,15 @@ export interface SignedTokenEvidenceOptions {
   namespace?: string;
 }
 
+/**
+ * PER-REQUEST OBJECT. An instance holds mutable per-call state (`lastToken`, `lastRejection`,
+ * `lastVerifiedTokenId`) linking establish() → getEstablishedNonce(), and verify() →
+ * explainRejection() / release(). Create a new instance for every request (every call site does,
+ * via `new SignedConfirmation(...)` or createAppApprovalEvidence()); NEVER hoist one to module
+ * scope or share it across requests: concurrent confirms would overwrite `lastVerifiedTokenId`, and
+ * release() could then delete ANOTHER request's replay-cache entry, reopening a consumed token.
+ * The process-wide state that must be shared (keys, replay cache) lives outside the instance.
+ */
 export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
   private readonly options: SignedTokenEvidenceOptions;
   private codec?: ConfirmationTokenCodec;

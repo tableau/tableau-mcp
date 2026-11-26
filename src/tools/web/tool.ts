@@ -120,6 +120,19 @@ export type ConstrainedResult<T> =
     };
 
 /**
+ * The default success serializer of WebTool.logAndExecute (used when a tool passes no
+ * `getSuccessResult`): the result as JSON text. Exported so a custom `getSuccessResult` that only
+ * adds to the default (e.g. appApprovalSuccessResult's `_meta`) delegates to it instead of
+ * re-implementing it, and cannot silently diverge when the default changes.
+ */
+export function defaultSuccessResult(result: unknown): CallToolResult {
+  return {
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+  };
+}
+
+/**
  * The parameters the logAndExecute method
  *
  * @typeParam T - The type of the result the tool's implementation returns
@@ -230,10 +243,7 @@ export class WebTool<Args extends undefined | ToolParamsSchema = undefined> exte
         success = true;
         toolResult = getSuccessResult
           ? getSuccessResult(constrainedResult.result)
-          : {
-              isError: false,
-              content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
-            };
+          : defaultSuccessResult(constrainedResult.result);
         return toolResult;
       }
 
