@@ -27,6 +27,7 @@ import * as personalSpaceApi from '../tableau/apis/personalSpaceApi.js';
 import * as projectsApi from '../tableau/apis/projectsApi.js';
 import * as pulseApi from '../tableau/apis/pulseApi.js';
 import * as serverApi from '../tableau/apis/serverApi.js';
+import * as subscriptionsApi from '../tableau/apis/subscriptionsApi.js';
 import * as tasksApi from '../tableau/apis/tasksApi.js';
 import * as usersApi from '../tableau/apis/usersApi.js';
 import * as viewsApi from '../tableau/apis/viewsApi.js';
@@ -61,6 +62,7 @@ const modules: Record<string, Record<string, unknown>> = {
   'tableau/apis/projectsApi.ts': projectsApi,
   'tableau/apis/pulseApi.ts': pulseApi,
   'tableau/apis/serverApi.ts': serverApi,
+  'tableau/apis/subscriptionsApi.ts': subscriptionsApi,
   'tableau/apis/tasksApi.ts': tasksApi,
   'tableau/apis/usersApi.ts': usersApi,
   'tableau/apis/viewsApi.ts': viewsApi,
