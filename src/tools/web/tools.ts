@@ -10,6 +10,7 @@ import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtrac
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
 import { getCancelFlowRunTool } from './flows/cancelFlowRun/cancelFlowRun.js';
 import { getDescribeFlowTool } from './flows/describeFlow/describeFlow.js';
+import { getDownloadFlowTool } from './flows/downloadFlow.js';
 import { getGetFlowTool } from './flows/getFlow/getFlow.js';
 import { getGetFlowTaskTool } from './flows/getFlowTask/getFlowTask.js';
 import { getListFlowRunsTool } from './flows/listFlowRuns/listFlowRuns.js';
@@ -74,6 +75,7 @@ export const webToolFactories = [
   getQueryDatasourceTool,
   getListFlowsTool,
   getGetFlowTool,
+  getDownloadFlowTool,
   getListFlowRunsTool,
   getListFlowTasksTool,
   getDescribeFlowTool,
