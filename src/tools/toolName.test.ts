@@ -1,7 +1,7 @@
 import { DesktopMcpServer } from '../server.desktop.js';
 import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './desktop/tools.js';
-import { isWebToolName, webToolNames } from './web/toolName.js';
+import { isWebToolName, webToolGroups, webToolNames } from './web/toolName.js';
 
 /** Names both variants register, each with its own implementation. */
 const crossVariantToolNames = new Set<string>(['scaffold-data-app']);
@@ -49,5 +49,12 @@ describe('ToolName', () => {
         expect(overlap).toEqual(crossVariantToolNames);
       }
     }
+  });
+});
+
+describe('recent content tool group', () => {
+  it('includes recent content in the content-exploration group', () => {
+    expect(isWebToolName('list-recent-content')).toBe(true);
+    expect(webToolGroups['content-exploration']).toContain('list-recent-content');
   });
 });
