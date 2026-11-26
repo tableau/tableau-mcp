@@ -185,18 +185,14 @@ describe('scopes', () => {
     it.each([
       'update-cloud-extract-refresh-task',
       'confirm-update-cloud-extract-refresh-task',
-    ] as const)(
-      '%s requests tableau:tasks:update (not the nonexistent tableau:tasks:write) and tableau:tasks:read',
-      (toolName) => {
-        mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
-        const api: ReadonlyArray<string> = getRequiredApiScopesForTool(toolName);
-        // tasks:read: the confirmation token's schedule pre-state (Get Extract Refresh Tasks) is read
-        // on both phases; without it the state silently resolves to '' under scoped tokens.
-        expect(api).toEqual(['tableau:tasks:update', 'tableau:tasks:read', 'tableau:users:read']);
-        expect(api).not.toContain('tableau:tasks:write');
-        expect(getRequiredMcpScopesForTool(toolName)).toEqual(['tableau:mcp:tasks:write']);
-      },
-    );
+    ] as const)('%s requests tableau:tasks:update and tableau:tasks:read', (toolName) => {
+      mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+      const api: ReadonlyArray<string> = getRequiredApiScopesForTool(toolName);
+      // tasks:read: the confirmation token's schedule pre-state (Get Extract Refresh Tasks) is read
+      // on both phases; without it the state silently resolves to '' under scoped tokens.
+      expect(api).toEqual(['tableau:tasks:update', 'tableau:tasks:read', 'tableau:users:read']);
+      expect(getRequiredMcpScopesForTool(toolName)).toEqual(['tableau:mcp:tasks:write']);
+    });
 
     // The signed confirmation tokens of run-flow / run-flow-task bind the flow's newest runs, so the
     // tools read flow runs (and run-flow-task reads the task to find its flow) on preview and confirm.

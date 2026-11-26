@@ -82,6 +82,16 @@ describe('SignedTokenEvidence', () => {
     expect(await make().verify(ctx({ confirmationToken: token }))).toBe(true);
   });
 
+  it('a decimal MUTATION_PREVIEW_TTL_MINUTES (1.17) still mints a token that verifies', async () => {
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '1.17');
+    const keys = { current: deriveConfirmationTokenKey(SECRET) };
+    const replayCache = new ExpiringMap<string, true>({ defaultExpirationTimeMs: 60_000 });
+    // No ttlMs override: the TTL comes from getMutationPreviewTtlMs().
+    const make = (): SignedTokenEvidence => new SignedTokenEvidence({ keys, replayCache });
+    const token = await preview(make());
+    expect(await make().verify(ctx({ confirmationToken: token }))).toBe(true);
+  });
+
   it('cross-replica: a token minted on one instance verifies on another with the same secret', async () => {
     const replicaA = replica(SECRET);
     const replicaB = replica(SECRET);

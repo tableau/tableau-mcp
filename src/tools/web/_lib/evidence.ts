@@ -153,7 +153,8 @@ let ttlClampWarned = false;
  *
  * A value ABOVE the max is clamped to the max (not silently reset to the default) and logged once
  * as a warning: an operator who asked for a long window gets the longest allowed one. Unparseable
- * or below-min values fall back to the default (parseNumber semantics).
+ * or below-min values fall back to the default (parseNumber semantics). The result is rounded to
+ * an integer number of milliseconds (a decimal setting such as 1.17 is accepted).
  */
 export function getMutationPreviewTtlMs(): number {
   const raw = process.env.MUTATION_PREVIEW_TTL_MINUTES;
@@ -176,7 +177,9 @@ export function getMutationPreviewTtlMs(): number {
     minValue: MUTATION_PREVIEW_TTL_MIN_MINUTES,
     maxValue: MUTATION_PREVIEW_TTL_MAX_MINUTES,
   });
-  return milliseconds.fromMinutes(ttlMinutes);
+  // A decimal minute value (e.g. 1.17) yields a fractional product (70199.99999999999); the token
+  // codec requires an integer TTL, so round at this config boundary.
+  return Math.round(milliseconds.fromMinutes(ttlMinutes));
 }
 
 export const evidenceExportedForTesting = {

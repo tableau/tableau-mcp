@@ -323,6 +323,14 @@ describe('getMutationPreviewTtlMs', () => {
     );
   });
 
+  it('rounds a decimal minute value to an integer number of milliseconds', () => {
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '1.17');
+    expect(getMutationPreviewTtlMs()).toBe(70_200);
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '1.33');
+    expect(Number.isSafeInteger(getMutationPreviewTtlMs())).toBe(true);
+    expect(getMutationPreviewTtlMs()).toBe(79_800);
+  });
+
   it('falls back to the default for below-min or unparseable values', () => {
     vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', '0.5');
     expect(getMutationPreviewTtlMs()).toBe(5 * MINUTE);
