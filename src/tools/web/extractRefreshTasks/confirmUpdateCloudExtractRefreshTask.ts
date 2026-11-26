@@ -134,6 +134,7 @@ schedule values.
                 resolveTarget,
                 confirmationToken: args.approvalToken,
                 binding,
+                targetIdHint: args.taskId,
               });
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();

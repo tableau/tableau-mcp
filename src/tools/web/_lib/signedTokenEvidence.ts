@@ -44,11 +44,13 @@ import { log } from '../../../logging/logger.js';
 import { ExpiringMap } from '../../../utils/expiringMap.js';
 import {
   APP_APPROVAL_TOKEN_HKDF_INFO,
+  BoundTokenFields,
   CONFIRMATION_TOKEN_HKDF_INFO,
   ConfirmationTokenCodec,
   ConfirmationTokenKeys,
   deriveConfirmationTokenKey,
   generateConfirmationTokenKey,
+  isWellFormedConfirmationToken,
   TokenFields,
   VerifyFailureReason,
 } from './confirmationTokenCodec.js';
@@ -229,15 +231,20 @@ export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
     return this.options.replayCache ?? getProcessReplayCache();
   }
 
-  private fields(ctx: EvidenceContext): TokenFields {
+  private boundFields(
+    ctx: Omit<EvidenceContext, 'target'> & { target: { id: string } },
+  ): BoundTokenFields {
     return {
       siteId: ctx.siteId,
       userLuid: ctx.userLuid,
       tool: this.options.namespace ?? ctx.tool,
       targetId: ctx.target.id,
       binding: ctx.binding ?? '',
-      state: ctx.target.state ?? '',
     };
+  }
+
+  private fields(ctx: EvidenceContext): TokenFields {
+    return { ...this.boundFields(ctx), state: ctx.target.state ?? '' };
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
@@ -251,6 +258,49 @@ export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
       this.fields(ctx),
       this.options.ttlMs ?? getMutationPreviewTtlMs(),
     );
+  }
+
+  /**
+   * EvidenceStrategy.precheck: rejects a missing or malformed token (shape only: no key, no clock,
+   * no I/O). Used by guardMutation to skip resolveTarget() for a confirm that cannot pass.
+   */
+  precheck(confirmationToken: string | undefined): boolean {
+    if (isWellFormedConfirmationToken(confirmationToken)) {
+      return true;
+    }
+    this.lastRejection = 'malformed';
+    return false;
+  }
+
+  /**
+   * Checks everything that does NOT depend on the target's live pre-state: identity, shape, expiry,
+   * MAC (computed over the token's OWN preState field) and the same-replica replay cache. Consumes
+   * nothing. A caller that must do REST reads to produce the live pre-state (SignedConfirmation's
+   * resolveState) calls this first, so a forged, tampered, expired or replayed token is rejected
+   * without any REST call, and `state-changed` is only ever reported for an authentic, unexpired
+   * token. verify() still re-runs every check (atomically with the replay-cache add) afterwards.
+   * `ctx.target.state` is ignored.
+   */
+  preVerify(ctx: Omit<EvidenceContext, 'target'> & { target: { id: string } }): boolean {
+    this.lastRejection = undefined;
+    if (!ctx.siteId || !ctx.userLuid) {
+      this.lastRejection = 'missing-identity';
+      return false;
+    }
+    if (!ctx.confirmationToken) {
+      this.lastRejection = 'malformed';
+      return false;
+    }
+    const result = this.getCodec().authenticate(ctx.confirmationToken, this.boundFields(ctx));
+    if (!result.ok) {
+      this.lastRejection = result.reason;
+      return false;
+    }
+    if (this.getReplayCache().has(result.token.tokenId)) {
+      this.lastRejection = 'replayed';
+      return false;
+    }
+    return true;
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {

@@ -148,6 +148,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
                 resolveTarget,
                 confirmationToken: args.confirmationToken,
                 binding,
+                targetIdHint: args.userId,
               });
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();

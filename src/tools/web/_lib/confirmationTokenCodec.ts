@@ -75,6 +75,26 @@ export type VerifyFailureReason = 'malformed' | 'expired' | 'state-changed' | 'b
 export type VerifyResult =
   { ok: true; tokenId: string; expiresAtMs: number } | { ok: false; reason: VerifyFailureReason };
 
+/** The fields the MAC covers. `state` is not needed: the MAC is over the token's OWN preState. */
+export type BoundTokenFields = Omit<TokenFields, 'state'>;
+
+/**
+ * A token whose shape, expiry and MAC have been checked (authenticate()), awaiting the pre-state
+ * comparison (checkPreState()). Opaque to callers; only the codec that produced it can use it.
+ */
+export interface AuthenticatedToken {
+  readonly tokenId: string;
+  readonly expiresAtMs: number;
+  /** @internal */
+  readonly preState: string;
+  /** @internal The key (current or previous) that verified the MAC; also keyed the preState. */
+  readonly verifyingKey: Buffer;
+}
+
+export type AuthenticateResult =
+  | { ok: true; token: AuthenticatedToken }
+  | { ok: false; reason: Exclude<VerifyFailureReason, 'state-changed'> };
+
 export interface ConfirmationTokenKeys {
   /** Signs new tokens and verifies. */
   current: Buffer;
@@ -204,6 +224,19 @@ export class ConfirmationTokenCodec {
 
   /** Verifies `token` against the server-supplied `fields`. See the module comment for the order. */
   verify(token: string, fields: TokenFields): VerifyResult {
+    const authenticated = this.authenticate(token, fields);
+    if (!authenticated.ok) {
+      return authenticated;
+    }
+    return this.checkPreState(authenticated.token, fields.state);
+  }
+
+  /**
+   * First half of verify(): shape → expiry → MAC, WITHOUT the live pre-state. The MAC covers the
+   * token's own preState field, so this needs no target read. Lets a caller reject a forged,
+   * tampered or expired token before doing the REST reads that produce the live pre-state.
+   */
+  authenticate(token: string, fields: BoundTokenFields): AuthenticateResult {
     const parsed = parseToken(token);
     if (!parsed) {
       return { ok: false, reason: 'malformed' };
@@ -226,21 +259,37 @@ export class ConfirmationTokenCodec {
     if (!verifyingKey) {
       return { ok: false, reason: 'bad-mac' };
     }
+    return {
+      ok: true,
+      token: {
+        tokenId: parsed.tokenId,
+        expiresAtMs: parsed.expiresAtMs,
+        preState: parsed.preState,
+        verifyingKey,
+      },
+    };
+  }
 
-    // Only for an authentic token: has the live target moved since the preview? The token's
-    // preState was keyed with the key that minted it, i.e. the one that just verified the MAC.
-    const livePreState = Buffer.from(computePreState(verifyingKey, fields.state), 'utf8');
-    if (!timingSafeEqual(livePreState, Buffer.from(parsed.preState, 'utf8'))) {
+  /**
+   * Second half of verify(): only for an authentic token (from authenticate()), has the live target
+   * moved since the preview? Re-checks expiry, since the live-state read may have taken a while.
+   */
+  checkPreState(token: AuthenticatedToken, state: string): VerifyResult {
+    if (this.now() >= token.expiresAtMs) {
+      return { ok: false, reason: 'expired' };
+    }
+    // The token's preState was keyed with the key that minted it, i.e. the one that verified the MAC.
+    const livePreState = Buffer.from(computePreState(token.verifyingKey, state), 'utf8');
+    if (!timingSafeEqual(livePreState, Buffer.from(token.preState, 'utf8'))) {
       return { ok: false, reason: 'state-changed' };
     }
-
-    return { ok: true, tokenId: parsed.tokenId, expiresAtMs: parsed.expiresAtMs };
+    return { ok: true, tokenId: token.tokenId, expiresAtMs: token.expiresAtMs };
   }
 }
 
 function sign(
   key: Buffer,
-  fields: TokenFields,
+  fields: BoundTokenFields,
   preState: string,
   expiresAtMs: number,
   tokenId: string,

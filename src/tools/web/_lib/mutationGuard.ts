@@ -132,6 +132,7 @@ export async function guardMutation<TTarget>({
   previewTool,
   binding,
   fallbackTargetKind,
+  targetIdHint,
   precondition,
 }: {
   restApi: RestApi;
@@ -157,6 +158,10 @@ export async function guardMutation<TTarget>({
   // itself fails. Required for polymorphic tools like `delete-content` where the caller knows the
   // dispatched resource kind but `targetKindHint(tool)` cannot derive it from the tool name alone.
   fallbackTargetKind?: MutationTarget['kind'];
+  // Optional caller-supplied target id (e.g. the `userId` arg) used ONLY in the user-facing message
+  // of a confirm rejected before resolveTarget() runs (malformed token). Never audited: the audit
+  // record of an unresolved attempt names the 'unresolved' placeholder.
+  targetIdHint?: string;
   // Optional state check the target must pass for the mutation to proceed (e.g. delete-content's
   // "still stale" re-evaluation, W-24311035). Runs on a PREVIEW before evidence is established (so a
   // rejected preview writes nothing) and on a CONFIRM after evidence verifies, immediately before
@@ -198,29 +203,67 @@ export async function guardMutation<TTarget>({
     return new AdminOnlyError(adminResult.error).toErr();
   }
 
-  // (3) Resolve the target so both the evidence gate and the audit record name exactly what was acted on.
-  // A refused pre-state read (the token's pre-state is part of the target, e.g. a task's schedule
-  // hash) is a DENIED attempt: audit it and return the scope-naming error as a clean tool error. Fail
-  // closed: no evidence is established or verified and nothing is mutated. Any other throw
-  // propagates as before.
-  let target: MutationTarget;
-  try {
-    target = await resolveTarget();
-  } catch (e) {
-    if (!(e instanceof ConfirmationPreStateForbiddenError)) {
-      throw e;
-    }
+  const unresolvedTarget: MutationTarget = {
+    id: 'unresolved',
+    kind: fallbackTargetKind ?? targetKindHint(tool),
+  };
+
+  // (2b) Confirm phase: reject a missing or malformed confirmation value BEFORE resolveTarget(), so
+  // an empty or garbage token costs no Tableau REST call (same short-circuit as the standalone
+  // SignedConfirmation.confirm). Shape-only, I/O-free (EvidenceStrategy.precheck); the full MAC /
+  // expiry / pre-state check still runs in verify() below, after the target (whose id the MAC binds)
+  // is resolved.
+  if (
+    phase === 'confirm' &&
+    mode === 'preview-confirm' &&
+    evidence.precheck &&
+    !evidence.precheck(confirmationToken)
+  ) {
     emitAuditRecord({
       actor,
       tool,
       action,
       phase,
-      target: { id: 'unresolved', kind: fallbackTargetKind ?? targetKindHint(tool) },
+      target: unresolvedTarget,
       confirmationEvidence: evidenceDescriptor,
       result: 'denied',
-      denyReason: e.type,
+      denyReason: 'preview-not-run',
     });
-    return e.toErr();
+    return new PreviewNotRunError(
+      renderPreviewNotRunMessage({
+        tool,
+        previewTool,
+        targetKind: unresolvedTarget.kind,
+        targetId: targetIdHint ?? 'unresolved',
+      }),
+    ).toErr();
+  }
+
+  // (3) Resolve the target so both the evidence gate and the audit record name exactly what was acted on.
+  // Any failure is a DENIED attempt and is audited (fail closed: no evidence is established or
+  // verified and nothing is mutated). A refused pre-state read (the token's pre-state is part of the
+  // target, e.g. a task's schedule hash) is returned as the scope-naming clean tool error; any other
+  // throw (5xx, timeout, network) is rethrown after the audit record.
+  let target: MutationTarget;
+  try {
+    target = await resolveTarget();
+  } catch (e) {
+    const preStateForbidden = e instanceof ConfirmationPreStateForbiddenError;
+    emitAuditRecord({
+      actor,
+      tool,
+      action,
+      phase,
+      target: unresolvedTarget,
+      confirmationEvidence: evidenceDescriptor,
+      result: 'denied',
+      // A fixed reason (the error type for typed errors), never the error message, token or params.
+      denyReason: e instanceof McpToolError ? e.type : 'target-unresolved',
+    });
+    if (preStateForbidden) {
+      return e.toErr();
+    }
+    throw e;
   }
   const evidenceCtx: EvidenceContext = {
     restApi,

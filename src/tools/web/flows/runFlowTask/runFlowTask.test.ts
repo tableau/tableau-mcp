@@ -198,9 +198,14 @@ describe('runFlowTaskTool', () => {
       const confirmationToken = await previewRunFlowTask();
       vi.stubEnv('MUTATION_TOKEN_SECRET', 'a-completely-different-secret-0123456789');
       signedTokenTesting.reset();
+      mocks.mockGetFlowRunTask.mockClear();
+      mocks.mockGetFlowRuns.mockClear();
       const result = await getToolResult({ taskId: TASK_ID, confirm: true, confirmationToken });
       expect(result.isError).toBe(true);
       expect(mocks.mockRunFlowTask).not.toHaveBeenCalled();
+      // The MAC is checked before the pre-state reads: a forged token costs no REST call.
+      expect(mocks.mockGetFlowRunTask).not.toHaveBeenCalled();
+      expect(mocks.mockGetFlowRuns).not.toHaveBeenCalled();
     });
 
     it('rejects a replay of a consumed token on the same instance', async () => {

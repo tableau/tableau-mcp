@@ -248,6 +248,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                 resolveTarget,
                 confirmationToken: args.confirmationToken,
                 binding,
+                targetIdHint: args.taskId,
               });
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();

@@ -164,6 +164,43 @@ describe('SignedTokenEvidence', () => {
     expect(evidence.explainRejection()).toBeUndefined();
   });
 
+  describe('precheck / preVerify (checks that need no live pre-state)', () => {
+    it('precheck accepts only a well-formed token and consumes nothing', async () => {
+      const make = replica(SECRET);
+      const token = await preview(make());
+      const evidence = make();
+      expect(evidence.precheck(token)).toBe(true);
+      expect(evidence.precheck(undefined)).toBe(false);
+      expect(evidence.precheck('garbage')).toBe(false);
+      expect(await make().verify(ctx({ confirmationToken: token }))).toBe(true);
+    });
+
+    it('preVerify accepts an authentic token whatever the live state, and consumes nothing', async () => {
+      const make = replica(SECRET);
+      const token = await preview(make());
+      const { target: _t, ...rest } = ctx({ confirmationToken: token });
+      expect(make().preVerify({ ...rest, target: { id: 'user-1' } })).toBe(true);
+      expect(make().preVerify({ ...rest, target: { id: 'user-1' } })).toBe(true);
+      expect(await make().verify(ctx({ confirmationToken: token }))).toBe(true);
+    });
+
+    it('preVerify rejects bad-mac, wrong target, expired and replayed tokens', async () => {
+      let now = T0;
+      const make = replica(SECRET, { now: () => now });
+      const token = await preview(make());
+      const base = { ...ctx({ confirmationToken: token }), target: { id: 'user-1' } };
+      expect(replica(OTHER_SECRET)().preVerify(base)).toBe(false);
+      expect(make().preVerify({ ...base, target: { id: 'user-2' } })).toBe(false);
+      expect(await make().verify(ctx({ confirmationToken: token }))).toBe(true);
+      expect(make().preVerify(base)).toBe(false); // replayed
+      const fresh = await preview(make());
+      now = T0 + 60_000;
+      const expired = make();
+      expect(expired.preVerify({ ...base, confirmationToken: fresh })).toBe(false);
+      expect(expired.explainRejection()).toBeUndefined();
+    });
+  });
+
   describe('replay', () => {
     it('rejects a replay on the same replica', async () => {
       const make = replica(SECRET);

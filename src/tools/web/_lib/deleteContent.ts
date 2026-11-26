@@ -792,6 +792,7 @@ async function runExtractRefreshTaskBranch({
     ...(confirm ? { confirmationToken } : {}),
     binding,
     fallbackTargetKind: 'extract-refresh-task',
+    targetIdHint: taskId,
   });
   if (guardResult.isErr()) {
     return guardResult.error.toErr();

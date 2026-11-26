@@ -15,8 +15,10 @@
  *   PreviewNotRunError and audits. After a preview, call `confirmation.nextStep()` for the text.
  * - Standalone (flow tools: run-flow, run-flow-task, cancel-flow-run, which have no admin gate and no
  *   audit record): call `preview()` / `confirm()`. `resolveState()` runs on BOTH phases; if it throws
- *   the error propagates (fail closed — no token is minted, nothing is mutated). On confirm a
- *   missing or malformed token is rejected first, without calling `resolveState()`. Wrap the
+ *   the error propagates (fail closed — no token is minted, nothing is mutated). On confirm the
+ *   token is authenticated first (shape, expiry, MAC over its own pre-state field, same-replica
+ *   replay) WITHOUT calling `resolveState()`: a missing, forged, expired or replayed token costs no
+ *   REST call, and `state-changed` is only reported for an authentic, unexpired token. Wrap the
  *   mutating REST call in `confirmAndRun()` so a definite 4xx (nothing applied) releases the token,
  *   the same rule guardMutation's recordOutcome applies.
  *
@@ -28,7 +30,6 @@ import { PreviewNotRunError } from '../../../errors/mcpToolError.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { getHttpStatusCode } from '../../../utils/getHttpStatus.js';
 import { WebToolName } from '../toolName.js';
-import { isWellFormedConfirmationToken } from './confirmationTokenCodec.js';
 import { EvidenceContext } from './evidence.js';
 import { renderPreviewNotRunMessage, renderTokenConfirmNextStep } from './hitlText.js';
 import { isDefiniteNotAppliedStatus } from './mutationGuard.js';
@@ -76,20 +77,30 @@ export class SignedConfirmation {
     this.evidence = new SignedTokenEvidence(options);
   }
 
-  private async context(
+  /** The evidence context without the live pre-state (no REST call). */
+  private baseContext(
     { restApi, userLuid }: SignedConfirmationCaller,
     confirmationToken?: string,
-  ): Promise<EvidenceContext> {
-    const state = this.spec.resolveState ? await this.spec.resolveState() : undefined;
+  ): EvidenceContext {
     return {
       restApi,
       siteId: restApi.siteId,
-      target: { id: this.spec.targetId, ...(state === undefined ? {} : { state }) },
+      target: { id: this.spec.targetId },
       tool: this.spec.tool,
       userLuid,
       confirmationToken,
       binding: this.spec.binding,
     };
+  }
+
+  /** The full evidence context: baseContext plus the live pre-state from resolveState() (REST). */
+  private async context(
+    caller: SignedConfirmationCaller,
+    confirmationToken?: string,
+  ): Promise<EvidenceContext> {
+    const base = this.baseContext(caller, confirmationToken);
+    const state = this.spec.resolveState ? await this.spec.resolveState() : undefined;
+    return state === undefined ? base : { ...base, target: { ...base.target, state } };
   }
 
   /** The preview "NEXT STEP" text carrying the token minted by the last establish. */
@@ -107,18 +118,20 @@ export class SignedConfirmation {
   }
 
   /**
-   * Standalone confirm: re-resolve the pre-state and verify the token. Throws PreviewNotRunError
-   * (with the state-changed detail when that is why) on any failure; resolves only when the caller
-   * may mutate.
+   * Standalone confirm: authenticate the token, then re-resolve the pre-state and verify. Throws
+   * PreviewNotRunError (with the state-changed detail when that is why) on any failure; resolves
+   * only when the caller may mutate.
    */
   async confirm(
     caller: SignedConfirmationCaller,
     confirmationToken: string | undefined,
   ): Promise<void> {
-    // Reject a missing or garbage token BEFORE resolveState(): no REST lookups for a confirm that
-    // cannot pass, and the "run the preview first" message is not masked by a lookup error.
+    // Authenticate BEFORE resolveState(): a missing, garbage, forged, expired or replayed token
+    // costs no REST lookup, and the "run the preview first" message is not masked by a lookup
+    // error. The MAC covers the pre-state taken from the token itself, so it is checkable before
+    // the live read; verify() then compares that pre-state with the live one (and re-checks all).
     if (
-      isWellFormedConfirmationToken(confirmationToken) &&
+      this.evidence.preVerify(this.baseContext(caller, confirmationToken)) &&
       (await this.evidence.verify(await this.context(caller, confirmationToken)))
     ) {
       return;
@@ -128,9 +141,7 @@ export class SignedConfirmation {
         tool: this.spec.tool,
         targetKind: this.spec.targetKind,
         targetId: this.spec.targetId,
-        detail: isWellFormedConfirmationToken(confirmationToken)
-          ? this.evidence.explainRejection()
-          : undefined,
+        detail: this.evidence.explainRejection(),
       }),
     );
   }

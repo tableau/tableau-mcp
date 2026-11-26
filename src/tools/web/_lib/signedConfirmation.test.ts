@@ -133,6 +133,66 @@ describe('SignedConfirmation', () => {
     },
   );
 
+  describe('verifies the token before the pre-state REST reads', () => {
+    it('rejects a forged (wrong-secret) token as bad-mac without calling resolveState', async () => {
+      const token = await preview(
+        new SignedConfirmation(
+          spec({ resolveState: async () => 'S1' }),
+          replica('another-secret-entirely-0123456789abcdef'),
+        ),
+      );
+      const resolveState = vi.fn(async () => 'S2');
+      const confirm = new SignedConfirmation(spec({ resolveState }), replica());
+      const rejection = confirm.confirm(caller, token);
+      await expect(rejection).rejects.toThrow(PreviewNotRunError);
+      // Never the state-changed explanation for an inauthentic token (no state oracle).
+      await expect(rejection).rejects.not.toThrow(exportedForTesting.STATE_CHANGED_EXPLANATION);
+      expect(resolveState).not.toHaveBeenCalled();
+    });
+
+    it('rejects an expired token without calling resolveState', async () => {
+      let now = 1_800_000_000_000;
+      const options = { ...replica(), now: () => now };
+      const token = await preview(
+        new SignedConfirmation(spec({ resolveState: async () => 'S1' }), options),
+      );
+      now += 60_000;
+      const resolveState = vi.fn(async () => 'S1');
+      await expect(
+        new SignedConfirmation(spec({ resolveState }), options).confirm(caller, token),
+      ).rejects.toThrow(PreviewNotRunError);
+      expect(resolveState).not.toHaveBeenCalled();
+    });
+
+    it('rejects a same-replica replay without calling resolveState', async () => {
+      const options = replica();
+      const token = await preview(
+        new SignedConfirmation(spec({ resolveState: async () => 'S1' }), options),
+      );
+      await new SignedConfirmation(spec({ resolveState: async () => 'S1' }), options).confirm(
+        caller,
+        token,
+      );
+      const resolveState = vi.fn(async () => 'S1');
+      await expect(
+        new SignedConfirmation(spec({ resolveState }), options).confirm(caller, token),
+      ).rejects.toThrow(PreviewNotRunError);
+      expect(resolveState).not.toHaveBeenCalled();
+    });
+
+    it('reports state-changed only for an authentic, unexpired token (after one resolveState)', async () => {
+      const options = replica();
+      const token = await preview(
+        new SignedConfirmation(spec({ resolveState: async () => 'S1' }), options),
+      );
+      const resolveState = vi.fn(async () => 'S2');
+      await expect(
+        new SignedConfirmation(spec({ resolveState }), options).confirm(caller, token),
+      ).rejects.toThrow(exportedForTesting.STATE_CHANGED_EXPLANATION);
+      expect(resolveState).toHaveBeenCalledOnce();
+    });
+  });
+
   it('calls resolveState on confirm for a well-formed token', async () => {
     const token = await preview(
       new SignedConfirmation(spec({ resolveState: async () => 'S1' }), replica()),

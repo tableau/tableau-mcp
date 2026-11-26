@@ -40,6 +40,10 @@ export interface EvidenceContext {
  * - `release` (optional) undoes the consuming side effect of the last SUCCESSFUL `verify` (e.g. a
  *   replay-cache entry). The guard calls it when the mutation does not proceed after a verify passed
  *   (a target-state precondition rejected), so that rejection does not burn the caller's proof.
+ * - `precheck` (optional) is a cheap, synchronous, I/O-free check of the caller-supplied
+ *   confirmation value on its own (e.g. "is this a well-formed signed token"). It can only reject:
+ *   false means `verify` would certainly fail, so the guard rejects the confirm BEFORE resolving the
+ *   target (no REST reads for a confirm that cannot pass). Omitted = no precheck.
  */
 /** Audit-record evidence kinds (mirrors auditRecordSchema.confirmationEvidence.kind). */
 export type EvidenceKind = 'tag' | 'signed-token' | 'registry-nonce' | 'none';
@@ -50,6 +54,7 @@ export interface EvidenceStrategy<TTarget> {
   describeEvidence(): { kind: EvidenceKind; detail?: string };
   explainRejection?(): string | undefined;
   release?(): void;
+  precheck?(confirmationToken: string | undefined): boolean;
   // Phantom marker so the target type participates in the strategy's identity; never read.
   readonly _target?: TTarget;
 }
@@ -231,6 +236,17 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
         return false;
       }
       this.verified.push(strategy);
+    }
+    return true;
+  }
+
+  /** Rejects when any member's precheck rejects (members without one pass). */
+  precheck(confirmationToken: string | undefined): boolean {
+    for (const strategy of this.strategies) {
+      if (strategy.precheck && !strategy.precheck(confirmationToken)) {
+        this.failed = strategy;
+        return false;
+      }
     }
     return true;
   }

@@ -164,13 +164,141 @@ describe('guardMutation', () => {
     },
   );
 
-  it('still propagates an untyped resolveTarget failure (no audit, unchanged behavior)', async () => {
-    const evidence = makeEvidence();
-    await expect(
-      run({ resolveTarget: vi.fn().mockRejectedValue(new Error('network down')), evidence }),
-    ).rejects.toThrow('network down');
-    expect(evidence.establish).not.toHaveBeenCalled();
-    expect(getAuditRecords()).toHaveLength(0);
+  it.each(['preview', 'confirm'] as const)(
+    'on %s, audits DENIED then rethrows an untyped resolveTarget failure (5xx / timeout / network)',
+    async (phase) => {
+      const evidence = makeEvidence();
+      const failure = new Error('network down: secret-param-value');
+      await expect(
+        run({
+          phase,
+          tool: 'update-cloud-extract-refresh-task',
+          action: 'update',
+          resolveTarget: vi.fn().mockRejectedValue(failure),
+          evidence,
+          confirmationToken: phase === 'confirm' ? 'v1.some-token' : undefined,
+          binding: 'binding-fingerprint',
+        }),
+      ).rejects.toBe(failure);
+      expect(evidence.establish).not.toHaveBeenCalled();
+      expect(evidence.verify).not.toHaveBeenCalled();
+      const audits = getAuditRecords();
+      expect(audits).toHaveLength(1);
+      const record = auditRecordSchema.parse(audits[0]);
+      expect(record.result).toBe('denied');
+      expect(record.denyReason).toBe('target-unresolved');
+      expect(record.phase).toBe(phase);
+      expect(record.target).toEqual({ id: 'unresolved', kind: 'extract-refresh-task' });
+      // Fixed reason only: never the error message, the token or a parameter fingerprint.
+      const serialized = JSON.stringify(audits[0]);
+      expect(serialized).not.toContain('secret-param-value');
+      expect(serialized).not.toContain('v1.some-token');
+      expect(serialized).not.toContain('binding-fingerprint');
+    },
+  );
+
+  it('audits a typed (McpToolError) resolveTarget failure with its type, then rethrows', async () => {
+    const typed = new ContentNotStaleError('not stale');
+    await expect(run({ resolveTarget: vi.fn().mockRejectedValue(typed) })).rejects.toBe(typed);
+    const record = auditRecordSchema.parse(getAuditRecords()[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe(typed.type);
+  });
+
+  // --- confirm: malformed-token short-circuit before resolveTarget ---
+
+  describe('confirm precheck (malformed token rejected before resolveTarget)', () => {
+    it.each([
+      ['missing', undefined],
+      ['empty', ''],
+      ['garbage', 'not-a-token'],
+      ['legacy UUID', '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f'],
+    ])('rejects a %s token with no REST call and a DENIED audit', async (_label, token) => {
+      const resolveTarget = vi.fn().mockResolvedValue(target);
+      const evidence = new SignedTokenEvidence({
+        keys: { current: deriveConfirmationTokenKey('guard-precheck-secret-0123456789abcdef') },
+        replayCache: new ExpiringMap<string, true>({ defaultExpirationTimeMs: 60_000 }),
+      });
+      const verify = vi.spyOn(evidence, 'verify');
+      const result = await run({
+        phase: 'confirm',
+        tool: 'update-user',
+        action: 'update',
+        evidence,
+        resolveTarget,
+        confirmationToken: token,
+        fallbackTargetKind: 'user',
+        targetIdHint: 'user-42',
+      });
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.type).toBe('preview-not-run');
+        expect(result.error.message).toContain('user user-42');
+        expect(result.error.message).toContain('Run update-user with confirm omitted');
+      }
+      expect(resolveTarget).not.toHaveBeenCalled();
+      expect(verify).not.toHaveBeenCalled();
+      const audits = getAuditRecords();
+      expect(audits).toHaveLength(1);
+      const record = auditRecordSchema.parse(audits[0]);
+      expect(record.result).toBe('denied');
+      expect(record.denyReason).toBe('preview-not-run');
+      expect(record.target).toEqual({ id: 'unresolved', kind: 'user' });
+    });
+
+    it('does not precheck on preview, nor in confirm-only mode', async () => {
+      const precheck = vi.fn().mockReturnValue(false);
+      const resolveTarget = vi.fn().mockResolvedValue(target);
+      await run({ phase: 'preview', evidence: makeEvidence({ precheck }), resolveTarget });
+      await run({
+        phase: 'confirm',
+        mode: 'confirm-only',
+        evidence: makeEvidence({ precheck }),
+        resolveTarget,
+      });
+      expect(precheck).not.toHaveBeenCalled();
+      expect(resolveTarget).toHaveBeenCalledTimes(2);
+    });
+
+    it('a well-formed token passes the precheck and proceeds to resolveTarget + verify', async () => {
+      const precheck = vi.fn().mockReturnValue(true);
+      const evidence = makeEvidence({ precheck });
+      const resolveTarget = vi.fn().mockResolvedValue(target);
+      const result = await run({
+        phase: 'confirm',
+        evidence,
+        resolveTarget,
+        confirmationToken: 'v1.x',
+      });
+      expect(result.isOk()).toBe(true);
+      expect(precheck).toHaveBeenCalledWith('v1.x');
+      expect(resolveTarget).toHaveBeenCalledOnce();
+      expect(evidence.verify).toHaveBeenCalledOnce();
+    });
+
+    it('AllEvidence (tag + app approval) rejects a malformed approval token before any REST call', async () => {
+      const tagEvidence = new TagEvidence({ cleanupDate: '2026-11-25', kind: 'workbook' });
+      const tagVerify = vi.spyOn(tagEvidence, 'verify');
+      const resolveTarget = vi.fn().mockResolvedValue({ ...target, kind: 'workbook' });
+      const result = await run({
+        phase: 'confirm',
+        tool: 'confirm-delete-content',
+        previewTool: 'delete-content',
+        evidence: new AllEvidence([
+          tagEvidence,
+          new SignedTokenEvidence({ purpose: 'app-approval' }),
+        ]),
+        resolveTarget,
+        confirmationToken: 'garbage',
+        fallbackTargetKind: 'workbook',
+      });
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain('Re-run delete-content to preview again');
+      }
+      expect(resolveTarget).not.toHaveBeenCalled();
+      expect(tagVerify).not.toHaveBeenCalled();
+    });
   });
 
   // --- preview-confirm: verify gate ---

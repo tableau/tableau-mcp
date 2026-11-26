@@ -359,6 +359,60 @@ describe('confirmationTokenCodec', () => {
     });
   });
 
+  describe('authenticate / checkPreState (verify split for pre-verification)', () => {
+    const { state: _state, ...BOUND } = FIELDS;
+
+    it('authenticates an authentic token without the live state; checkPreState then decides', () => {
+      const codec = codecFor(SECRET);
+      const token = codec.mint(FIELDS, TTL_MS);
+      const auth = codec.authenticate(token, BOUND);
+      expect(auth.ok).toBe(true);
+      if (!auth.ok) return;
+      expect(codec.checkPreState(auth.token, FIELDS.state)).toEqual(codec.verify(token, FIELDS));
+      expect(codec.checkPreState(auth.token, 'Viewer')).toEqual({
+        ok: false,
+        reason: 'state-changed',
+      });
+    });
+
+    it('rejects a forged / wrong-secret token as bad-mac with no state input at all', () => {
+      const token = codecFor(OTHER_SECRET).mint(FIELDS, TTL_MS);
+      expect(codecFor(SECRET).authenticate(token, BOUND)).toEqual({ ok: false, reason: 'bad-mac' });
+      expect(
+        codecFor(SECRET).authenticate(
+          flipCharInField(codecFor(SECRET).mint(FIELDS, TTL_MS), 3),
+          BOUND,
+        ),
+      ).toEqual({
+        ok: false,
+        reason: 'bad-mac',
+      });
+    });
+
+    it('rejects malformed and expired tokens before the MAC', () => {
+      let now = T0;
+      const codec = codecFor(SECRET, () => now);
+      const token = codec.mint(FIELDS, TTL_MS);
+      expect(codec.authenticate('garbage', BOUND)).toEqual({ ok: false, reason: 'malformed' });
+      now = T0 + TTL_MS;
+      expect(codec.authenticate(token, BOUND)).toEqual({ ok: false, reason: 'expired' });
+    });
+
+    it('checkPreState re-checks expiry (a slow live-state read can outlast the token)', () => {
+      let now = T0;
+      const codec = codecFor(SECRET, () => now);
+      const token = codec.mint(FIELDS, TTL_MS);
+      const auth = codec.authenticate(token, BOUND);
+      expect(auth.ok).toBe(true);
+      if (!auth.ok) return;
+      now = T0 + TTL_MS;
+      expect(codec.checkPreState(auth.token, FIELDS.state)).toEqual({
+        ok: false,
+        reason: 'expired',
+      });
+    });
+  });
+
   describe('computePreState', () => {
     const KEY = deriveConfirmationTokenKey(SECRET);
     const OTHER_KEY = deriveConfirmationTokenKey(OTHER_SECRET);

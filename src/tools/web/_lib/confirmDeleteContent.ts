@@ -153,6 +153,7 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                     ]),
                     resolveTarget,
                     fallbackTargetKind: 'workbook',
+                    targetIdHint: resourceId,
                     precondition: () =>
                       checkContentStillStale({
                         restApi,
@@ -226,6 +227,7 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                     ]),
                     resolveTarget,
                     fallbackTargetKind: 'datasource',
+                    targetIdHint: resourceId,
                     precondition: () =>
                       checkContentStillStale({
                         restApi,
@@ -291,6 +293,7 @@ allowed time window, that the item carries the preview's \`pending-deletion-YYYY
                     evidence: createAppApprovalEvidence('delete-content'),
                     resolveTarget,
                     fallbackTargetKind: 'extract-refresh-task',
+                    targetIdHint: resourceId,
                   });
                   if (guardResult.isErr()) {
                     return guardResult.error.toErr();
