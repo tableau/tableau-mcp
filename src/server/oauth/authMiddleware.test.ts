@@ -1254,22 +1254,13 @@ describe('pre-change (main-era) tokens after the signed-token scope additions (W
     });
   });
 
-  describe('strict mode (default): initialize with the main-era full advertised set', () => {
-    it('403s at initialize naming tableau:tasks:update for a grant with tasks:write instead', async () => {
-      // Strict is the default (no DISABLE_STRICT_SCOPE_MATCH, flag off).
+  // Strict scope matching was removed in #1292, so initialize no longer rejects an older grant;
+  // the missing scope surfaces per tool (see the subset-mode tests above).
+  describe('initialize with the main-era full advertised set', () => {
+    it('initializes a grant that has tasks:write instead of tasks:update', async () => {
       mocks.isFeatureEnabled.mockResolvedValue(false);
       const current = await getSupportedScopes({ includeApiScopes: true, clientId });
       expect(current).toContain('tableau:tasks:update');
-      // Main's full advertised set: identical except tasks:write where this release has tasks:update.
-      // (With admin + flow read tools on, tasks:read / flow_runs:read / flow_tasks:read were already
-      // advertised on main via list-extract-refresh-tasks / list-flow-runs / list-flow-tasks.)
-      expect(current).toEqual(
-        expect.arrayContaining([
-          'tableau:tasks:read',
-          'tableau:flow_runs:read',
-          'tableau:flow_tasks:read',
-        ]),
-      );
       const mainEraFullSet = [
         ...current.filter((scope) => scope !== 'tableau:tasks:update'),
         'tableau:tasks:write',
@@ -1277,18 +1268,8 @@ describe('pre-change (main-era) tokens after the signed-token scope additions (W
 
       const { res, next } = await drive(mainEraFullSet, initializeBody);
 
-      expect(next).not.toHaveBeenCalled();
-      expect(res.statusCode).toBe(403);
-      expect(res.body.error).toBe('insufficient_scope');
-      expect(res.body.error_description).toContain('tableau:tasks:update');
-      // Only the corrected scope is missing — the rest of the main-era set is still accepted.
-      expect(res.body.error_description).toMatch(/Missing required scopes: tableau:tasks:update\./);
-      const scopeList = challengeScopes(res);
-      expect(scopeList).toContain('tableau:tasks:update');
-      // The challenge carries the full current list so the client re-consents once.
-      for (const scope of current) {
-        expect(scopeList).toContain(scope);
-      }
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBeUndefined();
     });
 
     it('accepts the current full advertised set at initialize', async () => {
