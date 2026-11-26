@@ -275,7 +275,6 @@ describe('authorization code flow', () => {
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
       // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
     });
 
     afterEach(() => {
@@ -293,7 +292,7 @@ describe('authorization code flow', () => {
       expect(response.status).toBe(302);
     });
 
-    it('rejects /authorize when the requested scopes omit the mandatory scope, site settings on, strict off', async () => {
+    it('rejects /authorize when site settings are on and the requested scopes omit the mandatory scope', async () => {
       const { app } = await startServer();
 
       const response = await request(app)
@@ -305,13 +304,12 @@ describe('authorization code flow', () => {
       expect(response.body.error_description).toContain(MANDATORY_SCOPE);
     });
 
-    it('redirects (does not reject) when strict scope match is on, even for the same subset', async () => {
-      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'false');
+    it('redirects when a subset includes the mandatory scope', async () => {
       const { app } = await startServer();
 
       const response = await request(app)
         .get('/oauth2/authorize')
-        .query(authorizeQuery(SUBSET_SCOPE));
+        .query(authorizeQuery(`${SUBSET_SCOPE} ${MANDATORY_SCOPE}`));
 
       expect(response.status).toBe(302);
     });
