@@ -1,6 +1,5 @@
 import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import { log } from '../../logging/logger.js';
-import { apiVersionAtLeast, START_PAGE_MIN_API_VERSION } from '../externalApi/apiVersion.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow, ParsedWorkbook } from '../metadata/types.js';
@@ -27,7 +26,7 @@ export type ApplyFocus =
  * recover the pre-apply sheet for a restore — free, because every write path builds that
  * document from a live read.
  */
-export function activeWindowName(workbookXml: string): string | undefined {
+function activeWindowName(workbookXml: string): string | undefined {
   let workbook: ParsedWorkbook;
   try {
     workbook = parseXML(workbookXml);
@@ -70,10 +69,6 @@ export async function hideStartPage({
   executor,
   signal,
 }: WithExecutorAndAbortSignal): Promise<void> {
-  if (!apiVersionAtLeast(executor.desktopApiVersion, START_PAGE_MIN_API_VERSION)) {
-    return;
-  }
-
   try {
     const result = await executor.setStartPageVisibility(false, signal);
     if (result.isErr()) {

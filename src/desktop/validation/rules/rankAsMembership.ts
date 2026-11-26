@@ -1,4 +1,5 @@
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { expertiseReference } from './expertiseReference.js';
 
 const POSITIONAL_TABLECALC =
   /\b(RANK(_DENSE|_MODIFIED|_PERCENTILE|_UNIQUE)?|INDEX|FIRST|LAST)\s*\(/i;
@@ -87,7 +88,8 @@ export const rankAsMembershipRule: ValidationRule = {
           'threshold calcs (e.g. { FIXED : PERCENTILE([Member Value], 0.80) }), (3) tier label calc comparing against ' +
           'thresholds (IF [Member Value] >= [Top Threshold] THEN "Top" ELSEIF … "Bottom" ELSE "Everyone Else" END). ' +
           'Put the tier calc on Rows (NOT the raw dimension) to roll the middle into one bar. ' +
-          'See expertise://tableau/tactics/data/lod-membership-tier-calc. (Sets do NOT survive MCP apply — use LOD calcs.) ' +
+          expertiseReference('See expertise://tableau/tactics/data/lod-membership-tier-calc. ') +
+          '(Sets do NOT survive MCP apply — use LOD calcs.) ' +
           'RANK stays correct for a DISPLAYED ordinal value (a rank number on the viz, a Pareto, a bump chart).',
       });
     }

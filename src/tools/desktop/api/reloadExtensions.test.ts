@@ -30,9 +30,8 @@ describe('reload-extensions', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares its api floor and annotations', () => {
+  it('declares its annotations', () => {
     const tool = getReloadExtensionsTool(new DesktopMcpServer());
-    expect(tool.minApiVersion).toBe('0.2.25');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       idempotentHint: true,
@@ -171,6 +170,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-reload-extensions',
-    apiVersion: '0.2.25',
+    apiVersion: '0.2.34',
   };
 }

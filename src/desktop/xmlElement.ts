@@ -127,9 +127,12 @@ export function replaceElement(
 }
 
 /** UTF-8 byte-accurate slice [startByte, endByte) of `content`. */
-export function sliceBytes(content: string, startByte?: number, endByte?: number): string {
+export function sliceBytes(
+  content: string,
+  startByte?: number,
+  endByte?: number,
+): { text: string; bytes: number } {
   const buf = Buffer.from(content, 'utf8');
-  const start = startByte ?? 0;
-  const end = endByte ?? buf.length;
-  return buf.subarray(start, end).toString('utf8');
+  const slice = buf.subarray(startByte ?? 0, endByte ?? buf.length);
+  return { text: slice.toString('utf8'), bytes: slice.length };
 }

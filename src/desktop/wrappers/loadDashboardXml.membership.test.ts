@@ -26,7 +26,6 @@ function fixture(
   names: string[] = [],
   registered = names,
   beforeWrite: (xml: string) => string = (xml) => xml,
-  apiVersion?: string,
   repair = false,
 ): { executor: ReturnType<typeof makeExecutorMock>; original: string; live: () => string } {
   const original = `<workbook><worksheets>${['A', 'B'].map((name) => `<worksheet name="${name}"><table><rows>[ds].[field]</rows></table></worksheet>`).join('')}</worksheets>
@@ -35,7 +34,6 @@ function fixture(
     <window class="dashboard" name="Unrelated"><viewpoints/></window></windows></workbook>`;
   let live = original;
   const executor = makeExecutorMock({
-    desktopApiVersion: apiVersion,
     listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
     getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment(names) })),
     getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live })),
@@ -87,7 +85,6 @@ describe('dashboard membership apply', () => {
     let live = reflowWorkbook(empty, false);
     const instanceId = 'reflow-desktop-instance';
     const executor = makeExecutorMock({
-      desktopApiVersion: '0.2.22',
       listDashboards: vi
         .fn()
         .mockResolvedValue(
@@ -121,27 +118,10 @@ describe('dashboard membership apply', () => {
     expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, '0.2.21'])(
-    'keeps missing registrations blocked on API %s',
-    async (version) => {
-      const { executor } = fixture([], [], undefined, version);
-      const result = await loadDashboardXml({
-        dashboardName: 'D',
-        xml: fragment(['A', 'B']),
-        focus,
-        executor,
-        signal,
-      });
-      expect(result).toMatchObject({ error: { error: { type: 'registration-required' } } });
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
-      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-    },
-  );
-
   it.each([false, true])(
     'automatically registers only through dashboard POST (cached=%s)',
     async (cached) => {
-      const { executor, live } = fixture(['A'], ['A'], undefined, '0.2.22', true);
+      const { executor, live } = fixture(['A'], ['A'], undefined, true);
       const result = await loadDashboardXml({
         dashboardName: 'D',
         xml: fragment(['A', 'B']),
@@ -161,7 +141,7 @@ describe('dashboard membership apply', () => {
   );
 
   it('registers device-only worksheet references once during native apply', async () => {
-    const { executor, live } = fixture([], [], undefined, '0.2.22', true);
+    const { executor, live } = fixture([], [], undefined, true);
     const xml = fragment(['A']).replace(
       '</dashboard>',
       '<devicelayouts><devicelayout name="Phone"><zones><zone id="2" name="B"/><zone id="3" name="A"/></zones></devicelayout></devicelayouts></dashboard>',
@@ -183,7 +163,7 @@ describe('dashboard membership apply', () => {
   });
 
   it('cannot native-register an extra worksheet absent from the submitted zones', async () => {
-    const { executor } = fixture(['A'], ['A'], undefined, '0.2.22', true);
+    const { executor } = fixture(['A'], ['A'], undefined, true);
     const result = await loadDashboardXml({
       dashboardName: 'D',
       xml: fragment(['A']),
@@ -201,7 +181,7 @@ describe('dashboard membership apply', () => {
 
   it('requires repaired registrations in readback even when cached apply disables optional readback', async () => {
     vi.useFakeTimers();
-    const { executor } = fixture([], [], undefined, '0.2.22');
+    const { executor } = fixture([], []);
     const pending = loadDashboardXml({
       dashboardName: 'D',
       xml: fragment(['A', 'B']),
@@ -240,14 +220,10 @@ describe('dashboard membership apply', () => {
     },
   );
 
-  it.each(['absent', 'ambiguous', 'route-missing', 'list-error', 'post-error'] as const)(
+  it.each(['absent', 'ambiguous', 'list-error', 'post-error'] as const)(
     'never falls back to replacing the workbook when the helper target is %s',
     async (condition) => {
       const { executor, original, live } = fixture(['A']);
-      const missingRoute = {
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'No route matches', recoverable: false },
-      } as const;
       if (condition === 'absent')
         vi.mocked(executor.listDashboards).mockResolvedValue(Ok({ dashboards: [] }));
       if (condition === 'ambiguous')
@@ -259,14 +235,17 @@ describe('dashboard membership apply', () => {
             ],
           }),
         );
-      if (condition === 'route-missing')
-        vi.mocked(executor.listDashboards).mockResolvedValue(Err(missingRoute));
       if (condition === 'list-error')
         vi.mocked(executor.listDashboards).mockResolvedValue(
           Err({ type: 'invalid-response', error: new Error('unavailable') }),
         );
       if (condition === 'post-error')
-        vi.mocked(executor.applyDashboardDocument).mockResolvedValue(Err(missingRoute));
+        vi.mocked(executor.applyDashboardDocument).mockResolvedValue(
+          Err({
+            type: 'command-failed',
+            error: { code: 'operation-failed', message: 'failed', recoverable: false },
+          }),
+        );
       const result = await loadDashboardXml({
         dashboardName: 'D',
         xml: fragment(['A']).replace('<simple-id uuid="dash-1"/>', ''),
@@ -561,27 +540,6 @@ describe('dashboard membership apply', () => {
       expect(dashboardMembershipMatches(live(), 'D', after)).toBe(true);
       expect(live()).toContain('name="Unrelated"');
       expect(live()).toContain('uuid="dash-1"');
-    },
-  );
-
-  it.each([{ before: [] }, { before: ['A'] }])(
-    'rejects missing registrations without a whole-workbook fallback (existing zones: $before)',
-    async ({ before }) => {
-      const { executor, original, live } = fixture(before, []);
-      const result = await loadDashboardXml({
-        dashboardName: 'D',
-        xml: fragment(['A']),
-        requireExistingSheet: true,
-        focus,
-        executor,
-        signal,
-      });
-      expect(result).toMatchObject({
-        error: { error: { type: 'registration-required', worksheetNames: ['A'] } },
-      });
-      expect(live()).toBe(original);
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
-      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
     },
   );
 

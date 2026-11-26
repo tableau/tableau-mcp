@@ -2,8 +2,6 @@
   "mcp-apps": false,
   "interactive-viz": false,
   "mcp-apps-for-claude": false,
-  "enforce-role-requirements": true,
-  "enforce-registration-conditions": true,
   "datasource-authoring": false,
   "flow-read-tools": true,
   "flow-write-tools": true,
@@ -12,13 +10,11 @@
   "view-file-mode": false,
   "view-data-file-mode": false,
   "workbook-file-mode": true,
-  "data-apps": false,
   "view-all-data": false,
   "skills-over-mcp": false,
   "authoring-with-slack": false,
   "activity-log": false,
   "admin-tools": false,
-  "disable-strict-scope-match": false,
-  "mcp-protocol-2026": false,
-  "update-user-elicitation": false
+  "mcp-wildcard-scope": false,
+  "mcp-protocol-2026": false
 }

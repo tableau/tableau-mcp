@@ -165,30 +165,6 @@ describe('validateWorkbookXmlTool with External Client API transport', () => {
     expect(result.content[0].text).toContain('Workbook structure has');
     expect(server.requests).toEqual([]);
   });
-
-  it('reports a clear old-build error when the validation route is missing', async () => {
-    server.setOverride('POST /v0/workbook/document:validate', {
-      status: 404,
-      body: JSON.stringify({
-        code: 'not-found',
-        status: 404,
-        instance: '/v0/mock',
-        title: 'No route matches POST /v0/workbook/document:validate',
-        detail: 'No route matches POST /v0/workbook/document:validate',
-      }),
-    });
-    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-    await executor.start();
-
-    const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>', {
-      session: '999',
-      getExecutor: vi.fn<GetExecutor>().mockResolvedValue(executor),
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('does not serve the workbook validation endpoint');
-  });
 });
 
 type GetExecutor = TableauDesktopToolContext['getExecutor'];

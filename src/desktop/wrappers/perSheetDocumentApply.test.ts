@@ -10,15 +10,6 @@ import { type PerSheetKind, tryApplyViaPerSheetRoute } from './perSheetDocumentA
 // disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 
-const routeMissing = {
-  type: 'command-failed' as const,
-  error: {
-    code: 'not-found',
-    message: 'No route matches GET /v0/workbook/worksheets',
-    recoverable: false,
-  },
-};
-
 type KindFixture = {
   kind: PerSheetKind;
   sheetName: string;
@@ -678,59 +669,7 @@ describe('tryApplyViaPerSheetRoute', () => {
     },
   );
 
-  it.each(FIXTURES)(
-    'reports route-missing when the $kind list route is absent (old Desktop build)',
-    async ({ kind, sheetName, fragmentXml, listMethod, applyMethod }) => {
-      const apply = vi.fn();
-      const executor = makeExecutorMock({
-        [listMethod]: vi.fn().mockResolvedValue(Err(routeMissing)),
-        [applyMethod]: apply,
-      });
-
-      const result = await tryApplyViaPerSheetRoute({
-        kind,
-        sheetName,
-        fragmentXml,
-        focus: NO_FOCUS,
-        executor,
-        signal: mockSignal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      if (result.isOk()) {
-        expect(result.value).toBe('route-missing');
-      }
-      expect(apply).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(FIXTURES)(
-    'reports route-missing when the $kind POST route is absent but the list route is present',
-    async ({ kind, sheetName, fragmentXml, listMethod, listValue, applyMethod }) => {
-      const apply = vi.fn().mockResolvedValue(Err(routeMissing));
-      const executor = makeExecutorMock({
-        [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
-        [applyMethod]: apply,
-      });
-
-      const result = await tryApplyViaPerSheetRoute({
-        kind,
-        sheetName,
-        fragmentXml,
-        focus: NO_FOCUS,
-        executor,
-        signal: mockSignal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      if (result.isOk()) {
-        expect(result.value).toBe('route-missing');
-      }
-      expect(apply).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it('surfaces a non-route list error instead of falling back', async () => {
+  it('surfaces a list error', async () => {
     const listError = {
       type: 'command-failed' as const,
       error: { code: 'boom', message: 'internal error', recoverable: false },

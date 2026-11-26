@@ -1,16 +1,23 @@
 import { type CallToolResult, McpServer, type Tool as McpTool } from '@modelcontextprotocol/server';
+import { Ok } from 'ts-results-es';
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
+import { apiVersionAtLeast, MIN_SUPPORTED_API_VERSION } from './desktop/externalApi/apiVersion.js';
+import { makeExecutorMock } from './desktop/externalApi/executor.mock.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
+  EXPERTISE_TOOL_NAMES,
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './desktop/instructions.js';
+import { SessionManager } from './desktop/session/sessionManager.js';
+import { DesktopApiVersionTooOldError } from './errors/mcpToolError.js';
 import * as loggerModule from './logging/logger.js';
 import {
   ALWAYS_LOAD_TOOL_NAMES,
+  assertServesApiVersion,
   DEMO_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
@@ -18,15 +25,17 @@ import {
   filterToolsByApiVersion,
   getDesktopToolListEntry,
   getModelFacingToolEntry,
-  resolveConnectedApiVersion,
+  pinnedApiVersion,
   selectToolsForProfile,
   stripEmptySchemaNoise,
+  warnIfUnsupportedApiVersion,
+  withoutUnservedExpertiseTools,
 } from './server.desktop.js';
 import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
-import { desktopToolFactories } from './tools/desktop/tools.js';
+import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
 import { toStandardSchema } from './tools/toolContext.js';
 import { Provider } from './utils/provider.js';
 
@@ -36,6 +45,12 @@ const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
     isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
+  expertiseCorpusEntryCount: vi.fn(() => 1),
+}));
+
+vi.mock('./desktop/expertise/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./desktop/expertise/index.js')>()),
+  getExpertiseCorpusEntryCount: mocks.expertiseCorpusEntryCount,
 }));
 
 vi.mock('./features/init.js', () => ({
@@ -49,6 +64,7 @@ beforeEach(() => {
 describe('DesktopMcpServer', () => {
   beforeEach(() => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.expertiseCorpusEntryCount.mockReturnValue(1);
   });
 
   it('should register tools', async () => {
@@ -135,6 +151,7 @@ describe('DesktopMcpServer', () => {
     const desktopInstructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
       profile: config.toolProfile,
+      expertiseAvailable: true,
     });
     const combinedInstructions = `${buildWebInstructions()} ${desktopInstructions}`;
     const sharedMcpServer = new McpServer(
@@ -168,6 +185,7 @@ describe('DesktopMcpServer', () => {
       const instructions = buildDesktopInstructions({
         sessionPinned: base.desktopSessionId !== undefined,
         profile: 'unexpected-profile',
+        expertiseAvailable: true,
       });
 
       await server.registerTools();
@@ -199,7 +217,7 @@ describe('DesktopMcpServer', () => {
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   it('serves the modern instructions for the default profile', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
-      buildDesktopInstructions({ sessionPinned: false, profile: '' }),
+      buildDesktopInstructions({ sessionPinned: false, profile: '', expertiseAvailable: true }),
     );
     expect(DESKTOP_INSTRUCTIONS).toContain('build-worksheets-from-templates');
     expect(DESKTOP_INSTRUCTIONS).toContain('bind-template');
@@ -211,7 +229,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   });
 
   it('keeps pin-aware session guidance (list-instances, target another) when pinned', () => {
-    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    const pinned = buildDesktopInstructions({ sessionPinned: true, expertiseAvailable: true });
     expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
     expect(pinned).toContain('list-instances');
     expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
@@ -359,7 +377,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1569], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1127], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1273], // remeasured after accepting an empty KPI list
-    ['author-action', 2546], // ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
+    ['author-action', 2674], // raised 2026-11-23: caption, sourceField and targetSet get full-sentence describes (#1285); ratcheted down 2026-11-18: zod 4 JSON Schema without additionalProperties/empty-description noise; trimmed while adding identity-based edit/delete; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -698,7 +716,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   );
 });
 
-describe('API-version tool gate (interim minApiVersion floor)', () => {
+describe('API-version tool gate', () => {
   const instance = (pid: number, apiVersion?: string): ExternalApiInstance => ({
     baseUrl: `http://127.0.0.1:${pid}`,
     token: 't',
@@ -707,50 +725,21 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     apiVersion,
   });
 
-  describe('resolveConnectedApiVersion', () => {
-    it('unpinned → the highest version across live instances, not the newest-started', () => {
-      // Discovery is newest-first, so instances[0] here is the LOWER-version build; the gate
-      // must still resolve 0.2.6 so a tool the other running Desktop serves is not hidden.
-      expect(
-        resolveConnectedApiVersion([instance(1, '0.2.5'), instance(2, '0.2.6')], undefined),
-      ).toBe('0.2.6');
+  describe('pinnedApiVersion', () => {
+    it('returns the pinned instance version, not the highest', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe('0.2.5');
     });
 
-    it('unpinned → ignores instances with an unknown version when others report one', () => {
-      expect(resolveConnectedApiVersion([instance(1), instance(2, '0.2.6')], undefined)).toBe(
-        '0.2.6',
-      );
+    it('returns undefined when the session is not pinned', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6')], undefined)).toBeUndefined();
     });
 
-    it('unpinned → undefined when no instance reports a version', () => {
-      expect(resolveConnectedApiVersion([instance(1), instance(2)], undefined)).toBeUndefined();
+    it('returns undefined when no instance matches the pinned session', () => {
+      expect(pinnedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
     });
 
-    it('pinned → the matching instance version, not the highest', () => {
-      expect(resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe(
-        '0.2.5',
-      );
-    });
-
-    it('pinned but no match → undefined so the gate fails open', () => {
-      expect(resolveConnectedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
-    });
-
-    it('no instances → undefined', () => {
-      expect(resolveConnectedApiVersion([], undefined)).toBeUndefined();
-      expect(resolveConnectedApiVersion([], '1')).toBeUndefined();
-    });
-
-    it('unpinned mixed-version fleet → a tool only the newer instance serves stays visible', () => {
-      const version = resolveConnectedApiVersion(
-        [instance(1, '0.2.6'), instance(2, '0.2.7')],
-        undefined,
-      );
-      const tools = [{ name: 'story', minApiVersion: '0.2.7' }, { name: 'plain' }];
-      expect(filterToolsByApiVersion(tools, version).map((t) => t.name)).toEqual([
-        'story',
-        'plain',
-      ]);
+    it('returns undefined when no Desktop is running', () => {
+      expect(pinnedApiVersion([], '1')).toBeUndefined();
     });
   });
 
@@ -774,72 +763,164 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     });
   });
 
-  it('the version-gated tools declare the expected floors', () => {
-    const floors = new Map(
-      desktopToolFactories
-        .map((factory) => factory(new DesktopMcpServer()))
-        .map((tool) => [tool.name, tool.minApiVersion]),
-    );
-    expect(floors.get('capture-window-screenshot')).toBe('0.2.28');
-    expect(floors.get('set-auto-updates-paused')).toBe('0.2.5');
-    expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
-    expect(floors.get('open-file')).toBe('0.2.6');
-    expect(floors.get('list-saved-datasources')).toBe('0.2.6');
-    expect(floors.get('save-workbook')).toBe('0.2.6');
-    expect(floors.get('add-worksheet')).toBe('0.2.6');
-    expect(floors.get('add-dashboard')).toBe('0.2.6');
-    expect(floors.get('add-storyboard')).toBe('0.2.6');
-    expect(floors.get('export-storyboard-image')).toBe('0.2.7');
-    expect(floors.get('workbook-export-as')).toBe('0.2.7');
-    expect(floors.get('close-workbook')).toBe('0.2.32');
-    expect(floors.get('get-workspace-extensions')).toBe('0.2.34');
-    expect(floors.get('reload-workspace-extension')).toBe('0.2.34');
-    expect(floors.get('refresh-datasource')).toBe('0.2.8');
-    expect(floors.get('show-me')).toBe('0.2.11');
-    expect(floors.get('get-active-dialogs')).toBe('0.2.26');
-    expect(floors.get('invoke-dialog-action')).toBe('0.2.26');
-    expect(floors.get('get-desktop-state')).toBe('0.2.14');
-    expect(floors.get('get-diagnostics')).toBe('0.2.16');
-    expect(floors.get('get-datasources')).toBeUndefined();
-    expect(floors.get('apply-datasource')).toBe('0.2.10');
-    expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
-    expect(floors.get('get-show-me-options')).toBe('0.2.18');
-    expect(floors.get('set-data-source-page-active')).toBe('0.2.25');
-    expect(floors.get('get-capabilities')).toBe('0.2.25');
-    expect(floors.get('reload-extensions')).toBe('0.2.25');
-    expect(floors.get('validate-calculated-field')).toBe('0.2.30');
-    expect(floors.get('author-calc')).toBe('0.2.30');
-    expect(floors.get('list-datasource-logical-tables')).toBe('0.2.31');
-    expect(floors.get('get-datasource-underlying-data')).toBe('0.2.31');
+  describe('assertServesApiVersion', () => {
+    const story = { name: 'story', minApiVersion: '0.2.40' };
+    const tools: Array<{ name: string; minApiVersion?: string }> = [
+      story,
+      { name: 'newer', minApiVersion: '0.2.38' },
+      { name: 'served', minApiVersion: '0.2.34' },
+      { name: 'unfloored' },
+    ];
+
+    it('throws when the Desktop is older than the floor', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        DesktopApiVersionTooOldError,
+      );
+    });
+
+    it('names the tool and both versions', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'story needs External Client API version 0.2.40 or later, but this Tableau Desktop serves 0.2.34.',
+      );
+    });
+
+    it('lists every registered tool this Desktop cannot run', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'Tools this Desktop cannot run: story, newer.',
+      );
+    });
+
+    it('steers the agent to other tools before suggesting an update', () => {
+      expect(() => assertServesApiVersion(story, tools, '0.2.34')).toThrow(
+        'Do not call these tools again in this session. Continue with other tools if they can do what the user asked. ' +
+          'If none can, tell the user it needs a newer Tableau Desktop.',
+      );
+    });
+
+    it.each([
+      ['equal to the floor', '0.2.40', '0.2.40'],
+      ['newer than the floor', '0.2.40', '0.3.0'],
+      ['unknown', '0.2.40', undefined],
+      ['for a tool with no floor', undefined, '0.2.34'],
+    ])('passes when the Desktop version is %s', (_case, minApiVersion, desktopApiVersion) => {
+      const tool = { name: 'story', minApiVersion };
+      expect(() => assertServesApiVersion(tool, [tool], desktopApiVersion)).not.toThrow();
+    });
   });
 
-  it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
-    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
-    const registered = tools.filter((tool) => tool.name === 'get-diagnostics');
+  describe('per-call API version gate', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
 
-    expect(registered).toHaveLength(1);
-    expect(filterToolsByApiVersion(tools, '0.2.15').map((tool) => tool.name)).not.toContain(
-      'get-diagnostics',
-    );
-    expect(filterToolsByApiVersion(tools, '0.2.16').map((tool) => tool.name)).toContain(
-      'get-diagnostics',
+    async function callGatedTool(desktopApiVersion: string | undefined): Promise<{
+      result: CallToolResult;
+      toolBody: ReturnType<typeof vi.fn>;
+    }> {
+      const server = getServer();
+      const toolBody = vi.fn();
+      const tool: DesktopTool<Record<string, never>> = new DesktopTool({
+        server,
+        name: 'get-sheets',
+        title: 'Gated',
+        description: 'Gated test tool',
+        paramsSchema: {},
+        annotations: {
+          title: 'Gated',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        minApiVersion: '0.2.40',
+        callback: new Provider(
+          async () =>
+            async (_args, extra): Promise<CallToolResult> =>
+              tool.logAndExecute({
+                extra,
+                args: {},
+                callback: async () => {
+                  await extra.getExecutor('4242');
+                  toolBody();
+                  return new Ok({});
+                },
+              }),
+        ),
+      });
+      vi.spyOn(
+        server as unknown as { _getToolsToRegister: () => unknown },
+        '_getToolsToRegister',
+      ).mockResolvedValue([tool]);
+      vi.spyOn(SessionManager.prototype, 'getExecutor').mockResolvedValue(
+        makeExecutorMock({ desktopApiVersion }),
+      );
+      await server.registerTools();
+      const [, , registered] = vi.mocked(server.mcpServer.registerTool).mock
+        .calls[0] as unknown as [
+        string,
+        unknown,
+        (args: unknown, ctx: unknown) => Promise<CallToolResult>,
+      ];
+      const result = await registered(
+        {},
+        { mcpReq: { signal: new AbortController().signal, id: 1, notify: vi.fn() } },
+      );
+      return { result, toolBody };
+    }
+
+    it('rejects a call to a Desktop older than the tool floor before the tool runs', async () => {
+      const { result, toolBody } = await callGatedTool('0.2.34');
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        'get-sheets needs External Client API version 0.2.40 or later',
+      );
+      expect(toolBody).not.toHaveBeenCalled();
+    });
+
+    it.each(['0.2.40', undefined])('lets a call through to a Desktop on %s', async (version) => {
+      const { result, toolBody } = await callGatedTool(version);
+
+      expect(result.isError).toBe(false);
+      expect(toolBody).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('warnIfUnsupportedApiVersion', () => {
+    it.each(['0.2.33', '0.1.0'])('warns for a Desktop that serves %s', (version) => {
+      const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+      warnIfUnsupportedApiVersion(version);
+      expect(logSpy).toHaveBeenCalledOnce();
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining(`v${MIN_SUPPORTED_API_VERSION}`),
+        }),
+      );
+    });
+
+    it.each([MIN_SUPPORTED_API_VERSION, '0.2.35', '0.3.0', undefined])(
+      'stays quiet for %s',
+      (version) => {
+        const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+        warnIfUnsupportedApiVersion(version);
+        expect(logSpy).not.toHaveBeenCalled();
+      },
     );
   });
 
-  it('gates apply-datasource at 0.2.10, not get-datasources or get-xml, and fails open for an unknown version', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
+  it('only sets a tool floor that is newer than the oldest supported version', () => {
+    const tools = [...desktopToolFactories, ...episodeToolFactories].map((factory) =>
+      factory(new DesktopMcpServer()),
     );
-    const at209 = filterToolsByApiVersion(profileTools, '0.2.9').map((tool) => tool.name);
-    const at210 = filterToolsByApiVersion(profileTools, '0.2.10').map((tool) => tool.name);
-    const unknown = filterToolsByApiVersion(profileTools, undefined);
-
-    expect(at209).not.toContain('apply-datasource');
-    expect(at210).toContain('apply-datasource');
-    expect(at209).toContain('get-datasources');
-    expect(at209).toContain('get-xml');
-    expect(unknown).toBe(profileTools);
+    const redundant = tools
+      .filter(
+        (tool) =>
+          tool.minApiVersion !== undefined &&
+          apiVersionAtLeast(MIN_SUPPORTED_API_VERSION, tool.minApiVersion),
+      )
+      .map((tool) => tool.name);
+    expect(redundant).toEqual([]);
   });
 
   it('registers each individual datasource factory exactly once', () => {
@@ -851,130 +932,64 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(names).toHaveLength(2);
     expect(new Set(names)).toEqual(featureNames);
   });
+});
 
-  it('gates start-page visibility below External Client API 0.2.11', () => {
+describe('DesktopMcpServer without an expertise corpus', () => {
+  afterEach(() => {
+    mocks.expertiseCorpusEntryCount.mockReturnValue(1);
+  });
+
+  it('withoutUnservedExpertiseTools drops only the expertise tools', () => {
     const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
-    const at210 = filterToolsByApiVersion(tools, '0.2.10').map((tool) => tool.name);
-    const at211 = filterToolsByApiVersion(tools, '0.2.11').map((tool) => tool.name);
 
-    expect(at210).not.toContain('set-start-page-visibility');
-    expect(at211).toContain('set-start-page-visibility');
-  });
-
-  it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
+    expect(withoutUnservedExpertiseTools(tools, true)).toEqual(tools);
+    expect(withoutUnservedExpertiseTools(tools, false).map((tool) => tool.name)).toEqual(
+      tools.map((tool) => tool.name).filter((name) => !EXPERTISE_TOOL_NAMES.has(name)),
     );
-    const gated = filterToolsByApiVersion(profileTools, '0.2.5').map((tool) => tool.name);
-
-    for (const dropped of [
-      'open-file',
-      'list-saved-datasources',
-      'save-workbook',
-      'add-worksheet',
-      'add-dashboard',
-      'add-storyboard',
-    ]) {
-      expect(gated).not.toContain(dropped);
-    }
-    for (const kept of ['set-auto-updates-paused', 'apply-worksheet']) {
-      expect(gated).toContain(kept);
-    }
   });
 
-  it.each(['full', '', 'dynamic-authoring'])(
-    'keeps worksheet and dashboard image exports while gating the 0.2.7 export routes in TOOL_PROFILE=%j',
-    (profile) => {
-      const profileTools = selectToolsForProfile(
-        desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-        profile,
-      );
-      const at26 = filterToolsByApiVersion(profileTools, '0.2.6').map((tool) => tool.name);
-      const at27 = filterToolsByApiVersion(profileTools, '0.2.7').map((tool) => tool.name);
+  it.each(['', 'full'])(
+    'registers no expertise tool for TOOL_PROFILE=%j and keeps the rest of the profile',
+    async (profile) => {
+      vi.stubEnv('TOOL_PROFILE', profile);
+      mocks.expertiseCorpusEntryCount.mockReturnValue(0);
+      const server = getServer();
+      await server.registerTools();
 
-      for (const route of ['export-storyboard-image', 'workbook-export-as']) {
-        expect(at26).not.toContain(route);
-        expect(at27).toContain(route);
+      const registeredNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of EXPERTISE_TOOL_NAMES) {
+        expect(registeredNames).not.toContain(name);
       }
-      for (const route of ['export-worksheet-image', 'export-dashboard-image']) {
-        expect(at26).toContain(route);
-        expect(at27).toContain(route);
-      }
+      expect(registeredNames).toContain('bind-template');
+      expect(registeredNames).toContain('author-calc');
     },
   );
 
-  it('hides Show Me before 0.2.11 and exposes it at its registration floor', () => {
-    const fullTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'full',
-    );
-    expect(filterToolsByApiVersion(fullTools, '0.2.10').map((tool) => tool.name)).not.toContain(
-      'show-me',
-    );
-    expect(filterToolsByApiVersion(fullTools, '0.2.11').map((tool) => tool.name)).toContain(
-      'show-me',
+  it('sends instructions that name no expertise tool', () => {
+    mocks.expertiseCorpusEntryCount.mockReturnValue(0);
+    new DesktopMcpServer();
+    const [, options] = vi.mocked(McpServer).mock.calls.at(-1)!;
+
+    expect(options?.instructions).toBe(
+      buildDesktopInstructions({ sessionPinned: false, expertiseAvailable: false }),
     );
   });
 
-  it('a connected 0.2.25 Desktop hides dialog tools and 0.2.26 exposes them', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const at225 = filterToolsByApiVersion(profileTools, '0.2.25').map((tool) => tool.name);
-    const at226 = filterToolsByApiVersion(profileTools, '0.2.26').map((tool) => tool.name);
+  it('registers the expertise resource template only when the corpus has entries', async () => {
+    const register = async (count: number): Promise<string[]> => {
+      mocks.expertiseCorpusEntryCount.mockReturnValue(count);
+      const server = new DesktopMcpServer();
+      server.mcpServer.registerResource = vi.fn();
+      await server.registerResources();
+      return vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.map((call) => call[0] as string);
+    };
 
-    for (const name of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
-      expect(at225).not.toContain(name);
-      expect(at226).toContain(name);
-    }
-  });
-
-  it('gates app state at 0.2.14 independently of the dialog protocol', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.13')).not.toContain('get-active-dialogs');
-    expect(namesAt('0.2.13')).not.toContain('invoke-dialog-action');
-    expect(namesAt('0.2.13')).not.toContain('get-desktop-state');
-    expect(namesAt('0.2.14')).toContain('get-desktop-state');
-    expect(namesAt('0.3.0')).toContain('get-desktop-state');
-    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
-    expect(namesAt(undefined)).toContain('get-desktop-state');
-  });
-
-  it('gates refresh-auto-updates at 0.2.13 and fails open for an unknown version', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.12')).not.toContain('refresh-auto-updates');
-    expect(namesAt('0.2.13')).toContain('refresh-auto-updates');
-    expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
-    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
-    expect(namesAt(undefined)).toContain('refresh-auto-updates');
-  });
-
-  it('gates Show Me option discovery at External Client API 0.2.18', () => {
-    const profileTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'dynamic-authoring',
-    );
-    const namesAt = (apiVersion: string | undefined): string[] =>
-      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
-
-    expect(namesAt('0.2.17')).not.toContain('get-show-me-options');
-    expect(namesAt('0.2.18')).toContain('get-show-me-options');
-    expect(namesAt('0.3.0')).toContain('get-show-me-options');
-    expect(namesAt(undefined)).toContain('get-show-me-options');
+    expect(await register(0)).toEqual(['dashboard-xml-guide']);
+    expect(await register(3)).toEqual(['dashboard-xml-guide', 'tableau-expertise']);
   });
 });
 

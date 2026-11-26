@@ -7,33 +7,6 @@ import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeCha
 import request from '../../../src/testLoopbackRequest.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
-const mocks = vi.hoisted(() => ({
-  // Lets a test turn the disable-strict-scope-match flag off (strict on); otherwise delegates to the
-  // real gate.
-  disableStrictFlag: { value: true },
-}));
-
-// Override the feature gate for this file so the disable-strict-scope-match flag is controllable
-// per-test.
-// Composes with the shared testSetup mock (admin-tools forcing lives there); this file's mock wins.
-vi.mock('../../../src/features/init.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../../src/features/init.js')>();
-  return {
-    ...original,
-    getFeatureGate: () => {
-      const featureGate = original.getFeatureGate();
-      return {
-        isFeatureEnabled: async (featureName: string) => {
-          if (featureName === 'disable-strict-scope-match') {
-            return mocks.disableStrictFlag.value;
-          }
-          return featureName === 'admin-tools' || featureGate.isFeatureEnabled(featureName);
-        },
-      };
-    },
-  };
-});
-
 describe('authorization code flow', () => {
   let _server: http.Server | undefined;
 
@@ -302,12 +275,10 @@ describe('authorization code flow', () => {
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
       // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      mocks.disableStrictFlag.value = true;
     });
 
     afterEach(() => {
       vi.unstubAllEnvs();
-      mocks.disableStrictFlag.value = true;
     });
 
     it('redirects (does not reject) when API scopes are not advertised, even for the same subset', async () => {
@@ -321,7 +292,7 @@ describe('authorization code flow', () => {
       expect(response.status).toBe(302);
     });
 
-    it('rejects /authorize when the requested scopes omit the mandatory scope, site settings on, strict off', async () => {
+    it('rejects /authorize when site settings are on and the requested scopes omit the mandatory scope', async () => {
       const { app } = await startServer();
 
       const response = await request(app)
@@ -333,13 +304,12 @@ describe('authorization code flow', () => {
       expect(response.body.error_description).toContain(MANDATORY_SCOPE);
     });
 
-    it('redirects (does not reject) when strict scope match is on, even for the same subset', async () => {
-      mocks.disableStrictFlag.value = false;
+    it('redirects when a subset includes the mandatory scope', async () => {
       const { app } = await startServer();
 
       const response = await request(app)
         .get('/oauth2/authorize')
-        .query(authorizeQuery(SUBSET_SCOPE));
+        .query(authorizeQuery(`${SUBSET_SCOPE} ${MANDATORY_SCOPE}`));
 
       expect(response.status).toBe(302);
     });

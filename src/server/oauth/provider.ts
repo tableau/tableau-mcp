@@ -20,6 +20,7 @@ import { authorize } from './authorize.js';
 import { callback } from './callback.js';
 import { register } from './register.js';
 import { revoke } from './revoke.js';
+import { scopeInfo } from './scopeInfo.js';
 import { token } from './token.js';
 import {
   AuthorizationCode,
@@ -46,6 +47,9 @@ export abstract class OAuthProvider {
   setupRoutes(app: express.Application): void {
     // .well-known/oauth-protected-resource
     oauthProtectedResource(app);
+
+    // /scopeInfo
+    scopeInfo(app);
   }
 }
 
@@ -94,7 +98,7 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
-    // .well-known/oauth-protected-resource (from base)
+    // .well-known/oauth-protected-resource and /scopeInfo (from base)
     super.setupRoutes(app);
 
     // .well-known/oauth-authorization-server (embedded AS only)
@@ -155,8 +159,8 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
  *
  * In this mode the Tableau server IS the authorization server, so this MCP server
  * only acts as a resource server. The base setupRoutes() exposes the protected-resource
- * metadata document (so clients can discover the real AS) and nothing more — we must not
- * shadow the Tableau AS's own /.well-known/oauth-authorization-server.
+ * metadata document (so clients can discover the real AS) and /scopeInfo, and nothing more — we
+ * must not shadow the Tableau AS's own /.well-known/oauth-authorization-server.
  */
 export class TableauOAuthProvider extends OAuthProvider {
   get accessTokenValidator(): AccessTokenValidator {

@@ -207,7 +207,7 @@ export function readResourceAsset(relPath: string): string | null {
   }
 }
 
-// Ordered by precedence: earlier roots win on a slug collision. tab-agent-south owns what
+// Ordered by precedence: earlier roots win on a slug collision. Tableau Agent owns what
 // each root physically is (protected/user-content/overridable); this file never learns those
 // names, it just merges whatever ordered list it's handed.
 function externalExpertiseRoots(): string[] {

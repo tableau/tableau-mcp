@@ -31,7 +31,7 @@ describe('whole-workbook apply hides the Start Page (External Client API)', () =
           token: 'valid-token',
           pid: 999,
           instanceId: 'inst-start-page-apply',
-          apiVersion: '0.2.11',
+          apiVersion: '0.2.34',
         },
       ],
     });

@@ -20,6 +20,10 @@ vi.unmock('@modelcontextprotocol/server');
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: vi.fn(() => false) })),
 }));
+vi.mock('./desktop/expertise/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./desktop/expertise/index.js')>()),
+  getExpertiseCorpusEntryCount: vi.fn(() => 1),
+}));
 
 function normalizeSdkTool(tool: Tool): Tool {
   const normalized = structuredClone(tool) as Tool & {
@@ -131,6 +135,7 @@ describe('desktop tools/list alwaysLoad pins', () => {
     const instructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
       profile: config.toolProfile,
+      expertiseAvailable: true,
     });
     const sharedServer = new McpServer(
       { name: 'always-load-shared', version: '0.0.0' },

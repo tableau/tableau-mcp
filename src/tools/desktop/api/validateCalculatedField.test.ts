@@ -27,7 +27,6 @@ describe('validate-calculated-field tool', () => {
     const tool = getValidateCalculatedFieldTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('validate-calculated-field');
-    expect(tool.minApiVersion).toBe('0.2.30');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       datasourceName: expect.any(Object),
@@ -184,6 +183,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-validate-calc',
-    apiVersion: '0.2.31',
+    apiVersion: '0.2.34',
   };
 }

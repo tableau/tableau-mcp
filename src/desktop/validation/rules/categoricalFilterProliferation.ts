@@ -1,6 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { expertiseReference } from './expertiseReference.js';
 import { parseXml } from './parseXml.js';
 
 const MAX_CATEGORICAL_FILTERS = 5;
@@ -34,8 +35,10 @@ export const categoricalFilterProliferationRule: ValidationRule = {
           'This can hurt dashboard performance and usability. ' +
           'Re-apply with only 3-5 high-value filter controls. If you cannot determine which 3-5 are most useful, ' +
           'present a scoped recommendation and ask the user to confirm before applying. ' +
-          'Do not apply the oversized filter set. Relevant guidance: ' +
-          'expertise://tableau/tactics/data/dashboard-performance-efficient-workbooks.',
+          'Do not apply the oversized filter set.' +
+          expertiseReference(
+            ' Relevant guidance: expertise://tableau/tactics/data/dashboard-performance-efficient-workbooks.',
+          ),
         xpath: "//filter[@class='categorical']",
         suggestion:
           'Keep 3-5 high-value categorical filters; replace the rest with a parameter, a filter action, or a drill path.',

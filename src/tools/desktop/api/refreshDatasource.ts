@@ -30,7 +30,6 @@ export const getRefreshDatasourceTool = (
   const refreshDatasourceTool = new DesktopTool({
     server,
     name: 'refresh-datasource',
-    minApiVersion: '0.2.8',
     title,
     description:
       'Refresh a datasource in the open workbook: its live data (toolbar Refresh Data Source) or its extract. ' +

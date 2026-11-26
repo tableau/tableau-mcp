@@ -35,6 +35,7 @@ import { calcFieldNamesRule } from '../../../../desktop/validation/rules/calcFie
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import type { LoadWorkbookXmlError } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { NoDesktopInstancesFoundError } from '../../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../../logging/logger.js';
@@ -4574,13 +4575,12 @@ function setupAutoApplyMocks({
   );
   const getExecutor = vi.fn<GetExecutor>().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: '0.2.16',
     goToSheet,
     getWorkbook,
     getWorkbookDocument,
     applyWorkbookDocument,
     getWorksheetDiagnostics,
-    ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
+    ...(structuralReadback ? perSheetReads() : {}),
   } as unknown as Awaited<ReturnType<GetExecutor>>);
   return {
     goToSheet,
@@ -4592,12 +4592,28 @@ function setupAutoApplyMocks({
   };
 }
 
-// Route per-sheet readback through the whole-workbook fallback used by older Desktop hosts.
-const routeMissing = (): ReturnType<typeof Err> =>
-  Err({
-    type: 'command-failed',
-    error: { code: 'not-found', message: 'No route matches /worksheets' },
-  });
+function perSheetReads(): {
+  listWorksheets: ReturnType<typeof vi.fn>;
+  getWorksheetDocument: ReturnType<typeof vi.fn>;
+} {
+  const liveXml = (): ReturnType<typeof getWorkbookXmlModule.getWorkbookXml> =>
+    getWorkbookXmlModule.getWorkbookXml({} as never);
+  return {
+    listWorksheets: vi.fn(async () =>
+      (await liveXml()).map((xml) => ({
+        worksheets: [...xml.matchAll(/<worksheet name='([^']+)'/g)].map(([, encoded]) => {
+          const name = decodeXmlEntities(encoded);
+          return { id: sheetIdFor(name), name, hidden: false };
+        }),
+      })),
+    ),
+    getWorksheetDocument: vi.fn(async (id: string) =>
+      (await liveXml()).map((xml) => ({
+        xml: extractSheetXml(xml, id.replace(/^id-/, '')) ?? '',
+      })),
+    ),
+  };
+}
 
 function readbackExecutor(
   base: {
@@ -4606,19 +4622,15 @@ function readbackExecutor(
     applyWorkbookDocument: ReturnType<typeof vi.fn>;
     getWorkbookDocument: ReturnType<typeof vi.fn>;
   },
-  options: {
-    apiVersion?: string;
-    fieldValidation?: ReturnType<typeof vi.fn>;
-  } = {},
+  options: { fieldValidation?: ReturnType<typeof vi.fn> } = {},
 ): TableauDesktopToolContext['getExecutor'] {
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: options.apiVersion ?? '0.2.16',
     goToSheet: base.goToSheet,
     getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
-    listWorksheets: vi.fn(routeMissing),
+    ...perSheetReads(),
     getWorksheetDiagnostics:
       options.fieldValidation ??
       vi.fn(async (worksheetId: string) =>
@@ -4638,7 +4650,7 @@ function summaryRowsExecutor(
     | { columns: Array<Record<string, unknown>>; rows: unknown[][] }
     | ReturnType<typeof Err>
     | 'pending',
-  options: { apiVersion?: string; worksheetName?: string; datasource?: string } = {},
+  options: { worksheetName?: string; datasource?: string } = {},
 ): TableauDesktopToolContext['getExecutor'] {
   const getWorksheetSummaryData =
     summary === 'pending'
@@ -4652,7 +4664,6 @@ function summaryRowsExecutor(
             );
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: options.apiVersion ?? '0.2.16',
     goToSheet: base.goToSheet,
     getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
@@ -4671,7 +4682,11 @@ function summaryRowsExecutor(
     getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
       Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
     ),
-    getWorksheetDocument: vi.fn(routeMissing),
+    getWorksheetDocument: vi.fn(async () =>
+      (await getWorkbookXmlModule.getWorkbookXml({} as never)).map((xml) => ({
+        xml: extractSheetXml(xml, options.worksheetName ?? 'Sales by Region') ?? '',
+      })),
+    ),
     getWorksheetSummaryData,
     exportWorksheetImage: vi
       .fn()
@@ -9761,7 +9776,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
               [0, 4],
             ],
           },
-          { apiVersion: '0.2.15', worksheetName: ask, datasource },
+          { worksheetName: ask, datasource },
         ),
       });
       const applied = body(result);
@@ -9782,7 +9797,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
             template: 'distribution-histogram',
             sheetName: applied.sheet_name,
           },
-          caveats: ['field_validation_unverified', 'query_render_unverified'],
+          caveats: ['query_render_unverified'],
         });
         expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
       }
@@ -9825,7 +9840,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         session: `ordinary-line-${unitColumn}`,
         ask,
         auto_apply: true,
-        getExecutor: readbackExecutor(mocks, { apiVersion: '0.2.15' }),
+        getExecutor: readbackExecutor(mocks),
       });
       const applied = body(result);
       expect(applied.applied).toBe(true);
@@ -9844,7 +9859,6 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         },
         caveats: [
           ...(recognizedCurrency ? ['unconverted_currency'] : []),
-          'field_validation_unverified',
           'query_render_unverified',
           'summary_preview_unavailable',
         ],
@@ -9908,25 +9922,6 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(sendNotification.mock.invocationCallOrder[2]).toBeLessThan(
       vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock.invocationCallOrder.at(-1)!,
     );
-  });
-
-  it('keeps an old Desktop terminal but marks used-field validity unsupported', async () => {
-    const mocks = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
-    });
-    const result = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor: readbackExecutor(mocks, { apiVersion: '0.2.15' }),
-    });
-
-    const applied = body(result);
-    expect(applied.verification).toMatchObject({
-      status: 'skipped',
-      findings: [expect.objectContaining({ reason: 'unsupported-api' })],
-    });
-    expectStructuredBlock(result, COMPLETE_BIND_NEXT_ACTION);
   });
 
   it('keeps a failed native validation read non-retryable and non-terminal', async () => {

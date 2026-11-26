@@ -1,37 +1,7 @@
 import { Ok, Result } from 'ts-results-es';
 
-import { ArgsValidationError, McpToolError } from '../../errors/mcpToolError.js';
+import { ArgsValidationError } from '../../errors/mcpToolError.js';
 import { decodeXmlEntities } from '../xmlElement.js';
-
-export type RouteMissingOptions = {
-  /** Safe only for endpoints whose contract has no resource-level `not-found` outcome. */
-  stableNotFoundMeansRouteMissing?: boolean;
-};
-
-export function isRouteMissing(error: unknown, options: RouteMissingOptions = {}): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const e = error as { type?: string; error?: { code?: string; message?: string } };
-  const stableNotFound = e.type === 'command-failed' && e.error?.code === 'not-found';
-  if (!stableNotFound) {
-    return false;
-  }
-  return (
-    options.stableNotFoundMeansRouteMissing === true ||
-    (typeof e.error?.message === 'string' && e.error.message.includes('No route matches'))
-  );
-}
-
-export function endpointNotInThisBuild(endpoint: string): McpToolError {
-  return new McpToolError({
-    type: 'endpoint-not-in-this-build',
-    message:
-      `This Tableau Desktop build does not serve the ${endpoint} endpoint yet. ` +
-      'Tell the user their Desktop build is too old for this read and that a Desktop update enables it. Do not retry.',
-    statusCode: 404,
-  });
-}
 
 export function resolveItemByNameOrId<T extends { id: string; name: string }>(
   kind: string,

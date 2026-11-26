@@ -1,10 +1,15 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import features from '../../features.json';
 import pkg from '../../package.json';
 import { Config } from '../../src/config.js';
+import { EXPERTISE_TOOL_NAMES } from '../../src/desktop/instructions.js';
 import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
@@ -18,7 +23,6 @@ const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const knowledgeWriteToolsEnabled = Boolean(features['knowledge-write-tools']);
 let knowledgeReadExpected: boolean;
 let knowledgeWriteExpected: boolean;
-const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
@@ -96,8 +100,6 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (data-apps feature flag)
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -132,11 +134,6 @@ describe('server', () => {
       }
       if (!knowledgeWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => name !== 'manage-knowledge-context');
-      }
-
-      // Filter out data-app tools if they are not enabled (data-apps feature flag)
-      if (!tableauDataAppsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
       // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
@@ -225,12 +222,51 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const expectedToolNames = desktopToolNames.filter((name) =>
-        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      const expectedToolNames = desktopToolNames.filter(
+        (name) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(name) && !EXPERTISE_TOOL_NAMES.has(name),
       );
       expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    it('should not mention expertise in instructions', async () => {
+      expect(await client.getInstructions()).not.toContain('search-expertise');
+    });
+  });
+
+  describe('desktop variant with an expertise folder', () => {
+    let client: McpClient;
+    let expertiseDir: string;
+
+    beforeAll(async () => {
+      await buildVariant('desktop');
+      expertiseDir = await mkdtemp(join(tmpdir(), 'tableau-mcp-expertise-'));
+      await writeFile(join(expertiseDir, 'chart-selection.md'), '# Chart selection\nPick a chart.');
+      client = new McpClient({
+        variant: 'desktop',
+        env: { ...getDefaultEnv(), TABLEAU_EXPERTISE_DIR: expertiseDir },
+      });
+      await client.connect();
+    });
+
+    afterAll(async () => {
+      await client?.close();
+      await rm(expertiseDir, { recursive: true, force: true });
+    });
+
+    it('should list the expertise tools', async () => {
+      const names = await client.listTools();
+      const expectedToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedToolNames).toEqual(expect.arrayContaining([...EXPERTISE_TOOL_NAMES]));
+      expect(names).toEqual(expect.arrayContaining(expectedToolNames));
+      expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    it('should mention expertise in instructions', async () => {
+      expect(await client.getInstructions()).toContain('search-expertise');
     });
   });
 
@@ -296,8 +332,6 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (data-apps feature flag)
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -342,11 +376,6 @@ describe('server', () => {
         );
       }
 
-      // Filter out data-app tools if they are not enabled (data-apps feature flag)
-      if (!tableauDataAppsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
-      }
-
       // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
       if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
@@ -357,11 +386,14 @@ describe('server', () => {
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
 
-      const expectedDesktopToolNames = desktopToolNames.filter((name) =>
-        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      const expectedDesktopToolNames = desktopToolNames.filter(
+        (name) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(name) && !EXPERTISE_TOOL_NAMES.has(name),
       );
       expect(expectedDesktopToolNames).toContain('bind-template');
-      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
+      // Both variants define scaffold-data-app; the combined server exposes Desktop's tool once.
+      const expectedToolNames = [
+        ...new Set([...expectedDesktopToolNames, ...expectedWebToolNames]),
+      ];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });

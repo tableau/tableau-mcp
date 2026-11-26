@@ -1,10 +1,11 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { Config } from '../../../../config.desktop.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
+import { extractSheetXml, listWorksheetRefs } from '../../../../desktop/metadata/sheets.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
@@ -53,17 +54,19 @@ describe('bind-template public complete-request callback', () => {
     });
     const executor = {
       desktopInstanceId: 'inst-test',
-      desktopApiVersion: '0.2.16',
       applyWorkbookDocument,
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       ),
       listWorksheets: vi.fn(async () =>
-        Err({
-          type: 'command-failed' as const,
-          error: { code: 'not-found', message: 'No route matches /worksheets' },
+        Ok({
+          worksheets: listWorksheetRefs(liveXml).map((ref) => ({ ...ref, hidden: false })),
         }),
       ),
+      getWorksheetDocument: vi.fn(async (id: string) => {
+        const ref = listWorksheetRefs(liveXml).find((sheet) => sheet.id === id);
+        return Ok({ xml: (ref && extractSheetXml(liveXml, ref.name)) ?? '' });
+      }),
       getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
         Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
       ),

@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
+import { getExpertiseCorpusEntryCount } from './desktop/expertise/index.js';
 import { buildCombinedInstructions } from './instructions.combined.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger';
@@ -47,6 +48,7 @@ async function startServer(): Promise<void> {
   const instructions = buildCombinedInstructions({
     sessionPinned: desktopConfig.desktopSessionId !== undefined,
     profile: desktopConfig.toolProfile,
+    expertiseAvailable: getExpertiseCorpusEntryCount() > 0,
   });
   const mcpServer = new McpServer(
     {

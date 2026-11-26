@@ -7,7 +7,6 @@ import {
   MockExternalApiServer,
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
-import { isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
@@ -699,35 +698,6 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('tells the caller the Desktop build is too old when the summary-data route is missing', async () => {
-    // The tool dropped its own endpoint-unavailable status, but the shared read harness still
-    // maps a missing route to the actionable "build is too old, do not retry" message, so a
-    // build-too-old read stays diagnosable without the removed status machine.
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
-        status: 404,
-        contentType: 'application/problem+json',
-        body: JSON.stringify({
-          type: 'problem',
-          title: 'No route matches GET /v0/workbook/worksheets/sheet-sales/summaryData',
-          status: 404,
-          instance: '/v0/mock',
-          detail: 'No route matches GET /v0/workbook/worksheets/sheet-sales/summaryData',
-          code: 'not-found',
-        }),
-      });
-    });
-
-    try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
-      expect(result.isError).toBe(true);
-      expect(errorText(result)).toContain('Desktop build');
-      expect(errorText(result)).toContain('Do not retry');
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('clamps maxRows to 1000 before querying summary data', async () => {
     const harness = await startHarness();
     try {
@@ -803,25 +773,3 @@ function errorText(result: CallToolResult): string {
   invariant(result.content[0].type === 'text');
   return result.content[0].text;
 }
-
-describe('isRouteMissing', () => {
-  it('detects the Desktop route miss before summary data support is available', () => {
-    expect(
-      isRouteMissing({
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'No route matches the request path.' },
-      }),
-    ).toBe(true);
-  });
-
-  it('does not flag ordinary not-found errors (e.g. sheet-not-found)', () => {
-    expect(
-      isRouteMissing({
-        type: 'command-failed',
-        error: { code: 'not-found', message: 'Sheet not found' },
-      }),
-    ).toBe(false);
-    expect(isRouteMissing({ type: 'unknown', error: 'x' })).toBe(false);
-    expect(isRouteMissing(null)).toBe(false);
-  });
-});

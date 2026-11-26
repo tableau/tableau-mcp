@@ -61,8 +61,8 @@ The executable, `tableau-mcp-desktop` (`tableau-mcp-desktop.exe` on Windows), is
 
 ## Requirements
 
-- `list-templates`, the expertise tools, and the cached-XML read, write, and validate tools work
-  without %product_name%. They read bundled data or local files.
+- `list-templates` and the cached-XML read, write, and validate tools work without
+  %product_name%. They read bundled data or local files.
 - `list-available-fields`, `build-worksheets-from-templates`, `apply-worksheet`, `bind-template`,
   and the other tools that call the External Client API need a **running %product_name%**
   instance.

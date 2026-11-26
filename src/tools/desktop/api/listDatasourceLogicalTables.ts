@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 
-import { DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactNameParam, sessionParam } from '../params.js';
@@ -19,7 +18,6 @@ export const getListDatasourceLogicalTablesTool = (
   const listDatasourceLogicalTables = new DesktopTool({
     server,
     name: 'list-datasource-logical-tables',
-    minApiVersion: DATASOURCE_LOGICAL_TABLES_MIN_API_VERSION,
     title,
     description:
       "List a datasource's logical tables (id + caption), the input to get-datasource-underlying-data.",

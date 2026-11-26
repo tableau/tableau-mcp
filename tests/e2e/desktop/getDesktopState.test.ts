@@ -640,14 +640,13 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     expect(JSON.stringify(stateRequests)).not.toContain(DECOY_TOKEN);
   });
 
-  it('maps a missing app-state route without disclosing discovery credentials', async () => {
+  it('surfaces a missing app-state route without disclosing discovery credentials', async () => {
     mode = 'not-found';
 
     const result = await rawStateCall(SESSION);
     const text = toolErrorText(result);
 
-    expect(text).toContain('Desktop state endpoint');
-    expect(text).toContain('too old for this read');
+    expect(text).toContain('No route matches GET /v0/app/state');
     expect(text).not.toContain(INITIAL_TOKEN);
     expect(text).not.toContain(REFRESHED_TOKEN);
     expect(text).not.toContain(DECOY_TOKEN);

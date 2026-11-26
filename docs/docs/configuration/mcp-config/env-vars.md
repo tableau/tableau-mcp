@@ -637,9 +637,9 @@ Controls the read-only Tableau Prep flow tools. They are enabled by default.
   - [`list-flow-tasks`](../../web-tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../web-tools/flows/describe-flow.md)
   - [`get-flow-task`](../../web-tools/flows/get-flow-task.md)
-- When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is neither
-  advertised nor accepted. REST API scopes that an enabled tool still uses stay advertised. For
-  example, `run-flow` uses `tableau:flows:read`
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is not
+  accepted. REST API scopes that an enabled tool still uses stay advertised. For example,
+  `run-flow` uses `tableau:flows:read`
 
 <hr />
 
@@ -660,8 +660,8 @@ called again with that token, after the user approves the preview.
   - [`run-flow-task`](../../web-tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
   - [`cancel-flow-run`](../../web-tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
 - When disabled, these tools are not registered, and the `tableau:mcp:flow:run` and
-  `tableau:mcp:flow:cancel` scopes are neither advertised nor accepted. Their REST API scopes
-  (`tableau:flows:run`, `tableau:flow_tasks:run`, and `tableau:flow_runs:update`) are not advertised
+  `tableau:mcp:flow:cancel` scopes are not accepted. Their REST API scopes (`tableau:flows:run`,
+  `tableau:flow_tasks:run`, and `tableau:flow_runs:update`) are not advertised
 - These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
 - Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
 - You can still remove individual flow tools with [`EXCLUDE_TOOLS`](#exclude_tools), or remove all
@@ -691,8 +691,8 @@ Controls the read-only Tableau Knowledge tools. They are disabled by default.
 - When enabled, registers:
   - [`query-knowledge-context`](../../web-tools/knowledge/query-knowledge-context.md)
   - [`inspect-knowledge-context`](../../web-tools/knowledge/inspect-knowledge-context.md)
-- When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is
-  neither advertised nor accepted
+- When disabled, these tools are not registered, and the `tableau:mcp:knowledge:read` scope is not
+  accepted
 - The mutating Knowledge tool is controlled by
   [`KNOWLEDGE_WRITE_TOOLS_ENABLED`](#knowledge_write_tools_enabled), and also needs this setting on
 
@@ -711,8 +711,8 @@ shared with everyone and every agent that uses the Knowledge graph.
   [`KNOWLEDGE_TOOLS_ENABLED`](#knowledge_tools_enabled))
 - When enabled, registers:
   - [`manage-knowledge-context`](../../web-tools/knowledge/manage-knowledge-context.md)
-- When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is neither
-  advertised nor accepted, and the `tableau:knowledge:write` REST API scope is not advertised
+- When disabled, the tool is not registered, the `tableau:mcp:knowledge:write` scope is not
+  accepted, and the `tableau:knowledge:write` REST API scope is not advertised
 - The tool requires the Creator site role or higher
 
 | `KNOWLEDGE_TOOLS_ENABLED` | `KNOWLEDGE_WRITE_TOOLS_ENABLED` | Registered Knowledge tools |
@@ -1117,8 +1117,10 @@ under the OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if uns
 
 ## `TABLEAU_EXPERTISE_DIR`
 
-These are the authoring expertise roots served as `expertise://` resources. When unset, the
-expertise corpus is empty. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows);
+These are the authoring expertise roots served as `expertise://` resources. When unset, or when
+the roots hold no modules, the corpus is empty and the server does not register
+`search-expertise`, `read-expertise-resource`, or the `expertise://` resources, and its
+instructions do not mention them. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows);
 earlier roots win on a name collision.
 
 <hr />

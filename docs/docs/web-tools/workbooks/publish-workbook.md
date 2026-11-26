@@ -67,8 +67,6 @@ Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
 
 ### `personalSpace`
 
-This parameter is advertised only when `data-apps` is enabled.
-
 Defaults to `true`. When `projectId` is omitted, the workbook is published into your **Personal
 Space**. The tool resolves the caller's Personal Space LUID automatically and sends it as a location
 to Tableau; do not pass a Personal Space LUID as `projectId`.
@@ -123,14 +121,12 @@ output using existing task context.
 
 If the optional read fails, publishing still succeeds and `permissionsNote` explains that the
 rules could not be retrieved. Personal Space publishes skip the read and omit both permission
-fields. Project permission disclosure is independent of the `data-apps` flag. See
-[Feature Flags](../../developers/feature-flags.md).
+fields.
 
 | Publish outcome | Permission fields |
 | --- | --- |
 | Project publish; permission read succeeds | `permissions` contains the returned rules, including an empty array if none were returned. |
 | Project publish; permission read fails or consent is unavailable | `permissionsNote` explains the unavailable read; `permissions` is absent. |
-| Project publish; `data-apps` disabled | Same permission read and fields as any other project publish. |
 | Personal Space publish | Neither field is returned; no permission read occurs. |
 
 An omitted capability is not rewritten as a denial. An empty array means no configured rules

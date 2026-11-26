@@ -1,4 +1,5 @@
 import pkg from '../../../package.json';
+import { MIN_SUPPORTED_API_VERSION } from './apiVersion.js';
 import { ExternalApiHttp } from './externalApiHttp.js';
 import { MockExternalApiServer, startMockExternalApiServer } from './mockExternalApiServer.js';
 import {
@@ -284,7 +285,7 @@ describe('ExternalApiHttp', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toMatchObject({
-      apiVersion: '0.1.0',
+      apiVersion: MIN_SUPPORTED_API_VERSION,
       applicationVersion: '2026.1',
       links: expect.objectContaining({
         health: '/v0/health',
@@ -309,37 +310,6 @@ describe('ExternalApiHttp', () => {
     const last = server.requests.at(-1);
     expect(last?.method).toBe('GET');
     expect(last?.path).toBe('/v0/workbook/worksheets');
-  });
-
-  it('accepts the live 0.2.4 worksheet item shape without 0.2.5 state fields', async () => {
-    server.setOverride('GET /v0/workbook/worksheets', {
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        worksheets: [
-          {
-            datasources: ['Sample - Superstore'],
-            hidden: false,
-            id: 'sheet-sales',
-            index: 0,
-            name: 'Sales by Region',
-          },
-        ],
-      }),
-    });
-
-    const result = await http.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema);
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().worksheets).toEqual([
-      {
-        datasources: ['Sample - Superstore'],
-        hidden: false,
-        id: 'sheet-sales',
-        index: 0,
-        name: 'Sales by Region',
-      },
-    ]);
   });
 
   it('polls an overflowed (202) JSON read and returns the terminal result body', async () => {
@@ -464,9 +434,8 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.isOk()).toBe(true);
-    // The HTTP layer passes the wire shape through verbatim: a real luid, an explicit
-    // null (embedded/federated), and an absent luid (legacy build) all round-trip
-    // as-is — the nullish() schema accepts string | null | undefined.
+    // The HTTP layer passes the wire shape through verbatim: a real luid and an explicit
+    // null (embedded/federated) both round-trip as-is.
     expect(result.unwrap().datasources).toEqual([
       {
         id: 'wb-ds-superstore',
@@ -486,7 +455,6 @@ describe('ExternalApiHttp', () => {
         isExtract: false,
         hasDownloadFilePermission: null,
       },
-      { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
     ]);
 
     const last = server.requests.at(-1);
@@ -601,7 +569,6 @@ describe('ExternalApiHttp', () => {
   it('gets worksheet summary data, repeating columnsToIncludeByFieldName per column', async () => {
     const route = worksheetSummaryDataRoute('sheet-sales', {
       maxRows: 25,
-      ignoreAliases: true,
       ignoreSelection: true,
       columnsToIncludeByFieldName: ['Sales', 'Profit'],
     });

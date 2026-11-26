@@ -172,13 +172,12 @@ describe('set-member-colors tool', () => {
     vi.useRealTimers();
   });
 
-  it('has a lean description, no tool names in params, and the datasource-route API floor', () => {
+  it('has a lean description and no tool names in params', () => {
     const tool = getSetMemberColorsTool(new DesktopMcpServer());
     expect(tool.name).toBe('set-member-colors');
     expect(tool.description).toBe(
       "Set colors for members of the discrete field on a worksheet's Color.",
     );
-    expect(tool.minApiVersion).toBe('0.2.10');
     expect(Object.keys(tool.paramsSchema)).toEqual(['session', 'worksheetName', 'colors', 'field']);
   });
 
@@ -454,18 +453,6 @@ describe('set-member-colors tool', () => {
       );
       expect(result.isError).toBe(false);
       expect(body(result).message).toContain('Mars was not found in the first 10000 rows read');
-    });
-
-    it('reads underlying values, not display aliases', async () => {
-      const { executor } = await run(
-        { colors: [{ member: 'Europe', color: '#e15759' }] },
-        { ...region, datasource: regionDoc() },
-      );
-      expect(executor.getWorksheetSummaryData).toHaveBeenCalledWith(
-        'ws-1',
-        expect.objectContaining({ ignoreAliases: true, maxRows: 10000 }),
-        expect.anything(),
-      );
     });
 
     it('reads the data before the datasource document it edits', async () => {

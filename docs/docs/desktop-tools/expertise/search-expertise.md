@@ -8,7 +8,7 @@ sidebar_position: 1
 <span className="toolAvailability">Available November 2026 and later.</span>
 {/* /availability */}
 
-Searches the authoring-guidance library by concept — chart choice, calculation patterns, workbook structure, and dashboard layout — and returns the closest modules as JSON. The library is the markdown under [`TABLEAU_EXPERTISE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_expertise_dir); with no root set, the library is empty. The search runs in-process, does not use a %product_name% session, and does not change the library. When the result includes `topHitBody`, that text is the top module and no follow-up read is needed, unless the text was shortened to the 6,144-byte cap described under `query`. Otherwise read the top hit's `mustReadUri` with [`read-expertise-resource`](./read-expertise-resource.md).
+Searches the authoring-guidance library by concept — chart choice, calculation patterns, workbook structure, and dashboard layout — and returns the closest modules as JSON. The library is the markdown under [`TABLEAU_EXPERTISE_DIR`](../../configuration/mcp-config/env-vars.md#tableau_expertise_dir). When the library is empty, the server does not register this tool. The search runs in-process, does not use a %product_name% session, and does not change the library. When the result includes `topHitBody`, that text is the top module and no follow-up read is needed, unless the text was shortened to the 6,144-byte cap described under `query`. Otherwise read the top hit's `mustReadUri` with [`read-expertise-resource`](./read-expertise-resource.md).
 
 ## APIs called
 

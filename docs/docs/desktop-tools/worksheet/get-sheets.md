@@ -60,7 +60,7 @@ Id of one sheet to read. A unique sheet name also works. Requires `kind`. Omit i
 
 ## Notes and caveats
 
-- Every sheet includes `id` and `name`. Other fields appear only when the running %product_name% instance reports them. A fallback read may recover only id and name.
+- Every sheet includes `id` and `name`. Other fields appear only when the running %product_name% instance reports them.
 - When the workbook has no sheets of a kind, that list is an empty array.
 - Pass `id` rather than `name` when two sheets share a display name. `index` is the tab position across every kind, not the order of one kind's list.
 - This read does not return a sheet's structure. Use [`get-xml`](../workbook/get-xml.md) for that.

@@ -444,6 +444,7 @@ const queryOptionsSchema = z
   .object({
     returnFormat: returnFormatSchema,
     debug: z.boolean().default(false),
+    bypassMetadataCache: z.boolean(),
   })
   .partial()
   .passthrough();
@@ -539,6 +540,7 @@ const queryDatasourceOptionsSchema = queryOptionsSchema.and(
     .object({
       disaggregate: z.boolean(),
       rowLimit: z.number().int().min(1).optional(),
+      withNewSession: z.boolean(),
     })
     .partial()
     .passthrough(),

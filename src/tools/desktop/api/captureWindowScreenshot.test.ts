@@ -49,12 +49,6 @@ describe('captureWindowScreenshotTool', () => {
     );
   });
 
-  it('declares the 0.2.28 API floor', () => {
-    const tool = getCaptureWindowScreenshotTool(new DesktopMcpServer());
-
-    expect(tool.minApiVersion).toBe('0.2.28');
-  });
-
   it.each([
     ['exactly at', PNG_BYTES.length],
     ['under', PNG_BYTES.length + 1],
@@ -141,19 +135,6 @@ describe('captureWindowScreenshotTool', () => {
   });
 
   it.each([
-    {
-      caseName: 'route-missing response',
-      error: {
-        type: 'command-failed' as const,
-        error: {
-          code: 'not-found',
-          message: 'No route matches /v0/app/screenshot',
-          recoverable: false,
-        },
-      },
-      message: 'Desktop build is too old',
-      extraMessage: 'Do not retry',
-    },
     {
       caseName: 'command timeout',
       error: { type: 'command-timed-out' as const, error: 'Command timed out' },

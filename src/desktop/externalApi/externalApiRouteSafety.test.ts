@@ -26,7 +26,7 @@ const instance = (baseUrl = BASE_URL, token = TOKEN): ExternalApiInstance => ({
   token,
   pid: 4321,
   instanceId: 'inst-safety',
-  apiVersion: '0.2.0',
+  apiVersion: '0.2.34',
 });
 
 const acceptedWith = (location: string): Response =>

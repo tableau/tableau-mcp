@@ -30,7 +30,6 @@ export const getShowMeTool = (server: DesktopMcpServer): DesktopTool<typeof para
   const showMeTool = new DesktopTool({
     server,
     name: 'show-me',
-    minApiVersion: '0.2.11',
     title,
     description:
       'Apply a Show Me option. First call get-show-me-options, choose one marked applicable, and reuse its worksheet, data source, and selected fields.',

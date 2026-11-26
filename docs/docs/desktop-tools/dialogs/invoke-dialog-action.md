@@ -21,10 +21,6 @@ This tool acts on the running %product_name% instance, not on the Tableau Cloud 
 - Selects one current actionable dialog by exact `objectName`, `title`, `className`, `sessionId`, and `revision`, then invokes one visible enabled action copied from that dialog's `actions` array. Authorized by the session's loopback bearer token. A rejected request never invokes an action.
   - `POST /v<x>/app:invokeDialogAction` — invoke one exact action on one current dialog. [API reference](ext://eca/reference/index.html#tag/Application/operation/invokeDialogAction)
 
-:::note[Action route not served]
-If the running %product_name% instance does not serve `POST /v<x>/app:invokeDialogAction`, the tool reports that no dialog action ran. Do not retry `invoke-dialog-action`. Ask the user to handle the dialog.
-:::
-
 ## Required arguments
 
 ### `dialog`
