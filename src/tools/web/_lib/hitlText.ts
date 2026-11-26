@@ -65,16 +65,20 @@ export function renderTokenConfirmNextStep({
   subject: string;
   /** The confirm-verb clause, e.g. "confirm deleting it. Do NOT delete" / "confirm it. Do NOT apply". */
   approvalClause: string;
-  /** The single-use confirmation token to echo into the instruction. */
+  /** The confirmation token to echo into the instruction. */
   nonce: string | undefined;
-  /** Trailing gate clause, starting right after "single-use token", e.g. " before deleting)." */
+  /** Trailing gate clause, starting right after the token phrase, e.g. " before deleting)." */
   tail: string;
 }): string {
+  // Every caller uses a SignedTokenEvidence token (see signedConfirmation.ts): short-lived and bound
+  // to this change, verifiable on any replica, NOT strictly single-use across replicas — so the
+  // wording must not promise single use.
+  const tokenPhrase = 'verify this short-lived token bound to this change';
   return (
     `NEXT STEP — REQUIRED: ${subject} to the user and ask them to explicitly ` +
     `${approvalClause} without the user’s approval. ` +
     `Once approved, call again with confirm: true and confirmationToken: "${nonce}" ` +
-    `(the server will verify and consume this single-use token${tail}`
+    `(the server will ${tokenPhrase}${tail}`
   );
 }
 

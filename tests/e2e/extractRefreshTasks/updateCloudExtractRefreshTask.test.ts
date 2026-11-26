@@ -14,8 +14,8 @@ import { McpClient } from '../mcpClient.js';
  *
  * This tool is two-phase with a server-authoritative preview→confirm gate: the first call (confirm
  * omitted/false) reports the schedule that would be applied, changes nothing, and returns a
- * server-generated single-use `confirmationToken` bound to this exact taskId + schedule. The second
- * call passes `confirm: true` plus that token; the server verifies and consumes it before applying.
+ * server-signed, short-lived `confirmationToken` bound to this exact taskId + schedule. The second
+ * call passes `confirm: true` plus that token; the server verifies it before applying.
  * A confirm with no prior preview (or a token minted for a different schedule) is rejected.
  */
 describe('update-cloud-extract-refresh-task', () => {
@@ -190,7 +190,7 @@ describe('update-cloud-extract-refresh-task', () => {
     });
     invariant(preview.includes('No change has been made'), `Preview applied a change: ${preview}`);
     const tokenMatch = preview.match(
-      /confirmationToken:\s*\\?"?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+      /confirmationToken:\s*\\?"?(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
     );
     invariant(tokenMatch, `Preview did not surface a confirmationToken: ${preview}`);
     const token = tokenMatch[1];

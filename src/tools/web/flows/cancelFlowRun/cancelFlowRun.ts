@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
-import { McpToolError, PreviewNotRunError } from '../../../../errors/mcpToolError.js';
+import { McpToolError } from '../../../../errors/mcpToolError.js';
 import { isFlowWriteToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
@@ -11,8 +11,7 @@ import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
-import { EvidenceContext, RegistryEvidence } from '../../_lib/evidence.js';
-import { renderPreviewNotRunMessage, renderTokenConfirmNextStep } from '../../_lib/hitlText.js';
+import { SignedConfirmation } from '../../_lib/signedConfirmation.js';
 import { WebTool } from '../../tool.js';
 import { mapCancelFlowRunError } from '../flowWriteErrors.js';
 
@@ -50,20 +49,20 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
   - It does **not** alter the flow definition or its schedule — it requests cancellation for one run.
 
   **Two-phase confirmation:**
-  1. **Preview** (\`confirm\` omitted or false): describes the cancellation request without contacting Tableau and returns a single-use confirmation token.
+  1. **Preview** (\`confirm\` omitted or false): describes the cancellation request without contacting Tableau and returns a short-lived confirmation token bound to this change.
   2. **Cancel** (\`confirm: true\`): requires the token from the matching preview before requesting cancellation.
 
   **Parameters:**
   - \`flowRunId\` (required) – The id of the flow run to cancel.
   - \`confirm\` (optional) – Set \`true\` only after the user approves the preview.
-  - \`confirmationToken\` (optional) – The single-use token returned by the matching preview. Required when \`confirm\` is true.
+  - \`confirmationToken\` (optional) – The token returned by the matching preview. Required when \`confirm\` is true.
 
   **Response:** Preview returns instructions and a confirmation token. A confirmed call returns \`{ mcp: { cancelStatus } }\`. Report the cancel as *requested*. Use \`list-flow-runs\` to confirm the final status; retain the associated flow id when narrowing the query.
 
   **Requirements & limits:**
   - **Caller-role:** in addition to site/server administrators, you can cancel a flow run only if you **initiated the run** (or created its scheduled task) **and** have Run Flow permission on the flow. Non-permitted callers get a clear permission error.
   - Requires Tableau REST API version **3.10 or later**.
-  - Fails if the run has **already completed** (nothing to cancel), or if a site administrator has **disabled flow-run cancellation** for the site.
+  - Not idempotent: cancelling a run that has **already completed** fails with Tableau error 403135 (nothing to cancel) — check \`list-flow-runs\` rather than retrying. It also fails if a site administrator has **disabled flow-run cancellation** for the site.
   - **Bounded-context note:** when this MCP server is restricted to specific projects/tags, this tool cannot verify that the flow run's flow is in the allowed set (a run is addressed only by run id), so it refuses — mirroring \`run-flow-task\`.
   - Requires Tableau REST API access scopes \`tableau:flow_runs:update\` and \`tableau:mcp_site_settings:read\`.`,
     paramsSchema,
@@ -111,45 +110,35 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
               ...extra,
               jwtScopes: cancelFlowRunTool.requiredApiScopes,
               callback: async (restApi) => {
-                const evidence = new RegistryEvidence();
-                const evidenceContext: EvidenceContext = {
-                  restApi,
-                  siteId: restApi.siteId,
-                  target: { id: flowRunId },
+                // Server-signed, short-lived token bound to site, user, tool and flow run (no target
+                // state): verifiable on any replica sharing MUTATION_TOKEN_SECRET.
+                const confirmation = new SignedConfirmation({
                   tool: 'cancel-flow-run',
-                  userLuid: extra.getUserLuid(),
-                  confirmationToken,
+                  targetId: flowRunId,
+                  targetKind: 'flow run',
                   binding: flowRunId,
-                };
+                  text: {
+                    subject: 'present this proposed cancellation',
+                    approvalClause: 'confirm it. Do NOT cancel',
+                    tail: ' before requesting cancellation).',
+                  },
+                });
+                const caller = { restApi, userLuid: extra.getUserLuid() };
 
                 if (!confirm) {
-                  await evidence.establish(evidenceContext);
                   return (
                     `Preview — would request cancellation of flow run '${flowRunId}'. ` +
                     'No cancellation has been requested. ' +
-                    renderTokenConfirmNextStep({
-                      subject: 'present this proposed cancellation',
-                      approvalClause: 'confirm it. Do NOT cancel',
-                      nonce: evidence.getEstablishedNonce(),
-                      tail: ' before requesting cancellation).',
-                    })
+                    (await confirmation.preview(caller))
                   );
                 }
 
-                if (!(await evidence.verify(evidenceContext))) {
-                  throw new PreviewNotRunError(
-                    renderPreviewNotRunMessage({
-                      tool: 'cancel-flow-run',
-                      targetKind: 'flow run',
-                      targetId: flowRunId,
-                    }),
-                  );
-                }
-
-                await restApi.flowsMethods.cancelFlowRun({
-                  siteId: restApi.siteId,
-                  flowRunId,
-                });
+                await confirmation.confirmAndRun(caller, confirmationToken, () =>
+                  restApi.flowsMethods.cancelFlowRun({
+                    siteId: restApi.siteId,
+                    flowRunId,
+                  }),
+                );
                 return {
                   mcp: {
                     cancelStatus:

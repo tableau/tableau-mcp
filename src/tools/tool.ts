@@ -5,6 +5,7 @@ import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { TypeOrProvider } from '../utils/provider.js';
+import { redactSecretArgs } from '../utils/redactSecretArgs.js';
 import {
   TableauRequestHandlerExtra,
   TableauToolCallback,
@@ -134,7 +135,8 @@ export abstract class Tool<
       getNotificationMessageForTool({
         requestId,
         toolName: this.name,
-        args,
+        // Never forward a confirmation / approval token to the client's log stream.
+        args: redactSecretArgs(args),
         username,
       }),
     );

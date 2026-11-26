@@ -8,9 +8,12 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { createAppApprovalEvidence } from './appApproval.js';
 import { auditRecordSchema } from './auditRecord.js';
 import { getConfirmDeleteContentTool } from './confirmDeleteContent.js';
-import { AppApprovalEvidence, TagEvidence } from './evidence.js';
+import { EvidenceContext, TagEvidence } from './evidence.js';
+import { exportedForTesting as signedTokenTesting } from './signedTokenEvidence.js';
+import { mutationTokenConfigFromEnv } from './signedTokenEvidence.mock.js';
 import { checkContentStillStale } from './stalenessCheck.js';
 
 vi.mock('../../../logging/logger.js');
@@ -97,6 +100,7 @@ vi.mock('../adminGate.js', () => ({
 
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
+    ...mutationTokenConfigFromEnv(),
     adminToolsEnabled: true,
     pendingDeletionMaxAgeDays: 30,
     productTelemetryEndpoint: 'https://test.com',
@@ -104,8 +108,18 @@ vi.mock('../../../config.js', () => ({
   })),
 }));
 
-// Mirrors what the delete-content preview does for workbook/datasource: records both TagEvidence and
-// AppApprovalEvidence bound to the resource being deleted.
+// The signed app-approval token the last establish*Approval() minted — what the iframe would read
+// from the preview result's `_meta` and pass back as `approvalToken`. getToolResult() sends it.
+let approvalToken: string | undefined;
+
+async function mintApproval(namespace: string, ctx: EvidenceContext): Promise<void> {
+  const evidence = createAppApprovalEvidence(namespace);
+  await evidence.establish(ctx);
+  approvalToken = evidence.getEstablishedNonce();
+}
+
+// Mirrors what the delete-content preview does for workbook/datasource: writes the batch tag and
+// mints a signed app-approval token bound to the resource being deleted.
 async function establishWorkbookApproval(
   workbookId: string,
   cleanupDate: string = testBatch,
@@ -120,7 +134,7 @@ async function establishWorkbookApproval(
     userLuid: getMockRequestHandlerExtra().getUserLuid(),
   };
   await new TagEvidence({ cleanupDate, kind: 'workbook' }).establish(tagContext);
-  await new AppApprovalEvidence('delete-content').establish({
+  await mintApproval('delete-content', {
     restApi: { siteId: 'test-site-id' } as never,
     siteId: 'test-site-id',
     target: { id: workbookId, kind: 'workbook' },
@@ -143,7 +157,7 @@ async function establishDatasourceApproval(
     userLuid: getMockRequestHandlerExtra().getUserLuid(),
   };
   await new TagEvidence({ cleanupDate, kind: 'datasource' }).establish(tagContext);
-  await new AppApprovalEvidence('delete-content').establish({
+  await mintApproval('delete-content', {
     restApi: { siteId: 'test-site-id' } as never,
     siteId: 'test-site-id',
     target: { id: datasourceId, kind: 'datasource' },
@@ -153,7 +167,7 @@ async function establishDatasourceApproval(
 }
 
 async function establishExtractRefreshTaskApproval(taskId: string): Promise<void> {
-  await new AppApprovalEvidence('delete-content').establish({
+  await mintApproval('delete-content', {
     restApi: { siteId: 'test-site-id' } as never,
     siteId: 'test-site-id',
     target: { id: taskId, kind: 'extract-refresh-task' },
@@ -169,6 +183,8 @@ describe('confirmDeleteContentTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    approvalToken = undefined;
+    signedTokenTesting.reset();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(`${testBatch}T12:00:00Z`));
     mockCheckContentStillStale.mockResolvedValue(Ok.EMPTY);
@@ -260,7 +276,7 @@ describe('confirmDeleteContentTool', () => {
 
   // --- Happy path: workbook deletion with tag + approval ---
 
-  it('deletes the workbook when both TagEvidence and AppApprovalEvidence are established', async () => {
+  it('deletes the workbook when both the batch tag and a signed approval token are present', async () => {
     await establishWorkbookApproval(validWorkbookId);
     const result = await getToolResult({
       resourceType: 'workbook',
@@ -303,9 +319,9 @@ describe('confirmDeleteContentTool', () => {
     expect(record.denyReason).toBe('preview-not-run');
   });
 
-  // --- Single-use: second confirm with same evidence rejected ---
+  // --- Same-replica replay: second confirm with same evidence rejected ---
 
-  it('single-use: deletes once then a replay is rejected', async () => {
+  it('same-replica replay: deletes once then a replay is rejected', async () => {
     await establishWorkbookApproval(validWorkbookId);
     const first = await getToolResult({
       resourceType: 'workbook',
@@ -344,7 +360,7 @@ describe('confirmDeleteContentTool', () => {
 
   // --- Happy path: datasource deletion ---
 
-  it('deletes the datasource when both TagEvidence and AppApprovalEvidence are established', async () => {
+  it('deletes the datasource when both the batch tag and a signed approval token are present', async () => {
     await establishDatasourceApproval(validDatasourceId);
     const result = await getToolResult({
       resourceType: 'datasource',
@@ -368,9 +384,9 @@ describe('confirmDeleteContentTool', () => {
     expect(records.every((r) => r.action === 'delete')).toBe(true);
   });
 
-  // --- Happy path: extract-refresh-task deletion (no tag, AppApprovalEvidence only) ---
+  // --- Happy path: extract-refresh-task deletion (no tag, signed approval token only) ---
 
-  it('deletes the extract refresh task when AppApprovalEvidence is established', async () => {
+  it('deletes the extract refresh task when a signed approval token is supplied', async () => {
     await establishExtractRefreshTaskApproval(validTaskId);
     const result = await getToolResult({
       resourceType: 'extract-refresh-task',
@@ -400,7 +416,7 @@ describe('confirmDeleteContentTool', () => {
   // --- Cross-namespace isolation: an update approval must not unlock a delete ---
 
   it('rejects an approval established under the update-cloud-extract-refresh-task namespace', async () => {
-    await new AppApprovalEvidence('update-cloud-extract-refresh-task').establish({
+    await mintApproval('update-cloud-extract-refresh-task', {
       restApi: { siteId: 'test-site-id' } as never,
       siteId: 'test-site-id',
       target: { id: validTaskId, kind: 'extract-refresh-task' },
@@ -545,11 +561,12 @@ async function getToolResult(args: {
   resourceId: string;
   cleanupDate?: string;
   minAgeDays?: number;
+  approvalToken?: string;
 }): Promise<CallToolResult> {
   const tool = getConfirmDeleteContentTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { cleanupDate: undefined, minAgeDays: undefined, ...args },
+    { cleanupDate: undefined, minAgeDays: undefined, approvalToken, ...args },
     getMockRequestHandlerExtra(),
   );
 }

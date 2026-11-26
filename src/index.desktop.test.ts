@@ -33,6 +33,8 @@ vi.mock('./config.js', () => ({
     return {
       transport: 'http',
       server: 'https://tableau.example.com',
+      mutationTokenSecret: '',
+      mutationTokenSecretPrevious: '',
       oauth: { enabled: true },
       httpHost: startupState.httpHost,
       defaultNotificationLevel: 'info',
@@ -257,6 +259,8 @@ describe('desktop binary startup', () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       transport: 'http',
       server: 'https://tableau.example.com',
+      mutationTokenSecret: '',
+      mutationTokenSecretPrevious: '',
       oauth: { enabled: true },
       defaultNotificationLevel: 'info',
       loggers: new Set(['fileLogger']),

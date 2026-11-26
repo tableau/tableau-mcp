@@ -81,6 +81,8 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
   ADMIN_TOOLS_ENABLED: string | undefined;
   PENDING_DELETION_MAX_AGE_DAYS: string | undefined;
+  MUTATION_TOKEN_SECRET: string | undefined;
+  MUTATION_TOKEN_SECRET_PREVIOUS: string | undefined;
   FLOW_READ_TOOLS_ENABLED: string | undefined;
   FLOW_WRITE_TOOLS_ENABLED: string | undefined;
   KNOWLEDGE_TOOLS_ENABLED: string | undefined;

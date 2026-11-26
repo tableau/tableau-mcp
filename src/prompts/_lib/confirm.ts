@@ -7,8 +7,8 @@
  * server-side via the shared mutation guard (src/tools/web/_lib/mutationGuard.ts) and its pluggable
  * EvidenceStrategy: a confirmed mutation is rejected unless a preview genuinely ran, proven by one of
  * two evidence kinds — a `tag` (the reversible pending-deletion tag re-verified on live content;
- * datasource/workbook) or a `registry-nonce` (a server-generated single-use confirmation token;
- * extract refresh tasks). Every attempt (allowed and denied) also emits an authoritative audit record.
+ * datasource/workbook) or a `signed-token` (a server-signed, short-lived confirmation token bound to
+ * this change; extract refresh tasks, users, flows). Every attempt (allowed and denied) also emits an authoritative audit record.
  * This closes the prior caller-computable-token bypass (W-23093455).
  *
  * RESIDUAL GAP: the gate proves a preview *ran*, NOT that a human *approved* — an agent that runs both

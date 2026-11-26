@@ -18,14 +18,12 @@ import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
-import {
-  AppApprovalEvidence,
-  getMutationPreviewTtlMs,
-  RegistryEvidence,
-} from '../_lib/evidence.js';
-import { renderConfirmClosedMessage, renderTokenConfirmNextStep } from '../_lib/hitlText.js';
+import { appApprovalSuccessResult, attachAppApproval } from '../_lib/appApproval.js';
+import { getMutationPreviewTtlMs } from '../_lib/evidence.js';
+import { renderConfirmClosedMessage } from '../_lib/hitlText.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { resolveExtractRefreshTaskTarget } from '../_lib/resolveExtractRefreshTaskTarget.js';
+import { SignedConfirmation } from '../_lib/signedConfirmation.js';
 import { AppToolResult, WebTool } from '../tool.js';
 
 /**
@@ -53,16 +51,16 @@ const paramsSchema = {
     .optional()
     .describe(
       'When omitted or false, runs a non-destructive preview: reports the new schedule that would be ' +
-        'applied without changing anything and returns a single-use confirmation token. When true, ' +
+        'applied without changing anything and returns a short-lived confirmation token bound to this change. When true, ' +
         'applies the schedule update — but only if the confirmationToken from a prior preview of this ' +
-        'same taskId and schedule is supplied (the server verifies and consumes it). This gate ' +
+        'same taskId and schedule is supplied (the server verifies it). This gate ' +
         'genuinely requires the preview phase to have run for exactly this change.',
     ),
   confirmationToken: z
     .string()
     .optional()
     .describe(
-      'The single-use confirmation token returned by a prior preview call for this taskId and ' +
+      'The short-lived confirmation token returned by a prior preview call for this taskId and ' +
         'schedule. Required when confirm is true; ignored otherwise. A token minted for a different ' +
         'schedule will not validate.',
     ),
@@ -135,8 +133,8 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
 
   This tool is **two-phase** to keep the mutating action safe:
 
-  1. **Preview (default — \`confirm\` omitted or false):** reports the schedule that would be applied and returns a single-use confirmation token. Nothing is changed.
-  2. **Update (\`confirm: true\`):** overwrites the task's schedule with the supplied one. Requires the \`confirmationToken\` from a prior preview of this same \`taskId\` and \`schedule\` (the server verifies and consumes it). The token is server-generated and bound to the previewed schedule, so this gate genuinely requires the preview phase to have run for exactly this change; it cannot be bypassed by calling confirm first, and a token minted for a different schedule will not validate.
+  1. **Preview (default — \`confirm\` omitted or false):** reports the schedule that would be applied and returns a short-lived confirmation token bound to this change. Nothing is changed.
+  2. **Update (\`confirm: true\`):** overwrites the task's schedule with the supplied one. Requires the \`confirmationToken\` from a prior preview of this same \`taskId\` and \`schedule\` (the server verifies it). The token is server-signed and bound to the previewed schedule and the task's current schedule, so this gate genuinely requires the preview phase to have run for exactly this change; it cannot be bypassed by calling confirm first, a token minted for a different schedule will not validate, and it is rejected if the task's schedule changed since the preview.
 
   **Required human confirmation:** After preview, present the change to the user and get explicit approval before calling again with \`confirm: true\`. Do not auto-confirm — get the user's explicit approval first.
 
@@ -148,7 +146,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
   **Parameters:**
   - \`taskId\` (required) – The ID of the extract refresh task to update. Obtain this from the \`list-extract-refresh-tasks\` tool.
   - \`confirm\` (optional) – Set \`true\` to apply the update (requires the confirmation token from a prior preview of this same schedule). When omitted or false, previews the change without applying it.
-  - \`confirmationToken\` (optional) – The single-use token returned by the preview call. Required when \`confirm\` is true; a token minted for a different schedule will not validate.
+  - \`confirmationToken\` (optional) – The token returned by the preview call. Required when \`confirm\` is true; a token minted for a different schedule will not validate.
   - \`schedule\` (required) – The new schedule to apply. Replaces the existing schedule wholesale; partial-field merging is not supported by the Tableau API.
     - \`frequency\` (required) – One of \`Hourly\`, \`Daily\`, \`Weekly\`, \`Monthly\`.
     - \`frequencyDetails.start\` (required) – Start time in 24-hour \`HH:mm:ss\` format, e.g. \`"06:00:00"\`.
@@ -167,7 +165,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
 
   **Response:** A confirmation message describing the updated task and its new schedule.
 
-  **Note:** This operation overwrites the existing schedule. To revert, call again with the prior schedule values. Tableau Cloud uses \`tableau:tasks:write\` scope.
+  **Note:** This operation overwrites the existing schedule. To revert, call again with the prior schedule values. Tableau Cloud uses the \`tableau:tasks:update\` scope.
   `,
     paramsSchema,
     annotations: {
@@ -207,11 +205,13 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
               }
 
               // The task carries no durable taggable state, so this two-phase mutation gates on a
-              // server-generated single-use nonce (RegistryEvidence) — the same gate as
-              // delete-extract-refresh-task. The nonce is additionally bound to a fingerprint of the
-              // schedule (see scheduleBinding), so a token minted while previewing schedule A cannot
-              // confirm an update to schedule B, and a confirm with no prior preview is rejected
-              // server-side. The guard audits both the preview and the confirmed update.
+              // server-signed, short-lived confirmation token (SignedTokenEvidence) — the same gate as
+              // the delete-content extract-task branch, verifiable on any replica sharing
+              // MUTATION_TOKEN_SECRET. The token is bound to a fingerprint of the requested schedule
+              // (see scheduleBinding), so a token minted while previewing schedule A cannot confirm an
+              // update to schedule B, AND to the task's CURRENT schedule (target.state, see
+              // extractRefreshScheduleState), so a schedule change between preview and confirm
+              // invalidates it. A confirm with no prior preview is rejected server-side. The guard audits both the preview and the confirmed update.
               // Enrich the audit target with the underlying content's name/project/owner (AC-3) via
               // the shared best-effort helper. No task list is pre-fetched here, so the helper lists
               // tasks once, finds this id, then does ONE content lookup + ONE owner lookup. A resolve
@@ -222,9 +222,21 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                   siteId: restApi.siteId,
                   taskId: args.taskId,
                   logger: 'update-cloud-extract-refresh-task',
+                  includeScheduleState: true,
                 });
-              const evidence = new RegistryEvidence();
               const binding = scheduleBinding(args.schedule);
+              // Pre-state comes from resolveTarget().state (hash of the task's current schedule).
+              const confirmation = new SignedConfirmation({
+                tool: 'update-cloud-extract-refresh-task',
+                targetId: args.taskId,
+                targetKind: 'extract-refresh-task',
+                binding,
+                text: {
+                  subject: 'present this change',
+                  approvalClause: 'confirm it. Do NOT apply',
+                  tail: ', which is bound to this exact schedule, before applying the update).',
+                },
+              });
               const guardResult = await guardMutation({
                 restApi,
                 extra,
@@ -232,17 +244,18 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                 action: 'update',
                 mode: 'preview-confirm',
                 phase: args.confirm ? 'confirm' : 'preview',
-                evidence,
+                evidence: confirmation.evidence,
                 resolveTarget,
                 confirmationToken: args.confirmationToken,
                 binding,
+                targetIdHint: args.taskId,
               });
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();
               }
-              const { recordOutcome } = guardResult.value;
+              const { recordOutcome, target } = guardResult.value;
 
-              // Preview phase: the guard minted a single-use, schedule-bound confirmation token.
+              // Preview phase: the guard minted a short-lived, schedule-bound confirmation token.
               // Report the change and surface the token (flag OFF) or open the confirm panel (flag ON).
               // Nothing has been applied.
               if (!args.confirm) {
@@ -251,52 +264,57 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                   ? ` (${frequencyDetails.start}–${frequencyDetails.end})`
                   : ` (start ${frequencyDetails.start})`;
 
-                // Flag ON: ALSO record a single-use, TTL-bounded human-approval window and return an
+                // Flag ON: ALSO mint a signed, short-lived app-approval token and return an
                 // AppToolResult so the host renders the in-iframe confirm panel describing the schedule
                 // change. The change is then applied by the model-invisible
-                // confirm-update-cloud-extract-refresh-task tool — the approval recorded here is what its
-                // AppApprovalEvidence verifies. No secret is transported; approval is presence-based,
-                // keyed server-side by site+user+task.
+                // confirm-update-cloud-extract-refresh-task tool, which verifies the token (on any
+                // replica sharing MUTATION_TOKEN_SECRET). The token is bound to site, user, task, the
+                // previewed schedule AND the task's current schedule (target.state, resolved by the
+                // guard above; the confirm tool re-resolves it the same way), so a schedule change
+                // between preview and the click rejects the approval. It reaches the iframe in
+                // `_meta` only — never the model-visible text (see appApproval.ts).
                 if (mcpAppsEnabled) {
-                  await new AppApprovalEvidence('update-cloud-extract-refresh-task').establish({
-                    restApi,
-                    siteId: restApi.siteId,
-                    target: { id: args.taskId, kind: 'extract-refresh-task' },
-                    tool: 'confirm-update-cloud-extract-refresh-task',
-                    userLuid: extra.getUserLuid(),
-                    // Bind the approval to the previewed schedule so the confirm can only apply THIS
-                    // schedule — an approval minted here will not satisfy a confirm carrying a
-                    // different schedule (see AppApprovalEvidence.approvalKey).
-                    binding,
-                  });
                   const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
-                  return new Ok<AppToolResult<UpdateCloudExtractRefreshTaskConfirmPanel>>({
-                    data: {
-                      kind: 'update-cloud-extract-refresh-task-confirm',
-                      taskId: args.taskId,
-                      schedule: args.schedule,
-                      frequency,
-                      start: frequencyDetails.start,
-                      end: frequencyDetails.end,
-                      expiresAtMs,
-                    },
-                    // No web URL to embed for a confirm panel; the host renders from `data`.
-                    url: '',
-                  });
+                  return new Ok<AppToolResult<UpdateCloudExtractRefreshTaskConfirmPanel>>(
+                    await attachAppApproval(
+                      'update-cloud-extract-refresh-task',
+                      {
+                        restApi,
+                        siteId: restApi.siteId,
+                        target: {
+                          id: args.taskId,
+                          kind: 'extract-refresh-task',
+                          ...(target.state === undefined ? {} : { state: target.state }),
+                        },
+                        tool: 'confirm-update-cloud-extract-refresh-task',
+                        userLuid: extra.getUserLuid(),
+                        // Bind the approval to the previewed schedule so the confirm can only apply
+                        // THIS schedule.
+                        binding,
+                      },
+                      {
+                        data: {
+                          kind: 'update-cloud-extract-refresh-task-confirm',
+                          taskId: args.taskId,
+                          schedule: args.schedule,
+                          frequency,
+                          start: frequencyDetails.start,
+                          end: frequencyDetails.end,
+                          expiresAtMs,
+                        },
+                        // No web URL to embed for a confirm panel; the host renders from `data`.
+                        url: '',
+                      },
+                    ),
+                  );
                 }
 
                 // Flag OFF: today's exact preview text — surface the nonce so the caller can supply it
                 // on the confirmed call. No approval recorded, no iframe.
-                const nonce = evidence.getEstablishedNonce();
                 return new Ok(
                   `Preview — extract refresh task '${args.taskId}' would be updated to: ${frequency}${window}. ` +
                     'No change has been made. ' +
-                    renderTokenConfirmNextStep({
-                      subject: 'present this change',
-                      approvalClause: 'confirm it. Do NOT apply',
-                      nonce,
-                      tail: ', which is bound to this exact schedule, before applying the update).',
-                    }),
+                    confirmation.nextStep(),
                 );
               }
 
@@ -316,6 +334,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
                   recordOutcome({
                     ok: false,
                     failureDetail: `Tableau ${status}${codeStr}${summaryDetail ? `: ${summaryDetail}` : ''}`,
+                    httpStatus: status,
                   });
                   // 404 from Cloud commonly means the tool was called against a Tableau Server
                   // site or the taskId doesn't exist on this site — surface a Cloud-only hint
@@ -350,6 +369,8 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        // The flag-ON panel carries its signed approval token in `_meta`, never in the text.
+        getSuccessResult: appApprovalSuccessResult,
       });
     },
   });

@@ -13,7 +13,7 @@ import { z } from 'zod';
  * must be updated rather than silently dropping the outcome data.
  *
  * SECURITY: `confirmationEvidence.detail` is a non-sensitive description of the evidence (e.g. the
- * tag label, or that a registry nonce matched) — it MUST NEVER carry the raw single-use nonce, which
+ * tag label, or that a registry nonce matched) — it MUST NEVER carry the raw confirmation token, which
  * would let a reader of the audit log forge a confirmation.
  *
  * DURABILITY CONTRACT (AC-5): these records are emitted as structured JSON on the dedicated `audit`
@@ -46,7 +46,11 @@ export const auditRecordSchema = z.object({
     kind: z.enum(['datasource', 'workbook', 'extract-refresh-task', 'user']),
   }),
   confirmationEvidence: z.object({
-    kind: z.enum(['tag', 'registry-nonce', 'none']),
+    // 'signed-token': an HMAC-signed, short-lived confirmation / app-approval token (W-25002517) —
+    // verifiable on any replica, NOT strictly single-use across replicas. 'registry-nonce' (the former
+    // per-process single-use nonce) is no longer emitted but stays valid so consumers parsing older
+    // records keep working; removing it would be a breaking change for audit-log consumers.
+    kind: z.enum(['tag', 'signed-token', 'registry-nonce', 'none']),
     // Non-sensitive description only — NEVER the raw nonce.
     detail: z.string().optional(),
   }),

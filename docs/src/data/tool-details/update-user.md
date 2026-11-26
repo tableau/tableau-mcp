@@ -1,9 +1,9 @@
 ## Confirm and audit
 
-This mutation is **two-phase**, gated on a server-generated single-use confirmation token:
+This mutation is **two-phase**, gated on a server-signed, short-lived confirmation token bound to this change:
 
 1. **Preview** (default — `confirm` omitted or `false`): looks up the user, reports the current
-   and proposed site role, and returns a single-use `confirmationToken`.
+   and proposed site role, and returns a short-lived `confirmationToken`.
 2. **Update** (`confirm: true` + `confirmationToken`): applies the role change. The server
    verifies and consumes the token first.
 

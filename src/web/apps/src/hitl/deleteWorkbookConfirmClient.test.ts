@@ -4,6 +4,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APP_APPROVAL_META_KEY } from '../../../../utils/appApprovalMeta.js';
 import {
   isDeleteWorkbookConfirmResult,
   parseDeleteWorkbookConfirmResult,
@@ -97,6 +98,26 @@ describe('renderDeleteWorkbookConfirm', () => {
         resourceId: 'wb-1',
         cleanupDate: '2026-09-25',
         minAgeDays: 90,
+      },
+    });
+  });
+
+  it('forwards the _meta approval token (never in text) to the confirm tool', async () => {
+    const result = {
+      ...(confirmResult() as Record<string, unknown>),
+      _meta: { [APP_APPROVAL_META_KEY]: 'v1.test-approval' },
+    };
+    renderDeleteWorkbookConfirm(app as unknown as App, result as never);
+    (document.getElementById('confirmDeleteBtn') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(app.callServerTool).toHaveBeenCalledWith({
+      name: 'confirm-delete-content',
+      arguments: {
+        resourceType: 'workbook',
+        resourceId: 'wb-1',
+        cleanupDate: '2026-09-25',
+        minAgeDays: 90,
+        approvalToken: 'v1.test-approval',
       },
     });
   });

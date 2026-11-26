@@ -25,23 +25,16 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getHttpStatusCode } from '../../../utils/getHttpStatus.js';
 import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { AppToolResult, WebTool } from '../tool.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
-import {
-  AppApprovalEvidence,
-  getMutationPreviewTtlMs,
-  RegistryEvidence,
-  TagEvidence,
-} from './evidence.js';
-import {
-  renderConfirmClosedMessage,
-  renderTagDeleteNextStep,
-  renderTokenConfirmNextStep,
-} from './hitlText.js';
+import { appApprovalSuccessResult, attachAppApproval } from './appApproval.js';
+import { getMutationPreviewTtlMs, TagEvidence } from './evidence.js';
+import { renderConfirmClosedMessage, renderTagDeleteNextStep } from './hitlText.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
 import {
   checkCleanupBatchAge,
@@ -55,6 +48,7 @@ import {
   RemovePendingDeletionTagsResult,
 } from './removePendingDeletionTags.js';
 import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
+import { SignedConfirmation } from './signedConfirmation.js';
 import { checkContentStillStale } from './stalenessCheck.js';
 
 export type DeleteWorkbookConfirmPanel = {
@@ -96,7 +90,7 @@ export type DeleteExtractRefreshTaskConfirmPanel = {
  * - `workbook` — batch TagEvidence + staleness precondition + resourceAccessChecker.isWorkbookAllowed.
  * - `datasource` — batch TagEvidence + staleness precondition + isDatasourceAllowed + downstream
  *   warning.
- * - `extract-refresh-task` — RegistryEvidence nonce.
+ * - `extract-refresh-task` — SignedTokenEvidence (server-signed, short-lived confirmation token).
  *
  * Two-phase (preview → confirm). The branch is chosen by whether an MCP-Apps card can ACTUALLY
  * render for THIS client (`extra.mcpAppToolsRenderable` — the feature is on AND the client advertised
@@ -105,7 +99,8 @@ export type DeleteExtractRefreshTaskConfirmPanel = {
  *   (workbook/datasource) or mints a nonce (extract-refresh-task) and returns a readable TEXT
  *   preview; confirm re-verifies that evidence and deletes. This is the path an app-incapable client
  *   takes even with `mcp-apps` on, so it never receives an unrenderable app-card payload (W-24212898).
- * - App-renderable: preview records `AppApprovalEvidence` and returns a confirm-panel payload for the
+ * - App-renderable: preview mints a signed app-approval token (delivered in `_meta`, never in the
+ *   model-visible text — see appApproval.ts) and returns a confirm-panel payload for the
  *   MCP-Apps iframe. The iframe's Confirm button calls the separate app-only
  *   `confirm-delete-content` tool (visibility:['app'], model-invisible). Model-driven `confirm:true`
  *   on THIS tool is unconditionally rejected with PreviewNotRunError only when the card can render.
@@ -132,6 +127,9 @@ const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/
 export function formatProjectPhrase(project: string | undefined): string {
   return project ? `in project '${project}'` : 'in no project (e.g. a Personal Space item)';
 }
+
+/** Signed-token binding for the extract-refresh-task delete branch: the resource type. */
+export const EXTRACT_REFRESH_TASK_DELETE_BINDING = 'resourceType:extract-refresh-task';
 
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
 
@@ -198,7 +196,7 @@ const paramsSchema = {
     .string()
     .optional()
     .describe(
-      'Only for resourceType="extract-refresh-task": the single-use token returned by a prior ' +
+      'Only for resourceType="extract-refresh-task": the short-lived token returned by a prior ' +
         'preview call. Required when confirm is true; ignored otherwise.',
     ),
 };
@@ -388,6 +386,9 @@ permanent.
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        // An app-renderable preview carries its signed approval token to the iframe in `_meta`,
+        // never in the model-visible text (see appApproval.ts).
+        getSuccessResult: appApprovalSuccessResult,
       });
     },
   });
@@ -519,7 +520,11 @@ async function runWorkbookBranch({
     try {
       await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
     } catch (e) {
-      recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+      recordOutcome({
+        ok: false,
+        failureDetail: getExceptionMessage(e),
+        httpStatus: getHttpStatusCode(e),
+      });
       throw e;
     }
     recordOutcome({ ok: true });
@@ -531,27 +536,26 @@ async function runWorkbookBranch({
   }
 
   if (appRenderable) {
-    await new AppApprovalEvidence('delete-content').establish({
-      restApi,
-      siteId,
-      target,
-      tool: 'delete-content',
-      userLuid: extra.getUserLuid(),
-    });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
-    return new Ok<DeleteContentResult>({
-      data: {
-        kind: 'delete-workbook-confirm',
-        workbookId,
-        name: target.name,
-        project: target.project,
-        owner: target.owner,
-        cleanupDate,
-        minAgeDays,
-        expiresAtMs,
-      },
-      url: '',
-    });
+    return new Ok<DeleteContentResult>(
+      await attachAppApproval(
+        'delete-content',
+        { restApi, siteId, target, tool: 'delete-content', userLuid: extra.getUserLuid() },
+        {
+          data: {
+            kind: 'delete-workbook-confirm',
+            workbookId,
+            name: target.name,
+            project: target.project,
+            owner: target.owner,
+            cleanupDate,
+            minAgeDays,
+            expiresAtMs,
+          },
+          url: '',
+        },
+      ),
+    );
   }
 
   return new Ok<DeleteContentResult>(
@@ -651,7 +655,11 @@ async function runDatasourceBranch({
     try {
       await restApi.datasourcesMethods.deleteDatasource({ datasourceId, siteId });
     } catch (e) {
-      recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+      recordOutcome({
+        ok: false,
+        failureDetail: getExceptionMessage(e),
+        httpStatus: getHttpStatusCode(e),
+      });
       throw e;
     }
     recordOutcome({ ok: true });
@@ -664,27 +672,26 @@ async function runDatasourceBranch({
   }
 
   if (appRenderable) {
-    await new AppApprovalEvidence('delete-content').establish({
-      restApi,
-      siteId,
-      target,
-      tool: 'delete-content',
-      userLuid: extra.getUserLuid(),
-    });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
-    return new Ok<DeleteContentResult>({
-      data: {
-        kind: 'delete-datasource-confirm',
-        datasourceId,
-        name: target.name,
-        project: target.project,
-        owner: target.owner,
-        cleanupDate,
-        minAgeDays,
-        expiresAtMs,
-      },
-      url: '',
-    });
+    return new Ok<DeleteContentResult>(
+      await attachAppApproval(
+        'delete-content',
+        { restApi, siteId, target, tool: 'delete-content', userLuid: extra.getUserLuid() },
+        {
+          data: {
+            kind: 'delete-datasource-confirm',
+            datasourceId,
+            name: target.name,
+            project: target.project,
+            owner: target.owner,
+            cleanupDate,
+            minAgeDays,
+            expiresAtMs,
+          },
+          url: '',
+        },
+      ),
+    );
   }
 
   const dependencyWarning = await describeDownstreamDependencies({
@@ -756,7 +763,22 @@ async function runExtractRefreshTaskBranch({
       tasks,
     });
 
-  const registryEvidence = new RegistryEvidence();
+  // No target state: deleting the task is the whole change. The binding carries the resource type, so
+  // the token is type-bound by construction: delete-content is polymorphic, and a token minted for
+  // one resource type can never confirm a delete of another type that happens to share the id. The
+  // app-approval path below is unchanged.
+  const binding = EXTRACT_REFRESH_TASK_DELETE_BINDING;
+  const confirmation = new SignedConfirmation({
+    tool: 'delete-content',
+    targetId: taskId,
+    targetKind: 'extract-refresh-task',
+    binding,
+    text: {
+      subject: 'present this task',
+      approvalClause: 'confirm deleting it. Do NOT delete',
+      tail: ' before deleting).',
+    },
+  });
 
   const guardResult = await guardMutation({
     restApi,
@@ -765,10 +787,12 @@ async function runExtractRefreshTaskBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: registryEvidence,
+    evidence: confirmation.evidence,
     resolveTarget,
     ...(confirm ? { confirmationToken } : {}),
+    binding,
     fallbackTargetKind: 'extract-refresh-task',
+    targetIdHint: taskId,
   });
   if (guardResult.isErr()) {
     return guardResult.error.toErr();
@@ -779,7 +803,11 @@ async function runExtractRefreshTaskBranch({
     try {
       await restApi.tasksMethods.deleteExtractRefreshTask({ siteId, taskId });
     } catch (e) {
-      recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+      recordOutcome({
+        ok: false,
+        failureDetail: getExceptionMessage(e),
+        httpStatus: getHttpStatusCode(e),
+      });
       throw e;
     }
     recordOutcome({ ok: true });
@@ -790,34 +818,29 @@ async function runExtractRefreshTaskBranch({
   }
 
   if (appRenderable) {
-    await new AppApprovalEvidence('delete-content').establish({
-      restApi,
-      siteId,
-      target: { id: taskId, kind: 'extract-refresh-task' },
-      tool: 'delete-content',
-      userLuid: extra.getUserLuid(),
-    });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
-    return new Ok<DeleteContentResult>({
-      data: {
-        kind: 'delete-extract-refresh-task-confirm',
-        taskId,
-        expiresAtMs,
-      },
-      url: '',
-    });
+    return new Ok<DeleteContentResult>(
+      await attachAppApproval(
+        'delete-content',
+        {
+          restApi,
+          siteId,
+          target: { id: taskId, kind: 'extract-refresh-task' },
+          tool: 'delete-content',
+          userLuid: extra.getUserLuid(),
+        },
+        {
+          data: { kind: 'delete-extract-refresh-task-confirm', taskId, expiresAtMs },
+          url: '',
+        },
+      ),
+    );
   }
 
-  const nonce = registryEvidence.getEstablishedNonce();
   return new Ok<DeleteContentResult>(
     `Preview — extract refresh task '${taskId}' would be permanently deleted (the underlying data ` +
       'source or workbook is unaffected, but it will no longer be refreshed on this schedule). ' +
-      renderTokenConfirmNextStep({
-        subject: 'present this task',
-        approvalClause: 'confirm deleting it. Do NOT delete',
-        nonce,
-        tail: ' before deleting).',
-      }),
+      confirmation.nextStep(),
   );
 }
 

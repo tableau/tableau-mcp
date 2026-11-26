@@ -367,6 +367,20 @@ describe('Config', () => {
   );
 
   it.each([
+    { value: undefined, expected: '' },
+    { value: '', expected: '' },
+    { value: ' \n\t ', expected: '' },
+    { value: '  padded-test-value\n', expected: 'padded-test-value' },
+  ])('trims MUTATION_TOKEN_SECRET(_PREVIOUS) ($value)', ({ value, expected }) => {
+    vi.stubEnv('MUTATION_TOKEN_SECRET', value);
+    vi.stubEnv('MUTATION_TOKEN_SECRET_PREVIOUS', value);
+
+    const config = new Config();
+    expect(config.mutationTokenSecret).toBe(expected);
+    expect(config.mutationTokenSecretPrevious).toBe(expected);
+  });
+
+  it.each([
     { value: undefined, expected: undefined },
     { value: '', expected: undefined },
     { value: 'yes', expected: undefined },

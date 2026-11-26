@@ -4,6 +4,8 @@ import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { exportedForTesting as signedTokenTesting } from '../../_lib/signedTokenEvidence.js';
+import { mutationTokenConfigFromEnv } from '../../_lib/signedTokenEvidence.mock.js';
 import { WebTool } from '../../tool.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockRunFlowJob } from './mockRunFlowJob.js';
@@ -11,6 +13,7 @@ import { exportedForTesting, getRunFlowTool } from './runFlow.js';
 
 const mocks = vi.hoisted(() => ({
   mockRunFlowNow: vi.fn(),
+  mockGetFlowRuns: vi.fn(),
   mockIsFlowAllowed: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
@@ -30,6 +33,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
     callback({
       flowsMethods: {
         runFlowNow: mocks.mockRunFlowNow,
+        getFlowRuns: mocks.mockGetFlowRuns,
       },
       siteId: 'test-site-id',
     }),
@@ -38,6 +42,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
+    ...mutationTokenConfigFromEnv(),
     flowWriteToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -46,10 +51,17 @@ vi.mock('../../../../config.js', () => ({
 
 const FLOW_ID = 'd00700fe-28a0-4ece-a7af-5543ddf38a82';
 const ORIGINAL_REST_API_VERSION = RestApi.version;
+const EXISTING_RUNS = [
+  { id: 'run-b', flowId: FLOW_ID, status: 'Success' },
+  { id: 'run-a', flowId: FLOW_ID, status: 'Failed' },
+];
 
 describe('runFlowTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    signedTokenTesting.reset();
+    mocks.mockGetFlowRuns.mockResolvedValue(EXISTING_RUNS);
     RestApi.version = '3.24';
     vi.spyOn(RestApi, 'versionIsAtLeast').mockReturnValue(true);
     mocks.mockIsFlowAllowed.mockResolvedValue({ allowed: true });
@@ -108,7 +120,9 @@ describe('runFlowTool', () => {
     const text = JSON.parse(result.content[0].text) as string;
     expect(text).toContain('Preview');
     expect(text).toContain('No flow run has been started');
-    expect(text).toMatch(/confirmationToken: "[0-9a-f-]+"/);
+    expect(text).toMatch(
+      /confirmationToken: "v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43}"/,
+    );
     expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
   });
 
@@ -288,6 +302,215 @@ describe('runFlowTool', () => {
     );
   });
 
+  describe('signed token with a flow-run pre-state', () => {
+    const SECRET = 'run-flow-replica-secret-0123456789abcdef';
+
+    it("reads the flow's newest runs on preview and on confirm", async () => {
+      mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(mocks.mockGetFlowRuns).toHaveBeenCalledTimes(2);
+      expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        filter: `flowId:eq:${FLOW_ID}`,
+        sort: 'completedAt:desc',
+        pageSize: 10,
+        pageNumber: 1,
+      });
+    });
+
+    it('confirms on a second instance with the same MUTATION_TOKEN_SECRET', async () => {
+      vi.stubEnv('MUTATION_TOKEN_SECRET', SECRET);
+      signedTokenTesting.reset();
+      mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      signedTokenTesting.reset(); // a new replica: fresh keys and replay cache, same secret
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockRunFlowNow).toHaveBeenCalledOnce();
+    });
+
+    it('rejects a token minted under a different secret', async () => {
+      vi.stubEnv('MUTATION_TOKEN_SECRET', SECRET);
+      signedTokenTesting.reset();
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      vi.stubEnv('MUTATION_TOKEN_SECRET', 'a-completely-different-secret-0123456789');
+      signedTokenTesting.reset();
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    it('rejects a replay of a consumed token on the same instance', async () => {
+      mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      const first = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(first.isError).toBe(false);
+      const replay = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(replay.isError).toBe(true);
+      expect(mocks.mockRunFlowNow).toHaveBeenCalledOnce();
+    });
+
+    it('rejects with the state-changed explanation when a new run appeared since the preview', async () => {
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      mocks.mockGetFlowRuns.mockResolvedValue([
+        { id: 'run-c', flowId: FLOW_ID, status: 'Pending' },
+        ...EXISTING_RUNS,
+      ]);
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(signedTokenTesting.STATE_CHANGED_EXPLANATION);
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    // Live-probed: a never-run flow's Get Flow Runs returns an empty list, not a 404.
+    it('previews and confirms a flow that has never run (empty run list on both phases)', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue([]);
+      mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockRunFlowNow).toHaveBeenCalledOnce();
+    });
+
+    it('rejects a never-run preview once the flow gained a run before the confirm', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue([]);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      mocks.mockGetFlowRuns.mockResolvedValue([
+        { id: 'run-new', flowId: FLOW_ID, status: 'Pending' },
+      ]);
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    it('does not reject when an existing run only changed status since the preview', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue([
+        { id: 'run-c', flowId: FLOW_ID, status: 'Pending' },
+        ...EXISTING_RUNS,
+      ]);
+      mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      mocks.mockGetFlowRuns.mockResolvedValue([
+        { id: 'run-c', flowId: FLOW_ID, status: 'Success' },
+        ...EXISTING_RUNS,
+      ]);
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockRunFlowNow).toHaveBeenCalledOnce();
+    });
+
+    it('does not reject when the same runs come back in a different order', async () => {
+      mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      mocks.mockGetFlowRuns.mockResolvedValue([...EXISTING_RUNS].reverse());
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(false);
+    });
+
+    it('fails closed on preview when the run lookup fails (no token minted)', async () => {
+      mocks.mockGetFlowRuns.mockRejectedValue(new Error('lookup failed'));
+      const result = await getToolResult({ flowId: FLOW_ID });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).not.toContain('confirmationToken: "v1.');
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    it('fails closed on confirm when the run lookup fails', async () => {
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      mocks.mockGetFlowRuns.mockRejectedValue(new Error('lookup failed'));
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    // W-25002517: a token consented before run-flow required tableau:flow_runs:read is refused by
+    // Tableau on the pre-state read. The error must name the scope and say to reconnect, not the
+    // "not the flow owner / Prep Conductor" text mapFlowWriteError gives the run itself.
+    it.each([401, 403])(
+      'names tableau:flow_runs:read and says to reconnect when the preview run lookup is refused (%i)',
+      async (status) => {
+        mocks.mockGetFlowRuns.mockRejectedValue(makeAxiosError(status));
+        const result = await getToolResult({ flowId: FLOW_ID });
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        const text = result.content[0].text;
+        expect(text).toContain(
+          "Could not read this flow's recent runs to prepare the confirmation (requires tableau:flow_runs:read)",
+        );
+        expect(text).toContain('Reconnect Tableau');
+        expect(text).not.toContain('Not permitted to');
+        expect(text).not.toContain('Prep Conductor');
+        expect(text).not.toContain('confirmationToken: "v1.');
+        expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+      },
+    );
+
+    it('names tableau:flow_runs:read on confirm when the run lookup is refused, and does not run', async () => {
+      const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+      mocks.mockGetFlowRuns.mockRejectedValue(makeAxiosError(403));
+      const result = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('requires tableau:flow_runs:read');
+      expect(result.content[0].text).toContain('Reconnect Tableau');
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    it('keeps the generic not-found mapping for a non-auth pre-state failure (404)', async () => {
+      mocks.mockGetFlowRuns.mockRejectedValue(makeAxiosError(404));
+      const result = await getToolResult({ flowId: FLOW_ID });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).not.toContain('tableau:flow_runs:read');
+      expect(result.content[0].text).toContain('not found');
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the parameter binding changes between preview and confirm', async () => {
+      const confirmationToken = await previewRunFlow({
+        flowId: FLOW_ID,
+        parameterOverrides: [{ parameterId: 'p1', overrideValue: 'a' }],
+      });
+      const result = await getToolResult({
+        flowId: FLOW_ID,
+        parameterOverrides: [{ parameterId: 'p1', overrideValue: 'b' }],
+        confirm: true,
+        confirmationToken,
+      });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+    });
+  });
+
+  it('releases the token on a definite 4xx from Run Flow Now: a retry with the same token runs', async () => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+    mocks.mockRunFlowNow.mockRejectedValueOnce(makeAxiosError(409));
+    const first = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+    expect(first.isError).toBe(true);
+    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+    const retry = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(false);
+    expect(mocks.mockRunFlowNow).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['a 5xx', makeAxiosError(500)],
+    ['a network error', new Error('socket hang up')],
+  ])('keeps the token consumed on %s from Run Flow Now (outcome unknown)', async (_l, error) => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+    mocks.mockRunFlowNow.mockRejectedValueOnce(error);
+    expect(
+      (await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(true);
+    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+    const retry = await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(true);
+    expect(mocks.mockRunFlowNow).toHaveBeenCalledOnce();
+  });
+
   it('maps a 403 into a clear licensing/permission error after confirmation', async () => {
     const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
     mocks.mockRunFlowNow.mockRejectedValue(makeAxiosError(403));
@@ -329,7 +552,9 @@ async function previewRunFlow(
   expect(result.isError).toBe(false);
   invariant(result.content[0].type === 'text');
   const text = JSON.parse(result.content[0].text) as string;
-  const match = text.match(/confirmationToken: "([0-9a-f-]+)"/);
+  const match = text.match(
+    /confirmationToken: "(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})"/,
+  );
   invariant(match, `expected a confirmation token in preview: ${text}`);
   return match[1];
 }

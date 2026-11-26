@@ -4,6 +4,8 @@ import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { exportedForTesting as signedTokenTesting } from '../../_lib/signedTokenEvidence.js';
+import { mutationTokenConfigFromEnv } from '../../_lib/signedTokenEvidence.mock.js';
 import { WebTool } from '../../tool.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getCancelFlowRunTool } from './cancelFlowRun.js';
@@ -30,6 +32,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
+    ...mutationTokenConfigFromEnv(),
     flowWriteToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -42,6 +45,7 @@ const ORIGINAL_REST_API_VERSION = RestApi.version;
 describe('cancelFlowRunTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    signedTokenTesting.reset();
     RestApi.version = '3.10';
     vi.spyOn(RestApi, 'versionIsAtLeast').mockReturnValue(true);
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
@@ -98,7 +102,11 @@ describe('cancelFlowRunTool', () => {
     const text = JSON.parse(result.content[0].text) as string;
     expect(text).toContain('Preview');
     expect(text).toContain('No cancellation has been requested');
-    expect(text).toMatch(/confirmationToken: "[0-9a-f-]+"/);
+    expect(text).toMatch(
+      /confirmationToken: "v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43}"/,
+    );
+    expect(text).toContain('short-lived token bound to this change');
+    expect(text).not.toContain('single-use');
     expect(mocks.mockCancelFlowRun).not.toHaveBeenCalled();
   });
 
@@ -130,6 +138,48 @@ describe('cancelFlowRunTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('could not verify that a preview ran');
     expect(mocks.mockCancelFlowRun).not.toHaveBeenCalled();
+  });
+
+  it('confirms on a fresh process with the same MUTATION_TOKEN_SECRET (cross-replica)', async () => {
+    vi.stubEnv('MUTATION_TOKEN_SECRET', 'cancel-flow-run-replica-secret-0123456789');
+    signedTokenTesting.reset();
+    mocks.mockCancelFlowRun.mockResolvedValue(undefined);
+    const confirmationToken = await previewCancelFlowRun();
+    // A new replica: fresh process-wide keys and replay cache, same secret.
+    signedTokenTesting.reset();
+    const result = await getToolResult({
+      flowRunId: FLOW_RUN_ID,
+      confirm: true,
+      confirmationToken,
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockCancelFlowRun).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a token previewed for a different flow run', async () => {
+    const confirmationToken = await previewCancelFlowRun();
+    const result = await getToolResult({
+      flowRunId: '11111111-2222-4333-8444-555555555555',
+      confirm: true,
+      confirmationToken,
+    });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockCancelFlowRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects a replayed token on the same replica', async () => {
+    mocks.mockCancelFlowRun.mockResolvedValue(undefined);
+    const confirmationToken = await previewCancelFlowRun();
+    expect(
+      (await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(false);
+    const replay = await getToolResult({
+      flowRunId: FLOW_RUN_ID,
+      confirm: true,
+      confirmationToken,
+    });
+    expect(replay.isError).toBe(true);
+    expect(mocks.mockCancelFlowRun).toHaveBeenCalledOnce();
   });
 
   it('redacts the confirmation token from invocation logging', async () => {
@@ -211,6 +261,30 @@ describe('cancelFlowRunTool', () => {
     expect(result.content[0].text).toContain('initiated the run');
   });
 
+  it('releases the token on a definite 4xx from Cancel Flow Run: a retry with the same token cancels', async () => {
+    const confirmationToken = await previewCancelFlowRun();
+    mocks.mockCancelFlowRun.mockRejectedValueOnce(makeTableauError(403, '403136'));
+    expect(
+      (await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(true);
+    mocks.mockCancelFlowRun.mockResolvedValue(undefined);
+    const retry = await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(false);
+    expect(mocks.mockCancelFlowRun).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the token consumed on a 5xx from Cancel Flow Run (outcome unknown)', async () => {
+    const confirmationToken = await previewCancelFlowRun();
+    mocks.mockCancelFlowRun.mockRejectedValueOnce(makeTableauError(500, '500000'));
+    expect(
+      (await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken })).isError,
+    ).toBe(true);
+    mocks.mockCancelFlowRun.mockResolvedValue(undefined);
+    const retry = await getToolResult({ flowRunId: FLOW_RUN_ID, confirm: true, confirmationToken });
+    expect(retry.isError).toBe(true);
+    expect(mocks.mockCancelFlowRun).toHaveBeenCalledOnce();
+  });
+
   it('maps a 404 into a flow-run-not-found error', async () => {
     const confirmationToken = await previewCancelFlowRun();
     mocks.mockCancelFlowRun.mockRejectedValue(makeTableauError(404, '404036'));
@@ -246,7 +320,9 @@ async function previewCancelFlowRun(): Promise<string> {
   expect(result.isError).toBe(false);
   invariant(result.content[0].type === 'text');
   const text = JSON.parse(result.content[0].text) as string;
-  const match = text.match(/confirmationToken: "([0-9a-f-]+)"/);
+  const match = text.match(
+    /confirmationToken: "(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})"/,
+  );
   invariant(match, `expected a confirmation token in preview: ${text}`);
   return match[1];
 }

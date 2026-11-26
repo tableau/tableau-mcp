@@ -35,6 +35,8 @@ vi.mock('./config.js', () => ({
   getConfig: vi.fn(() => ({
     transport: 'stdio',
     server: 'https://tableau.example.com',
+    mutationTokenSecret: '',
+    mutationTokenSecretPrevious: '',
     defaultNotificationLevel: 'info',
     loggers: new Set<string>(),
     fileLoggerDirectory: '/tmp',

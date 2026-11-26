@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
@@ -11,7 +12,7 @@ import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/t
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { AppApprovalEvidence } from '../_lib/evidence.js';
+import { createAppApprovalEvidence } from '../_lib/appApproval.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { resolveExtractRefreshTaskTarget } from '../_lib/resolveExtractRefreshTaskTarget.js';
 import { WebTool } from '../tool.js';
@@ -20,6 +21,11 @@ import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 const paramsSchema = {
   taskId: luidSchema,
   schedule: updateCloudExtractRefreshScheduleSchema,
+  approvalToken: z
+    .string()
+    .max(512)
+    .optional()
+    .describe('Supplied by the confirm panel only: the approval token from the preview result.'),
 };
 
 /**
@@ -31,11 +37,13 @@ const paramsSchema = {
  * schedule change" inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`.
  * The mutating `updateCloudExtractRefreshTask` REST call lives ONLY here. NOTE: `visibility` is a
  * client-side hint, not a server guarantee — a non-cooperating client could still call this tool
- * directly. The task has no taggable state, so AppApprovalEvidence is the ONLY server gate here.
+ * directly. The task has no taggable state, so the signed app-approval token is the ONLY server gate here.
+ * The token is bound to the previewed schedule and to the task's schedule at preview time (both
+ * phases resolve it via resolveExtractRefreshTaskTarget with includeScheduleState).
  *
  * This is a SCHEDULE CHANGE, not a deletion. The task has no durable, taggable state, so the human
- * gesture in the iframe IS the proof: the guard verifies a fresh, single-use in-iframe human approval
- * (AppApprovalEvidence, namespace 'update-cloud-extract-refresh-task') recorded by the
+ * gesture in the iframe IS the proof: the guard verifies a fresh, short-lived in-iframe human approval
+ * (signed app-approval token, namespace 'update-cloud-extract-refresh-task') recorded by the
  * update-cloud-extract-refresh-task preview within the MUTATION_PREVIEW_TTL_MINUTES window. Missing
  * approval → PreviewNotRunError, no update.
  *
@@ -94,20 +102,25 @@ schedule values.
               // proof. Enrich the audit target with the underlying content's name/project/owner
               // (AC-3) via the shared best-effort helper: it lists tasks once, finds this id, then
               // does ONE content lookup + ONE owner lookup. A resolve failure degrades to an id-only
-              // target and never blocks the update.
+              // target and never blocks the update. `includeScheduleState` re-reads the task's
+              // CURRENT schedule hash (target.state) exactly as the preview did, so the approval token
+              // (which binds that state) is rejected if the schedule changed after the preview.
               const resolveTarget = async (): Promise<MutationTarget> =>
                 resolveExtractRefreshTaskTarget({
                   restApi,
                   siteId: restApi.siteId,
                   taskId: args.taskId,
                   logger: 'confirm-update-cloud-extract-refresh-task',
+                  includeScheduleState: true,
                 });
 
-              // Require a fresh, single-use in-iframe human approval recorded by the preview — bound to
-              // the exact schedule that was previewed/approved. `binding` is folded into the approval
-              // key, so an approval minted for schedule A cannot confirm an update to schedule B; the
-              // fingerprint MUST match the preview tool's, so it is computed by the SAME exported
-              // scheduleBinding().
+              // Require the signed, short-lived app-approval token the preview delivered to the iframe
+              // (in `_meta`, never model-visible) — bound to the exact schedule that was previewed and
+              // to the task's schedule at preview time. A token minted for schedule A cannot confirm
+              // an update to schedule B, nor survive a schedule change since the preview; the fingerprint
+              // MUST match the preview tool's, so it is computed by the SAME exported
+              // scheduleBinding(). Verifies on any replica sharing MUTATION_TOKEN_SECRET; a replay on
+              // the same replica is rejected (see appApproval.ts).
               const binding = scheduleBinding(args.schedule);
               const guardResult = await guardMutation({
                 restApi,
@@ -117,9 +130,11 @@ schedule values.
                 action: 'update',
                 mode: 'preview-confirm',
                 phase: 'confirm',
-                evidence: new AppApprovalEvidence('update-cloud-extract-refresh-task'),
+                evidence: createAppApprovalEvidence('update-cloud-extract-refresh-task'),
                 resolveTarget,
+                confirmationToken: args.approvalToken,
                 binding,
+                targetIdHint: args.taskId,
               });
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();
@@ -142,6 +157,7 @@ schedule values.
                   recordOutcome({
                     ok: false,
                     failureDetail: `Tableau ${status}${codeStr}${summaryDetail ? `: ${summaryDetail}` : ''}`,
+                    httpStatus: status,
                   });
                   // 404 from Cloud commonly means the tool was called against a Tableau Server
                   // site or the taskId doesn't exist on this site — surface a Cloud-only hint

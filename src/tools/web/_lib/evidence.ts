@@ -1,7 +1,5 @@
-import { randomUUID } from 'node:crypto';
-
+import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
 import { WebToolName } from '../toolName.js';
@@ -10,7 +8,7 @@ import { formatPendingDeletionTag, getPendingDeletionMarkers } from './pendingDe
 
 /**
  * Context handed to an EvidenceStrategy on every guarded mutation. `confirmationToken` is the
- * caller-supplied confirmation value (e.g. the nonce echoed back from a preview), if any.
+ * caller-supplied confirmation value (e.g. the signed token echoed back from a preview), if any.
  */
 export type EvidenceTarget = Pick<MutationTarget, 'id'> & Partial<Omit<MutationTarget, 'id'>>;
 
@@ -18,13 +16,13 @@ export interface EvidenceContext {
   restApi: RestApi;
   siteId: string;
   target: EvidenceTarget;
-  // The WebToolName, used to namespace registry keys so one tool's evidence can't satisfy another's.
+  // The WebToolName, used to namespace the evidence so one tool's evidence can't satisfy another's.
   tool: WebToolName;
   userLuid: string;
   confirmationToken?: string;
   // Optional fingerprint of the mutation's caller-controlled parameters (e.g. a hash of the schedule
-  // an update tool would apply). When present it is folded into the RegistryEvidence nonce key, so a
-  // nonce minted while previewing parameter set A cannot satisfy a confirm carrying parameter set B —
+  // an update tool would apply). When present it is signed into the SignedTokenEvidence token, so a
+  // token minted while previewing parameter set A cannot satisfy a confirm carrying parameter set B —
   // the confirmed mutation is bound to exactly what was previewed. Ignored by TagEvidence/NoEvidence.
   binding?: string;
 }
@@ -39,12 +37,24 @@ export interface EvidenceContext {
  * - `describeEvidence` returns the non-sensitive evidence descriptor for the audit record.
  * - `explainRejection` (optional) returns a human-readable note on WHY the last `verify` failed, when
  *   the strategy saw something more specific than "no proof" (e.g. a marker from another batch).
+ * - `release` (optional) undoes the consuming side effect of the last SUCCESSFUL `verify` (e.g. a
+ *   replay-cache entry). The guard calls it when the mutation does not proceed after a verify passed
+ *   (a target-state precondition rejected), so that rejection does not burn the caller's proof.
+ * - `precheck` (optional) is a cheap, synchronous, I/O-free check of the caller-supplied
+ *   confirmation value on its own (e.g. "is this a well-formed signed token"). It can only reject:
+ *   false means `verify` would certainly fail, so the guard rejects the confirm BEFORE resolving the
+ *   target (no REST reads for a confirm that cannot pass). Omitted = no precheck.
  */
+/** Audit-record evidence kinds (mirrors auditRecordSchema.confirmationEvidence.kind). */
+export type EvidenceKind = 'tag' | 'signed-token' | 'registry-nonce' | 'none';
+
 export interface EvidenceStrategy<TTarget> {
   establish(ctx: EvidenceContext): Promise<void>;
   verify(ctx: EvidenceContext): Promise<boolean>;
-  describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string };
+  describeEvidence(): { kind: EvidenceKind; detail?: string };
   explainRejection?(): string | undefined;
+  release?(): void;
+  precheck?(confirmationToken: string | undefined): boolean;
   // Phantom marker so the target type participates in the strategy's identity; never read.
   readonly _target?: TTarget;
 }
@@ -130,194 +140,79 @@ export class TagEvidence implements EvidenceStrategy<MutationTarget> {
   }
 }
 
-// Lazy-initialized registry of server-generated single-use confirmation nonces, keyed
-// `${siteId}:${userLuid}:${tool}:${targetId}`. Copied from adminGate.ts's getCache() pattern
-// (parseNumber + milliseconds.fromMinutes + ExpiringMap) to avoid a module-level parseNumber call.
-//
-// DURABILITY CAVEAT: this is in-memory, so it is NOT durable across a server restart and is NOT
-// shared across multiple instances. The consequence is asymmetric and safe: a lost/absent nonce can
-// only cause a confirm to be REJECTED (the caller must re-preview), never wrongly ALLOWED. It is
-// therefore strictly more friction and preserves the no-bypass guarantee. Contrast TagEvidence,
-// whose proof lives in durable Tableau server-side state.
-let nonceCache: ExpiringMap<string, string> | null = null;
+/** Default / bounds of MUTATION_PREVIEW_TTL_MINUTES. */
+export const MUTATION_PREVIEW_TTL_DEFAULT_MINUTES = 5;
+export const MUTATION_PREVIEW_TTL_MIN_MINUTES = 1;
+// The replay guard is per-replica, so across replicas a signed token is replayable until it
+// expires: the TTL IS the cross-replica replay window. Keep it short — capped at 5 minutes per the
+// product-security review of the signed-token design (W-25002517); the default is also the max.
+export const MUTATION_PREVIEW_TTL_MAX_MINUTES = 5;
 
-function getCache(): ExpiringMap<string, string> {
-  if (!nonceCache) {
-    const ttlMinutes = parseNumber(process.env.MUTATION_PREVIEW_TTL_MINUTES, {
-      defaultValue: 5,
-      minValue: 1,
-      maxValue: 60 * 24, // 24 hours
-    });
-    nonceCache = new ExpiringMap<string, string>({
-      defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
-    });
-  }
-  return nonceCache;
-}
-
-function nonceKey(ctx: EvidenceContext): string {
-  // Fold the optional parameter fingerprint into the key so a nonce is valid only for a confirm that
-  // carries the same caller-controlled parameters that were previewed. `binding` is a non-secret hash
-  // (see EvidenceContext.binding); an empty segment when absent keeps keys stable for taggable/no-arg
-  // targets like deletes.
-  return `${ctx.siteId}:${ctx.userLuid}:${ctx.tool}:${ctx.target.id}:${ctx.binding ?? ''}`;
-}
+let ttlClampWarned = false;
 
 /**
  * The preview→confirm approval window, in milliseconds, from MUTATION_PREVIEW_TTL_MINUTES (default
- * 5, min 1, max 24h) — the same bound RegistryEvidence's nonce cache uses. Exported so a preview
+ * 5, min 1, max 5) — the same bound the signed confirmation tokens use. Exported so a preview
  * tool can compute and surface the absolute expiry (`expiresAtMs`) to its UI without duplicating
  * the parse/bounds logic.
+ *
+ * A value ABOVE the max is clamped to the max (not silently reset to the default) and logged once
+ * as a warning: an operator who asked for a long window gets the longest allowed one. Unparseable
+ * or below-min values fall back to the default (parseNumber semantics). The result is rounded to
+ * an integer number of milliseconds (a decimal setting such as 1.17 is accepted).
  */
 export function getMutationPreviewTtlMs(): number {
-  const ttlMinutes = parseNumber(process.env.MUTATION_PREVIEW_TTL_MINUTES, {
-    defaultValue: 5,
-    minValue: 1,
-    maxValue: 60 * 24, // 24 hours
+  const raw = process.env.MUTATION_PREVIEW_TTL_MINUTES;
+  const requested = raw ? parseFloat(raw) : NaN;
+  if (!isNaN(requested) && requested > MUTATION_PREVIEW_TTL_MAX_MINUTES) {
+    if (!ttlClampWarned) {
+      ttlClampWarned = true;
+      log({
+        message:
+          `MUTATION_PREVIEW_TTL_MINUTES=${requested} exceeds the maximum of ` +
+          `${MUTATION_PREVIEW_TTL_MAX_MINUTES}; using ${MUTATION_PREVIEW_TTL_MAX_MINUTES} minutes.`,
+        level: 'warning',
+        logger: 'startup',
+      });
+    }
+    return milliseconds.fromMinutes(MUTATION_PREVIEW_TTL_MAX_MINUTES);
+  }
+  const ttlMinutes = parseNumber(raw, {
+    defaultValue: MUTATION_PREVIEW_TTL_DEFAULT_MINUTES,
+    minValue: MUTATION_PREVIEW_TTL_MIN_MINUTES,
+    maxValue: MUTATION_PREVIEW_TTL_MAX_MINUTES,
   });
-  return milliseconds.fromMinutes(ttlMinutes);
+  // A decimal minute value (e.g. 1.17) yields a fractional product (70199.99999999999); the token
+  // codec requires an integer TTL, so round at this config boundary.
+  return Math.round(milliseconds.fromMinutes(ttlMinutes));
 }
 
-// Lazy-initialized registry of in-iframe human approvals, keyed identically to the nonce cache
-// (`${siteId}:${userLuid}:${tool}:${targetId}`) but storing only PRESENCE — there is no secret to
-// transport. Kept separate from `nonceCache` so the two strategies never collide on a key. Same
-// DURABILITY CAVEAT applies: in-memory, so a lost entry can only force a re-preview (reject), never
-// wrongly allow.
-let approvalCache: ExpiringMap<string, true> | null = null;
-
-function getApprovalCache(): ExpiringMap<string, true> {
-  if (!approvalCache) {
-    approvalCache = new ExpiringMap<string, true>({
-      defaultExpirationTimeMs: getMutationPreviewTtlMs(),
-    });
-  }
-  return approvalCache;
-}
-
-/**
- * AppApprovalEvidence — proof that a human approved the mutation by a gesture inside a rendered
- * MCP-Apps iframe, within the preview→confirm TTL window. Closes AC-5's residual gap (the tag gate
- * proves a preview RAN, not that a HUMAN approved): the destructive confirm tool is model-invisible
- * (`visibility:['app']`), so the only path that calls `establish`/`verify` is a human click in the
- * iframe — never the LLM.
- *
- * Unlike RegistryEvidence, NOTHING secret is minted, returned, or transported: approval is
- * PRESENCE-based, keyed server-side by site+user+tool+target (all server-known plus the one arg the
- * confirm tool takes) AND the optional `binding` (a fingerprint of the mutation's caller-controlled
- * parameters — see EvidenceContext.binding). `establish` records presence with the TTL; `verify`
- * returns true only if a live, unexpired entry exists and DELETES it (single-use); `confirmationToken`
- * is ignored. Layered ON TOP of the durable tag (the confirm tool also re-checks the tag), this
- * strategy only ever NARROWS access → it can reject, never wrongly allow.
- *
- * Binding the key to `binding` closes a payload-swap gap for confirm tools that carry a mutable
- * payload (e.g. update-cloud-extract-refresh-task's schedule): an approval minted while previewing
- * schedule A must not satisfy a confirm that applies schedule B. Target-only-keyed confirms (the
- * DELETEs, which carry no payload beyond the target id) pass no `binding`, so their key is unchanged.
- */
-export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
-  // The preview-tool name that namespaces the approval key. The preview tool and its model-invisible
-  // confirm tool run as separate WebTool instances under DIFFERENT tool names, so the key must NOT be
-  // `ctx.tool` (that would never match across the pair). Instead both sides pass the SAME fixed
-  // namespace — the preview tool's name (e.g. 'delete-workbook', 'delete-datasource',
-  // 'delete-extract-refresh-task', 'update-cloud-extract-refresh-task') — so each tool's approval is
-  // isolated from every other tool's and the preview/confirm pair resolves the same entry.
-  private readonly namespace: string;
-
-  // Defaults to 'delete-workbook' to preserve the original (pre-generalization) behavior for the
-  // first tool to adopt this strategy. Every NEW tool MUST pass its own preview-tool name so the
-  // approvals don't collide on the 'delete-workbook' namespace.
-  constructor(namespace: string = 'delete-workbook') {
-    this.namespace = namespace;
-  }
-
-  private approvalKey(ctx: EvidenceContext): string {
-    // Fold the optional parameter fingerprint into the key (mirrors RegistryEvidence's nonceKey) so an
-    // approval minted for parameter set A cannot satisfy a confirm carrying parameter set B. An empty
-    // segment when `binding` is absent keeps keys stable for payload-free targets like the deletes.
-    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}:${ctx.binding ?? ''}`;
-  }
-
-  async establish(ctx: EvidenceContext): Promise<void> {
-    getApprovalCache().set(this.approvalKey(ctx), true);
-  }
-
-  async verify(ctx: EvidenceContext): Promise<boolean> {
-    const key = this.approvalKey(ctx);
-    if (!getApprovalCache().get(key)) {
-      return false;
-    }
-    // Single-use: consume the approval so it cannot be replayed.
-    getApprovalCache().delete(key);
-    return true;
-  }
-
-  describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
-    // Reuse the audited 'registry-nonce' kind (no schema change); the detail distinguishes it.
-    return { kind: 'registry-nonce', detail: 'app-approval (human gesture in MCP-Apps iframe)' };
-  }
-}
-
-/**
- * RegistryEvidence — server-generated single-use confirmation nonce, for mutations whose target has
- * no durable taggable state (e.g. extract refresh tasks).
- *
- * `establish` generates a fresh nonce via crypto.randomUUID() and stores it under a key scoped to
- * site + user + tool + target; the preview text echoes the nonce so the caller can supply it on
- * confirm. `verify` checks the supplied nonce matches the stored one AND deletes it (single-use), so
- * a nonce can never be replayed. The nonce is server-generated and unguessable, so — like the tag —
- * it cannot be fabricated by computing a value.
- *
- * See the DURABILITY CAVEAT on the registry cache above: this can only reject, never wrongly allow.
- */
-export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
-  // The nonce minted by the most recent establish(), so the caller (preview branch) can surface it
-  // in the response text. NEVER write this into the audit record.
-  private lastNonce?: string;
-
-  async establish(ctx: EvidenceContext): Promise<void> {
-    const nonce = randomUUID();
-    getCache().set(nonceKey(ctx), nonce);
-    this.lastNonce = nonce;
-  }
-
-  async verify(ctx: EvidenceContext): Promise<boolean> {
-    const key = nonceKey(ctx);
-    const stored = getCache().get(key);
-    if (!stored || !ctx.confirmationToken || stored !== ctx.confirmationToken) {
-      return false;
-    }
-    // Single-use: consume the nonce so it cannot be replayed.
-    getCache().delete(key);
-    return true;
-  }
-
-  describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
-    // Non-sensitive descriptor only — the raw nonce is never recorded.
-    return { kind: 'registry-nonce', detail: 'server-generated single-use confirmation nonce' };
-  }
-
-  /** The nonce minted by the last establish(), for the preview response text. Never audited. */
-  getEstablishedNonce(): string | undefined {
-    return this.lastNonce;
-  }
-}
+export const evidenceExportedForTesting = {
+  resetTtlClampWarning(): void {
+    ttlClampWarned = false;
+  },
+};
 
 /**
  * AllEvidence — AND-composition of several strategies. `verify` is true only when EVERY member
  * verifies; `establish` establishes every member; `explainRejection` delegates to the member that
- * failed. Used by confirm-delete-workbook to require BOTH a
- * live batch `pending-deletion-YYYY-MM-DD` tag (durable, un-forgeable) AND a fresh in-iframe human approval
- * (AppApprovalEvidence) — layering the human-gesture proof ON TOP of the tag so the composite can
+ * failed. Used by confirm-delete-content to require BOTH a
+ * live batch `pending-deletion-YYYY-MM-DD` tag (durable, un-forgeable) AND a signed in-iframe human
+ * approval token (createAppApprovalEvidence, see appApproval.ts) — layering the human-gesture proof ON TOP of the tag so the composite can
  * only ever NARROW access (reject), never wrongly allow.
  *
  * `verify` short-circuits in array order. Place a NON-consuming check (the tag re-fetch) before a
- * single-use one (the approval) so a missing tag never wastes the one-shot approval. For the audit,
- * `describeEvidence` surfaces a 'registry-nonce' member if any is present (the meaningful
- * human-gesture signal), otherwise the first member's kind.
+ * replay-guarded one (the approval token) so a missing tag never burns the approval token. A
+ * target-state precondition the guard runs AFTER verify (e.g. delete-content's "still stale" check)
+ * does not burn it either: on a precondition rejection the guard calls `release`, which every member
+ * that verified forwards to its own `release` (removing the approval token's replay-cache entry).
+ * For the audit, `describeEvidence` surfaces a 'signed-token' member if any is present (the
+ * meaningful human-gesture signal), otherwise the first member's kind.
  */
 export class AllEvidence implements EvidenceStrategy<MutationTarget> {
   private readonly strategies: ReadonlyArray<EvidenceStrategy<MutationTarget>>;
   private failed?: EvidenceStrategy<MutationTarget>;
+  private verified: Array<EvidenceStrategy<MutationTarget>> = [];
 
   constructor(strategies: ReadonlyArray<EvidenceStrategy<MutationTarget>>) {
     this.strategies = strategies;
@@ -331,8 +226,24 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
     this.failed = undefined;
+    this.verified = [];
     for (const strategy of this.strategies) {
       if (!(await strategy.verify(ctx))) {
+        this.failed = strategy;
+        // A later member rejected: undo any earlier member's consumption so the composite as a
+        // whole consumes nothing on a rejection.
+        this.release();
+        return false;
+      }
+      this.verified.push(strategy);
+    }
+    return true;
+  }
+
+  /** Rejects when any member's precheck rejects (members without one pass). */
+  precheck(confirmationToken: string | undefined): boolean {
+    for (const strategy of this.strategies) {
+      if (strategy.precheck && !strategy.precheck(confirmationToken)) {
         this.failed = strategy;
         return false;
       }
@@ -340,13 +251,20 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
     return true;
   }
 
+  release(): void {
+    for (const strategy of this.verified) {
+      strategy.release?.();
+    }
+    this.verified = [];
+  }
+
   explainRejection(): string | undefined {
     return this.failed?.explainRejection?.();
   }
 
-  describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string } {
+  describeEvidence(): { kind: EvidenceKind; detail?: string } {
     const descriptors = this.strategies.map((s) => s.describeEvidence());
-    return descriptors.find((d) => d.kind === 'registry-nonce') ?? descriptors[0];
+    return descriptors.find((d) => d.kind === 'signed-token') ?? descriptors[0];
   }
 }
 
@@ -355,8 +273,8 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
  * preview→confirm evidence to establish or verify. The guard never calls establish/verify in
  * confirm-only mode; these are inert no-ops, and the audit record reflects evidence kind 'none'.
  *
- * No production tool currently uses this: update-cloud-extract-refresh-task moved to RegistryEvidence
- * (a schedule-bound single-use nonce) so an un-previewed confirm is rejected server-side. Retained as
+ * No production tool currently uses this: update-cloud-extract-refresh-task moved to a schedule-bound
+ * signed confirmation token so an un-previewed confirm is rejected server-side. Retained as
  * the strategy for any future confirm-only tool whose target has no verifiable preview state.
  */
 export class NoEvidence implements EvidenceStrategy<MutationTarget> {

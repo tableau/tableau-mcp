@@ -101,6 +101,10 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
+  // HITL confirmation-token signing secrets (SignedTokenEvidence). Raw values; length is validated at
+  // startup by initializeConfirmationTokenKeys (webRuntime). NEVER log these.
+  mutationTokenSecret: string;
+  mutationTokenSecretPrevious: string;
   flowReadToolsEnabled: boolean | undefined;
   flowWriteToolsEnabled: boolean | undefined;
   knowledgeToolsEnabled: boolean | undefined;
@@ -183,6 +187,8 @@ export class Config extends BaseConfig {
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
+      MUTATION_TOKEN_SECRET: mutationTokenSecret,
+      MUTATION_TOKEN_SECRET_PREVIOUS: mutationTokenSecretPrevious,
       FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       KNOWLEDGE_TOOLS_ENABLED: knowledgeToolsEnabled,
@@ -412,6 +418,10 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
+    // Trimmed: a trailing newline from a mounted secret file (or stray whitespace) must not change
+    // the HKDF input, or replicas configured "with the same secret" would silently disagree.
+    this.mutationTokenSecret = mutationTokenSecret?.trim() ?? '';
+    this.mutationTokenSecretPrevious = mutationTokenSecretPrevious?.trim() ?? '';
     this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
     this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
     this.knowledgeToolsEnabled = parseOptionalBoolean(knowledgeToolsEnabled);

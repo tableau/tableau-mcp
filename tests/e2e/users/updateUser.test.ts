@@ -8,8 +8,8 @@ import { McpClient } from '../mcpClient.js';
  *
  * The tool is two-phase with a server-authoritative preview→confirm gate: the first call (confirm
  * omitted/false) reports the current and proposed site role, changes nothing, and returns a
- * server-generated single-use `confirmationToken` bound to the previewed `userId:siteRole`. The
- * second call passes `confirm: true` plus that token; the server verifies and consumes it before
+ * server-signed, short-lived `confirmationToken` bound to the previewed `userId:siteRole`. The
+ * second call passes `confirm: true` plus that token; the server verifies it before
  * applying the role change.
  *
  * Preview and bogus-token tests are gated behind `UPDATE_USER_E2E_ID` — set it to a disposable
@@ -163,7 +163,7 @@ describe('update-user', () => {
     expect(preview).toContain('No change has been made');
 
     const tokenMatch = preview.match(
-      /confirmationToken:\s*\\?"?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+      /confirmationToken:\s*\\?"?(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
     );
     expect(tokenMatch).toBeTruthy();
     const token = tokenMatch![1];

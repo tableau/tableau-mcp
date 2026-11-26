@@ -71,7 +71,7 @@ export type TableauApiScope =
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
   | 'tableau:tasks:delete'
-  | 'tableau:tasks:write'
+  | 'tableau:tasks:update'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbook_tags:delete'
   | 'tableau:workbooks:download'
@@ -288,17 +288,20 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:tasks:read'],
     api: new Set(['tableau:tasks:read', 'tableau:users:read', 'tableau:mcp_site_settings:read']),
   },
+  // tasks:read: the signed confirmation / app-approval token's pre-state is a hash of the task's
+  // CURRENT schedule, read via Get Extract Refresh Tasks on both preview and confirm
+  // (resolveExtractRefreshTaskTarget, includeScheduleState).
   'update-cloud-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:write'],
-    api: new Set(['tableau:tasks:write', 'tableau:users:read']),
+    api: new Set(['tableau:tasks:update', 'tableau:tasks:read', 'tableau:users:read']),
   },
   // Admin-only, app-only confirm step for update-cloud-extract-refresh-task (MCP-Apps HITL). Invoked
   // ONLY by a human gesture in the rendered iframe (visibility:['app']), never the model. Applies the
-  // schedule change (tasks:write); adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} →
-  // users:read.
+  // schedule change (tasks:update); re-reads the task's current schedule for the approval token's
+  // pre-state (tasks:read); adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
   'confirm-update-cloud-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:write'],
-    api: new Set(['tableau:tasks:write', 'tableau:users:read']),
+    api: new Set(['tableau:tasks:update', 'tableau:tasks:read', 'tableau:users:read']),
   },
   'list-jobs': {
     mcp: ['tableau:mcp:jobs:read'],
@@ -400,13 +403,26 @@ const toolScopeMap: Record<
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
   'run-flow': {
-    // Needed for resourceAccessChecker.isFlowAllowed under bounded contexts.
+    // flows:read: resourceAccessChecker.isFlowAllowed under bounded contexts. flow_runs:read: the
+    // signed confirmation token's pre-state (the flow's newest runs, see flowRunPreState.ts).
     mcp: ['tableau:mcp:flow:run'],
-    api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
+    api: new Set([
+      'tableau:flows:run',
+      'tableau:flows:read',
+      'tableau:flow_runs:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'run-flow-task': {
+    // flow_tasks:read + flow_runs:read: the signed confirmation token's pre-state (resolve the task's
+    // flow, then that flow's newest runs, see flowRunPreState.ts).
     mcp: ['tableau:mcp:flow:run'],
-    api: new Set(['tableau:flow_tasks:run', 'tableau:mcp_site_settings:read']),
+    api: new Set([
+      'tableau:flow_tasks:run',
+      'tableau:flow_tasks:read',
+      'tableau:flow_runs:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'cancel-flow-run': {
     mcp: ['tableau:mcp:flow:cancel'],

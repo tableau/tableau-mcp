@@ -24,3 +24,15 @@ export function getHttpStatus(error: Error): string {
   }
   return '';
 }
+
+/**
+ * Numeric HTTP status of an error (see getHttpStatus), or undefined when none can be determined
+ * (network error, timeout, non-HTTP failure).
+ */
+export function getHttpStatusCode(error: unknown): number | undefined {
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+  const status = Number(getHttpStatus(error));
+  return Number.isInteger(status) && status > 0 ? status : undefined;
+}

@@ -4,6 +4,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APP_APPROVAL_META_KEY } from '../../../../utils/appApprovalMeta.js';
 import {
   isUpdateCloudExtractRefreshTaskConfirmResult,
   parseUpdateCloudExtractRefreshTaskConfirmResult,
@@ -123,6 +124,20 @@ describe('renderUpdateCloudExtractRefreshTaskConfirm', () => {
     expect(app.callServerTool).toHaveBeenCalledWith({
       name: 'confirm-update-cloud-extract-refresh-task',
       arguments: { taskId, schedule },
+    });
+  });
+
+  it('forwards the _meta approval token (never in text) to the confirm tool', async () => {
+    const result = {
+      ...(confirmResult() as Record<string, unknown>),
+      _meta: { [APP_APPROVAL_META_KEY]: 'v1.test-approval' },
+    };
+    renderUpdateCloudExtractRefreshTaskConfirm(app as unknown as App, result as never);
+    (document.querySelector('.dww-confirm') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(app.callServerTool).toHaveBeenCalledWith({
+      name: 'confirm-update-cloud-extract-refresh-task',
+      arguments: { taskId, schedule, approvalToken: 'v1.test-approval' },
     });
   });
 

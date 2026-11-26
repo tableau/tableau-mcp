@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { mutationTokenConfigFromEnv } from '../_lib/signedTokenEvidence.mock.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockUser } from './mockUser.js';
 import { getUpdateUserTool } from './updateUser.js';
@@ -34,6 +35,7 @@ vi.mock('../../../features/init.js', () => ({
 
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
+    ...mutationTokenConfigFromEnv(),
     adminToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -48,15 +50,15 @@ vi.mock('../_lib/mutationGuard.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../_lib/evidence.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../_lib/evidence.js')>();
+vi.mock('../_lib/signedTokenEvidence.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../_lib/signedTokenEvidence.js')>();
   return {
     ...actual,
-    RegistryEvidence: vi.fn().mockImplementation(function () {
+    SignedTokenEvidence: vi.fn().mockImplementation(function () {
       return {
         establish: vi.fn(),
         verify: vi.fn().mockResolvedValue(true),
-        describeEvidence: () => ({ kind: 'registry-nonce' }),
+        describeEvidence: () => ({ kind: 'signed-token' }),
         getEstablishedNonce: () => 'mock-nonce-123',
       };
     }),
@@ -126,6 +128,36 @@ describe('updateUserTool', () => {
       expect(text).toContain('Unlicensed');
       expect(text).toContain('jsmith');
       expect(text).toContain('mock-nonce-123');
+      expect(text).toContain('short-lived token bound to this change');
+      expect(text).not.toContain('single-use');
+    });
+
+    it('binds the target state to the current site role from the same lookup (no extra call)', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue({ ...mockUser, siteRole: 'Creator' });
+
+      await getToolResult({ userId: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890', siteRole: 'Viewer' });
+
+      const { resolveTarget } = mocks.mockGuardMutation.mock.calls[0][0];
+      mocks.mockQueryUserOnSite.mockClear();
+      await expect(resolveTarget()).resolves.toMatchObject({
+        id: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890',
+        kind: 'user',
+        state: 'Creator',
+      });
+      expect(mocks.mockQueryUserOnSite).toHaveBeenCalledOnce();
+    });
+
+    it('uses an empty state when the user has no site role', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue({ ...mockUser, siteRole: undefined });
+      await getToolResult({ userId: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890', siteRole: 'Viewer' });
+      const { resolveTarget } = mocks.mockGuardMutation.mock.calls[0][0];
+      await expect(resolveTarget()).resolves.toMatchObject({ state: '' });
+    });
+
+    it('does not describe the token as single-use in the tool description', () => {
+      const tool = getUpdateUserTool(new WebMcpServer());
+      expect(tool.description).not.toContain('single-use');
+      expect(tool.description).toContain('short-lived confirmation token bound to this change');
     });
 
     it('should call guardMutation with preview phase and correct binding', async () => {

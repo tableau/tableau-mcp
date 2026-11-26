@@ -1,17 +1,25 @@
 import { CallToolResult } from '@modelcontextprotocol/server';
+import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
 import { ContentNotStaleError, StalenessUnverifiedError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { readAppApprovalToken } from '../../../utils/appApprovalMeta.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from '../workbooks/mockWorkbook.js';
+import { createAppApprovalEvidence } from './appApproval.js';
 import { auditRecordSchema } from './auditRecord.js';
-import { getDeleteContentTool } from './deleteContent.js';
-import { AppApprovalEvidence } from './evidence.js';
+import { EXTRACT_REFRESH_TASK_DELETE_BINDING, getDeleteContentTool } from './deleteContent.js';
+import {
+  exportedForTesting as signedTokenTesting,
+  SignedTokenEvidence,
+} from './signedTokenEvidence.js';
+import { mutationTokenConfigFromEnv } from './signedTokenEvidence.mock.js';
 import { checkContentStillStale } from './stalenessCheck.js';
 
 // Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
@@ -122,6 +130,7 @@ vi.mock('../resourceAccessChecker.js', () => ({
 
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
+    ...mutationTokenConfigFromEnv(),
     adminToolsEnabled: true,
     pendingDeletionMaxAgeDays: 30,
     productTelemetryEndpoint: 'https://test.com',
@@ -136,6 +145,7 @@ describe('deleteContentTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    signedTokenTesting.reset();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(`${TODAY}T12:00:00Z`));
     mockCheckContentStillStale.mockResolvedValue(Ok.EMPTY);
@@ -505,6 +515,9 @@ describe('deleteContentTool', () => {
       it('honors a configured limit', async () => {
         const { getConfig } = await import('../../../config.js');
         const base = vi.mocked(getConfig)();
+        // mockReturnValueOnce-style override that does not permanently replace the env-reading
+        // implementation (later tests stub MUTATION_TOKEN_SECRET and expect getConfig to see it).
+        const original = vi.mocked(getConfig).getMockImplementation();
         vi.mocked(getConfig).mockReturnValue({ ...base, pendingDeletionMaxAgeDays: 3 });
         try {
           mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook);
@@ -518,7 +531,10 @@ describe('deleteContentTool', () => {
           invariant(result.content[0].type === 'text');
           expect(result.content[0].text).toContain('past the 3-day limit');
         } finally {
-          vi.mocked(getConfig).mockReturnValue(base);
+          vi.mocked(getConfig).mockReset();
+          if (original) {
+            vi.mocked(getConfig).mockImplementation(original);
+          }
         }
       });
 
@@ -643,7 +659,10 @@ describe('deleteContentTool', () => {
       invariant(result.content[0].type === 'text');
       const text = result.content[0].text;
       expect(text).toContain('Preview');
-      expect(text).toMatch(/confirmationToken:\s*\\?"[0-9a-fA-F-]+/);
+      expect(text).toMatch(
+        /confirmationToken:\s*\\?"(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
+      );
+      expect(text).toContain('short-lived token bound to this change');
       expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
     });
 
@@ -653,7 +672,7 @@ describe('deleteContentTool', () => {
         resourceId: validTaskId,
       });
       const match = previewText.match(
-        /confirmationToken:\s*\\?"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+        /confirmationToken:\s*\\?"(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
       );
       invariant(match, `expected confirmationToken in preview: ${previewText}`);
       const token = match[1];
@@ -670,6 +689,126 @@ describe('deleteContentTool', () => {
         siteId: 'test-site-id',
         taskId: validTaskId,
       });
+    });
+
+    it('deletes on a fresh process with the same MUTATION_TOKEN_SECRET (cross-replica)', async () => {
+      vi.stubEnv('MUTATION_TOKEN_SECRET', 'delete-content-replica-secret-0123456789a');
+      signedTokenTesting.reset();
+      const token = extractToken(
+        await previewAndGetText({ resourceType: 'extract-refresh-task', resourceId: validTaskId }),
+      );
+      signedTokenTesting.reset(); // another replica: fresh keys + replay cache, same secret
+      const result = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledOnce();
+    });
+
+    it('rejects a token previewed for a different task', async () => {
+      const token = extractToken(
+        await previewAndGetText({ resourceType: 'extract-refresh-task', resourceId: validTaskId }),
+      );
+      const result = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: 'ffffffff-e5f6-4789-9abc-ef1234567890',
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    describe('the token is bound to the resource type (binding)', () => {
+      // Mint directly with the process keys so only the binding differs from a real preview.
+      async function mintWithBinding(binding: string): Promise<string> {
+        const evidence = new SignedTokenEvidence();
+        await evidence.establish({
+          restApi: {} as RestApi,
+          siteId: 'test-site-id',
+          userLuid: getMockRequestHandlerExtra().getUserLuid(),
+          tool: 'delete-content',
+          target: { id: validTaskId, kind: 'extract-refresh-task' },
+          binding,
+        });
+        return evidence.getEstablishedNonce()!;
+      }
+
+      async function confirmWith(token: string): Promise<CallToolResult> {
+        return getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          confirm: true,
+          confirmationToken: token,
+        });
+      }
+
+      it('accepts a token minted for the extract-refresh-task binding', async () => {
+        const result = await confirmWith(
+          await mintWithBinding(EXTRACT_REFRESH_TASK_DELETE_BINDING),
+        );
+        expect(result.isError).toBe(false);
+        expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledOnce();
+      });
+
+      it.each([
+        ['no binding', ''],
+        ['another resource type', 'resourceType:workbook'],
+      ])('rejects a token minted with %s', async (_label, binding) => {
+        const result = await confirmWith(await mintWithBinding(binding));
+        expect(result.isError).toBe(true);
+        expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+      });
+    });
+
+    it('a definite 4xx delete failure does not burn the token (same-token retry succeeds)', async () => {
+      const token = extractToken(
+        await previewAndGetText({ resourceType: 'extract-refresh-task', resourceId: validTaskId }),
+      );
+      mocks.mockDeleteExtractRefreshTask.mockRejectedValueOnce(
+        new AxiosError('conflict', '409', undefined, undefined, { status: 409 } as never),
+      );
+      const failed = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(failed.isError).toBe(true);
+      const retry = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(retry.isError).toBe(false);
+      expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledTimes(2);
+    });
+
+    it('a 5xx delete failure keeps the token consumed (outcome unknown: re-preview)', async () => {
+      const token = extractToken(
+        await previewAndGetText({ resourceType: 'extract-refresh-task', resourceId: validTaskId }),
+      );
+      mocks.mockDeleteExtractRefreshTask.mockRejectedValueOnce(
+        new AxiosError('bad gateway', '502', undefined, undefined, { status: 502 } as never),
+      );
+      await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+        confirm: true,
+        confirmationToken: token,
+      });
+      const retry = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(retry.isError).toBe(true);
+      expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledOnce();
     });
 
     // AC-3 / Gap-B: the audit record's target is enriched with the underlying content's
@@ -1026,15 +1165,29 @@ describe('deleteContentTool', () => {
       // The panel carries the batch identity so its confirm/cancel target the same batch.
       expect(payload.data.cleanupDate).toBe(TODAY);
       expect(payload.data.minAgeDays).toBe(90);
-      // Approval established under the delete-content namespace.
+      // A signed approval token rides in `_meta` (never the model-visible text) and verifies under
+      // the delete-content namespace for this workbook only.
+      const approvalToken = readAppApprovalToken(result);
+      expect(approvalToken).toMatch(/^v1\./);
+      expect(result.content[0].text).not.toContain(approvalToken!);
       const extra = getMockRequestHandlerExtra();
+      const ctx = {
+        restApi: { siteId: 'test-site-id' } as never,
+        siteId: 'test-site-id',
+        tool: 'confirm-delete-content' as const,
+        userLuid: extra.getUserLuid(),
+        confirmationToken: approvalToken,
+      };
       await expect(
-        new AppApprovalEvidence('delete-content').verify({
-          restApi: { siteId: 'test-site-id' } as never,
-          siteId: 'test-site-id',
+        createAppApprovalEvidence('delete-content').verify({
+          ...ctx,
+          target: { id: 'wb-other', kind: 'workbook' },
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        createAppApprovalEvidence('delete-content').verify({
+          ...ctx,
           target: { id: 'wb-app', kind: 'workbook' },
-          tool: 'delete-content',
-          userLuid: extra.getUserLuid(),
         }),
       ).resolves.toBe(true);
     });
@@ -1052,6 +1205,9 @@ describe('deleteContentTool', () => {
       expect(payload.data.datasourceId).toBe('ds-app');
       expect(payload.data.cleanupDate).toBe(TODAY);
       expect(payload.data.minAgeDays).toBe(90);
+      const approvalToken = readAppApprovalToken(result);
+      expect(approvalToken).toMatch(/^v1\./);
+      expect(result.content[0].text).not.toContain(approvalToken!);
     });
 
     it('extract-refresh-task preview returns the LEGACY delete-extract-refresh-task-confirm panel', async () => {
@@ -1065,6 +1221,19 @@ describe('deleteContentTool', () => {
       const payload = JSON.parse(result.content[0].text);
       expect(payload.data.kind).toBe('delete-extract-refresh-task-confirm');
       expect(payload.data.taskId).toBe(validTaskId);
+      const approvalToken = readAppApprovalToken(result);
+      expect(approvalToken).toMatch(/^v1\./);
+      expect(result.content[0].text).not.toContain(approvalToken!);
+      expect(result.content[0].text).not.toMatch(/token/i);
+    });
+
+    it('a text-only (non-app) preview never carries an approval token in _meta', async () => {
+      const result = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+      });
+      expect(result.isError).toBe(false);
+      expect(readAppApprovalToken(result)).toBeUndefined();
     });
 
     it('rejects model-driven confirm:true with a PreviewNotRun error (no self-confirm)', async () => {
@@ -1162,7 +1331,7 @@ async function previewAndGetText(args: {
 
 function extractToken(previewText: string): string {
   const match = previewText.match(
-    /confirmationToken:\s*\\?"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+    /confirmationToken:\s*\\?"(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
   );
   invariant(match, `expected confirmationToken in preview: ${previewText}`);
   return match[1];

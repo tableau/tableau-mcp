@@ -697,7 +697,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable content-mutating Tableau Prep flow MCP tools',
     description:
-      'run-flow, run-flow-task, and cancel-flow-run are enabled by default. Set to "false" to disable them. Each tool previews the change and returns a single-use confirmation token. The change happens only when the tool is called again with that token, after the user approves the preview.',
+      'run-flow, run-flow-task, and cancel-flow-run are enabled by default. Set to "false" to disable them. Each tool previews the change and returns a short-lived token bound to this change. The change happens only when the tool is called again with that token, after the user approves the preview.',
     required: false,
     sensitive: false,
   },
@@ -754,6 +754,24 @@ const envVars = {
       'Oldest cleanup batch (days) a delete-content confirm still accepts for a workbook or data source; older pending-deletion markers can no longer authorize a delete. Defaults to 30; range 1-90.',
     required: false,
     sensitive: false,
+  },
+  MUTATION_TOKEN_SECRET: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Mutation confirmation token secret',
+    description:
+      'Shared secret (at least 32 characters, surrounding whitespace trimmed) that signs the short-lived HITL confirmation and approval tokens, so a token verifies on any replica with the same secret. Defaults to empty: each process signs with its own random key, which is sufficient for a single local server.',
+    required: false,
+    sensitive: true,
+  },
+  MUTATION_TOKEN_SECRET_PREVIOUS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Previous mutation confirmation token secret',
+    description:
+      'Previous value of MUTATION_TOKEN_SECRET, accepted for verification only during a secret rotation. Requires MUTATION_TOKEN_SECRET to be set.',
+    required: false,
+    sensitive: true,
   },
   STALE_CONTENT_MAX_ROWS: {
     includeInUserConfig: false,

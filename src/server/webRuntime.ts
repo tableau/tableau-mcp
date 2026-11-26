@@ -9,6 +9,7 @@ import {
   disconnectSessionStore,
   initializeSessionStore,
 } from '../sessionStore/init.js';
+import { initializeConfirmationTokenKeys } from '../tools/web/_lib/signedTokenEvidence.js';
 
 // Minimal shutdown hook: release the session store's backend resources and flush the Activity Log
 // on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
@@ -50,6 +51,10 @@ export async function initializeWebRuntime(
   config: Config,
 ): Promise<{ serverInfoReady: ReturnType<typeof getTableauServerInfo> }> {
   RestApi.host = config.server;
+
+  // Fail fast at boot on a too-short MUTATION_TOKEN_SECRET (and warn when stateless with no secret),
+  // rather than on the first preview of a mutation tool.
+  initializeConfirmationTokenKeys(config);
 
   initializeFeatureGate();
   await initializeActivityLog();

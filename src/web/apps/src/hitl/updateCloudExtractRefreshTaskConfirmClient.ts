@@ -10,8 +10,8 @@
  *
  * Clicking Apply invokes the model-invisible `confirm-update-cloud-extract-refresh-task` tool via
  * `app.callServerTool`, passing the task id and the full structured `schedule` (passed through as
- * data, never rendered as markup) — that human gesture IS the approval the server's
- * AppApprovalEvidence verifies. The countdown is advisory only: the server independently rejects an
+ * data, never rendered as markup) plus the signed approval token the preview delivered in `_meta` —
+ * that human gesture IS the approval the server verifies. The countdown is advisory only: the server independently rejects an
  * expired approval, so disabling the button past expiry is a UX nicety, not the security boundary.
  *
  * The panel is built entirely with DOM APIs (createElement + textContent) — never innerHTML — so no
@@ -19,6 +19,8 @@
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
+
+import { readAppApprovalToken } from '../../../../utils/appApprovalMeta.js';
 
 // The structured schedule is passed straight back to the confirm tool; it is never rendered as
 // markup, so a permissive passthrough schema is sufficient here (the server re-validates it against
@@ -101,6 +103,9 @@ function el<K extends keyof HTMLElementTagNameMap>(
  */
 export function renderUpdateCloudExtractRefreshTaskConfirm(app: App, result: unknown): void {
   const panel = parseUpdateCloudExtractRefreshTaskConfirmResult(result);
+  // The signed approval token travels in the result's `_meta` (never in the model-visible text) and
+  // is echoed to the app-only confirm tool, which verifies it on any replica.
+  const approvalToken = readAppApprovalToken(result);
 
   const host = document.getElementById('root') ?? document.body;
   // Idempotent: replace any prior panel so a re-render doesn't stack duplicates.
@@ -187,7 +192,7 @@ export function renderUpdateCloudExtractRefreshTaskConfirm(app: App, result: unk
     void app
       .callServerTool({
         name: 'confirm-update-cloud-extract-refresh-task',
-        arguments: { taskId: panel.taskId, schedule: panel.schedule },
+        arguments: { taskId: panel.taskId, schedule: panel.schedule, approvalToken },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

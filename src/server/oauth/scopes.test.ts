@@ -178,6 +178,38 @@ describe('scopes', () => {
     it('requires no Tableau API permissions to request an S3 upload URL', () => {
       expect(getRequiredApiScopesForTool('request-datasource-upload')).toEqual([]);
     });
+
+    // Regression: Tableau's Update Cloud Extract Refresh Task JWT scope is `tableau:tasks:update`
+    // (REST 3.27). `tableau:tasks:write` does not exist, so requesting it left the update
+    // unauthorized under scoped (JWT / OAuth) tokens. The MCP scope stays `tableau:mcp:tasks:write`.
+    it.each([
+      'update-cloud-extract-refresh-task',
+      'confirm-update-cloud-extract-refresh-task',
+    ] as const)('%s requests tableau:tasks:update and tableau:tasks:read', (toolName) => {
+      mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+      const api: ReadonlyArray<string> = getRequiredApiScopesForTool(toolName);
+      // tasks:read: the confirmation token's schedule pre-state (Get Extract Refresh Tasks) is read
+      // on both phases; without it the state silently resolves to '' under scoped tokens.
+      expect(api).toEqual(['tableau:tasks:update', 'tableau:tasks:read', 'tableau:users:read']);
+      expect(getRequiredMcpScopesForTool(toolName)).toEqual(['tableau:mcp:tasks:write']);
+    });
+
+    // The signed confirmation tokens of run-flow / run-flow-task bind the flow's newest runs, so the
+    // tools read flow runs (and run-flow-task reads the task to find its flow) on preview and confirm.
+    it('grants the flow run tools the read scopes their confirmation pre-state needs', () => {
+      expect(getRequiredApiScopesForTool('run-flow')).toEqual([
+        'tableau:flows:run',
+        'tableau:flows:read',
+        'tableau:flow_runs:read',
+        'tableau:mcp_site_settings:read',
+      ]);
+      expect(getRequiredApiScopesForTool('run-flow-task')).toEqual([
+        'tableau:flow_tasks:run',
+        'tableau:flow_tasks:read',
+        'tableau:flow_runs:read',
+        'tableau:mcp_site_settings:read',
+      ]);
+    });
   });
 
   describe('getSupportedMcpScopes', () => {
@@ -539,7 +571,7 @@ describe('scopes', () => {
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:tasks:read');
-      expect(scopes).toContain('tableau:tasks:write');
+      expect(scopes).toContain('tableau:tasks:update');
       expect(scopes).toContain('tableau:jobs:read');
       expect(scopes).toContain('tableau:users:read');
       expect(scopes).toContain('tableau:users:update');
@@ -554,7 +586,7 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:tasks:read');
     });
 
-    it('should include tableau:tasks:write when adminToolsEnabled and admin-tools are both on', async () => {
+    it('should include tableau:tasks:update when adminToolsEnabled and admin-tools are both on', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
         async (featureName: string) => featureName === 'admin-tools',
       );
@@ -563,16 +595,16 @@ describe('scopes', () => {
       } as any);
 
       const scopes = await getSupportedApiScopes();
-      expect(scopes).toContain('tableau:tasks:write');
+      expect(scopes).toContain('tableau:tasks:update');
     });
 
-    it('should exclude tableau:tasks:write when adminToolsEnabled is false', async () => {
+    it('should exclude tableau:tasks:update when adminToolsEnabled is false', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
 
       const scopes = await getSupportedApiScopes();
-      expect(scopes).not.toContain('tableau:tasks:write');
+      expect(scopes).not.toContain('tableau:tasks:update');
     });
 
     it('should include tableau:jobs:read when adminToolsEnabled and admin-tools are both on', async () => {
@@ -1084,7 +1116,7 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:tasks:write');
       expect(scopes).not.toContain('tableau:mcp:jobs:read');
       expect(scopes).not.toContain('tableau:tasks:read');
-      expect(scopes).not.toContain('tableau:tasks:write');
+      expect(scopes).not.toContain('tableau:tasks:update');
       expect(scopes).not.toContain('tableau:jobs:read');
       expect(scopes).not.toContain('tableau:users:read');
       expect(scopes).not.toContain('tableau:mcp:users:write');

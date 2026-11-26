@@ -7,7 +7,8 @@
  * buttons.
  *
  * Clicking Confirm invokes the app-only `confirm-delete-content` tool via `app.callServerTool` —
- * that human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is
+ * together with the signed approval token the preview delivered in `_meta`, that human gesture IS
+ * the approval the server verifies. The countdown is
  * advisory only: the server independently rejects an expired approval, so disabling the button past
  * expiry is a UX nicety, not the security boundary.
  *
@@ -18,6 +19,8 @@
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
+
+import { readAppApprovalToken } from '../../../../utils/appApprovalMeta.js';
 
 const confirmPanelSchema = z.object({
   kind: z.literal('delete-datasource-confirm'),
@@ -79,6 +82,9 @@ function row(label: string, value: string | undefined): string {
  */
 export function renderDeleteDatasourceConfirm(app: App, result: unknown): void {
   const panel = parseDeleteDatasourceConfirmResult(result);
+  // The signed approval token travels in the result's `_meta` (never in the model-visible text) and
+  // is echoed to the app-only confirm tool, which verifies it on any replica.
+  const approvalToken = readAppApprovalToken(result);
 
   const host = document.getElementById('root') ?? document.body;
   // Idempotent: replace any prior panel so a re-render doesn't stack duplicates.
@@ -180,6 +186,7 @@ export function renderDeleteDatasourceConfirm(app: App, result: unknown): void {
           resourceId: panel.datasourceId,
           cleanupDate: panel.cleanupDate,
           minAgeDays: panel.minAgeDays,
+          approvalToken,
         },
       })
       .then((res) => {

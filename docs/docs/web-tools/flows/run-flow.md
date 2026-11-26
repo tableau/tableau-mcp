@@ -15,8 +15,8 @@ sidebar_position: 8
   **This tool changes server state.** A confirmed run consumes warehouse + Tableau Prep Conductor capacity and overwrites the flow's outputs. Do not confirm until the user has explicitly approved the preview.
 
   **Two-phase confirmation:**
-  1. **Preview** (`confirm` omitted or false): checks the requested run and bounded-context eligibility, starts no run, and returns a single-use confirmation token.
-  2. **Run** (`confirm: true`): requires the token from the matching preview. The server verifies and consumes it before enqueuing the flow.
+  1. **Preview** (`confirm` omitted or false): checks the requested run and bounded-context eligibility, starts no run, and returns a short-lived confirmation token bound to this change.
+  2. **Run** (`confirm: true`): requires the token from the matching preview. The server verifies it before enqueuing the flow, and rejects it if the run options changed or a new run of this flow appeared since the preview.
 
   **Parameters:**
   - `flowId` (required) – The flow to run.
@@ -24,7 +24,7 @@ sidebar_position: 8
   - `outputStepIds` (optional) – Run only these output steps (ids from `get-flow`). If provided, it must contain at least one id; omit it to run every output step.
   - `parameterOverrides` (optional) – Array of `{ parameterId, overrideValue }` for flows that use parameters. Required parameters must be supplied. Use `get-flow` to discover parameter ids and whether they are required.
   - `confirm` (optional) – Set `true` only after the user approves the preview.
-  - `confirmationToken` (optional) – The single-use token returned by the matching preview. Required when `confirm` is true.
+  - `confirmationToken` (optional) – The token returned by the matching preview. Required when `confirm` is true.
 
   **Response:** Preview returns instructions and a confirmation token. A confirmed call returns `{ job, mcp: { runStatus } }`. `job` includes `id` (background job id) and `runFlowJobType.flowRunId` (the flow run id). The run is asynchronous: report it as *started/queued*, and to check the outcome poll with `list-flow-runs` (filter `flowId:eq:`id``) or `get-flow` (`flowRunLimit: 1`).
 
@@ -33,7 +33,7 @@ sidebar_position: 8
   - Requires **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled.
   - **Caller-role:** in addition to admins/project leaders, the flow owner and users granted Run Flow / Execute permission can run a flow. Non-permitted callers get a clear permission error.
   - Not idempotent — each call enqueues another run. A run may be rejected if one is already queued or in progress for the flow.
-  - Requires Tableau REST API access scopes `tableau:flows:run`, `tableau:flows:read` (for bounded-context verification), and `tableau:mcp_site_settings:read`.
+  - Requires Tableau REST API access scopes `tableau:flows:run`, `tableau:flows:read` (for bounded-context verification), `tableau:flow_runs:read` (to bind the token to the flow's latest runs), and `tableau:mcp_site_settings:read`.
 
 ## APIs called
 
@@ -86,13 +86,16 @@ The confirmationToken argument.
 The tool is two-phase:
 
 1. **Preview** — omit `confirm` or set it to `false`. The tool checks the requested run and
-   bounded-context eligibility, starts no run, and returns a single-use `confirmationToken`.
+   bounded-context eligibility, starts no run, and returns a short-lived `confirmationToken` bound to this change.
 2. **Run** — set `confirm: true` and pass the token from the matching preview. The server verifies
-   and consumes the token before enqueuing the run.
+   the token before enqueuing the run.
 
 Present the preview to the user and get explicit approval before calling the tool with `confirm: true`.
 The token is bound to the flow id, run mode, output steps, and parameter overrides, so changing any
-of those values requires a new preview.
+of those values requires a new preview. The token is also bound to a fingerprint of the flow's 10
+most recent run ids, read with one extra Get Flow Runs call on preview and on confirm: if a new run
+appears in between, the confirmation is rejected and a new preview is needed. An existing run that
+only progresses (for example Pending to Success) does not reject the confirmation. If that lookup fails, no token is issued and nothing runs.
 
 ## Bounded context (fail-closed)
 
@@ -102,7 +105,7 @@ the run, and refuses otherwise.
 
 ## Response
 
-A preview returns instructions and a single-use confirmation token. A confirmed call returns an object
+A preview returns instructions and a short-lived confirmation token. A confirmed call returns an object
 `{ job, mcp: { runStatus } }`:
 
 - `job.id` — the background job id.

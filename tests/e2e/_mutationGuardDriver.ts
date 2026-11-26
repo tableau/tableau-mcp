@@ -57,6 +57,16 @@ function textOf(result: any): string {
   return JSON.stringify(result);
 }
 
+/**
+ * Extracts the v1 signed confirmation token (`v1.<expiresAtMs>.<tokenId>.<preState>.<mac>`) from a
+ * preview's NEXT STEP text, tolerating straight, curly, or JSON-escaped quotes around it.
+ */
+function extractSignedToken(text: string): string | undefined {
+  return text.match(
+    /confirmationToken:\s*[\\"“”]*(v1\.[0-9]+\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{11}\.[A-Za-z0-9_-]{43})/,
+  )?.[1];
+}
+
 async function main(): Promise<void> {
   const transport = new StdioClientTransport({
     command: 'node',
@@ -203,13 +213,12 @@ async function main(): Promise<void> {
       arguments: { resourceType: 'extract-refresh-task', resourceId: targetTaskId },
     });
     const msg = textOf(res);
-    const m = msg.match(/confirmationToken:\s*[“”]?([0-9a-fA-F-]{36})[“”]?/);
-    mintedNonce = m?.[1];
+    mintedNonce = extractSignedToken(msg);
     const ok = res.isError !== true && /Preview/i.test(msg) && !!mintedNonce;
     record(
       'preview-mints-nonce (delete-content:extract-refresh-task)',
       ok,
-      `nonce=${mintedNonce ?? 'NONE'} | ${msg.slice(0, 220)}`,
+      `token=${mintedNonce ? 'v1.<redacted>' : 'NONE'}`,
     );
   }
 
@@ -222,7 +231,7 @@ async function main(): Promise<void> {
       arguments: { resourceType: 'extract-refresh-task', resourceId: disposableTaskId },
     });
     const prevMsg = textOf(prev);
-    const nonce = prevMsg.match(/confirmationToken:\s*”([^”]+)”/)?.[1];
+    const nonce = extractSignedToken(prevMsg);
     const confirmRes = await client.callTool({
       name: 'delete-content',
       arguments: {
@@ -291,13 +300,11 @@ async function main(): Promise<void> {
     hasPreviewNotRun,
     hasPreviewNotRun ? 'present' : 'ABSENT',
   );
-  // No raw nonce ever in audit detail.
-  const leak = auditLines.some((a) =>
-    /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-/.test(
-      JSON.stringify((a as any).data?.confirmationEvidence ?? {}),
-    ),
-  );
-  record('audit-no-nonce-leak', !leak, leak ? 'NONCE LEAKED IN AUDIT' : 'clean');
+  // No signed confirmation token anywhere in an audit record. Match the token shape
+  // (`v1.<expiresAtMs>.<tokenId:22 base64url>.`) against the whole serialized line, not only
+  // confirmationEvidence, so a token leaked into any field is caught.
+  const leak = auditLines.some((a) => /v1\.\d+\.[A-Za-z0-9_-]{22}\./.test(JSON.stringify(a)));
+  record('audit-no-token-leak', !leak, leak ? 'TOKEN LEAKED IN AUDIT' : 'clean');
 
   await client.close();
 

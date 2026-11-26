@@ -96,6 +96,42 @@ describe('Tool', () => {
     });
   });
 
+  it('redacts confirmation / approval tokens from the invocation notification', () => {
+    const spy = vi.spyOn(notifier, 'debug');
+
+    const tool = new WebTool(mockParams);
+    tool.notifyInvocation({
+      requestId: '3',
+      args: { param1: 'test', confirmationToken: 'v1.1.SECRET.x.y', approvalToken: 'APPROVAL' },
+    });
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
+      type: 'tool',
+      requestId: '3',
+      username: undefined,
+      tool: {
+        name: 'get-datasource-metadata',
+        args: { param1: 'test', confirmationToken: '<redacted>', approvalToken: '<redacted>' },
+      },
+    });
+  });
+
+  it('never writes a confirmation token into the debug log line', async () => {
+    const tool = new WebTool(mockParams);
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+
+    await tool.logAndExecute({
+      extra: mockExtra,
+      args: { param1: 'test', confirmationToken: 'v1.1.SECRET.x.y' } as { param1: string },
+      callback: async () => new Ok({ ok: true }),
+      constrainSuccessResult: (result) => ({ type: 'success', result }),
+    });
+
+    const logged = JSON.stringify(logSpy.mock.calls);
+    expect(logged).not.toContain('SECRET');
+    expect(logged).toContain('<redacted>');
+  });
+
   it('should return successful result when callback succeeds', async () => {
     const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
