@@ -6,7 +6,9 @@ import {
   PulseNotAvailableError,
 } from '../../errors/mcpToolError.js';
 import { RestApiArgs, useRestApi } from '../../restApiInstance.js';
+import type { Flow } from '../../sdks/tableau/types/flow.js';
 import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pulse.js';
+import { isAdminSiteRole } from '../../sdks/tableau/types/user.js';
 // Type-only: erased at compile time, so scopes.ts can import the value map below without a
 // runtime import cycle.
 import type { TableauApiScope } from '../../server/oauth/scopes.js';
@@ -19,7 +21,11 @@ import { retry } from '../../utils/retry.js';
  * then add or update the `registrationConditions` property for all the tools the condition should apply to.
  */
 export type RegistrationCondition =
-  'RequiresKnowledge' | 'RequiresPulse' | 'RequiresPulsePremium' | 'MissingConditionCheck';
+  | 'UserCanViewFlows'
+  | 'RequiresKnowledge'
+  | 'RequiresPulse'
+  | 'RequiresPulsePremium'
+  | 'MissingConditionCheck';
 
 /**
  * Map of registration conditions to the JWT scopes needed for checking said condition.
@@ -31,6 +37,7 @@ export const REGISTRATION_CONDITION_API_SCOPES: Record<
   RegistrationCondition,
   ReadonlyArray<TableauApiScope>
 > = {
+  UserCanViewFlows: ['tableau:flows:read'],
   RequiresKnowledge: ['tableau:knowledge:read'],
   RequiresPulse: ['tableau:insight_definitions_metrics:read'],
   RequiresPulsePremium: ['tableau:entitlements:read'],
@@ -43,6 +50,7 @@ export const REGISTRATION_CONDITION_API_SCOPES: Record<
  */
 export type RegistrationContext = {
   siteRole?: string;
+  userCanViewFlows?: boolean;
   isKnowledgeAvailable?: boolean;
   isPulseEnabled?: boolean;
   hasPulsePremium?: boolean;
@@ -79,6 +87,19 @@ export async function checkRegistrationConditions(
 ): Promise<ConditionsCheckResult> {
   for (const condition of conditions) {
     switch (condition) {
+      case 'UserCanViewFlows': {
+        if (context.userCanViewFlows === undefined) {
+          context.userCanViewFlows = recordProbe(
+            context,
+            'UserCanViewFlows',
+            await checkFlowsAvailable(restApiArgs, context),
+          );
+        }
+        if (!context.userCanViewFlows) {
+          return unmet(context, 'UserCanViewFlows');
+        }
+        continue;
+      }
       case 'RequiresKnowledge': {
         if (context.isKnowledgeAvailable === undefined) {
           context.isKnowledgeAvailable = recordProbe(
@@ -173,6 +194,10 @@ function unmet(
  * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
+  UserCanViewFlows:
+    'NOTE: Tableau Flow tools were omitted because access to a visible flow or administrator access ' +
+    'could not be confirmed. Ask your Tableau administrator about access to flows, ' +
+    'then reconnect to check again.',
   // Kept generic: the probe cannot tell a site without Knowledge from a denied check.
   RequiresKnowledge:
     'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as ' +
@@ -202,6 +227,7 @@ const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
 };
 
 const CONDITION_TOOL_LABELS: Record<RegistrationCondition, string> = {
+  UserCanViewFlows: 'Flow',
   RequiresKnowledge: 'Knowledge',
   RequiresPulse: 'Pulse',
   RequiresPulsePremium: 'AI-powered Pulse insight',
@@ -226,6 +252,63 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 
 /** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
 export const MAX_API_RETRY_ATTEMPTS = 2;
+
+/**
+ * Publishing writes the seed again ~50 ms after creating it, and the REST API rounds to whole
+ * seconds, so an untouched seed is 0 or 1 second apart (99.7% of Cloud seeds; the rest were edited).
+ */
+const SEED_MAX_UPDATE_LAG_MS = 1_000;
+
+/**
+ * Whether `flow` looks like the sample flow seeded when a site is provisioned. The name is not
+ * localized, but customers can publish the same sample themselves, so also require an untouched
+ * `.tflx`. Missing or unparseable fields mean "not the seed": it errs toward counting a flow.
+ */
+function isSeededSampleFlow(flow: Flow): boolean {
+  if (flow.name !== 'Superstore Flow' || flow.fileType !== 'tflx') return false;
+  if (flow.createdAt === undefined || flow.updatedAt === undefined) return false;
+
+  const lagMs = Date.parse(flow.updatedAt) - Date.parse(flow.createdAt);
+  return lagMs >= 0 && lagMs <= SEED_MAX_UPDATE_LAG_MS;
+}
+
+/**
+ * One single-item visible-flow query, with no retries or pagination. A site's only flow being the
+ * seeded sample counts as no flow, so it does not enable Flow tools for everyone. Admins need not
+ * have flows.
+ */
+async function checkFlowsAvailable(
+  restApiArgs: RestApiArgs,
+  context: RegistrationContext,
+): Promise<boolean | undefined> {
+  try {
+    return await useRestApi({
+      ...restApiArgs,
+      signal: AbortSignal.any([restApiArgs.signal, AbortSignal.timeout(5_000)]),
+      jwtScopes: REGISTRATION_CONDITION_API_SCOPES.UserCanViewFlows,
+      callback: async (restApi) => {
+        const { flows, pagination } = await restApi.flowsMethods.queryFlowsForSite({
+          siteId: restApi.siteId,
+          pageSize: 1,
+        });
+        const onlyTheSeededSample =
+          flows.length === 1 && pagination.totalAvailable === 1 && isSeededSampleFlow(flows[0]);
+        if (flows.length > 0 && !onlyTheSeededSample) return true;
+
+        if (!Object.hasOwn(context, 'siteRole')) {
+          const session = await restApi.authenticatedServerMethods.getCurrentServerSession();
+          if (session.isErr()) {
+            return session.error.type === 'unauthorized' ? false : undefined;
+          }
+          context.siteRole = session.value.user.siteRole;
+        }
+        return isAdminSiteRole(context.siteRole);
+      },
+    });
+  } catch (error) {
+    return isRetryableProbeError(error) ? undefined : false;
+  }
+}
 
 /** `listGraphs` is available to every Knowledge read role and succeeds for an entitled empty site. */
 async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolean | undefined> {

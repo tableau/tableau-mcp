@@ -1,5 +1,5 @@
 import { AxiosError, AxiosResponse } from 'axios';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import {
   PulseDisabledError,
@@ -8,6 +8,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { RestApiArgs } from '../../restApiInstance.js';
 import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pulse.js';
+import { ADMIN_SITE_ROLES, SiteRole } from '../../sdks/tableau/types/user.js';
 import {
   checkRegistrationConditions,
   getUnmetConditionInstructions,
@@ -24,8 +25,8 @@ vi.mock('../../restApiInstance.js', () => ({
   useRestApi: mocks.useRestApi,
 }));
 
-// The Pulse probe is reached through the mocked useRestApi, so a minimal stub is sufficient here.
-const restApiArgs = {} as unknown as RestApiArgs;
+// Probes are reached through the mocked useRestApi; only cancellation needs a real value.
+const restApiArgs = { signal: new AbortController().signal } as RestApiArgs;
 
 /** A successful `listAllPulseMetricDefinitions` page. An empty site still means Pulse is enabled. */
 function pulseDefinitionsPage(definitionCount = 0): Ok<unknown> {
@@ -35,6 +36,14 @@ function pulseDefinitionsPage(definitionCount = 0): Ok<unknown> {
       metadata: { name: `m${i}` },
     })),
   });
+}
+
+/** A `queryFlowsForSite` result; `totalAvailable` defaults to the number of flows returned. */
+function flowsPage(
+  flows: Array<Record<string, unknown>>,
+  totalAvailable = flows.length,
+): { pagination: Record<string, number>; flows: Array<Record<string, unknown>> } {
+  return { pagination: { pageNumber: 1, pageSize: 1, totalAvailable }, flows };
 }
 
 /** An entitlements response built from `{ entitlementType: enabled }` pairs. */
@@ -154,6 +163,241 @@ describe('checkRegistrationConditions', () => {
         registrationConditionsMet: false,
         failingCondition: 'MissingConditionCheck',
       });
+    });
+  });
+
+  describe('UserCanViewFlows', () => {
+    const queryFlowsForSite = vi.fn();
+    const getCurrentServerSession = vi.fn();
+
+    beforeEach(() => {
+      queryFlowsForSite.mockReset().mockResolvedValue(flowsPage([]));
+      getCurrentServerSession
+        .mockReset()
+        .mockResolvedValue(new Ok({ user: { siteRole: SiteRole.CREATOR } }));
+      mocks.useRestApi.mockImplementation(async ({ callback }) =>
+        callback({
+          siteId: 'site-id',
+          flowsMethods: { queryFlowsForSite },
+          authenticatedServerMethods: { getCurrentServerSession },
+        }),
+      );
+    });
+
+    it.each([true, false])('caches visibility=$0 across Flow tools', async (hasVisibleFlows) => {
+      queryFlowsForSite.mockResolvedValue(
+        hasVisibleFlows ? flowsPage([{ id: 'flow-id', name: 'Sales Cleanup' }]) : flowsPage([]),
+      );
+      const context: RegistrationContext = {};
+      const expected = hasVisibleFlows
+        ? { registrationConditionsMet: true }
+        : { registrationConditionsMet: false, failingCondition: 'UserCanViewFlows' };
+
+      await expect(
+        checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs),
+      ).resolves.toEqual(expected);
+      await expect(
+        checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs),
+      ).resolves.toEqual(expected);
+
+      expect(queryFlowsForSite).toHaveBeenCalledExactlyOnceWith({
+        siteId: 'site-id',
+        pageSize: 1,
+      });
+      expect(getCurrentServerSession).toHaveBeenCalledTimes(hasVisibleFlows ? 0 : 1);
+      expect(mocks.useRestApi).toHaveBeenCalledWith(
+        expect.objectContaining({ jwtScopes: ['tableau:flows:read'] }),
+      );
+    });
+
+    it.each([SiteRole.VIEWER, SiteRole.EXPLORER, SiteRole.EXPLORER_CAN_PUBLISH])(
+      'allows a %s with a shared flow without a user ID or ownership lookup',
+      async (siteRole) => {
+        queryFlowsForSite.mockResolvedValue(
+          flowsPage([{ id: 'shared-flow-id', name: 'Shared', owner: { id: 'another-user-id' } }]),
+        );
+        await expect(
+          checkRegistrationConditions(['UserCanViewFlows'], { siteRole }, restApiArgs),
+        ).resolves.toEqual({ registrationConditionsMet: true });
+        expect(queryFlowsForSite).toHaveBeenCalledExactlyOnceWith({
+          siteId: 'site-id',
+          pageSize: 1,
+        });
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      },
+    );
+
+    describe('seeded sample flow', () => {
+      const seed = {
+        id: 'seed-id',
+        name: 'Superstore Flow',
+        fileType: 'tflx',
+        createdAt: '2026-11-24T16:04:53Z',
+        updatedAt: '2026-11-24T16:04:53Z',
+      };
+
+      it('treats a site whose only flow is the seed as having no flow', async () => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([seed]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'UserCanViewFlows',
+        });
+      });
+
+      it.each([
+        ['0 seconds', '2026-11-24T16:04:53Z'],
+        ['1 second, the update crossed a second boundary', '2026-11-24T16:04:54Z'],
+      ])('treats a seed updated %s after creation as the seed', async (_label, updatedAt) => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([{ ...seed, updatedAt }]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'UserCanViewFlows',
+        });
+      });
+
+      it.each(ADMIN_SITE_ROLES)(
+        'still allows %s when the seed is the only flow',
+        async (siteRole) => {
+          queryFlowsForSite.mockResolvedValue(flowsPage([seed]));
+          getCurrentServerSession.mockResolvedValue(new Ok({ user: { siteRole } }));
+          await expect(
+            checkRegistrationConditions(['UserCanViewFlows'], {}, restApiArgs),
+          ).resolves.toEqual({ registrationConditionsMet: true });
+        },
+      );
+
+      it('counts the seed plus a customer flow', async () => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([seed], 2));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({ registrationConditionsMet: true });
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['a different name', { name: 'Superstore' }],
+        ['a different case', { name: 'superstore flow' }],
+        ['a different file type', { fileType: 'tfl' }],
+        ['an edited flow', { updatedAt: '2026-11-25T09:00:00Z' }],
+        ['an update 2 seconds after creation', { updatedAt: '2026-11-24T16:04:55Z' }],
+        ['an update before creation', { updatedAt: '2026-11-24T16:04:52Z' }],
+        ['an unparseable updated time', { updatedAt: 'not-a-date' }],
+        ['no file type', { fileType: undefined }],
+        ['no created time', { createdAt: undefined }],
+        ['no updated time', { updatedAt: undefined }],
+      ])('counts a single flow with %s', async (_label, override) => {
+        queryFlowsForSite.mockResolvedValue(flowsPage([{ ...seed, ...override }]));
+        await expect(
+          checkRegistrationConditions(
+            ['UserCanViewFlows'],
+            { siteRole: SiteRole.VIEWER },
+            restApiArgs,
+          ),
+        ).resolves.toEqual({ registrationConditionsMet: true });
+      });
+    });
+
+    it.each(ADMIN_SITE_ROLES)('allows %s without a visible flow', async (siteRole) => {
+      getCurrentServerSession.mockResolvedValue(new Ok({ user: { siteRole } }));
+      await expect(
+        checkRegistrationConditions(['UserCanViewFlows'], {}, restApiArgs),
+      ).resolves.toEqual({ registrationConditionsMet: true });
+    });
+
+    it.each([SiteRole.CREATOR, SiteRole.SITE_ADMINISTRATOR_CREATOR])(
+      'reuses a previously fetched %s role',
+      async (siteRole) => {
+        const context: RegistrationContext = { siteRole };
+        const result = await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          context,
+          restApiArgs,
+        );
+        expect(result.registrationConditionsMet).toBe(
+          siteRole === SiteRole.SITE_ADMINISTRATOR_CREATOR,
+        );
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([401, 403, 404, 500, undefined])(
+      'fails closed without retries on HTTP %s',
+      async (status) => {
+        queryFlowsForSite.mockRejectedValue(
+          new AxiosError(
+            'probe failed',
+            undefined,
+            undefined,
+            undefined,
+            status === undefined ? undefined : ({ status } as AxiosResponse),
+          ),
+        );
+        const context: RegistrationContext = { siteRole: SiteRole.SITE_ADMINISTRATOR_CREATOR };
+        const result = await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          context,
+          restApiArgs,
+        );
+        expect(result).toEqual({
+          registrationConditionsMet: false,
+          failingCondition: 'UserCanViewFlows',
+          ...((status === undefined || status >= 500) && { indeterminate: true }),
+        });
+        await checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs);
+        expect(queryFlowsForSite).toHaveBeenCalledTimes(1);
+        expect(getCurrentServerSession).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['unauthorized', 'unknown'] as const)(
+      'fails closed if the admin check is %s',
+      async (type) => {
+        getCurrentServerSession.mockResolvedValue(new Err({ type, message: 'unavailable' }));
+        const context: RegistrationContext = {};
+        const result = await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          context,
+          restApiArgs,
+        );
+        expect(result.registrationConditionsMet).toBe(false);
+        await checkRegistrationConditions(['UserCanViewFlows'], context, restApiArgs);
+        expect(getCurrentServerSession).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('bounds the probe to five seconds and preserves caller cancellation', async () => {
+      const timeout = vi.spyOn(AbortSignal, 'timeout');
+      const caller = new AbortController();
+      try {
+        await checkRegistrationConditions(
+          ['UserCanViewFlows'],
+          {},
+          { ...restApiArgs, signal: caller.signal },
+        );
+        expect(timeout).toHaveBeenCalledWith(5_000);
+        const signal = mocks.useRestApi.mock.calls[0][0].signal as AbortSignal;
+        expect(signal.aborted).toBe(false);
+        caller.abort();
+        expect(signal.aborted).toBe(true);
+      } finally {
+        timeout.mockRestore();
+      }
     });
   });
 
