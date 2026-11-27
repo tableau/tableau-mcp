@@ -813,7 +813,10 @@ describe('API-version tool gate', () => {
       vi.restoreAllMocks();
     });
 
-    async function callGatedTool(desktopApiVersion: string | undefined): Promise<{
+    async function callGatedTool(
+      versionsBySession: Record<string, string | undefined>,
+      session = '4242',
+    ): Promise<{
       result: CallToolResult;
       toolBody: ReturnType<typeof vi.fn>;
     }> {
@@ -840,7 +843,7 @@ describe('API-version tool gate', () => {
                 extra,
                 args: {},
                 callback: async () => {
-                  await extra.getExecutor('4242');
+                  await extra.getExecutor(session);
                   toolBody();
                   return new Ok({});
                 },
@@ -851,8 +854,8 @@ describe('API-version tool gate', () => {
         server as unknown as { _getToolsToRegister: () => unknown },
         '_getToolsToRegister',
       ).mockResolvedValue([tool]);
-      vi.spyOn(SessionManager.prototype, 'getExecutor').mockResolvedValue(
-        makeExecutorMock({ desktopApiVersion }),
+      vi.spyOn(SessionManager.prototype, 'getExecutor').mockImplementation(async (sessionId) =>
+        makeExecutorMock({ desktopApiVersion: versionsBySession[sessionId] }),
       );
       await server.registerTools();
       const [, , registered] = vi.mocked(server.mcpServer.registerTool).mock
@@ -869,7 +872,7 @@ describe('API-version tool gate', () => {
     }
 
     it('rejects a call to a Desktop older than the tool floor before the tool runs', async () => {
-      const { result, toolBody } = await callGatedTool('0.2.34');
+      const { result, toolBody } = await callGatedTool({ '4242': '0.2.34' });
 
       expect(result.isError).toBe(true);
       expect(JSON.stringify(result.content)).toContain(
@@ -879,10 +882,19 @@ describe('API-version tool gate', () => {
     });
 
     it.each(['0.2.40', undefined])('lets a call through to a Desktop on %s', async (version) => {
-      const { result, toolBody } = await callGatedTool(version);
+      const { result, toolBody } = await callGatedTool({ '4242': version });
 
       expect(result.isError).toBe(false);
       expect(toolBody).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['1111', true],
+      ['2222', false],
+    ])('checks session %s against its own Desktop version', async (session, rejected) => {
+      const { result } = await callGatedTool({ '1111': '0.2.34', '2222': '0.2.40' }, session);
+
+      expect(result.isError).toBe(rejected);
     });
   });
 

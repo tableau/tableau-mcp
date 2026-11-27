@@ -413,6 +413,9 @@ describe('DesktopTool product telemetry', () => {
       oauth_client_id: '',
       oauth_client_display_name: '',
       auth_type: 'desktop',
+      client: '',
+      client_name: 'test-client',
+      client_version: '1.0.0',
     });
   });
 
@@ -432,6 +435,53 @@ describe('DesktopTool product telemetry', () => {
         site_luid: '11111111-1111-1111-1111-111111111111',
         user_luid: '22222222-2222-2222-2222-222222222222',
       }),
+    );
+  });
+
+  it.each([
+    ['tableau-agent/2026.3.1', 'tableau-agent'],
+    ['tableau-desktop-plugin/1.2.3', 'tableau-desktop-plugin'],
+    ['tableau-desktop-plugin', 'tableau-desktop-plugin'],
+    [undefined, ''],
+  ])('sends client %s as %s', async (userAgentPrefix, client) => {
+    await makeTool().logAndExecute({
+      extra: extraWithConfig({ userAgentPrefix }),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ client }),
+    );
+  });
+
+  it('sends the MCP client name and version from clientInfo', async () => {
+    await makeTool().logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ client_name: 'test-client', client_version: '1.0.0' }),
+    );
+  });
+
+  it('sends empty client name and version before the client initializes', async () => {
+    const tool = makeTool();
+    vi.mocked(tool.server.mcpServer.server.getClientVersion).mockReturnValue(undefined);
+
+    await tool.logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ client_name: '', client_version: '' }),
     );
   });
 

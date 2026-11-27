@@ -32,3 +32,5 @@ build/sea/**/*
 sea-prep.*.blob
 sea-config.*.generated.json
 asset-manifest.*.generated.json
+build-pkg/**/*
+tableau-plugin/**/*

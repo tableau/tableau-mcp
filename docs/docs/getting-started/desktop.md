@@ -4,12 +4,11 @@ sidebar_position: 1
 
 # Desktop Authoring Server
 
-The `@tableau/mcp-server` npm package is Web-only. The **desktop** build of this repository runs a
-local authoring server that drives a running %product_name% instance over MCP (stdio). Use it to
+The Desktop authoring server drives a running %product_name% instance over MCP (stdio). Use it to
 inspect a workbook, list chart templates, and bind fields into worksheets.
 
-Run the Desktop server from a source build or from a standalone Desktop executable that you build
-yourself. GitHub Release archives carry the Web executable only.
+Install it from npm as `@tableau/mcp-server-desktop`, or build it from source. The
+`@tableau/mcp-server` npm package and the GitHub Release archives carry the Web server only.
 
 ## Prepare %product_name%
 
@@ -17,6 +16,36 @@ The server talks to %product_name% through its External Client API. To turn the 
 the version requirements, follow
 [Use Tableau Studio Headless](ext://studio/use-tableau-studio-headless.html). Restart
 %product_name% after you turn the API on.
+
+## Install from npm
+
+Requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later and the External Client API
+turned on (see above). Point your AI tool (MCP client) at the package:
+
+```json
+{
+  "mcpServers": {
+    "tableau-desktop": {
+      "command": "npx",
+      "args": ["-y", "@tableau/mcp-server-desktop@latest"],
+      "env": {
+        "TABLEAU_MCP_CACHE_DIR": "/absolute/path/to/a/cache/folder"
+      }
+    }
+  }
+}
+```
+
+Write `@latest` out. Without a version, `npx` can keep reusing the copy it downloaded first. Set
+[`TABLEAU_MCP_CACHE_DIR`](../configuration/mcp-config/env-vars.md#tableau_mcp_cache_dir) to a full
+path; otherwise the cache sits inside npm's own cache folder.
+
+The package reads its settings from the environment only. It does not read a `.env` file.
+
+The server can start before %product_name% does. Each tool checks the External Client API version
+of the instance it calls. If that instance is too old, the tool says which tools it cannot run, and
+your AI tool carries on with the others. It suggests updating %product_name% only if none of them
+can do the job.
 
 ## Build and run from source
 

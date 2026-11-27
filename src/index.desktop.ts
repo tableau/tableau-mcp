@@ -13,6 +13,9 @@ import { startExpressServer } from './server/express.js';
 import { initializeWebRuntime } from './server/webRuntime.js';
 import { resolveTransportProfile } from './transportProfile.js';
 
+// Replaced at build time; undefined when run from source.
+declare const NPM_PACKAGE: boolean | undefined;
+
 const serverVersion = pkg.version;
 
 const DESKTOP_LOG_RETENTION_DAYS = 14;
@@ -114,7 +117,10 @@ async function startWebProfile(): Promise<void> {
 }
 
 async function startServer(): Promise<void> {
-  dotenv.config();
+  // The npm package starts in the user's project folder, whose .env is not ours to read.
+  if (typeof NPM_PACKAGE === 'undefined' || !NPM_PACKAGE) {
+    dotenv.config();
+  }
   // Profile is selected (and TRANSPORT validated) before any profile-specific config is
   // loaded: getDesktopConfig() requires stdio, getConfig() (web) requires SERVER/auth, so
   // we must not construct the wrong one — and an invalid transport must not fail open to

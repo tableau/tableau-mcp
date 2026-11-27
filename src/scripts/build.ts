@@ -15,6 +15,7 @@ import { isVariant, variants } from './variants.js';
 const dev = process.argv.includes('--dev');
 const dirty = process.argv.includes('--dirty');
 const watch = process.argv.includes('--watch');
+const npmPackage = process.argv.includes('--npm-package');
 const variant = process.argv.includes('--variant')
   ? process.argv[process.argv.indexOf('--variant') + 1]
   : 'default';
@@ -23,8 +24,13 @@ if (!isVariant(variant)) {
   throw new Error(`Invalid variant: ${variant}. Expected one of: ${variants.join(', ')}`);
 }
 
+if (npmPackage && variant !== 'desktop') {
+  throw new Error('--npm-package is only supported for the desktop variant');
+}
+
 const globalValues: Record<GlobalIdentifierName, string> = {
   BUILD_VARIANT: variant,
+  NPM_PACKAGE: String(npmPackage),
 };
 
 const checkNoDesktopSources = variant === 'default';

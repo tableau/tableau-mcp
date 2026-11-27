@@ -234,6 +234,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         // oauth is omitted due to using stdio for desktop
         oauth_client_id: '',
         oauth_client_display_name: '',
+        client: extra.config.userAgentPrefix?.split('/')[0] ?? '',
+        client_name: this.server.clientInfo?.name ?? '',
+        client_version: this.server.clientInfo?.version ?? '',
       });
     }
   }

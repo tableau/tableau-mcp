@@ -300,15 +300,23 @@ Feature flags gate in-development features and are internal: customers don't kno
 
 ## NPM Package
 
-Published as the Web-only `@tableau/mcp-server` package. Keep the Desktop entry point and Desktop
-data out of its tarball. The package has:
+Two packages publish from the same tag and version.
+
+`@tableau/mcp-server` is the Web package. Keep the Desktop entry point and Desktop data out of its
+tarball. The package has:
 - Binary: `tableau-mcp-server` → `build/index.js`
 - Exports: main entry + `./tracing` for APM
 - Requires Node.js >= 22.7.5
 
-Desktop remains available through `npm run build:desktop` from a clone and through the standalone
-Desktop executable from a source build (`npm run build:sea:desktop`); release archives carry the
-Web executable only.
+`@tableau/mcp-server-desktop` is the Desktop package, staged in `build-pkg/desktop/` by
+`npm run build:desktop:npm` (`src/scripts/prepareDesktopNpmPackage.ts`). Its README is
+`docs/README.desktop.md`. It has:
+- Binary: `tableau-mcp-server-desktop` → `build/index.desktop.js`
+- No dependencies, scripts or exports; the file allowlist is `src/scripts/desktopNpmPackage.ts`
+- Built with `--npm-package`, so it does not read a `.env` file
+
+Release archives carry the Web executable only. The standalone Desktop executable is a source
+build (`npm run build:sea:desktop`).
 
 ## Documentation
 

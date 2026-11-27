@@ -62,6 +62,55 @@ jobs:
             echo "Stable $VERSION -> npm publish (moves 'latest')"
             npm publish "$PACKAGE_TARBALL"
           fi
+  publish-npm-desktop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to upload the source map to the release
+      id-token: write # Needed for OIDC authentication
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: tableau/tableau-plugin
+          path: tableau-plugin
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '>=22.7.5'
+          registry-url: https://registry.npmjs.org/
+      - env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags
+          git checkout -b publish-desktop "$RELEASE_TAG"
+          npm install -g npm@latest
+          npm ci
+          npx tsx src/scripts/build.ts --variant desktop --npm-package
+          npx tsx src/scripts/prepareDesktopNpmPackage.ts
+          npm pack ./build-pkg/desktop --pack-destination build-pkg --json > build-pkg/desktop-pack.json
+          npx tsx src/scripts/assertDesktopNpmPackage.ts build-pkg/desktop-pack.json
+          PACKAGE_TARBALL="build-pkg/$(node -p "(d => Array.isArray(d) ? d[0].filename : Object.values(d)[0].filename)(require('./build-pkg/desktop-pack.json'))")"
+          npx tsx src/scripts/assertNpmInstall.desktop.ts "$PACKAGE_TARBALL" --skills-dir tableau-plugin/src/plugin/skills/tableau-desktop-authoring
+          # Same version and prerelease rules as publish-npm above.
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ -z "$VERSION" || "$VERSION" == "undefined" ]]; then
+            echo "::error::Could not read version from package.json — aborting publish (refusing to risk moving 'latest')"
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' != 'v$VERSION' (package.json) — aborting."
+            exit 1
+          fi
+          # The map stays out of the package to keep the download small; the release keeps it for decoding stack traces.
+          cp build/index.desktop.js.map "mcp-server-desktop-$VERSION.js.map"
+          gh release upload "$RELEASE_TAG" "mcp-server-desktop-$VERSION.js.map"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "Prerelease $VERSION -> npm publish --tag hotfix-v$VERSION (NOT moving 'latest')"
+            npm publish "$PACKAGE_TARBALL" --tag "hotfix-v$VERSION"
+          else
+            echo "Stable $VERSION -> npm publish (moves 'latest')"
+            npm publish "$PACKAGE_TARBALL"
+          fi
   upload-mcpb:
     runs-on: ubuntu-latest
     permissions:
