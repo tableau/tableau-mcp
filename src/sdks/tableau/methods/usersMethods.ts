@@ -2,12 +2,18 @@ import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { usersApis } from '../apis/usersApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { Group } from '../types/group.js';
 import { Pagination } from '../types/pagination.js';
 import { User } from '../types/user.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 export interface ListUsersResult {
   users: User[];
+  pagination?: Pagination;
+}
+
+export interface ListGroupsResult {
+  groups: Group[];
   pagination?: Pagination;
 }
 
@@ -125,5 +131,41 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
       },
     );
     return user;
+  };
+
+  /**
+   * Returns a filtered, sorted list of groups on the site with pagination metadata.
+   *
+   * Required scopes (Tableau Cloud): `<scope from the REST docs>`
+   *
+   * @param siteId - The Tableau site ID
+   * @param pageSize - Number of groups per page (default 100, max 1000)
+   * @param pageNumber - Page offset (default 1)
+   * @param filter - Filter expression, e.g. `name:eq:Sales`
+   * @param sort - Sort expression, e.g. `name:asc`
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#<anchor>
+   */
+  listGroups = async ({
+    siteId,
+    pageSize,
+    pageNumber,
+    filter,
+    sort,
+  }: {
+    siteId: string;
+    pageSize?: number;
+    pageNumber?: number;
+    filter?: string;
+    sort?: string;
+  }): Promise<ListGroupsResult> => {
+    const response = await this._apiClient.listGroups({
+      params: { siteId },
+      queries: { pageSize, pageNumber, filter, sort },
+      ...this.authHeader,
+    });
+    return {
+      groups: response.groups.group,
+      pagination: response.pagination,
+    };
   };
 }

@@ -595,6 +595,10 @@
       "category": "web-tools/flows",
       "sidebarPosition": 1
     },
+    "list-groups": {
+      "category": "web-tools/users",
+      "sidebarPosition": 2
+    },
     "list-instances": {
       "category": "desktop-tools/session",
       "sidebarPosition": 3

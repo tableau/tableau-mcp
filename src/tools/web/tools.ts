@@ -38,6 +38,7 @@ import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderIntera
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
+import { getListGroupsTool } from './users/listGroups.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -70,6 +71,7 @@ export const webToolFactories = [
   getInspectKnowledgeContextTool,
   getManageKnowledgeContextTool,
   getListUsersTool,
+  getListGroupsTool,
   getUpdateUserTool,
   getQueryDatasourceTool,
   getListFlowsTool,

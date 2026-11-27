@@ -220,6 +220,16 @@
     "docPath": "/docs/web-tools/users/list-users"
   },
   {
+    "title": "List Groups",
+    "summary": "Lists the groups on the Tableau site. Admin only.",
+    "date": "2026-11-21",
+    "changeType": "ADD",
+    "toolCategory": "Users",
+    "toolType": "Web Tools",
+    "toolName": "list-groups",
+    "docPath": "/docs/web-tools/users/list-groups"
+  },
+  {
     "title": "Update User",
     "summary": "Updates the site role of a user on the Tableau site.",
     "date": "2026-06-01",
