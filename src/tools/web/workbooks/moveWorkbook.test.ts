@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   mockUpdateWorkbook: vi.fn(),
   mockGetWorkbook: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
-  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -36,10 +35,6 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../../features/init.js', () => ({
-  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
-}));
-
 beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
@@ -50,7 +45,6 @@ describe('moveWorkbookTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     mocks.mockUpdateWorkbook.mockResolvedValue({
       ...mockWorkbook,
@@ -94,27 +88,6 @@ describe('moveWorkbookTool', () => {
   it('requires at least Explorer Can Publish role', () => {
     const tool = getMoveWorkbookTool(new WebMcpServer());
     expect(tool.minRequiredRole).toBe(SiteRole.EXPLORER_CAN_PUBLISH);
-  });
-
-  it('is enabled when the data-apps flag is ON', async () => {
-    const tool = getMoveWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
-
-    expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('data-apps');
-  });
-
-  it('is enabled when the data-apps flag is ON and there is no OAuth client id (stdio)', async () => {
-    const tool = getMoveWorkbookTool(new WebMcpServer());
-
-    expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('is disabled when the data-apps feature flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
-    const tool = getMoveWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
   it('moves the workbook to the destination project and returns the updated workbook', async () => {

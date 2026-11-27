@@ -88,7 +88,6 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
-    disableStrictScopeMatch: boolean;
     external: {
       discovery: boolean;
       usernameClaimName: string;
@@ -166,7 +165,6 @@ export class Config extends BaseConfig {
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
       ADVERTISE_API_SCOPES: advertiseApiScopes,
-      DISABLE_STRICT_SCOPE_MATCH: disableStrictScopeMatch,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -310,7 +308,6 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
-      disableStrictScopeMatch: disableStrictScopeMatch === 'true',
       external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
         ? {
             discovery: oauthExternalDiscovery === 'true',

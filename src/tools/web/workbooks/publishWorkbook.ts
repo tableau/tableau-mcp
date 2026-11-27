@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
@@ -74,22 +73,6 @@ const paramsSchema = {
     ),
 };
 
-const personalSpaceParamsSchema = z.object(paramsSchema).strict();
-const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true }).extend({
-  projectId: z
-    .string()
-    .min(1)
-    .describe(
-      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs.',
-    ),
-});
-// Both advertised schemas produce arguments accepted by the same execution path; the project
-// schema has no personalSpace, so it is optional on the shared output type.
-type PublishWorkbookParamsSchema = z.ZodType<
-  Omit<z.output<typeof personalSpaceParamsSchema>, 'personalSpace'> & { personalSpace?: boolean },
-  z.input<typeof personalSpaceParamsSchema>
->;
-
 export type PublishWorkbookResult =
   | {
       status: 'published';
@@ -115,29 +98,18 @@ type ValidationFinding = {
   elementName: string;
 };
 
-export const getPublishWorkbookTool = (
-  server: WebMcpServer,
-): WebTool<PublishWorkbookParamsSchema> => {
-  const tool = new WebTool<PublishWorkbookParamsSchema>({
+export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const tool = new WebTool<typeof paramsSchema>({
     server,
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    description: new Provider(async () => {
-      const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
-      return [
-        'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
-          (dataAppsEnabled
-            ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
-            : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
-          'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
-        'Project publishes also return the workbook permission rules (configured rules, not effective access) in permissions, or permissionsNote if that optional read fails.',
-      ].join('\n\n');
-    }),
-    paramsSchema: new Provider(async () =>
-      (await getFeatureGate().isFeatureEnabled('data-apps'))
-        ? personalSpaceParamsSchema
-        : projectParamsSchema,
-    ),
+    description: [
+      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
+        'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. ' +
+        'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
+      'Project publishes also return the workbook permission rules (configured rules, not effective access) in permissions, or permissionsNote if that optional read fails.',
+    ].join('\n\n'),
+    paramsSchema,
     annotations: {
       title: 'Publish Workbook',
       readOnlyHint: false,
@@ -166,12 +138,8 @@ export const getPublishWorkbookTool = (
           overwrite,
         },
         callback: async () => {
-          // Recheck at execution time in case the client cached a schema from before the flag changed.
-          const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
-          // projectId always wins. Without it, the destination is Personal Space unless it is
-          // opted out (or the flag is off, e.g. a stale cached schema), which requires projectId.
-          const usePersonalSpace =
-            projectId === undefined && dataAppsEnabled && personalSpace !== false;
+          // projectId always wins. Without it, publish to Personal Space unless opted out.
+          const usePersonalSpace = projectId === undefined && personalSpace !== false;
           if (projectId === undefined && !usePersonalSpace) {
             throw new ArgsValidationError('projectId is required to publish a workbook.');
           }

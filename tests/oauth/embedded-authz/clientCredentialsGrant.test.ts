@@ -8,9 +8,6 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
-  // Lets a test turn the disable-strict-scope-match flag off (strict on); otherwise delegates to the
-  // real gate.
-  disableStrictFlag: { value: true },
   mcpWildcardScopeFlag: { value: false },
 }));
 
@@ -18,9 +15,7 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 
-// Override the feature gate for this file so the disable-strict-scope-match flag is controllable
-// per-test.
-// Composes with the shared testSetup mock (admin-tools forcing lives there); this file's mock wins.
+// Override the wildcard flag per test, keeping admin tools enabled as in the shared setup.
 vi.mock('../../../src/features/init.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../src/features/init.js')>();
   return {
@@ -29,9 +24,6 @@ vi.mock('../../../src/features/init.js', async (importOriginal) => {
       const featureGate = original.getFeatureGate();
       return {
         isFeatureEnabled: async (featureName: string) => {
-          if (featureName === 'disable-strict-scope-match') {
-            return mocks.disableStrictFlag.value;
-          }
           if (featureName === 'mcp-wildcard-scope') {
             return mocks.mcpWildcardScopeFlag.value;
           }
@@ -243,12 +235,10 @@ describe('client credentials grant type', () => {
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
       // The scope is required only when API scopes are advertised.
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      mocks.disableStrictFlag.value = true;
     });
 
     afterEach(() => {
       vi.unstubAllEnvs();
-      mocks.disableStrictFlag.value = true;
     });
 
     it('mints the token when API scopes are not advertised, even for a subset omitting the mandatory scope', async () => {
@@ -266,7 +256,7 @@ describe('client credentials grant type', () => {
       expect(response.body.access_token).toEqual(expect.any(String));
     });
 
-    it('rejects a client_credentials grant that omits the mandatory scope when site settings are on and strict is off', async () => {
+    it('rejects a client_credentials grant that omits the mandatory scope when site settings are on', async () => {
       const { app } = await startServer();
 
       const response = await request(app).post('/oauth2/token').send({
@@ -281,16 +271,17 @@ describe('client credentials grant type', () => {
       expect(response.body.error_description).toContain(MANDATORY_SCOPE);
     });
 
-    it('mints the token when strict scope match is on, even for the same subset', async () => {
-      mocks.disableStrictFlag.value = false;
+    it('mints a subset token that includes the mandatory scope', async () => {
       const { app } = await startServer();
 
-      const response = await request(app).post('/oauth2/token').send({
-        grant_type: 'client_credentials',
-        client_id: 'test-client-id',
-        client_secret: 'test-client-secret',
-        scope: SUBSET_SCOPE,
-      });
+      const response = await request(app)
+        .post('/oauth2/token')
+        .send({
+          grant_type: 'client_credentials',
+          client_id: 'test-client-id',
+          client_secret: 'test-client-secret',
+          scope: `${SUBSET_SCOPE} ${MANDATORY_SCOPE}`,
+        });
 
       expect(response.status).toBe(200);
       expect(response.body.access_token).toEqual(expect.any(String));

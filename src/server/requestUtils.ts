@@ -57,4 +57,5 @@ export function getToolNameFromRequestBody(body: unknown): WebToolName | undefin
       return name;
     }
   }
+  return undefined;
 }

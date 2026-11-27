@@ -580,11 +580,8 @@ describe('server', () => {
       expect(registered).toContain('query-datasource');
     });
 
-    it('omits nothing and adds no missing-scopes note under strict scope match with a full grant', async () => {
-      // Strict ON guarantees a full grant upstream (the gate rejects anything short), so discovery
-      // omits nothing. server.web.ts has no strict branch — this pins that a full grant produces an
-      // empty omission set and no missing-scopes note, regardless of the strict toggle.
-      vi.stubEnv('ADVERTISE_API_SCOPES', 'true'); // strict is on by default
+    it('omits nothing and adds no missing-scopes note with a full grant', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       const server = getServer();
       await server.registerTools(bearerAuth, [
         ...allScopes('list-datasources'),
@@ -596,12 +593,8 @@ describe('server', () => {
       expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
     });
 
-    it('omits unusable tools and adds the missing-scopes note under non-strict with a subset grant', async () => {
-      // Strict OFF: a subset grant is accepted and discovery degrades gracefully — the tool the grant
-      // cannot cover is omitted and the note is pushed. This is the existing behavior the subset
-      // mode relies on; pinned here as a regression against the strict toggle.
+    it('omits unusable tools and adds the missing-scopes note with a subset grant', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
       const server = getServer();
       // Covers list-datasources fully but not query-datasource's extra viz_data_service:read scope.
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
