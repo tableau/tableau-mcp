@@ -9,13 +9,15 @@ the pull request._
 request! -->
 
 <!-- TITLE: say plainly what the change does. Keep the `type(scope):` prefix; skip jargon, slogans, and
-version numbers. Good: "fix(remove-field): refetch the worksheet before removing a field". -->
+version numbers. Good: "fix(remove-field): refetch the worksheet before removing a field". Write your
+own, don't reuse it. -->
 
 ## Decision
 
-<!-- The one thing a reviewer is being asked to accept. State whether it is a RULE WE NOW KEEP (e.g.
-"every worksheet-mutating tool refreshes state first") or a ONE-OFF for this case. Do not leave the
-reviewer to infer which. This is the most important line in the PR. -->
+<!-- In one or two plain sentences, say what the reviewer is being asked to accept, and whether other
+code should follow it from now on or it only applies here. Write it the way you would say it to a
+teammate. For example: "From now on, every tool that edits a worksheet re-reads it first." or "This
+only changes how bind-template handles a workbook with no data." Write your own, don't reuse these. -->
 
 ## Description
 
