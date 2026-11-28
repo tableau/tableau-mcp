@@ -624,6 +624,15 @@ export async function bindTemplate(args: {
   keepLargePie?: boolean;
 }): Promise<BinderResult> {
   const summary = summarizeSchema(args.workbookXml, args.datasource);
+  if (summary.fields.length === 0) {
+    return {
+      status: 'escalate',
+      reason: 'no-datasource-fields',
+      blockers: [
+        { code: 'no-datasource-fields', detail: 'The workbook has no connected datasource fields' },
+      ],
+    };
+  }
   const minConfidence = args.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
 
   // ── Call 2: validate the agent-produced proposal ─────────────────

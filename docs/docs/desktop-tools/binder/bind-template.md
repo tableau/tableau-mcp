@@ -14,7 +14,7 @@ Each call reports one outcome in its `status` field:
 
 - `bound` — the ask matched a template and every slot is filled; the response carries the bound arguments (and, when `auto_apply` succeeded, an applied receipt).
 - `propose` — no deterministic match; the response lists candidate templates and the fields to bind, for you to choose one and call again with a `proposal`.
-- `escalate` — no fast-path template fits the ask/data; the response routes you to the template artifact path (`list-templates` → `list-available-fields` → `build-worksheets-from-templates` → `apply-worksheet`).
+- `escalate` — no fast-path template fits; the response usually routes you to the template artifact path (`list-templates` → `list-available-fields` → `build-worksheets-from-templates` → `apply-worksheet`). If the workbook has no connected data, `reason` is `"no-datasource-fields"` instead: have the user connect a datasource, then retry the same ask.
 - `blocked` — this MCP server refused the call before writing a chart, for example a repeated or unchanged retry for the same ask, a proposal outside the returned `call_2_contract`, an unresolved filter, or a pie with more than 12 slices (see [Notes and caveats](#notes-and-caveats)).
 
 :::note[Mutates the workbook]

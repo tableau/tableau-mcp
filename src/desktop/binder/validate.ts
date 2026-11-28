@@ -114,7 +114,8 @@ export type EscalateReason =
   // The ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
   // classifier fails closed (never classifies a truncated subset) and escalates to
   // the general authoring flow rather than risk a silent wrong bind.
-  | 'schema-too-large';
+  | 'schema-too-large'
+  | 'no-datasource-fields';
 
 export function pieSliceGateDetail(blockers: readonly Blocker[]): string | undefined {
   return blockers.find((b) => b.pie_slice_gate === true)?.detail;

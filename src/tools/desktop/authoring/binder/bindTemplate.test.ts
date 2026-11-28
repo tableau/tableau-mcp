@@ -602,6 +602,14 @@ const escalateResult: BinderResult = {
   blockers: [{ code: 'field-not-found', slot_id: 'val', detail: 'No field named "Revenue".' }],
 };
 
+const noDatasourceFieldsResult: BinderResult = {
+  status: 'escalate',
+  reason: 'no-datasource-fields',
+  blockers: [
+    { code: 'no-datasource-fields', detail: 'The workbook has no connected datasource fields' },
+  ],
+};
+
 const tier2EscalateResult: BinderResult = {
   status: 'escalate',
   reason: 'not-fast-path',
@@ -4369,6 +4377,41 @@ describe('bindTemplateTool bind recovery gate', () => {
     );
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the user to connect data instead of routing a no-data workbook to the artifact path', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(noDatasourceFieldsResult);
+
+    const result = await getToolResult({ session: '1', ask: 'bar chart of Sales by Region' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({ status: 'escalate', reason: 'no-datasource-fields' });
+    expect(body.guidance).toContain('connect a datasource');
+    expect(body.guidance).not.toContain('list-available-fields');
+    expect(body.guidance).not.toContain('list-templates');
+    expectStructuredBlock(result, { label: 'Ask the user to connect data', kind: 'prefill' });
+  });
+
+  it('binds the same ask normally once data is connected after a no-data escalation', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(noDatasourceFieldsResult)
+      .mockResolvedValueOnce(escalateResult);
+    const ask = 'bar chart of Sales by Region';
+
+    await getToolResult({ session: '1', ask });
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
+
+    const retry = await getToolResult({ session: '1', ask });
+    invariant(retry.content[0].type === 'text');
+    expect(JSON.parse(retry.content[0].text)).toMatchObject({
+      status: 'escalate',
+      reason: 'field-not-found',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 });
 

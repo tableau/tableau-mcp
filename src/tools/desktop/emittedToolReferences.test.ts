@@ -140,6 +140,7 @@ const NON_TOOL_VOCABULARY = [
   'name-style',
   'nav-action',
   'nav-type',
+  'no-datasource-fields',
   'no-desktop-instances-found',
   'non-empty',
   'non-string',
