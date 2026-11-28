@@ -23,7 +23,6 @@ const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const knowledgeWriteToolsEnabled = Boolean(features['knowledge-write-tools']);
 let knowledgeReadExpected: boolean;
 let knowledgeWriteExpected: boolean;
-const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
@@ -101,8 +100,6 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (data-apps feature flag)
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -137,11 +134,6 @@ describe('server', () => {
       }
       if (!knowledgeWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => name !== 'manage-knowledge-context');
-      }
-
-      // Filter out data-app tools if they are not enabled (data-apps feature flag)
-      if (!tableauDataAppsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
       // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
@@ -340,8 +332,6 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (data-apps feature flag)
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -386,11 +376,6 @@ describe('server', () => {
         );
       }
 
-      // Filter out data-app tools if they are not enabled (data-apps feature flag)
-      if (!tableauDataAppsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
-      }
-
       // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
       if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
@@ -405,7 +390,10 @@ describe('server', () => {
         (name) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(name) && !EXPERTISE_TOOL_NAMES.has(name),
       );
       expect(expectedDesktopToolNames).toContain('bind-template');
-      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
+      // Both variants define scaffold-data-app; the combined server exposes Desktop's tool once.
+      const expectedToolNames = [
+        ...new Set([...expectedDesktopToolNames, ...expectedWebToolNames]),
+      ];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });

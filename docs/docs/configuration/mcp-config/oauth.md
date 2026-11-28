@@ -77,9 +77,8 @@ To set it up:
 The server now advertises `tableau:mcp:*` in place of the individual `tableau:mcp:…` scopes, so
 clients that read `scopes_supported` request `tableau:mcp:*`. Before you upgrade, set up your IdP
 to accept that scope and put it in the token. If your IdP rejects the scope, sign-in fails. If it
-drops the scope, the server rejects the token, or, with
-[`DISABLE_STRICT_SCOPE_MATCH`](#disable_strict_scope_match) set to `true`, the client connects
-with no tools. Tokens that list the individual scopes keep working.
+drops the scope, the token does not grant access to MCP tools. Tokens that list the individual
+scopes keep working.
 
 :::
 
@@ -316,6 +315,15 @@ Disable scope enforcement and scope challenges.
 
 - Default: `false`
 - Useful for Tableau Server deployments that do not want to enforce scopes yet.
+- When `false`, a token with only some of the supported scopes can connect. Tools it lacks scopes
+  for are left out of the tool list, and the server's initialize instructions name them. Each tool
+  call still requires that tool's MCP scopes, plus its Tableau API scopes when
+  [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`.
+- When `false`, `ADVERTISE_API_SCOPES` is `true`, and
+  [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
+  every token must carry `tableau:mcp_site_settings:read` so the server can read the site's
+  settings. It is an API scope, so `tableau:mcp:*` doesn't grant it. A token without it is rejected
+  with a `403`, and the embedded authorization server refuses to issue one (`400` `invalid_scope`).
 - When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
   enforce scopes on incoming access tokens.
 - With [your own identity provider](#use-your-own-identity-provider-self-hosted-only), `true` is
@@ -508,35 +516,11 @@ SESSION_STORE_PROVIDER_CONFIG='{"module":"./providers/redis-session-store.js"}'
 Include Tableau API scopes in OAuth metadata and scope challenges.
 
 - Default: `false`
-- When `false`, `scopes_supported` lists only `tableau:mcp:*`. When `true`, it also lists the
-  Tableau API scopes, and scope challenges may include API scopes for step-up. `tableau:mcp:*` never
-  grants API scopes.
-- The check for AI-powered Pulse insight tools needs `tableau:entitlements:read`, so it is part of
-  the advertised set. Under strict scope matching (the default), tokens issued before upgrading must
-  be re-consented to include it. With
-  [`DISABLE_STRICT_SCOPE_MATCH`](#disable_strict_scope_match) `true`, those tools are left out
-  instead.
-
-<hr />
-
-### `DISABLE_STRICT_SCOPE_MATCH`
-
-Do not require every access token to carry all supported scopes before it can connect. Allows for access tokens that are subsets of the full supported scopes lists to be used in a connection.
-
-- Default: `false`.
-- Has no effect when [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) is `true`.
-- When `false`, a token must carry `tableau:mcp:*` or every supported `tableau:mcp:…` scope.
-  Otherwise it is rejected with a `403` `insufficient_scope` error. When
-  [`ADVERTISE_API_SCOPES`](#advertise_api_scopes) is `true`, the token must also carry the supported
-  Tableau API scopes, except optional ones.
-- When `true`, a token with only some of the supported scopes can connect. Tools the token lacks
-  scopes for are left out of the tool list, and the server's initialize instructions name them.
-- When `true`, `ADVERTISE_API_SCOPES` is `true`, and
-  [`ENABLE_MCP_SITE_SETTINGS`](site-settings.md#enable_mcp_site_settings) is `true` (its default),
-  every token must carry `tableau:mcp_site_settings:read` so the server can read the site's
-  settings. It is an API scope, so `tableau:mcp:*` doesn't grant it. A token without it is
-  rejected with a `403`, and the embedded authorization server refuses to issue one (`400`
-  `invalid_scope`).
+- When `false`, `scopes_supported` lists MCP scopes only. When `true`, it also lists Tableau API
+  scopes, and scope challenges may include API scopes for step-up. `tableau:mcp:*` never grants API
+  scopes.
+- When `true`, the advertised set also includes `tableau:entitlements:read` if AI-powered Pulse
+  insight tools are enabled.
 
 <hr />
 

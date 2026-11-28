@@ -32,8 +32,9 @@ ship in the default surface).
 `MIN_SUPPORTED_API_VERSION` in `apiVersion.ts` is the oldest External Client API version this server
 supports. Code does not check for anything older. When a feature needs a newer version:
 
-- For a new tool, set `minApiVersion` on it. Registration hides the tool when the connected Desktop
-  reports an older version.
+- For a new tool, set `minApiVersion` on it. A call that reaches an older Desktop fails with
+  `desktop-api-version-too-old` before anything is sent, using the version the session's executor
+  read from the discovery file. When the session is pinned, registration also hides the tool.
 - For changed behavior in an existing tool, compare `executor.desktopApiVersion` with
   `apiVersionAtLeast` and keep the older path until the minimum supported version catches up.
 

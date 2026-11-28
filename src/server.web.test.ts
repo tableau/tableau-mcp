@@ -580,11 +580,8 @@ describe('server', () => {
       expect(registered).toContain('query-datasource');
     });
 
-    it('omits nothing and adds no missing-scopes note under strict scope match with a full grant', async () => {
-      // Strict ON guarantees a full grant upstream (the gate rejects anything short), so discovery
-      // omits nothing. server.web.ts has no strict branch — this pins that a full grant produces an
-      // empty omission set and no missing-scopes note, regardless of the strict toggle.
-      vi.stubEnv('ADVERTISE_API_SCOPES', 'true'); // strict is on by default
+    it('omits nothing and adds no missing-scopes note with a full grant', async () => {
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       const server = getServer();
       await server.registerTools(bearerAuth, [
         ...allScopes('list-datasources'),
@@ -596,12 +593,8 @@ describe('server', () => {
       expect(getInstructions(server)).not.toContain("doesn't include access to these tools");
     });
 
-    it('omits unusable tools and adds the missing-scopes note under non-strict with a subset grant', async () => {
-      // Strict OFF: a subset grant is accepted and discovery degrades gracefully — the tool the grant
-      // cannot cover is omitted and the note is pushed. This is the existing behavior the subset
-      // mode relies on; pinned here as a regression against the strict toggle.
+    it('omits unusable tools and adds the missing-scopes note with a subset grant', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
-      vi.stubEnv('DISABLE_STRICT_SCOPE_MATCH', 'true');
       const server = getServer();
       // Covers list-datasources fully but not query-datasource's extra viz_data_service:read scope.
       await server.registerTools(bearerAuth, allScopes('list-datasources'));
@@ -685,9 +678,6 @@ describe('server', () => {
     it('omits a conditional tool when its probe scope is not granted, without running the condition check', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       vi.stubEnv('INCLUDE_TOOLS', 'mock-conditional-tool');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (name: string) => name === 'enforce-registration-conditions',
-      );
       const server = getServer();
       vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
 
@@ -700,25 +690,21 @@ describe('server', () => {
       expect(getInstructions(server)).toContain("doesn't include access to these tools");
     });
 
-    it('does not hold the caller to probe scopes when registration conditions are not enforced', async () => {
-      vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    it('does not enforce probe scopes when API scopes are not advertised', async () => {
       vi.stubEnv('INCLUDE_TOOLS', 'mock-conditional-tool');
-      // enforce-registration-conditions off (beforeEach default): probe scopes are not advertised, so
-      // the grant would never carry them — omitting on them would wrongly hide every conditional tool.
+      vi.stubEnv('ADVERTISE_API_SCOPES', 'false');
       const server = getServer();
       vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
 
       await server.registerTools(bearerAuth, ['tableau:mcp:datasource:read']);
 
       expect(registeredNames(server)).toContain('mock-conditional-tool');
+      expect(mocks.mockCheckRegistrationConditions).toHaveBeenCalled();
     });
 
     it('runs the condition check when the probe scope is granted', async () => {
       vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
       vi.stubEnv('INCLUDE_TOOLS', 'mock-conditional-tool');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (name: string) => name === 'enforce-registration-conditions',
-      );
       mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
       const server = getServer();
       vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
@@ -1310,7 +1296,6 @@ describe('server', () => {
 
     async function setup(): Promise<WebMcpServer> {
       vi.stubEnv('TOOL_PROFILE', 'combined-lean');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
       const server = getServer({ shared: true });
       await server.registerTools();
       return server;
@@ -1391,9 +1376,6 @@ describe('server', () => {
 
     it('retries a Pulse group after an indeterminate condition probe and registers it once the probe succeeds', async () => {
       const server = await setup();
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
-        enforceRegistrationConditions(name),
-      );
       mocks.mockCheckRegistrationConditions
         .mockResolvedValueOnce({
           registrationConditionsMet: false,
@@ -1418,9 +1400,6 @@ describe('server', () => {
 
     it('reports a definitive unmet condition as a note and closes the group', async () => {
       const server = await setup();
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
-        enforceRegistrationConditions(name),
-      );
       mocks.mockCheckRegistrationConditions.mockResolvedValue({
         registrationConditionsMet: false,
         failingCondition: 'RequiresPulse',
@@ -1514,15 +1493,6 @@ describe('server', () => {
     } as unknown as WebTool<any>;
   }
 
-  // The registration-time role check is gated behind the `enforce-role-requirements` flag. With the
-  // flag ON the tool's minRequiredRole is enforced; with it OFF the check is skipped entirely.
-  const enforceRoleRequirements = (name: string): boolean => name === 'enforce-role-requirements';
-
-  // Companion flag for the registration-conditions check (Pulse etc.). ON enforces a tool's
-  // declared `registrationConditions`; OFF skips the check entirely.
-  const enforceRegistrationConditions = (name: string): boolean =>
-    name === 'enforce-registration-conditions';
-
   it.each([
     ['omits Knowledge tools for an unlicensed user', 'Unlicensed', false, []],
     ['omits Knowledge tools for a Guest', 'Guest', false, []],
@@ -1581,11 +1551,7 @@ describe('server', () => {
     vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
     vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (name: string) =>
-        name === 'knowledge-tools' ||
-        name === 'knowledge-write-tools' ||
-        enforceRoleRequirements(name) ||
-        enforceRegistrationConditions(name),
+      (name: string) => name === 'knowledge-tools' || name === 'knowledge-write-tools',
     );
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(siteRole);
     mocks.mockCheckRegistrationConditions.mockResolvedValue(
@@ -1616,9 +1582,6 @@ describe('server', () => {
   it('omits Knowledge tools when the knowledge-tools feature flag is off', async () => {
     vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
     vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (name: string) => enforceRoleRequirements(name) || enforceRegistrationConditions(name),
-    );
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
     mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
 
@@ -1638,10 +1601,7 @@ describe('server', () => {
     vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
     vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (name: string) =>
-        name === 'knowledge-tools' ||
-        enforceRoleRequirements(name) ||
-        enforceRegistrationConditions(name),
+      (name: string) => name === 'knowledge-tools',
     );
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
     mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
@@ -1669,7 +1629,6 @@ describe('server', () => {
   });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
     const server = getServer();
@@ -1686,7 +1645,6 @@ describe('server', () => {
   });
 
   it('registers a tool when the caller ranks at or above minRequiredRole', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
 
     const server = getServer();
@@ -1703,7 +1661,6 @@ describe('server', () => {
   });
 
   it('does not register a tool when the caller has no site role (fetch failed)', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
 
     const server = getServer();
@@ -1719,7 +1676,7 @@ describe('server', () => {
     );
   });
 
-  it('registers a below-rank tool when enforce-role-requirements is off and never fetches the site role', async () => {
+  it('enforces role requirements when all feature flags are disabled', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
@@ -1729,13 +1686,12 @@ describe('server', () => {
 
     await server.registerTools();
 
-    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
       'mock-admin-tool',
       expect.anything(),
       expect.any(Function),
     );
-    // The gate short-circuits before the role fetch, so no /users call is issued.
-    expect(mocks.mockGetCurrentUserSiteRole).not.toHaveBeenCalled();
+    expect(mocks.mockGetCurrentUserSiteRole).toHaveBeenCalledTimes(1);
   });
 
   // The SDK emits server-level instructions from `mcpServer.server._instructions` at initialize
@@ -1745,7 +1701,6 @@ describe('server', () => {
   }
 
   it('warns in the connect instructions when a role-gated tool is omitted because the role fetch failed', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     // undefined uniquely signals a failed fetch (a successful low-role fetch returns the role string).
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
 
@@ -1764,7 +1719,6 @@ describe('server', () => {
   });
 
   it('does not warn when the role was fetched but ranks too low (legitimate omission)', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
     const server = getServer();
@@ -1776,7 +1730,7 @@ describe('server', () => {
     expect(getInstructions(server)).not.toContain('site role could not be determined');
   });
 
-  it('does not warn when enforce-role-requirements is off (no role check, nothing omitted)', async () => {
+  it('warns about role fetch failures when all feature flags are disabled', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
 
@@ -1786,11 +1740,10 @@ describe('server', () => {
 
     await server.registerTools();
 
-    expect(getInstructions(server)).not.toContain('site role could not be determined');
+    expect(getInstructions(server)).toContain('site role could not be determined');
   });
 
   it('registers a Viewer-minimum tool even when the role fetch failed (Viewer is never enforced)', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     // Fetch failed (undefined): an above-Viewer tool would be omitted, but a Viewer minimum is
     // satisfied by every authenticated caller, so enforcement is skipped for it entirely.
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
@@ -1821,7 +1774,6 @@ describe('server', () => {
   }
 
   it('logs a telemetry warning when a role-gated tool is omitted because the role fetch failed', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
 
     const server = getServer();
@@ -1838,7 +1790,6 @@ describe('server', () => {
   });
 
   it('does not log a telemetry warning when the role was fetched but ranks too low', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
     const server = getServer();
@@ -1851,7 +1802,6 @@ describe('server', () => {
   });
 
   it('logs a telemetry warning naming the tools omitted for unmet conditions and the failing condition', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
     mocks.mockCheckRegistrationConditions.mockResolvedValue({
       registrationConditionsMet: false,
       failingCondition: 'RequiresPulse',
@@ -1876,7 +1826,6 @@ describe('server', () => {
   });
 
   it('registers a conditional tool when its conditions are met', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
     mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
 
     const server = getServer();
@@ -1900,12 +1849,8 @@ describe('server', () => {
       'manage-knowledge-context',
     ];
 
-    const knowledgeFlag =
-      (readFlag: boolean, writeFlag: boolean, enforceConditions = false) =>
-      (name: string) =>
-        (name === 'knowledge-tools' && readFlag) ||
-        (name === 'knowledge-write-tools' && writeFlag) ||
-        (name === 'enforce-registration-conditions' && enforceConditions);
+    const knowledgeFlag = (readFlag: boolean, writeFlag: boolean) => (name: string) =>
+      (name === 'knowledge-tools' && readFlag) || (name === 'knowledge-write-tools' && writeFlag);
 
     async function registerKnowledgeTools(): Promise<{
       server: WebMcpServer;
@@ -1971,10 +1916,10 @@ describe('server', () => {
       expect(registered).toEqual([]);
     });
 
-    it('checks Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is on', async () => {
+    it('checks Knowledge availability when enabled by the environment with all feature flags disabled', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
       mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
 
       const { registered } = await registerKnowledgeTools();
@@ -1987,10 +1932,10 @@ describe('server', () => {
       expect(getWarningLogs()).toHaveLength(0);
     });
 
-    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true, conditions are enforced, and the site lacks Knowledge', async () => {
+    it('omits Knowledge tools with the Knowledge note when KNOWLEDGE_TOOLS_ENABLED=true and the site lacks Knowledge', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
       mocks.mockCheckRegistrationConditions.mockResolvedValue({
         registrationConditionsMet: false,
         failingCondition: 'RequiresKnowledge',
@@ -2013,10 +1958,10 @@ describe('server', () => {
       }
     });
 
-    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true, conditions are enforced, and the probe fails transiently', async () => {
+    it('omits Knowledge tools with the indeterminate warning when KNOWLEDGE_TOOLS_ENABLED=true and the probe fails transiently', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false, true));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
       mocks.mockCheckRegistrationConditions.mockResolvedValue({
         registrationConditionsMet: false,
         failingCondition: 'RequiresKnowledge',
@@ -2034,25 +1979,14 @@ describe('server', () => {
       );
     });
 
-    it('does not check Knowledge availability when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is off', async () => {
-      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
-      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
-
-      const { registered } = await registerKnowledgeTools();
-
-      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-      expect(registered).toEqual(knowledgeToolNames);
-    });
-
-    it('does not check Knowledge availability when KNOWLEDGE_TOOLS_ENABLED is unset and enforce-registration-conditions is off', async () => {
+    it('checks Knowledge availability when enabled by feature flags', async () => {
       vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', undefined);
       vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', undefined);
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(true, true));
 
       const { registered } = await registerKnowledgeTools();
 
-      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+      expect(mocks.mockCheckRegistrationConditions).toHaveBeenCalledTimes(3);
       expect(registered).toEqual(knowledgeToolNames);
     });
 
@@ -2064,21 +1998,14 @@ describe('server', () => {
 
       expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
     });
-
-    it('checks no registration conditions when KNOWLEDGE_TOOLS_ENABLED=true and enforce-registration-conditions is off', async () => {
-      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
-      vi.stubEnv('KNOWLEDGE_WRITE_TOOLS_ENABLED', 'true');
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(knowledgeFlag(false, false));
-
-      const { registered } = await registerKnowledgeTools();
-
-      expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-      expect(registered).toEqual(knowledgeToolNames);
-    });
   });
 
-  it('does not check conditions or warn when enforce-registration-conditions is off', async () => {
+  it('omits tools with unmet conditions when all feature flags are disabled', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
 
     const server = getServer();
     const mockConditionalTool = createMockConditionalTool();
@@ -2086,18 +2013,16 @@ describe('server', () => {
 
     await server.registerTools();
 
-    // With the flag off, conditions are not evaluated: the tool registers and nothing is logged.
-    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
       'mock-conditional-tool',
       expect.anything(),
       expect.any(Function),
     );
-    expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
-    expect(getWarningLogs()).toHaveLength(0);
+    expect(mocks.mockCheckRegistrationConditions).toHaveBeenCalledTimes(1);
+    expect(getWarningLogs()).toHaveLength(1);
   });
 
   it('explains in the connect instructions why Pulse tools were omitted', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
     mocks.mockCheckRegistrationConditions.mockResolvedValue({
       registrationConditionsMet: false,
       failingCondition: 'RequiresPulse',
@@ -2117,7 +2042,6 @@ describe('server', () => {
   });
 
   it('does not mention Pulse in the connect instructions when conditions are met', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
     mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
 
     const server = getServer();

@@ -214,9 +214,9 @@ export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
 
 /**
- * Reading the per-site MCP security layer requires this Tableau API scope. Under subset
- * (non-strict) scope matching it is mandatory when MCP site settings are enabled and API scopes
- * are advertised (see isSiteSettingsScopeRequired).
+ * Reading the per-site MCP security layer requires this Tableau API scope. It is mandatory when
+ * MCP site settings are enabled and API scopes are enforced and advertised
+ * (see isSiteSettingsScopeRequired).
  */
 export const MCP_SITE_SETTINGS_READ_SCOPE: TableauApiScope = 'tableau:mcp_site_settings:read';
 
@@ -625,7 +625,6 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await isKnowledgeToolsEnabled(config);
   const knowledgeWriteToolsEnabled = await isKnowledgeWriteToolsEnabled(config);
-  const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
   const adminToolsEnabled = await isAdminToolsEnabled(config);
 
   // Remove disabled tools based on feature flags
@@ -690,11 +689,6 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('publish-datasource');
   }
 
-  if (!dataAppsEnabled) {
-    enabledTools.delete('scaffold-data-app');
-    enabledTools.delete('move-workbook');
-  }
-
   if (!authoringAllowedForClient) {
     enabledTools.delete('scaffold-data-app');
   }
@@ -730,9 +724,6 @@ export async function getSupportedApiScopes(
 ): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
-  const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
-    'enforce-registration-conditions',
-  );
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
@@ -744,11 +735,9 @@ export async function getSupportedApiScopes(
           scopes.add(scope);
         }
       }
-      // adding api scopes needed to check the registration conditions required by this tool
-      if (enforceRegistrationConditions) {
-        for (const scope of scopeConfig.conditionApiScopes ?? []) {
-          scopes.add(scope);
-        }
+      // Include the scopes needed to check this tool's registration conditions.
+      for (const scope of scopeConfig.conditionApiScopes ?? []) {
+        scopes.add(scope);
       }
     }
   }

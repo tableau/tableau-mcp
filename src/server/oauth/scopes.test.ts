@@ -400,27 +400,6 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:workbook:create');
     });
 
-    it('should exclude tableau:mcp:workbook:write when data-apps is disabled', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedMcpScopes(claudeClientId);
-      expect(scopes).not.toContain('tableau:mcp:workbook:write');
-    });
-
-    it('should include tableau:mcp:workbook:write when data-apps is enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-        return featureName === 'data-apps';
-      });
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedMcpScopes(claudeClientId);
-      expect(scopes).toContain('tableau:mcp:workbook:write');
-    });
-
     it('should always include other MCP scopes regardless of adminToolsEnabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -473,22 +452,19 @@ describe('scopes', () => {
 
   describe('getSupportedApiScopes', () => {
     it.each([
-      { enabled: false, clientId: claudeClientId, expected: true },
-      { enabled: true, clientId: claudeClientId, expected: true },
-      { enabled: true, clientId: undefined, expected: true },
-      { enabled: true, clientId: slackClientId, expected: false },
+      { clientId: claudeClientId, expected: true },
+      { clientId: undefined, expected: true },
+      { clientId: slackClientId, expected: false },
       {
-        enabled: true,
         clientId: slackClientId,
         authoringWithSlack: true,
         expected: true,
       },
     ])(
-      'advertises permissions scope only for enabled publishing: $enabled, $clientId, $authoringWithSlack',
-      async ({ enabled, clientId, authoringWithSlack, expected }) => {
+      'advertises permissions scope only for enabled publishing: $clientId, $authoringWithSlack',
+      async ({ clientId, authoringWithSlack, expected }) => {
         mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
         mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
-          if (flag === 'data-apps') return enabled;
           if (flag === 'authoring-with-slack') return authoringWithSlack ?? false;
           return false;
         });
@@ -499,19 +475,13 @@ describe('scopes', () => {
       },
     );
 
-    it.each([false, true])(
-      'omits optional permissions scope when requested, data-apps=%s',
-      async (enabled) => {
-        mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
-        mocks.mockIsFeatureEnabled.mockImplementation(
-          async (flag) => flag === 'data-apps' && enabled,
-        );
-        const scopes = await getSupportedApiScopes(claudeClientId, {
-          includeOptionalScopes: false,
-        });
-        expect(scopes).not.toContain('tableau:permissions:read');
-      },
-    );
+    it('omits optional permissions scope when requested', async () => {
+      mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
+      const scopes = await getSupportedApiScopes(claudeClientId, {
+        includeOptionalScopes: false,
+      });
+      expect(scopes).not.toContain('tableau:permissions:read');
+    });
 
     it('should advertise only the Knowledge read API scope when write tools are off', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
@@ -751,15 +721,6 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:workbooks:create');
     });
 
-    it('should exclude tableau:workbooks:update when data-apps is disabled', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes(claudeClientId);
-      expect(scopes).not.toContain('tableau:workbooks:update');
-    });
-
     it.each([
       { mcpApps: true, interactiveViz: false, expected: false },
       { mcpApps: true, interactiveViz: true, expected: true },
@@ -779,40 +740,29 @@ describe('scopes', () => {
       },
     );
 
-    it('should include tableau:workbooks:update when data-apps is enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-        return featureName === 'data-apps';
-      });
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes(claudeClientId);
-      expect(scopes).toContain('tableau:workbooks:update');
-    });
-
     it.each([
-      { clientId: claudeClientId, flags: ['data-apps'], version: '2026.3.0', expected: true },
-      { clientId: undefined, flags: ['data-apps'], version: '2026.3.0', expected: true },
-      { clientId: slackClientId, flags: ['data-apps'], version: '2026.3.0', expected: false },
+      { clientId: claudeClientId, flags: [], version: '2026.3.0', expected: true },
+      { clientId: undefined, flags: [], version: '2026.3.0', expected: true },
+      { clientId: slackClientId, flags: [], version: '2026.3.0', expected: false },
       {
         clientId: slackClientId,
-        flags: ['data-apps', 'authoring-with-slack'],
+        flags: ['authoring-with-slack'],
         version: '2026.3.0',
         expected: true,
       },
-      { clientId: claudeClientId, flags: [], version: '2026.3.0', expected: false },
-      { clientId: claudeClientId, flags: ['data-apps'], version: '2026.2.0', expected: false },
+      { clientId: claudeClientId, flags: [], version: '2026.2.0', expected: false },
       {
         clientId: slackClientId,
-        flags: ['data-apps', 'authoring-with-slack'],
+        flags: ['authoring-with-slack'],
         version: '2026.2.0',
         expected: false,
       },
     ])(
       'advertises scaffold-data-app scope: $clientId, flags=$flags, version=$version',
       async ({ clientId, flags, version, expected }) => {
-        mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flags.includes(flag));
+        mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
+          (flags as string[]).includes(flag),
+        );
         mocks.mockGetTableauServerInfo.mockResolvedValue({
           productVersion: { value: version, build: '' },
         });
@@ -885,46 +835,13 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp_site_settings:read');
     });
 
-    // Registration-condition probe scopes must be advertised too, or the token minted from this
-    // metadata lacks them and the probe fails closed, hiding the very tools it gates. The Pulse
-    // premium probe reads `tableau:entitlements:read`, which no tool declares in its own scope set.
-    // They are advertised only when `enforce-registration-conditions` is on, since that flag is what
-    // makes the probes actually run.
-    it('should advertise tableau:entitlements:read for the RequiresPulsePremium probe when enforce-registration-conditions is enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'enforce-registration-conditions',
-      );
+    it('should always advertise tableau:entitlements:read for premium Pulse availability checks', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:entitlements:read');
-    });
-
-    it('should NOT advertise condition probe scopes when enforce-registration-conditions is disabled', async () => {
-      // Default mock: every feature (including enforce-registration-conditions) is off.
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes();
-      // `tableau:entitlements:read` is only ever contributed by the RequiresPulsePremium condition,
-      // so its absence proves condition scopes are not advertised when the flag is off.
-      expect(scopes).not.toContain('tableau:entitlements:read');
-    });
-
-    it('should advertise the Knowledge availability probe scope when knowledge-tools and enforce-registration-conditions are enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) =>
-          featureName === 'knowledge-tools' || featureName === 'enforce-registration-conditions',
-      );
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes();
-      expect(scopes).toContain('tableau:knowledge:read');
     });
   });
 
@@ -1378,25 +1295,6 @@ describe('scopes', () => {
       } as any);
 
       await expect(isValidScope('tableau:mcp:workbook:create', slackClientId)).resolves.toBe(true);
-    });
-
-    it('should return false for tableau:mcp:workbook:write when data-apps is disabled', async () => {
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      await expect(isValidScope('tableau:mcp:workbook:write', claudeClientId)).resolves.toBe(false);
-    });
-
-    it('should return true for tableau:mcp:workbook:write when data-apps is enabled', async () => {
-      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-        return featureName === 'data-apps';
-      });
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-      } as any);
-
-      await expect(isValidScope('tableau:mcp:workbook:write', claudeClientId)).resolves.toBe(true);
     });
 
     it('should return false for invalid scopes', async () => {

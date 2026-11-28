@@ -99,21 +99,13 @@ describe('getScaffoldDataAppTool', () => {
     });
   });
 
-  describe('feature gate (disabled provider)', () => {
-    it('is disabled when the data-apps flag is off', async () => {
+  describe('authoring access by client', () => {
+    it('is enabled without an OAuth client id', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      const tool = makeTool();
-      expect(await Provider.from(tool.disabled)).toBe(true);
-      expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('data-apps');
+      expect(await Provider.from(makeTool().disabled)).toBe(false);
     });
 
-    it('is enabled when the data-apps flag is on and the version is at the floor', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-      const tool = makeTool(VERSION_AT_FLOOR);
-      expect(await Provider.from(tool.disabled)).toBe(false);
-    });
-
-    it('is disabled for Slack when the data-apps flag is on but authoring-with-slack is off', async () => {
+    it('is disabled for Slack when authoring-with-slack is off', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
         async (flag) => flag !== 'authoring-with-slack',
       );
@@ -124,21 +116,13 @@ describe('getScaffoldDataAppTool', () => {
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
-    it('is enabled for Slack when the data-apps and authoring-with-slack flags are on', async () => {
+    it('is enabled for Slack when authoring-with-slack is on', async () => {
       const tool = getScaffoldDataAppTool(
         new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
         VERSION_AT_FLOOR,
       );
       expect(await Provider.from(tool.disabled)).toBe(false);
       expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
-    });
-
-    it('is disabled for Slack when all flags are on but the version is below the floor', async () => {
-      const tool = getScaffoldDataAppTool(
-        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
-        VERSION_BELOW,
-      );
-      expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
     it('is enabled for a non-Slack client when authoring-with-slack is off', async () => {
@@ -153,11 +137,7 @@ describe('getScaffoldDataAppTool', () => {
     });
   });
 
-  describe('version gate (disabled provider)', () => {
-    beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-    });
-
+  describe('Tableau version compatibility', () => {
     it('is enabled at or above the version floor', async () => {
       expect(await Provider.from(makeTool(VERSION_AT_FLOOR).disabled)).toBe(false);
       expect(await Provider.from(makeTool(VERSION_ABOVE).disabled)).toBe(false);
@@ -179,11 +159,6 @@ describe('getScaffoldDataAppTool', () => {
     it('is enabled for the explicit main product-version sentinel', async () => {
       const tool = makeTool({ value: 'main', build: '' });
       expect(await Provider.from(tool.disabled)).toBe(false);
-    });
-
-    it('is disabled below the floor even when the flag is on and above when off', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      expect(await Provider.from(makeTool(VERSION_ABOVE).disabled)).toBe(true);
     });
   });
 

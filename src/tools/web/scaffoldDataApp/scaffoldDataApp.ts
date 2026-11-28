@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 
 import { datappNameSchema } from '../../../dataApps/dataAppName.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -38,9 +37,8 @@ export const getScaffoldDataAppTool = (
       openWorldHint: false,
     },
     disabled: new Provider(async () => {
-      const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
       const versionAllowed = isDataAppVersionSupported(productVersion);
-      return !(flagOn && versionAllowed && (await isAuthoringAllowedForClient(server.clientId)));
+      return !(versionAllowed && (await isAuthoringAllowedForClient(server.clientId)));
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
